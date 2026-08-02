@@ -7,8 +7,14 @@ on:
       - .github/workflows/validate-current-head.yml
       - package.json
       - pnpm-lock.yaml
-      - tools/checks/check-ci-bootstrap.mjs
-      - tools/checks/run-offline-source-gates.sh
+      - svelte.config.js
+      - tsconfig.json
+      - vite.config.ts
+      - static/**
+      - src/**
+      - supabase/**
+      - tests/**
+      - tools/**
   workflow_dispatch:
 
 permissions:
@@ -85,7 +91,6 @@ jobs:
         uses: denoland/setup-deno@v2
         with:
           deno-version: 2.8.1
-          cache: true
 
       - name: Set up Supabase CLI
         uses: supabase/setup-cli@v1
