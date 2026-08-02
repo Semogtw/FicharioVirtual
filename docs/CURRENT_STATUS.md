@@ -2,7 +2,7 @@
 
 _Atualizado: 2026-08-02_  
 _Branch ativa: `main`_  
-_Estado: MVP implementado, em endurecimento e validação pré-staging; sem deployment ou release_
+_Estado: MVP implementado e validado localmente; em preparação para staging, sem deployment ou release_
 
 ## Resumo executivo
 
@@ -91,6 +91,7 @@ A política central permanece:
 - limpeza de imagem temporária após terminal válido;
 - recuperação de claims antigos pela fila de revisão;
 - replay idempotente da conclusão após perda de resposta;
+- replay divergente rejeitado sem alterar texto confirmado;
 - desbloqueio de cota pelo próximo dia UTC;
 - rollup automático do estado das páginas para o documento.
 
@@ -115,53 +116,54 @@ A política central permanece:
 - painel privado de uso/cota sem conteúdo dos documentos;
 - configurações com exportação, política operacional e encerramento de sessão;
 - documentação de deployment, privacidade, recuperação, limites gratuitos e testes;
-- gates offline de segurança/migrations e runners locais de funções/banco.
+- gates offline de segurança/migrations e runners locais de funções/banco;
+- workspace offline portátil fabricado pelo repositório `Offline-Toolchains`.
 
 ## Validação e evidência
 
-### Último checkpoint local completo
+### HEAD integralmente validado
 
-O commit `f2b4eb47614daa488118c14aa81ce94cb0d9817d` registrou `PASS` para:
+O commit `cccce3f819b1e72dcf41f2342f04a476a8bbf150` recebeu `SUCCESS` no workflow `Validate current head`, run `30770283157`.
+
+A execução comprovou:
 
 ```text
-pnpm install --frozen-lockfile --offline
-pnpm lint
-pnpm check
-pnpm test
-pnpm test:coverage
-pnpm build
-pnpm test:e2e
-bash tools/checks/run-offline-source-gates.sh
-supabase db reset
-supabase test db
-deno check das Edge Functions
+pnpm install --frozen-lockfile
+Prettier + ESLint
+svelte-check: 0 erros, 0 warnings
+120 testes unitários
+build estático + validação dos artefatos PWA
+gates offline de segurança, migrations, RPCs, toolchain e rotas
+3 testes E2E no Chromium
+Deno check das Edge Functions
+Supabase start + db reset
+27 migrations aplicadas do zero
+54 testes pgTAP
+concorrência real de claim OCR
+replay OCR idempotente e rejeição de replay divergente
+cota e retomada na virada do dia UTC
 ```
 
-Relatório: `docs/reports/2026-08-02-local-validation-checkpoint.md`.
+Recibo persistente: issue `#1`, `[CI] Fichário current HEAD validation`.
 
-### Mudanças posteriores ao checkpoint
+Relatório: `docs/reports/2026-08-02-current-head-validation.md`.
 
-Depois desse SHA foram adicionados:
+### Workspace offline
 
-- organização de documentos em lote;
-- testes reais de concorrência de claim OCR;
-- replay idempotente de conclusão e virada UTC da cota;
-- entrypoints `test:source:offline`, `test:functions:check`, `test:db:local` e `verify:full`;
-- documentação atualizada.
+O workflow `Build Fichário offline workspace` do repositório `Semogtw/Offline-Toolchains` concluiu com sucesso no run `30769889858` e publicou manifest mais duas partes compactadas.
 
-Essas mudanças ainda precisam de `pnpm verify:full` no HEAD exato. O ambiente desta sessão não resolve `github.com`, portanto não foi possível obter checkout local e executar os comandos. O conector GitHub foi usado apenas para leitura e commits.
+O bundle inclui checkout, Node, pnpm/store, Chromium, Deno e Supabase CLI. O gate de banco ainda requer Docker e as imagens Supabase, que não são incluídas no archive.
 
 ## Próximas prioridades
 
-1. executar `pnpm verify:full` no HEAD atual e registrar saída fresca;
-2. corrigir qualquer regressão detectada sem avançar o escopo;
-3. implantar um projeto Supabase de staging gratuito, sem dados reais;
-4. validar Auth, RLS, Storage e URLs assinadas com duas contas de teste;
-5. configurar secrets e testar OCR real com imagens sintéticas;
-6. injetar 429 diário/transitório, 503, timeout e resposta inválida;
-7. validar PDFs textuais, digitalizados e mistos em tablet/celular;
-8. verificar headers, PWA, atualização e expiração de URL no host final;
-9. somente depois considerar um release.
+1. implantar um projeto Supabase de staging gratuito, sem dados reais;
+2. validar Auth, RLS, Storage e URLs assinadas com duas contas de teste;
+3. configurar secrets e testar OCR real com imagens sintéticas;
+4. injetar 429 diário/transitório, 503, timeout e resposta inválida;
+5. validar PDFs textuais, digitalizados e mistos em tablet/celular;
+6. verificar headers, fallback SPA, PWA, atualização e expiração de URL no host final;
+7. validar limites gratuitos e billing desativado na conta real;
+8. somente depois considerar um release.
 
 ## Ainda não validado externamente
 
