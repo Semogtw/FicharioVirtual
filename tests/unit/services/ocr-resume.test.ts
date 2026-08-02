@@ -6,15 +6,30 @@ import {
 
 const documentId = '11111111-1111-4111-8111-111111111111';
 
-function gateway(pages: Array<{ id: string; pageNumber: number }>): OcrResumeGateway {
+function gateway(
+	pages: Array<{ id: string; pageNumber: number }>,
+	events: string[] = []
+): OcrResumeGateway {
 	return {
+		async recoverStaleJobs() {
+			events.push('recover');
+		},
 		async listPendingPages() {
+			events.push('list');
 			return pages;
 		}
 	};
 }
 
 describe('resumeDocumentOcrWithGateway', () => {
+	it('recovers interrupted claims before selecting resumable pages', async () => {
+		const events: string[] = [];
+
+		await resumeDocumentOcrWithGateway(documentId, gateway([], events));
+
+		expect(events).toEqual(['recover', 'list']);
+	});
+
 	it('retries only pending page identifiers with at most two concurrent calls', async () => {
 		const pages = [1, 2, 3, 4].map((pageNumber) => ({
 			id: `00000000-0000-4000-8000-00000000000${pageNumber}`,
