@@ -1,6 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, parseAppOrigin } from '../_shared/cors.ts';
-import { classifyGeminiFailure } from '../_shared/ocr-contract.ts';
+import { claimStateHttpStatus, classifyGeminiFailure } from '../_shared/ocr-contract.ts';
 import {
 	GeminiHttpError,
 	GeminiResponseError,
@@ -138,19 +138,9 @@ Deno.serve(async (request) => {
 	}
 	const claimState = (claim as { state?: unknown }).state;
 	if (claimState !== 'claimed') {
-		const status =
-			claimState === 'already_complete'
-				? 200
-				: claimState === 'busy' || claimState === 'retry_later'
-					? 202
-					: claimState === 'quota_exhausted'
-						? 429
-						: claimState === 'consent_required' || claimState === 'not_authorized'
-							? 403
-							: claimState === 'not_found'
-								? 404
-								: 409;
-		return respond(status, { state: claimState ?? 'claim_rejected' });
+		return respond(claimStateHttpStatus(claimState), {
+			state: claimState ?? 'claim_rejected'
+		});
 	}
 	const attemptCount = Number((claim as { attemptCount?: unknown }).attemptCount ?? 1);
 
