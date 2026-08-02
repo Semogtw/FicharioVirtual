@@ -5,6 +5,7 @@ import {
 	uploadPreparedImage,
 	type UploadedPage
 } from '$lib/import/upload';
+import { recordOcrConsent } from '$lib/services/ocr-consent';
 
 export type ImportQueueStatus =
 	| 'queued'
@@ -32,6 +33,7 @@ export const importQueue = $state<{ items: ImportQueueItem[] }>({ items: [] });
 
 const controllers = new Map<string, AbortController>();
 const localFingerprints = new Set<string>();
+let consentPromise: Promise<void> | null = null;
 
 function id() {
 	return globalThis.crypto?.randomUUID?.() ?? `import_${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -50,6 +52,14 @@ function releasePreview(item: ImportQueueItem) {
 	item.previewUrl = null;
 }
 
+function ensureConsent() {
+	consentPromise ??= recordOcrConsent().catch((error) => {
+		consentPromise = null;
+		throw error;
+	});
+	return consentPromise;
+}
+
 async function processItem(item: ImportQueueItem) {
 	if (item.status === 'preparing' || item.status === 'uploading') return;
 	const controller = new AbortController();
@@ -60,6 +70,8 @@ async function processItem(item: ImportQueueItem) {
 	item.status = 'preparing';
 
 	try {
+		await ensureConsent();
+		if (controller.signal.aborted) throw new DOMException('Import cancelled', 'AbortError');
 		const prepared = await prepareImage(item.file, item.mode, { signal: controller.signal });
 		releasePreview(item);
 		item.previewUrl = URL.createObjectURL(prepared.thumbnail);
