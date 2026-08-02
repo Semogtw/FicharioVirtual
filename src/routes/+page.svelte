@@ -1,154 +1,196 @@
+<script lang="ts">
+	import { goto } from '$app/navigation';
+	import EmptyState from '$lib/components/EmptyState.svelte';
+
+	function startImport() {
+		void goto('/import/');
+	}
+</script>
+
 <svelte:head>
-	<title>Fichário Virtual</title>
+	<title>Início — Fichário Virtual</title>
 </svelte:head>
 
-<main aria-labelledby="page-title">
-	<section class="hero">
-		<p class="eyebrow">Biblioteca pessoal pesquisável</p>
-		<h1 id="page-title">Fichário Virtual</h1>
-		<p class="summary">
-			Preserve imagens e PDFs de anotações, encontre a página certa por texto e mantenha o
-			arquivo original sempre ao alcance.
-		</p>
-
-		<div class="status" role="status">
-			<span class="status-mark" aria-hidden="true"></span>
-			<div>
-				<strong>Fundação em construção</strong>
-				<p>A biblioteca, a importação e a leitura automática serão habilitadas por etapas.</p>
-			</div>
+<div class="page" aria-labelledby="page-title">
+	<header class="page-header">
+		<div>
+			<p class="eyebrow">Seu arquivo pessoal</p>
+			<h1 id="page-title">Encontre a página certa.</h1>
+			<p class="summary">
+				Imagens, PDFs e anotações organizados como um fichário — pesquisáveis sem perder o
+				original.
+			</p>
 		</div>
+		<a class="primary-action" href="/import/">Importar documento</a>
+	</header>
+
+	<section class="overview" aria-label="Resumo da biblioteca">
+		<article>
+			<span>Documentos</span>
+			<strong>0</strong>
+			<small>A biblioteca está pronta para começar</small>
+		</article>
+		<article>
+			<span>Páginas pesquisáveis</span>
+			<strong>0</strong>
+			<small>Texto nativo e leituras revisadas</small>
+		</article>
+		<article>
+			<span>Para revisar</span>
+			<strong>0</strong>
+			<small>Nenhum trecho aguardando atenção</small>
+		</article>
 	</section>
 
-	<section class="principles" aria-labelledby="principles-title">
-		<h2 id="principles-title">O que orienta o projeto</h2>
-		<ul>
-			<li>O original é preservado e continua sendo a fonte principal.</li>
-			<li>PDFs com texto não consomem leitura automática.</li>
-			<li>Nenhum serviço pode ativar cobrança automaticamente.</li>
-		</ul>
+	<section class="recent" aria-labelledby="recent-title">
+		<div class="section-heading">
+			<div>
+				<p class="eyebrow">Biblioteca</p>
+				<h2 id="recent-title">Documentos recentes</h2>
+			</div>
+			<a href="/library/">Ver biblioteca</a>
+		</div>
+
+		<EmptyState
+			title="Seu fichário ainda está vazio"
+			description="Importe uma imagem ou PDF. O arquivo original será preservado enquanto o texto é preparado para pesquisa."
+			actionLabel="Importar o primeiro documento"
+			onAction={startImport}
+		/>
 	</section>
-</main>
+</div>
 
 <style>
-	:global(*) {
-		box-sizing: border-box;
-	}
-
-	:global(body) {
-		margin: 0;
-		background: #f7f4ee;
-		color: #202124;
-		font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-	}
-
-	main {
-		min-height: 100vh;
+	.page {
 		display: grid;
-		align-content: center;
-		gap: clamp(2rem, 7vw, 6rem);
-		padding: clamp(2rem, 7vw, 7rem);
-		background:
-			linear-gradient(90deg, rgb(83 106 91 / 8%) 1px, transparent 1px) 0 0 / 4rem 4rem,
-			#f7f4ee;
+		gap: clamp(2rem, 4vw, 3.5rem);
 	}
 
-	.hero,
-	.principles {
-		max-width: 58rem;
+	.page-header {
+		display: flex;
+		align-items: flex-end;
+		justify-content: space-between;
+		gap: 2rem;
+		padding: clamp(1rem, 3vw, 2rem) 0 0;
 	}
 
 	.eyebrow {
-		margin: 0 0 0.75rem;
-		color: #536a5b;
-		font-size: 0.8rem;
-		font-weight: 750;
+		margin-bottom: 0.55rem;
+		color: var(--archive);
+		font-size: 0.76rem;
+		font-weight: 780;
 		letter-spacing: 0.12em;
 		text-transform: uppercase;
 	}
 
 	h1,
 	h2 {
-		font-family: Georgia, Cambria, 'Times New Roman', serif;
-		font-weight: 500;
+		font-family: var(--font-heading);
+		font-weight: 520;
 	}
 
 	h1 {
-		margin: 0;
-		font-size: clamp(3.25rem, 11vw, 7.5rem);
-		line-height: 0.92;
-		letter-spacing: -0.055em;
+		max-width: 48rem;
+		margin-bottom: 0.8rem;
+		font-size: clamp(2.6rem, 7vw, 5.75rem);
+		line-height: 0.98;
+		letter-spacing: -0.045em;
 	}
 
 	.summary {
-		max-width: 44rem;
-		margin: 1.5rem 0 0;
-		color: #4f5854;
-		font-size: clamp(1.1rem, 2vw, 1.45rem);
-		line-height: 1.6;
+		max-width: 42rem;
+		margin-bottom: 0;
+		color: var(--muted);
+		font-size: clamp(1rem, 2vw, 1.2rem);
+		line-height: 1.65;
 	}
 
-	.status {
-		display: flex;
-		gap: 1rem;
-		max-width: 37rem;
-		margin-top: 2.5rem;
-		padding: 1.25rem 1.35rem;
-		border: 1px solid #ddd7cc;
-		border-radius: 0.8rem;
-		background: #fcfaf6;
-		box-shadow: 0 1rem 3rem rgb(32 33 36 / 7%);
-	}
-
-	.status-mark {
-		width: 0.75rem;
-		height: 0.75rem;
-		margin-top: 0.35rem;
-		border-radius: 50%;
-		background: #a65e43;
-		box-shadow: 0 0 0 0.35rem rgb(166 94 67 / 12%);
+	.primary-action {
+		min-height: 2.9rem;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
 		flex: 0 0 auto;
+		padding: 0.75rem 1.05rem;
+		border-radius: var(--radius-sm);
+		background: var(--archive);
+		color: white;
+		font-weight: 740;
 	}
 
-	.status strong {
-		font-size: 1rem;
+	.overview {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 1rem;
 	}
 
-	.status p {
-		margin: 0.3rem 0 0;
-		color: #66706b;
-		line-height: 1.5;
+	.overview article {
+		display: grid;
+		gap: 0.35rem;
+		min-height: 10.5rem;
+		align-content: space-between;
+		padding: 1.25rem;
+		border: 1px solid var(--line);
+		border-radius: var(--radius-md);
+		background: var(--surface);
 	}
 
-	.principles {
-		padding-top: 2rem;
-		border-top: 1px solid #d5cec1;
+	.overview span,
+	.overview small {
+		color: var(--muted);
+	}
+
+	.overview span {
+		font-size: 0.82rem;
+		font-weight: 720;
+		letter-spacing: 0.03em;
+	}
+
+	.overview strong {
+		font-family: var(--font-heading);
+		font-size: 3rem;
+		font-weight: 520;
+		line-height: 1;
+	}
+
+	.overview small {
+		line-height: 1.45;
+	}
+
+	.recent {
+		display: grid;
+		gap: 1.25rem;
+	}
+
+	.section-heading {
+		display: flex;
+		align-items: end;
+		justify-content: space-between;
+		gap: 1rem;
 	}
 
 	h2 {
-		margin: 0 0 1rem;
-		font-size: clamp(1.5rem, 3vw, 2.25rem);
+		margin-bottom: 0;
+		font-size: clamp(1.75rem, 4vw, 2.6rem);
 	}
 
-	ul {
-		display: grid;
-		gap: 0.65rem;
-		margin: 0;
-		padding-left: 1.2rem;
-		color: #4f5854;
-		line-height: 1.55;
+	.section-heading > a {
+		color: var(--archive);
+		font-weight: 720;
 	}
 
-	@media (min-width: 800px) {
-		main {
-			grid-template-columns: minmax(0, 1.8fr) minmax(18rem, 0.8fr);
-			align-items: end;
+	@media (max-width: 760px) {
+		.page-header {
+			align-items: flex-start;
+			flex-direction: column;
 		}
 
-		.principles {
-			padding: 2rem 0 0 2rem;
-			border-top: 0;
-			border-left: 1px solid #d5cec1;
+		.overview {
+			grid-template-columns: 1fr;
+		}
+
+		.overview article {
+			min-height: 8rem;
 		}
 	}
 </style>
