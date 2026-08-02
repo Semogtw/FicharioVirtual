@@ -6,9 +6,11 @@
 	import type { NotebookSummary } from '$lib/domain/notebook';
 	import { highlightSnippet } from '$lib/search/highlight';
 	import { listNotebooks } from '$lib/services/notebooks';
+	import { RequestVersion } from '$lib/services/request-version';
 	import { searchPages, type SearchResult } from '$lib/services/search';
 
 	const pageSize = 30;
+	const requests = new RequestVersion();
 	let query = $state(page.url.searchParams.get('q')?.slice(0, 200) ?? '');
 	let notebookId = $state('');
 	let results = $state<readonly SearchResult[]>([]);
@@ -19,7 +21,6 @@
 	let hasMore = $state(false);
 	let timer: ReturnType<typeof setTimeout> | null = null;
 	let controller: AbortController | null = null;
-	let requestVersion = 0;
 
 	function cancelPending() {
 		if (timer) clearTimeout(timer);
@@ -28,19 +29,25 @@
 		controller = null;
 	}
 
-	async function run(reset: boolean) {
+	async function run(
+		reset: boolean,
+		version = reset ? requests.next() : requests.current()
+	) {
+		if (!reset && loadingMore) return;
 		const normalized = query.trim();
 		if (!normalized) {
+			requests.next();
 			cancelPending();
 			results = [];
 			hasMore = false;
 			error = null;
+			loading = false;
+			loadingMore = false;
 			return;
 		}
 		controller?.abort();
 		const activeController = new AbortController();
 		controller = activeController;
-		const version = ++requestVersion;
 		if (reset) loading = true;
 		else loadingMore = true;
 		error = null;
@@ -51,14 +58,14 @@
 				offset: reset ? 0 : results.length,
 				signal: activeController.signal
 			});
-			if (version !== requestVersion) return;
+			if (!requests.isCurrent(version)) return;
 			results = reset ? pageResults : Object.freeze([...results, ...pageResults]);
 			hasMore = pageResults.length === pageSize;
 		} catch (caught) {
 			if (caught instanceof DOMException && caught.name === 'AbortError') return;
-			if (version === requestVersion) error = 'Não foi possível concluir esta pesquisa agora.';
+			if (requests.isCurrent(version)) error = 'Não foi possível concluir esta pesquisa agora.';
 		} finally {
-			if (version === requestVersion) {
+			if (requests.isCurrent(version)) {
 				loading = false;
 				loadingMore = false;
 			}
@@ -67,7 +74,8 @@
 
 	function schedule() {
 		cancelPending();
-		timer = setTimeout(() => void run(true), 220);
+		const version = requests.next();
+		timer = setTimeout(() => void run(true, version), 220);
 	}
 
 	onMount(() => {
@@ -75,7 +83,10 @@
 		if (query.trim()) void run(true);
 	});
 
-	onDestroy(cancelPending);
+	onDestroy(() => {
+		requests.next();
+		cancelPending();
+	});
 </script>
 
 <svelte:head>
