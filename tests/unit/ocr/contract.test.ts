@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	claimStateHttpStatus,
 	classifyGeminiFailure,
 	parseOcrPayload
 } from '../../../supabase/functions/_shared/ocr-contract';
@@ -14,7 +15,6 @@ describe('OCR response contract', () => {
 						{ code: 'uncertain_text', message: 'Uma palavra na margem está pouco legível.' }
 					]
 				})
-			)
 		).toEqual({
 			text: 'Mitose e meiose',
 			warnings: [
@@ -31,6 +31,22 @@ describe('OCR response contract', () => {
 		expect(() =>
 			parseOcrPayload(JSON.stringify({ text: 'x', warnings: [], privateReasoning: 'hidden' }))
 		).toThrow('Invalid OCR response');
+	});
+});
+
+describe('OCR claim state HTTP contract', () => {
+	it('keeps expected resumable states inside successful HTTP responses', () => {
+		expect(claimStateHttpStatus('already_complete')).toBe(200);
+		expect(claimStateHttpStatus('busy')).toBe(202);
+		expect(claimStateHttpStatus('retry_later')).toBe(202);
+		expect(claimStateHttpStatus('quota_exhausted')).toBe(202);
+	});
+
+	it('uses authorization and not-found statuses only for terminal request failures', () => {
+		expect(claimStateHttpStatus('consent_required')).toBe(403);
+		expect(claimStateHttpStatus('not_authorized')).toBe(403);
+		expect(claimStateHttpStatus('not_found')).toBe(404);
+		expect(claimStateHttpStatus('invalid_configuration')).toBe(409);
 	});
 });
 
