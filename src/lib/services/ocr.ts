@@ -91,10 +91,11 @@ function parseResult(data: unknown): OcrRunResult {
 
 export async function processPageOcr(
 	pageId: string,
-	client: OcrFunctionClient = defaultClient()
+	client?: OcrFunctionClient
 ): Promise<OcrRunResult> {
 	if (!UUID.test(pageId)) throw new TypeError('Invalid page identifier');
-	const { data, error } = await client.functions.invoke('process-ocr', { body: { pageId } });
+	const gateway = client ?? defaultClient();
+	const { data, error } = await gateway.functions.invoke('process-ocr', { body: { pageId } });
 	if (error) throw await mappedError(error);
 	return parseResult(data);
 }
