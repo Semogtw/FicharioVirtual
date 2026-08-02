@@ -7,6 +7,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 
 export type PendingOcrPage = { id: string; pageNumber: number };
 export interface OcrResumeGateway {
+	recoverStaleJobs(): Promise<void>;
 	listPendingPages(documentId: string): Promise<readonly PendingOcrPage[]>;
 }
 export type OcrResumeSummary = {
@@ -27,7 +28,9 @@ export async function resumeDocumentOcrWithGateway(
 	gateway: OcrResumeGateway,
 	processor: OcrProcessor = processPageOcr
 ): Promise<OcrResumeSummary> {
-	const pages = [...(await gateway.listPendingPages(validId(documentId)))];
+	const validDocumentId = validId(documentId);
+	await gateway.recoverStaleJobs();
+	const pages = [...(await gateway.listPendingPages(validDocumentId))];
 	let cursor = 0;
 	let completed = 0;
 	let needsReview = 0;
@@ -58,6 +61,18 @@ export async function resumeDocumentOcrWithGateway(
 class SupabaseGateway implements OcrResumeGateway {
 	constructor(private readonly client: SupabaseClient<Database>) {}
 
+	async recoverStaleJobs() {
+		type RecoveryClient = {
+			rpc(
+				name: 'recover_stale_ocr_jobs'
+			): Promise<{ data: number | null; error: unknown }>;
+		};
+		const { error } = await (this.client as unknown as RecoveryClient).rpc(
+			'recover_stale_ocr_jobs'
+		);
+		if (error) throw new Error('Não foi possível recuperar leituras interrompidas.');
+	}
+
 	async listPendingPages(documentId: string) {
 		const { data, error } = await this.client
 			.from('pages')
@@ -65,7 +80,9 @@ class SupabaseGateway implements OcrResumeGateway {
 			.eq('document_id', validId(documentId))
 			.in('status', ['pending', 'retryable', 'blocked_quota'])
 			.order('page_number', { ascending: true });
-		if (error || !Array.isArray(data)) throw new Error('Não foi possível localizar as páginas pendentes.');
+		if (error || !Array.isArray(data)) {
+			throw new Error('Não foi possível localizar as páginas pendentes.');
+		}
 		return Object.freeze(
 			data.map((page) => Object.freeze({ id: page.id, pageNumber: page.page_number }))
 		);
