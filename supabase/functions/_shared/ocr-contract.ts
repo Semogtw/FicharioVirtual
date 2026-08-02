@@ -68,6 +68,14 @@ export function parseOcrPayload(value: string): OcrPayload {
 	});
 }
 
+export function claimStateHttpStatus(state: unknown): number {
+	if (state === 'already_complete') return 200;
+	if (state === 'busy' || state === 'retry_later' || state === 'quota_exhausted') return 202;
+	if (state === 'consent_required' || state === 'not_authorized') return 403;
+	if (state === 'not_found') return 404;
+	return 409;
+}
+
 export function classifyGeminiFailure(status: number, responseBody: string): GeminiFailure {
 	const summary = responseBody.slice(0, 8_000).toLowerCase();
 	const dailyQuota =
