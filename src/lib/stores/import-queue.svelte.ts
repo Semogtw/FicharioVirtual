@@ -6,11 +6,15 @@ import {
 	type UploadedPage
 } from '$lib/import/upload';
 import { recordOcrConsent } from '$lib/services/ocr-consent';
+import { OcrProcessingError, processPageOcr } from '$lib/services/ocr';
 
 export type ImportQueueStatus =
 	| 'queued'
 	| 'preparing'
 	| 'uploading'
+	| 'reading'
+	| 'waiting'
+	| 'needs_review'
 	| 'complete'
 	| 'duplicate'
 	| 'failed'
@@ -60,8 +64,38 @@ function ensureConsent() {
 	return consentPromise;
 }
 
+async function processOcr(item: ImportQueueItem) {
+	if (!item.result) throw new Error('A página importada não está disponível para leitura.');
+	item.status = 'reading';
+	item.error = null;
+	try {
+		const result = await processPageOcr(item.result.pageId);
+		if (result.state === 'complete') {
+			item.status = result.needsReview ? 'needs_review' : 'complete';
+			return;
+		}
+		if (result.state === 'already_complete') {
+			item.status = 'complete';
+			return;
+		}
+		item.status = 'waiting';
+		item.error =
+			result.state === 'quota_exhausted'
+				? 'A cota diária foi atingida; o arquivo permanece salvo para continuar depois.'
+				: 'A leitura ficou pendente e poderá ser retomada sem reenviar o arquivo.';
+	} catch (error) {
+		if (error instanceof OcrProcessingError) {
+			item.status = error.retryable || error.code === 'gemini_daily_quota' ? 'waiting' : 'failed';
+			item.error = error.message;
+			return;
+		}
+		item.status = 'waiting';
+		item.error = message(error);
+	}
+}
+
 async function processItem(item: ImportQueueItem) {
-	if (item.status === 'preparing' || item.status === 'uploading') return;
+	if (['preparing', 'uploading', 'reading'].includes(item.status)) return;
 	const controller = new AbortController();
 	controllers.set(item.id, controller);
 	item.error = null;
@@ -82,11 +116,14 @@ async function processItem(item: ImportQueueItem) {
 			notebookId: item.notebookId,
 			signal: controller.signal
 		});
-		item.status = 'complete';
+		if (controller.signal.aborted) throw new DOMException('Import cancelled', 'AbortError');
+		await processOcr(item);
 	} catch (error) {
 		if (error instanceof DOMException && error.name === 'AbortError') {
-			item.status = 'cancelled';
-			item.error = null;
+			item.status = item.result ? 'waiting' : 'cancelled';
+			item.error = item.result
+				? 'O arquivo já foi salvo; a leitura pode ser retomada depois.'
+				: null;
 		} else if (error instanceof DuplicateImageError) {
 			item.status = 'duplicate';
 			item.duplicateDocumentId = error.documentId;
@@ -134,8 +171,9 @@ export function cancelImport(itemId: string) {
 
 export function retryImport(itemId: string) {
 	const item = importQueue.items.find((candidate) => candidate.id === itemId);
-	if (!item || !['failed', 'cancelled'].includes(item.status)) return;
-	void processItem(item);
+	if (!item || !['failed', 'cancelled', 'waiting'].includes(item.status)) return;
+	if (item.result) void processOcr(item);
+	else void processItem(item);
 }
 
 export function removeImport(itemId: string) {
@@ -150,6 +188,8 @@ export function removeImport(itemId: string) {
 
 export function clearFinishedImports() {
 	for (const item of [...importQueue.items]) {
-		if (['complete', 'duplicate', 'cancelled'].includes(item.status)) removeImport(item.id);
+		if (['complete', 'needs_review', 'duplicate', 'cancelled'].includes(item.status)) {
+			removeImport(item.id);
+		}
 	}
 }
