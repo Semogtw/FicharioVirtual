@@ -1,0 +1,128 @@
+export type OcrWarning = {
+	code: string;
+	message: string;
+};
+
+export type OcrPayload = {
+	text: string;
+	warnings: readonly OcrWarning[];
+	needsReview: boolean;
+};
+
+export type GeminiFailure = {
+	code:
+		| 'gemini_daily_quota'
+		| 'gemini_rate_limited'
+		| 'gemini_authentication_failed'
+		| 'gemini_model_unavailable'
+		| 'gemini_invalid_request'
+		| 'gemini_service_unavailable';
+	retryable: boolean;
+	quotaExhausted: boolean;
+	delaySeconds: number | null;
+	safeMessage: string;
+};
+
+function invalidResponse(): never {
+	throw new TypeError('Invalid OCR response');
+}
+
+export function parseOcrPayload(value: string): OcrPayload {
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(value);
+	} catch {
+		invalidResponse();
+	}
+	if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) invalidResponse();
+	const record = parsed as Record<string, unknown>;
+	const keys = Object.keys(record).sort();
+	if (keys.length !== 2 || keys[0] !== 'text' || keys[1] !== 'warnings') invalidResponse();
+	if (typeof record.text !== 'string' || record.text.length > 1_000_000) invalidResponse();
+	if (!Array.isArray(record.warnings) || record.warnings.length > 100) invalidResponse();
+
+	const warnings = record.warnings.map((value) => {
+		if (value === null || typeof value !== 'object' || Array.isArray(value)) invalidResponse();
+		const warning = value as Record<string, unknown>;
+		const warningKeys = Object.keys(warning).sort();
+		if (warningKeys.length !== 2 || warningKeys[0] !== 'code' || warningKeys[1] !== 'message') {
+			invalidResponse();
+		}
+		if (
+			typeof warning.code !== 'string' ||
+			!/^[a-z][a-z0-9_]{1,63}$/.test(warning.code) ||
+			typeof warning.message !== 'string' ||
+			warning.message.trim().length < 1 ||
+			warning.message.length > 300
+		) {
+			invalidResponse();
+		}
+		return Object.freeze({ code: warning.code, message: warning.message.trim() });
+	});
+
+	const text = record.text.trim();
+	return Object.freeze({
+		text,
+		warnings: Object.freeze(warnings),
+		needsReview: text.length === 0 || warnings.length > 0
+	});
+}
+
+export function classifyGeminiFailure(status: number, responseBody: string): GeminiFailure {
+	const summary = responseBody.slice(0, 8_000).toLowerCase();
+	const dailyQuota =
+		status === 429 &&
+		/(requests? per day|per-day|daily quota|\brpd\b|quota[^\n]{0,80}day)/i.test(summary);
+	if (dailyQuota) {
+		return Object.freeze({
+			code: 'gemini_daily_quota',
+			retryable: false,
+			quotaExhausted: true,
+			delaySeconds: null,
+			safeMessage: 'A cota diária do provedor foi atingida.'
+		});
+	}
+	if (status === 429) {
+		return Object.freeze({
+			code: 'gemini_rate_limited',
+			retryable: true,
+			quotaExhausted: false,
+			delaySeconds: 60,
+			safeMessage: 'O provedor limitou temporariamente as solicitações.'
+		});
+	}
+	if (status === 401 || status === 403) {
+		return Object.freeze({
+			code: 'gemini_authentication_failed',
+			retryable: false,
+			quotaExhausted: false,
+			delaySeconds: null,
+			safeMessage: 'A configuração do provedor de leitura foi rejeitada.'
+		});
+	}
+	if (status === 404) {
+		return Object.freeze({
+			code: 'gemini_model_unavailable',
+			retryable: false,
+			quotaExhausted: false,
+			delaySeconds: null,
+			safeMessage: 'O modelo configurado não está disponível.'
+		});
+	}
+	if (status === 400 || status === 422) {
+		return Object.freeze({
+			code: 'gemini_invalid_request',
+			retryable: false,
+			quotaExhausted: false,
+			delaySeconds: null,
+			safeMessage: 'O provedor rejeitou o formato da solicitação.'
+		});
+	}
+	return Object.freeze({
+		code: 'gemini_service_unavailable',
+		retryable: status === 408 || status === 425 || status >= 500,
+		quotaExhausted: false,
+		delaySeconds: status === 408 || status === 425 || status >= 500 ? 30 : null,
+		safeMessage: 'O serviço de leitura está temporariamente indisponível.'
+	});
+}
