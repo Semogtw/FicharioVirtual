@@ -100,6 +100,7 @@
 		margin-bottom: 1.5rem;
 		line-height: 1.45;
 		opacity: 0.8;
+		line-clamp: 2;
 		-webkit-box-orient: vertical;
 		-webkit-line-clamp: 2;
 	}
