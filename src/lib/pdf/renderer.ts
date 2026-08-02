@@ -1,3 +1,5 @@
+import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist';
+
 export type RenderPdfPageOptions = {
 	maxDimension?: number;
 	quality?: number;
@@ -59,15 +61,11 @@ export async function renderPdfPage(
 	GlobalWorkerOptions.workerSrc = workerModule.default;
 
 	const bytes = new Uint8Array(await file.arrayBuffer());
-	const loadingTask = getDocument({
-		data: bytes,
-		isEvalSupported: false,
-		useSystemFonts: true
-	});
-	let pdfDocument: Awaited<typeof loadingTask.promise> | null = null;
-	let page: Awaited<ReturnType<Awaited<typeof loadingTask.promise>['getPage']>> | null = null;
+	const loadingTask = getDocument({ data: bytes, isEvalSupported: false, useSystemFonts: true });
+	let pdfDocument: PDFDocumentProxy | null = null;
+	let pdfPage: PDFPageProxy | null = null;
 	let canvas: HTMLCanvasElement | null = null;
-	let renderTask: ReturnType<NonNullable<typeof page>['render']> | null = null;
+	let renderTask: RenderTask | null = null;
 	const cancel = () => renderTask?.cancel();
 	options.signal?.addEventListener('abort', cancel, { once: true });
 
@@ -75,23 +73,24 @@ export async function renderPdfPage(
 		try {
 			pdfDocument = await loadingTask.promise;
 		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
-			throw new PdfRenderError(/password/i.test(message) ? 'encrypted_pdf' : 'render_failed');
+			const detail = error instanceof Error ? error.message : String(error);
+			throw new PdfRenderError(/password/i.test(detail) ? 'encrypted_pdf' : 'render_failed');
 		}
 		if (pageNumber > pdfDocument.numPages) throw new PdfRenderError('invalid_page');
 		if (options.signal?.aborted) throw abortError();
 
-		page = await pdfDocument.getPage(pageNumber);
-		const baseViewport = page.getViewport({ scale: 1 });
+		pdfPage = await pdfDocument.getPage(pageNumber);
+		const baseViewport = pdfPage.getViewport({ scale: 1 });
 		const scale = maxDimension / Math.max(baseViewport.width, baseViewport.height);
-		const viewport = page.getViewport({ scale });
+		const viewport = pdfPage.getViewport({ scale });
 		canvas = document.createElement('canvas');
 		canvas.width = Math.max(1, Math.round(viewport.width));
 		canvas.height = Math.max(1, Math.round(viewport.height));
 		const context = canvas.getContext('2d', { alpha: false });
 		if (!context) throw new PdfRenderError('render_failed');
 
-		renderTask = page.render({
+		renderTask = pdfPage.render({
+			canvas,
 			canvasContext: context,
 			viewport,
 			background: '#ffffff'
@@ -107,7 +106,7 @@ export async function renderPdfPage(
 	} finally {
 		options.signal?.removeEventListener('abort', cancel);
 		renderTask?.cancel();
-		page?.cleanup();
+		pdfPage?.cleanup();
 		if (pdfDocument) await pdfDocument.destroy();
 		else await loadingTask.destroy();
 		if (canvas) {
