@@ -39,6 +39,8 @@ declare
   completed_again boolean;
   blocked boolean;
   provider_retry_at timestamptz;
+  same_day_resumable_count integer;
+  next_day_resumable_count integer;
   day_one_count integer;
   day_two_count integer;
 begin
@@ -118,6 +120,24 @@ begin
   );
   if same_day_claim->>'state' <> 'retry_later' then
     raise exception 'provider quota retried before UTC rollover: %', same_day_claim;
+  end if;
+
+  select count(*) into same_day_resumable_count
+  from public.list_resumable_ocr_pages(
+    '11111111-1111-4111-8111-111111111111'::uuid,
+    '2026-08-01T23:59:59Z'::timestamptz
+  );
+  if same_day_resumable_count <> 0 then
+    raise exception 'quota-blocked page was selectable before retry time';
+  end if;
+
+  select count(*) into next_day_resumable_count
+  from public.list_resumable_ocr_pages(
+    '11111111-1111-4111-8111-111111111111'::uuid,
+    '2026-08-02T00:00:01Z'::timestamptz
+  );
+  if next_day_resumable_count <> 1 then
+    raise exception 'quota-blocked page was not selectable after UTC rollover';
   end if;
 
   next_day_claim := public.claim_ocr_job(
