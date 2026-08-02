@@ -1,0 +1,143 @@
+import { describe, expect, it } from 'vitest';
+import {
+	uploadPdfWithGateway,
+	type PdfImportGateway,
+	type PdfUploadDependencies
+} from '../../../src/lib/pdf/upload';
+import type { PdfInspection } from '../../../src/lib/pdf/types';
+
+const userId = '11111111-1111-4111-8111-111111111111';
+
+function mixedInspection(): PdfInspection {
+	return {
+		type: 'Mixed',
+		pageCount: 3,
+		nativePages: [
+			{ pageNumber: 1, text: 'Texto um' },
+			{ pageNumber: 3, text: 'Texto três' }
+		],
+		pagesNeedingOcr: [2],
+		ocrReasonsByPage: [{ pageNumber: 2, reasons: ['no_text_operators'] }],
+		markdown: null,
+		title: 'Apostila',
+		confidence: 0.9,
+		processingTimeMs: 10,
+		layout: { isComplex: false, pagesWithTables: [], pagesWithColumns: [] },
+		hasEncodingIssues: false
+	};
+}
+
+function gatewayFixture({ failMetadata = false } = {}) {
+	const uploads: Array<{ path: string; type: string }> = [];
+	const removed: string[][] = [];
+	let descriptorPayload: unknown = null;
+	const gateway: PdfImportGateway = {
+		async currentUserId() {
+			return userId;
+		},
+		async findDuplicate() {
+			return null;
+		},
+		async upload(path, blob) {
+			uploads.push({ path, type: blob.type });
+		},
+		async remove(paths) {
+			removed.push([...paths]);
+		},
+		async createImport(input) {
+			descriptorPayload = input.pages;
+			if (failMetadata) throw new Error('metadata failed');
+			return {
+				documentId: input.documentId,
+				pageCount: input.pages.length,
+				ocrPageCount: input.pages.filter((page) => page.needsOcr).length,
+				reviewPageCount: 0,
+				status: 'partially_ready'
+			};
+		}
+	};
+	return { gateway, uploads, removed, get descriptorPayload() { return descriptorPayload; } };
+}
+
+function dependencies() {
+	const rendered: number[] = [];
+	const processed: string[] = [];
+	let consentCalls = 0;
+	const values: PdfUploadDependencies = {
+		async inspectPdf() {
+			return mixedInspection();
+		},
+		async renderPdfPage(_file, pageNumber) {
+			rendered.push(pageNumber);
+			return new Blob(['page'], { type: 'image/webp' });
+		},
+		async calculateSha256() {
+			return 'a'.repeat(64);
+		},
+		async recordOcrConsent() {
+			consentCalls += 1;
+		},
+		async processPageOcr(pageId) {
+			processed.push(pageId);
+			return { state: 'complete', needsReview: false, warningCount: 0 };
+		}
+	};
+	return { values, rendered, processed, get consentCalls() { return consentCalls; } };
+}
+
+function pdf() {
+	return new File(['pdf'], 'apostila.pdf', { type: 'application/pdf', lastModified: 1_700_000_000_000 });
+}
+
+describe('uploadPdfWithGateway', () => {
+	it('renders and transcribes only pages classified for OCR', async () => {
+		const fixture = gatewayFixture();
+		const deps = dependencies();
+
+		const result = await uploadPdfWithGateway(pdf(), { consentGranted: true }, fixture.gateway, deps.values);
+
+		expect(deps.rendered).toEqual([2]);
+		expect(deps.consentCalls).toBe(1);
+		expect(deps.processed).toHaveLength(1);
+		expect(fixture.uploads.map((item) => item.path)).toEqual([
+			expect.stringMatching(new RegExp(`^${userId}/[^/]+/original\\.pdf$`)),
+			expect.stringMatching(new RegExp(`^${userId}/[^/]+/pages/2\\.webp$`))
+		]);
+		expect(fixture.descriptorPayload).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ pageNumber: 1, nativeText: 'Texto um', needsOcr: false }),
+				expect.objectContaining({ pageNumber: 2, nativeText: null, needsOcr: true }),
+				expect.objectContaining({ pageNumber: 3, nativeText: 'Texto três', needsOcr: false })
+			])
+		);
+		expect(result.ocrCompleted).toBe(1);
+	});
+
+	it('does not require OCR consent for a text-only PDF', async () => {
+		const fixture = gatewayFixture();
+		const deps = dependencies();
+		deps.values.inspectPdf = async () => ({
+			...mixedInspection(),
+			type: 'TextBased',
+			pagesNeedingOcr: [],
+			ocrReasonsByPage: []
+		});
+
+		await uploadPdfWithGateway(pdf(), { consentGranted: false }, fixture.gateway, deps.values);
+
+		expect(deps.rendered).toEqual([]);
+		expect(deps.consentCalls).toBe(0);
+		expect(deps.processed).toEqual([]);
+	});
+
+	it('removes every uploaded object when metadata publication fails', async () => {
+		const fixture = gatewayFixture({ failMetadata: true });
+		const deps = dependencies();
+
+		await expect(
+			uploadPdfWithGateway(pdf(), { consentGranted: true }, fixture.gateway, deps.values)
+		).rejects.toThrow('metadata failed');
+		expect(fixture.removed).toHaveLength(1);
+		expect(fixture.removed[0]).toEqual(fixture.uploads.map((item) => item.path));
+	});
+});
