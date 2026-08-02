@@ -346,6 +346,10 @@ export type Database = {
 					document_count: number;
 				}>;
 			};
+			list_resumable_ocr_pages: {
+				Args: { target_document_id: string; selection_at?: string };
+				Returns: Array<{ page_id: string; page_number: number }>;
+			};
 			list_review_pages: {
 				Args: { result_limit?: number; result_offset?: number };
 				Returns: Array<{
