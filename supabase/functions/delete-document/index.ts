@@ -60,7 +60,7 @@ Deno.serve(async (request) => {
 		.eq('id', documentId)
 		.maybeSingle();
 	if (loadError) return respond(503, 'document_lookup_failed');
-	if (!document) return respond(404, 'document_not_found');
+	if (!document) return respond(204);
 
 	const pagePaths = Array.isArray(document.pages)
 		? document.pages
