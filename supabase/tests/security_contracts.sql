@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(31);
+select plan(32);
 
 select has_table('public', 'app_users', 'allowlist table exists');
 select has_table('public', 'notebooks', 'notebooks table exists');
@@ -12,6 +12,16 @@ select has_table('public', 'usage_daily', 'daily usage table exists');
 select has_table('public', 'tags', 'tags table exists');
 select has_table('public', 'document_tags', 'document tags table exists');
 select has_column('public', 'tags', 'updated_at', 'tags expose an update timestamp');
+select ok(
+  (
+    select count(*) = 2
+    from pg_constraint
+    where conrelid = 'public.tags'::regclass
+      and contype = 'c'
+      and pg_get_constraintdef(oid) like '%120%'
+  ),
+  'tag names and normalized names allow the 120 character public contract'
+);
 
 select ok(
   (select relrowsecurity from pg_class where oid = 'public.app_users'::regclass),
