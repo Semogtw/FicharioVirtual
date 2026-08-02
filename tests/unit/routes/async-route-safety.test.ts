@@ -26,4 +26,13 @@ describe('async route safety', () => {
 			/\{#key selectedPage\.id\}[\s\S]*<CorrectionEditor page=\{selectedPage\}[\s\S]*\{\/key\}/
 		);
 	});
+
+	it('offers OCR retry only for states accepted by claim_ocr_job', () => {
+		const reviewRoute = read('src/routes/review/+page.svelte');
+
+		expect(reviewRoute).toContain(
+			"{#if ['retryable', 'blocked_quota'].includes(item.pageStatus)}"
+		);
+		expect(reviewRoute).not.toContain("item.pageStatus !== 'needs_review'");
+	});
 });
