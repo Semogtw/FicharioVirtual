@@ -37,8 +37,10 @@ declare
   next_day_claim jsonb;
   completed boolean;
   completed_again boolean;
+  conflicting_completion boolean;
   blocked boolean;
   provider_retry_at timestamptz;
+  persisted_text text;
   same_day_resumable_count integer;
   next_day_resumable_count integer;
   day_one_count integer;
@@ -74,6 +76,24 @@ begin
   );
   if completed_again is distinct from true then
     raise exception 'exact completion replay was not idempotent';
+  end if;
+
+  conflicting_completion := public.complete_ocr_job(
+    '22222222-2222-4222-8222-222222222222'::uuid,
+    'Texto divergente',
+    '[]'::jsonb,
+    'ready',
+    '2026-08-01T12:01:00Z'::timestamptz
+  );
+  if conflicting_completion is distinct from false then
+    raise exception 'conflicting completion replay was accepted';
+  end if;
+
+  select ocr_raw_text into persisted_text
+  from public.pages
+  where id = '22222222-2222-4222-8222-222222222222'::uuid;
+  if persisted_text is distinct from 'Texto confirmado' then
+    raise exception 'conflicting replay changed persisted OCR text: %', persisted_text;
   end if;
 
   replay_claim := public.claim_ocr_job(
