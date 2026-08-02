@@ -43,6 +43,37 @@ for (const sourceRoot of sourceRoots) {
 	}
 }
 
+const processOcrPath = join(root, 'supabase/functions/process-ocr/index.ts');
+const deleteDocumentPath = join(root, 'supabase/functions/delete-document/index.ts');
+const geminiClientPath = join(root, 'supabase/functions/_shared/gemini-ocr-client.ts');
+const edgeFunctions = [processOcrPath, deleteDocumentPath];
+
+for (const path of edgeFunctions) {
+	const content = await readFile(path, 'utf8');
+	if (!content.includes("from '../_shared/cors.ts'")) {
+		fail(path, 'edge-cors', 'Edge Function must import the shared fail-closed CORS policy');
+	}
+	if (!content.includes('parseAppOrigin') || !content.includes('corsHeaders')) {
+		fail(path, 'edge-cors', 'Edge Function must parse APP_ORIGIN and use shared CORS headers');
+	}
+	if (/['"]Access-Control-Allow-Origin['"]\s*:\s*['"]\*/.test(content)) {
+		fail(path, 'edge-cors', 'wildcard Access-Control-Allow-Origin is forbidden');
+	}
+}
+
+const processOcr = await readFile(processOcrPath, 'utf8');
+if (/generativelanguage\.googleapis\.com/i.test(processOcr)) {
+	fail(processOcrPath, 'provider-duplication', 'provider endpoint belongs only in the shared Gemini client');
+}
+if (!processOcr.includes('requestGeminiOcr')) {
+	fail(processOcrPath, 'provider-duplication', 'process-ocr must delegate provider transport and parsing');
+}
+
+const geminiClient = await readFile(geminiClientPath, 'utf8');
+if (!/generativelanguage\.googleapis\.com/i.test(geminiClient)) {
+	fail(geminiClientPath, 'provider-boundary', 'shared Gemini client must own the provider endpoint');
+}
+
 const pwaConfig = await readFile(join(root, 'vite.config.ts'), 'utf8');
 if (/supabase\.co[^\n]*(?:CacheFirst|NetworkFirst|StaleWhileRevalidate)/i.test(pwaConfig)) {
 	fail(join(root, 'vite.config.ts'), 'private-cache', 'Supabase requests must not be runtime cached');
