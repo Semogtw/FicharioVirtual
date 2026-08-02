@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { corsHeaders, parseAppOrigin } from '../_shared/cors.ts';
 import { classifyGeminiFailure } from '../_shared/ocr-contract.ts';
 import {
 	GeminiHttpError,
@@ -12,24 +13,22 @@ const MODEL = /^[A-Za-z0-9._-]{3,128}$/;
 const MAX_INLINE_IMAGE_BYTES = 14 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 55_000;
 
-function corsHeaders() {
-	return {
-		'Access-Control-Allow-Origin': Deno.env.get('APP_ORIGIN') ?? '*',
-		'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-		'Access-Control-Allow-Methods': 'POST, OPTIONS',
-		Vary: 'Origin'
-	};
-}
-
-function json(status: number, body: Record<string, unknown>) {
+function json(status: number, body: Record<string, unknown>, appOrigin: string | null) {
 	return new Response(JSON.stringify(body), {
 		status,
-		headers: { ...corsHeaders(), 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }
+		headers: {
+			...corsHeaders(appOrigin),
+			'Content-Type': 'application/json',
+			'Cache-Control': 'no-store'
+		}
 	});
 }
 
-function empty(status: number) {
-	return new Response(null, { status, headers: corsHeaders() });
+function empty(status: number, appOrigin: string | null) {
+	return new Response(null, {
+		status,
+		headers: { ...corsHeaders(appOrigin), 'Cache-Control': 'no-store' }
+	});
 }
 
 function retryAt(attemptCount: number, baseSeconds: number) {
@@ -40,17 +39,23 @@ function retryAt(attemptCount: number, baseSeconds: number) {
 }
 
 Deno.serve(async (request) => {
-	if (request.method === 'OPTIONS') return empty(204);
-	if (request.method !== 'POST') return json(405, { code: 'method_not_allowed' });
+	const appOrigin = parseAppOrigin(Deno.env.get('APP_ORIGIN'));
+	const respond = (status: number, body: Record<string, unknown>) => json(status, body, appOrigin);
+
+	if (!appOrigin) return respond(503, { code: 'ocr_not_configured' });
+	if (request.method === 'OPTIONS') return empty(204, appOrigin);
+	if (request.method !== 'POST') return respond(405, { code: 'method_not_allowed' });
 
 	const authorization = request.headers.get('Authorization');
-	if (!authorization?.startsWith('Bearer ')) return json(401, { code: 'authentication_required' });
+	if (!authorization?.startsWith('Bearer ')) {
+		return respond(401, { code: 'authentication_required' });
+	}
 
 	let body: unknown;
 	try {
 		body = await request.json();
 	} catch {
-		return json(400, { code: 'invalid_json' });
+		return respond(400, { code: 'invalid_json' });
 	}
 	if (
 		body === null ||
@@ -60,7 +65,7 @@ Deno.serve(async (request) => {
 		typeof (body as { pageId?: unknown }).pageId !== 'string' ||
 		!UUID.test((body as { pageId: string }).pageId)
 	) {
-		return json(400, { code: 'invalid_page_id' });
+		return respond(400, { code: 'invalid_page_id' });
 	}
 	const pageId = (body as { pageId: string }).pageId;
 
@@ -81,7 +86,7 @@ Deno.serve(async (request) => {
 		!Number.isInteger(dailyLimit) ||
 		dailyLimit < 1
 	) {
-		return json(503, { code: 'ocr_not_configured' });
+		return respond(503, { code: 'ocr_not_configured' });
 	}
 
 	const supabase = createClient(supabaseUrl, publishableKey, {
@@ -92,15 +97,15 @@ Deno.serve(async (request) => {
 		data: { user },
 		error: userError
 	} = await supabase.auth.getUser();
-	if (userError || !user) return json(401, { code: 'authentication_required' });
+	if (userError || !user) return respond(401, { code: 'authentication_required' });
 
 	const { data: page, error: pageError } = await supabase
 		.from('pages')
 		.select('id,status,temporary_image_path,document_id,ocr_raw_text,corrected_text')
 		.eq('id', pageId)
 		.maybeSingle();
-	if (pageError) return json(503, { code: 'page_lookup_failed' });
-	if (!page) return json(404, { code: 'page_not_found' });
+	if (pageError) return respond(503, { code: 'page_lookup_failed' });
+	if (!page) return respond(404, { code: 'page_not_found' });
 
 	const cleanupTemporaryImage = async (path: string | null) => {
 		if (!path) return;
@@ -118,7 +123,7 @@ Deno.serve(async (request) => {
 		(typeof page.corrected_text === 'string' || typeof page.ocr_raw_text === 'string')
 	) {
 		await cleanupTemporaryImage(page.temporary_image_path);
-		return json(200, { state: 'already_complete' });
+		return respond(200, { state: 'already_complete' });
 	}
 
 	const claimedAt = new Date().toISOString();
@@ -129,7 +134,7 @@ Deno.serve(async (request) => {
 		daily_hard_limit: dailyLimit
 	});
 	if (claimError || !claim || typeof claim !== 'object') {
-		return json(503, { code: 'ocr_claim_failed' });
+		return respond(503, { code: 'ocr_claim_failed' });
 	}
 	const claimState = (claim as { state?: unknown }).state;
 	if (claimState !== 'claimed') {
@@ -145,7 +150,7 @@ Deno.serve(async (request) => {
 							: claimState === 'not_found'
 								? 404
 								: 409;
-		return json(status, { state: claimState ?? 'claim_rejected' });
+		return respond(status, { state: claimState ?? 'claim_rejected' });
 	}
 	const attemptCount = Number((claim as { attemptCount?: unknown }).attemptCount ?? 1);
 
@@ -163,7 +168,7 @@ Deno.serve(async (request) => {
 			failed_at: new Date().toISOString(),
 			retry_at: null
 		});
-		return json(409, { code: 'ocr_source_missing' });
+		return respond(409, { code: 'ocr_source_missing' });
 	}
 	const sourcePath = page.temporary_image_path ?? (document.kind === 'image' ? document.storage_path : null);
 	if (!sourcePath) {
@@ -175,7 +180,7 @@ Deno.serve(async (request) => {
 			failed_at: new Date().toISOString(),
 			retry_at: null
 		});
-		return json(409, { code: 'ocr_source_missing' });
+		return respond(409, { code: 'ocr_source_missing' });
 	}
 
 	const { data: sourceBlob, error: sourceError } = await supabase.storage
@@ -191,7 +196,7 @@ Deno.serve(async (request) => {
 			failed_at: failedAt.toISOString(),
 			retry_at: retryAt(attemptCount, 30)
 		});
-		return json(503, { code: 'ocr_source_unavailable', retryable: true });
+		return respond(503, { code: 'ocr_source_unavailable', retryable: true });
 	}
 	if (sourceBlob.size > MAX_INLINE_IMAGE_BYTES) {
 		await supabase.rpc('fail_ocr_job', {
@@ -202,7 +207,7 @@ Deno.serve(async (request) => {
 			failed_at: new Date().toISOString(),
 			retry_at: null
 		});
-		return json(413, { code: 'ocr_source_too_large' });
+		return respond(413, { code: 'ocr_source_too_large' });
 	}
 
 	let bytes: Uint8Array | null = null;
@@ -227,11 +232,11 @@ Deno.serve(async (request) => {
 			completed_at: completedAt
 		});
 		if (completionError || completed !== true) {
-			return json(503, { code: 'ocr_completion_failed' });
+			return respond(503, { code: 'ocr_completion_failed' });
 		}
 
 		await cleanupTemporaryImage(page.temporary_image_path);
-		return json(200, {
+		return respond(200, {
 			state: 'complete',
 			needsReview: result.needsReview,
 			warningCount: result.warnings.length
@@ -260,7 +265,7 @@ Deno.serve(async (request) => {
 				});
 			}
 			const providerStatus = error.status >= 400 && error.status <= 599 ? error.status : 502;
-			return json(failure.quotaExhausted ? 429 : failure.retryable ? 503 : providerStatus, {
+			return respond(failure.quotaExhausted ? 429 : failure.retryable ? 503 : providerStatus, {
 				code: failure.code,
 				retryable: failure.retryable
 			});
@@ -285,7 +290,7 @@ Deno.serve(async (request) => {
 			failed_at: failedAt.toISOString(),
 			retry_at: retryable ? retryAt(attemptCount, 45) : null
 		});
-		return json(retryable ? 503 : responseInvalid ? 422 : 503, { code, retryable });
+		return respond(retryable ? 503 : responseInvalid ? 422 : 503, { code, retryable });
 	} finally {
 		clearTimeout(timeoutId);
 		bytes?.fill(0);
