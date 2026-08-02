@@ -51,6 +51,19 @@ if (workflow.includes('restore-pnpm-lockfile') || workflow.includes('pnpm-lock.y
 	fail('workflow must use the versioned root lockfile without a restoration layer');
 }
 
+const supabaseSetup = workflow.match(
+	/uses:\s*supabase\/setup-cli@(v\d+)\s*\n\s*with:\s*\n\s*version:\s*([^\s#]+)/
+);
+if (!supabaseSetup) {
+	fail('workflow must configure Supabase CLI with an explicit action and CLI version');
+} else {
+	const [, actionVersion, cliVersion] = supabaseSetup;
+	if (actionVersion !== 'v2') fail('workflow must use supabase/setup-cli@v2');
+	if (!/^\d+\.\d+\.\d+$/.test(cliVersion)) {
+		fail('Supabase CLI must use an exact semantic version instead of latest');
+	}
+}
+
 if (/^pnpm-lock\.yaml\/?\s*$/m.test(gitignore)) {
 	fail('pnpm-lock.yaml must remain versioned and cannot be ignored');
 }
@@ -60,5 +73,5 @@ if (failures.length > 0) {
 	for (const failure of failures) console.error(`- ${failure}`);
 	process.exitCode = 1;
 } else {
-	console.log('CI bootstrap checks passed with the versioned root pnpm lockfile.');
+	console.log('CI bootstrap checks passed with pinned package-manager and Supabase tooling.');
 }
