@@ -144,7 +144,7 @@ jobs:
         continue-on-error: true
         run: pnpm test:db:local
 
-      - name: Aggregate verification results
+      - name: Publish verification summary
         if: always()
         env:
           FRONTEND_OUTCOME: ${{ steps.frontend.outcome }}
@@ -156,29 +156,24 @@ jobs:
           SUPABASE_OUTCOME: ${{ steps.supabase.outcome }}
           DATABASE_OUTCOME: ${{ steps.database.outcome }}
         run: |
-          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
-          ## Verification results
+          {
+            echo '## Verification results'
+            echo
+            echo '| Gate | Outcome |'
+            echo '| --- | --- |'
+            echo "| frontend | $FRONTEND_OUTCOME |"
+            echo "| source | $SOURCE_OUTCOME |"
+            echo "| chromium | $CHROMIUM_OUTCOME |"
+            echo "| browser | $BROWSER_OUTCOME |"
+            echo "| deno | $DENO_OUTCOME |"
+            echo "| edge | $EDGE_OUTCOME |"
+            echo "| supabase | $SUPABASE_OUTCOME |"
+            echo "| database | $DATABASE_OUTCOME |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
-          | Gate | Outcome |
-          | --- | --- |
-          | frontend | $FRONTEND_OUTCOME |
-          | source | $SOURCE_OUTCOME |
-          | chromium | $CHROMIUM_OUTCOME |
-          | browser | $BROWSER_OUTCOME |
-          | deno | $DENO_OUTCOME |
-          | edge | $EDGE_OUTCOME |
-          | supabase | $SUPABASE_OUTCOME |
-          | database | $DATABASE_OUTCOME |
-          EOF
-
-          test "$FRONTEND_OUTCOME" = success
-          test "$SOURCE_OUTCOME" = success
-          test "$CHROMIUM_OUTCOME" = success
-          test "$BROWSER_OUTCOME" = success
-          test "$DENO_OUTCOME" = success
-          test "$EDGE_OUTCOME" = success
-          test "$SUPABASE_OUTCOME" = success
-          test "$DATABASE_OUTCOME" = success
+      - name: Reject incomplete verification
+        if: ${{ always() && (steps.frontend.outcome != 'success' || steps.source.outcome != 'success' || steps.chromium.outcome != 'success' || steps.browser.outcome != 'success' || steps.deno.outcome != 'success' || steps.edge.outcome != 'success' || steps.supabase.outcome != 'success' || steps.database.outcome != 'success') }}
+        run: exit 1
 
       - name: Publish final receipt
         if: always()
