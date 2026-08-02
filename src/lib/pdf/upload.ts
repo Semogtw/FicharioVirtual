@@ -1,0 +1,377 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { calculateSha256 } from '$lib/import/hash';
+import { recordOcrConsent } from '$lib/services/ocr-consent';
+import { processPageOcr, type OcrRunResult } from '$lib/services/ocr';
+import { getSupabaseClient } from '$lib/services/supabase';
+import type { Database, DocumentStatus } from '$lib/types/database';
+import { buildPdfImportPlan, type PdfImportPagePlan } from './import-plan';
+import { inspectPdf } from './inspector-client';
+import { renderPdfPage } from './renderer';
+import type { PdfInspection } from './types';
+
+const MAX_PDF_BYTES = 20 * 1024 * 1024;
+
+export type PdfImportPublication = {
+	documentId: string;
+	pageCount: number;
+	ocrPageCount: number;
+	reviewPageCount: number;
+	status: DocumentStatus;
+};
+
+export type PdfCreateImportInput = {
+	documentId: string;
+	notebookId: string | null;
+	title: string;
+	originalFilename: string;
+	originalStoragePath: string;
+	sha256: string;
+	sourceCreatedAt: string | null;
+	pages: readonly PdfImportPagePlan[];
+	promptVersion: number;
+};
+
+export interface PdfImportGateway {
+	currentUserId(): Promise<string>;
+	findDuplicate(sha256: string): Promise<string | null>;
+	upload(path: string, blob: Blob): Promise<void>;
+	remove(paths: readonly string[]): Promise<void>;
+	createImport(input: PdfCreateImportInput): Promise<PdfImportPublication>;
+}
+
+export type PdfUploadDependencies = {
+	inspectPdf(file: File, options?: { signal?: AbortSignal }): Promise<PdfInspection>;
+	renderPdfPage(
+		file: File,
+		pageNumber: number,
+		options?: { maxDimension?: number; quality?: number; signal?: AbortSignal }
+	): Promise<Blob>;
+	calculateSha256(input: Blob | ArrayBuffer | ArrayBufferView): Promise<string>;
+	recordOcrConsent(version?: number): Promise<void>;
+	processPageOcr(pageId: string): Promise<OcrRunResult>;
+};
+
+export type PdfUploadOptions = {
+	title?: string;
+	notebookId?: string | null;
+	consentGranted: boolean;
+	promptVersion?: number;
+	signal?: AbortSignal;
+	onProgress?: (progress: PdfUploadProgress) => void;
+};
+
+export type PdfUploadProgress = {
+	phase: 'inspecting' | 'uploading' | 'rendering' | 'publishing' | 'reading';
+	completed: number;
+	total: number;
+	pageNumber?: number;
+};
+
+export type UploadedPdf = PdfImportPublication & {
+	inspection: PdfInspection;
+	sha256: string;
+	storagePath: string;
+	ocrCompleted: number;
+	ocrNeedsReview: number;
+	ocrPending: number;
+};
+
+export class DuplicatePdfError extends Error {
+	readonly documentId: string;
+
+	constructor(documentId: string) {
+		super('Este PDF já está no fichário.');
+		this.name = 'DuplicatePdfError';
+		this.documentId = documentId;
+	}
+}
+
+export class PdfConsentRequiredError extends Error {
+	constructor() {
+		super('Este PDF contém páginas sem texto e exige consentimento para leitura automática.');
+		this.name = 'PdfConsentRequiredError';
+	}
+}
+
+export class PdfUploadError extends Error {
+	readonly code: 'invalid_pdf' | 'not_authenticated' | 'duplicate_check_failed' | 'upload_failed' | 'metadata_failed';
+
+	constructor(code: PdfUploadError['code']) {
+		const messages = {
+			invalid_pdf: 'Selecione um PDF válido de até 20 MB.',
+			not_authenticated: 'Entre novamente antes de enviar arquivos.',
+			duplicate_check_failed: 'Não foi possível verificar se o PDF já existe.',
+			upload_failed: 'Não foi possível enviar o PDF agora.',
+			metadata_failed: 'O PDF foi enviado, mas o registro não pôde ser concluído.'
+		} as const;
+		super(messages[code]);
+		this.name = 'PdfUploadError';
+		this.code = code;
+	}
+}
+
+function abortError() {
+	return new DOMException('PDF upload was cancelled', 'AbortError');
+}
+
+function uuid() {
+	const value = globalThis.crypto?.randomUUID?.();
+	if (!value) throw new Error('Secure UUID generation is unavailable');
+	return value;
+}
+
+function titleFromFile(file: File) {
+	return file.name.replace(/\.pdf$/i, '').trim().slice(0, 240) || 'PDF sem título';
+}
+
+function imageExtension(blob: Blob) {
+	return blob.type === 'image/webp' ? 'webp' : 'jpg';
+}
+
+function validate(file: File, options: PdfUploadOptions) {
+	if (file.type !== 'application/pdf' || file.size < 1 || file.size > MAX_PDF_BYTES) {
+		throw new PdfUploadError('invalid_pdf');
+	}
+	const promptVersion = options.promptVersion ?? 1;
+	if (!Number.isInteger(promptVersion) || promptVersion < 1 || promptVersion > 10_000) {
+		throw new TypeError('Invalid OCR prompt version');
+	}
+	return promptVersion;
+}
+
+async function processOcrPages(
+	pages: readonly PdfImportPagePlan[],
+	dependencies: PdfUploadDependencies,
+	onProgress?: PdfUploadOptions['onProgress']
+) {
+	const queue = pages.filter((page) => page.needsOcr);
+	let index = 0;
+	let complete = 0;
+	let needsReview = 0;
+	let pending = 0;
+	let progress = 0;
+
+	async function worker() {
+		while (index < queue.length) {
+			const page = queue[index++];
+			if (!page) return;
+			try {
+				const result = await dependencies.processPageOcr(page.id);
+				if (result.state === 'complete') {
+					if (result.needsReview) needsReview += 1;
+					else complete += 1;
+				} else if (result.state === 'already_complete') {
+					complete += 1;
+				} else {
+					pending += 1;
+				}
+			} catch {
+				pending += 1;
+			} finally {
+				progress += 1;
+				onProgress?.({
+					phase: 'reading',
+					completed: progress,
+					total: queue.length,
+					pageNumber: page.pageNumber
+				});
+			}
+		}
+	}
+
+	await Promise.all(Array.from({ length: Math.min(2, queue.length) }, () => worker()));
+	return { complete, needsReview, pending };
+}
+
+const defaultDependencies: PdfUploadDependencies = {
+	inspectPdf,
+	renderPdfPage,
+	calculateSha256,
+	recordOcrConsent,
+	processPageOcr
+};
+
+export async function uploadPdfWithGateway(
+	file: File,
+	options: PdfUploadOptions,
+	gateway: PdfImportGateway,
+	dependencies: PdfUploadDependencies = defaultDependencies
+): Promise<UploadedPdf> {
+	const promptVersion = validate(file, options);
+	if (options.signal?.aborted) throw abortError();
+	options.onProgress?.({ phase: 'inspecting', completed: 0, total: 1 });
+	const inspection = await dependencies.inspectPdf(file, { signal: options.signal });
+	options.onProgress?.({ phase: 'inspecting', completed: 1, total: 1 });
+
+	if (inspection.pagesNeedingOcr.length > 0) {
+		if (!options.consentGranted) throw new PdfConsentRequiredError();
+		await dependencies.recordOcrConsent();
+	}
+	if (options.signal?.aborted) throw abortError();
+
+	const [userId, sha256] = await Promise.all([
+		gateway.currentUserId(),
+		dependencies.calculateSha256(file)
+	]);
+	const duplicateId = await gateway.findDuplicate(sha256);
+	if (duplicateId) throw new DuplicatePdfError(duplicateId);
+
+	const documentId = uuid();
+	const storageRoot = `${userId}/${documentId}`;
+	const originalStoragePath = `${storageRoot}/original.pdf`;
+	let pages = buildPdfImportPlan(inspection, storageRoot).map((page) => ({ ...page }));
+	const uploadedPaths: string[] = [];
+	let metadataPublished = false;
+
+	try {
+		options.onProgress?.({ phase: 'uploading', completed: 0, total: 1 });
+		await gateway.upload(originalStoragePath, file);
+		uploadedPaths.push(originalStoragePath);
+		options.onProgress?.({ phase: 'uploading', completed: 1, total: 1 });
+
+		const ocrPages = pages.filter((page) => page.needsOcr);
+		let rendered = 0;
+		for (const page of ocrPages) {
+			if (options.signal?.aborted) throw abortError();
+			options.onProgress?.({
+				phase: 'rendering',
+				completed: rendered,
+				total: ocrPages.length,
+				pageNumber: page.pageNumber
+			});
+			const blob = await dependencies.renderPdfPage(file, page.pageNumber, {
+				maxDimension: 2400,
+				quality: 0.88,
+				signal: options.signal
+			});
+			const temporaryImagePath = `${storageRoot}/pages/${page.pageNumber}.${imageExtension(blob)}`;
+			await gateway.upload(temporaryImagePath, blob);
+			uploadedPaths.push(temporaryImagePath);
+			pages = pages.map((candidate) =>
+				candidate.id === page.id ? { ...candidate, temporaryImagePath } : candidate
+			);
+			rendered += 1;
+			options.onProgress?.({
+				phase: 'rendering',
+				completed: rendered,
+				total: ocrPages.length,
+				pageNumber: page.pageNumber
+			});
+		}
+
+		if (options.signal?.aborted) throw abortError();
+		options.onProgress?.({ phase: 'publishing', completed: 0, total: 1 });
+		const publication = await gateway.createImport({
+			documentId,
+			notebookId: options.notebookId ?? null,
+			title: options.title?.trim() || inspection.title || titleFromFile(file),
+			originalFilename: file.name,
+			originalStoragePath,
+			sha256,
+			sourceCreatedAt: file.lastModified > 0 ? new Date(file.lastModified).toISOString() : null,
+			pages: Object.freeze(pages.map((page) => Object.freeze(page))),
+			promptVersion
+		});
+		metadataPublished = true;
+		options.onProgress?.({ phase: 'publishing', completed: 1, total: 1 });
+
+		const ocr = await processOcrPages(pages, dependencies, options.onProgress);
+		return Object.freeze({
+			...publication,
+			inspection,
+			sha256,
+			storagePath: originalStoragePath,
+			ocrCompleted: ocr.complete,
+			ocrNeedsReview: ocr.needsReview,
+			ocrPending: ocr.pending
+		});
+	} catch (error) {
+		if (!metadataPublished && uploadedPaths.length > 0) {
+			await gateway.remove(uploadedPaths).catch(() => undefined);
+		}
+		throw error;
+	}
+}
+
+class SupabasePdfGateway implements PdfImportGateway {
+	readonly #client: SupabaseClient<Database>;
+
+	constructor(client: SupabaseClient<Database>) {
+		this.#client = client;
+	}
+
+	async currentUserId() {
+		const { data, error } = await this.#client.auth.getSession();
+		if (error || data.session === null) throw new PdfUploadError('not_authenticated');
+		return data.session.user.id;
+	}
+
+	async findDuplicate(sha256: string) {
+		const { data, error } = await this.#client
+			.from('documents')
+			.select('id')
+			.eq('sha256', sha256)
+			.maybeSingle();
+		if (error) throw new PdfUploadError('duplicate_check_failed');
+		return data?.id ?? null;
+	}
+
+	async upload(path: string, blob: Blob) {
+		const { error } = await this.#client.storage.from('documents').upload(path, blob, {
+			contentType: blob.type,
+			cacheControl: blob.type === 'application/pdf' ? '3600' : '86400',
+			upsert: false
+		});
+		if (error) throw new PdfUploadError('upload_failed');
+	}
+
+	async remove(paths: readonly string[]) {
+		if (paths.length === 0) return;
+		await this.#client.storage.from('documents').remove([...paths]);
+	}
+
+	async createImport(input: PdfCreateImportInput) {
+		type RpcClient = {
+			rpc(
+				name: 'create_pdf_import',
+				args: Record<string, unknown>
+			): Promise<{ data: Record<string, unknown> | null; error: unknown }>;
+		};
+		const { data, error } = await (this.#client as unknown as RpcClient).rpc('create_pdf_import', {
+			target_document_id: input.documentId,
+			target_notebook_id: input.notebookId,
+			document_title: input.title,
+			original_filename: input.originalFilename,
+			original_storage_path: input.originalStoragePath,
+			prepared_sha256: input.sha256,
+			source_created_at: input.sourceCreatedAt,
+			page_descriptors: input.pages,
+			prompt_version: input.promptVersion
+		});
+		if (error || !data) throw new PdfUploadError('metadata_failed');
+		if (
+			typeof data.documentId !== 'string' ||
+			!Number.isInteger(data.pageCount) ||
+			!Number.isInteger(data.ocrPageCount) ||
+			!Number.isInteger(data.reviewPageCount) ||
+			typeof data.status !== 'string'
+		) {
+			throw new PdfUploadError('metadata_failed');
+		}
+		return Object.freeze({
+			documentId: data.documentId,
+			pageCount: data.pageCount as number,
+			ocrPageCount: data.ocrPageCount as number,
+			reviewPageCount: data.reviewPageCount as number,
+			status: data.status as DocumentStatus
+		});
+	}
+}
+
+export function uploadPdf(
+	file: File,
+	options: PdfUploadOptions,
+	client: SupabaseClient<Database> = getSupabaseClient()
+) {
+	return uploadPdfWithGateway(file, options, new SupabasePdfGateway(client));
+}
