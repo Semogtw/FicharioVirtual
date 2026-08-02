@@ -14,7 +14,73 @@ const input = {
 	promptVersion: 1
 };
 
+function validProviderResponse() {
+	return {
+		candidates: [
+			{
+				content: {
+					parts: [{ text: JSON.stringify({ text: 'Transcrição', warnings: [] }) }]
+				}
+			}
+		]
+	};
+}
+
 describe('requestGeminiOcr', () => {
+	it('sends the image and strict structured-output contract without putting the API key in the URL', async () => {
+		let capturedUrl = '';
+		let capturedInit: RequestInit | undefined;
+
+		await requestGeminiOcr({
+			...input,
+			model: 'gemini/test model',
+			fetchImpl: async (url, init) => {
+				capturedUrl = String(url);
+				capturedInit = init;
+				return new Response(JSON.stringify(validProviderResponse()), {
+					status: 200,
+					headers: { 'Content-Type': 'application/json' }
+				});
+			}
+		});
+
+		expect(capturedUrl).toBe(
+			'https://generativelanguage.googleapis.com/v1beta/models/gemini%2Ftest%20model:generateContent'
+		);
+		expect(capturedUrl).not.toContain(input.apiKey);
+		expect(new Headers(capturedInit?.headers).get('x-goog-api-key')).toBe(input.apiKey);
+
+		const body = JSON.parse(String(capturedInit?.body)) as {
+			contents: Array<{
+				parts: Array<{ inlineData?: { mimeType: string; data: string }; text?: string }>;
+			}>;
+			generationConfig: {
+				temperature: number;
+				maxOutputTokens: number;
+				responseFormat: {
+					text: { mimeType: string; schema: { required: string[] } };
+				};
+			};
+		};
+		expect(body.contents[0]?.parts[0]?.inlineData).toEqual({
+			mimeType: 'image/webp',
+			data: 'AQID'
+		});
+		expect(body.contents[0]?.parts[1]?.text).toContain('Versão do prompt: 1.');
+		expect(body.generationConfig).toEqual(
+			expect.objectContaining({
+				temperature: 0,
+				maxOutputTokens: 8192,
+				responseFormat: {
+					text: expect.objectContaining({
+						mimeType: 'application/json',
+						schema: expect.objectContaining({ required: ['text', 'warnings'] })
+					})
+				}
+			})
+		);
+	});
+
 	it('classifies a rejected fetch as a transport failure', async () => {
 		await expect(
 			requestGeminiOcr({
@@ -45,20 +111,11 @@ describe('requestGeminiOcr', () => {
 	});
 
 	it('returns the validated OCR contract from a structured candidate', async () => {
-		const payload = {
-			candidates: [
-				{
-					content: {
-						parts: [{ text: JSON.stringify({ text: 'Transcrição', warnings: [] }) }]
-					}
-				}
-			]
-		};
 		await expect(
 			requestGeminiOcr({
 				...input,
 				fetchImpl: async () =>
-					new Response(JSON.stringify(payload), {
+					new Response(JSON.stringify(validProviderResponse()), {
 						status: 200,
 						headers: { 'Content-Type': 'application/json' }
 					})
