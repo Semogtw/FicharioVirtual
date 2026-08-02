@@ -15,12 +15,15 @@ export async function calculateSha256(input: HashInput): Promise<string> {
 	if (!subtle) throw new Error('SHA-256 is unavailable in this runtime');
 
 	const bytes = await copyBytes(input);
+	const digestInput = new Uint8Array(bytes.byteLength);
+	digestInput.set(bytes);
 	try {
-		const digest = await subtle.digest('SHA-256', bytes);
+		const digest = await subtle.digest('SHA-256', digestInput);
 		return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join(
 			''
 		);
 	} finally {
 		bytes.fill(0);
+		digestInput.fill(0);
 	}
 }
