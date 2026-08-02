@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: validate-current-head
@@ -22,6 +23,41 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+
+      - name: Archive the validated source
+        run: git archive --format=zip --output=/tmp/fichario-source.zip HEAD
+
+      - name: Upload source archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: fichario-source-${{ github.sha }}
+          path: /tmp/fichario-source.zip
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Publish running receipt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title='[CI] Fichário current HEAD validation'
+          issue_number="$(
+            gh issue list --state all --limit 100 --json number,title \
+              --jq '.[] | select(.title == "[CI] Fichário current HEAD validation") | .number' \
+              | head -n 1
+          )"
+          cat > /tmp/receipt.md <<EOF
+          Status: RUNNING
+          Commit: ${{ github.sha }}
+          Run ID: ${{ github.run_id }}
+          Workflow: ${{ github.workflow }}
+          EOF
+          if [ -z "$issue_number" ]; then
+            issue_url="$(gh issue create --title "$title" --body-file /tmp/receipt.md)"
+            issue_number="${issue_url##*/}"
+          else
+            gh issue edit "$issue_number" --body-file /tmp/receipt.md
+          fi
+          echo "RECEIPT_ISSUE=$issue_number" >> "$GITHUB_ENV"
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
@@ -53,3 +89,20 @@ jobs:
 
       - name: Run complete verification for current HEAD
         run: pnpm verify:full
+
+      - name: Publish final receipt
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -z "${RECEIPT_ISSUE:-}" ]; then
+            echo 'Receipt issue was not created.' >&2
+            exit 1
+          fi
+          cat > /tmp/receipt.md <<EOF
+          Status: ${{ job.status }}
+          Commit: ${{ github.sha }}
+          Run ID: ${{ github.run_id }}
+          Workflow: ${{ github.workflow }}
+          EOF
+          gh issue edit "$RECEIPT_ISSUE" --body-file /tmp/receipt.md
