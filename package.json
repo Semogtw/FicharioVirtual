@@ -21,7 +21,9 @@
     "verify": "pnpm lint && pnpm check && pnpm test && pnpm build"
   },
   "dependencies": {
+    "@firecrawl/pdf-inspector-wasm": "0.1.1",
     "@supabase/supabase-js": "^2.0.0",
+    "pdfjs-dist": "6.1.200",
     "zod": "^4.0.0"
   },
   "devDependencies": {
