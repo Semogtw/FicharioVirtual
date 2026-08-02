@@ -86,20 +86,21 @@ if (!/generativelanguage\.googleapis\.com/i.test(geminiClient)) {
 	);
 }
 
-const pwaConfig = await readFile(join(root, 'vite.config.ts'), 'utf8');
+const viteConfigPath = join(root, 'vite.config.ts');
+const appHtmlPath = join(root, 'src/app.html');
+const pwaConfig = await readFile(viteConfigPath, 'utf8');
+const appHtml = await readFile(appHtmlPath, 'utf8');
 if (/supabase\.co[^\n]*(?:CacheFirst|NetworkFirst|StaleWhileRevalidate)/i.test(pwaConfig)) {
-	fail(
-		join(root, 'vite.config.ts'),
-		'private-cache',
-		'Supabase requests must not be runtime cached'
-	);
+	fail(viteConfigPath, 'private-cache', 'Supabase requests must not be runtime cached');
 }
-if (!/injectRegister:\s*['"]script-defer['"]/.test(pwaConfig)) {
-	fail(
-		join(root, 'vite.config.ts'),
-		'csp',
-		'PWA registration must use an external deferred script'
-	);
+if (!/injectRegister:\s*false/.test(pwaConfig)) {
+	fail(viteConfigPath, 'csp', 'automatic PWA registration must stay disabled');
+}
+if (!/<link\s+rel=["']manifest["']\s+href=["']%sveltekit\.assets%\/manifest\.webmanifest["']\s*\/>/.test(appHtml)) {
+	fail(appHtmlPath, 'pwa-manifest', 'the application template must link the generated manifest');
+}
+if (!/<script\s+src=["']%sveltekit\.assets%\/registerSW\.js["']\s+defer><\/script>/.test(appHtml)) {
+	fail(appHtmlPath, 'csp', 'PWA registration must use an external deferred script');
 }
 
 const headers = await readFile(join(root, 'static/_headers'), 'utf8');
