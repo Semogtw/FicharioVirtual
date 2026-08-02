@@ -141,6 +141,8 @@
 	</label>
 
 	<section
+		role="region"
+		aria-label="Área para importar imagens"
 		class:dragging
 		class="drop-zone"
 		ondragenter={(event) => {

@@ -310,7 +310,6 @@
 		max-width: 42rem;
 	}
 
-	input[type='text'],
 	.create-form input {
 		width: 100%;
 		min-height: 2.75rem;

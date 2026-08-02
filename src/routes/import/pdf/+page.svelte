@@ -114,6 +114,8 @@
 	</section>
 
 	<section
+		role="region"
+		aria-label="Área para importar PDFs"
 		class:dragging
 		class="drop-zone"
 		ondragenter={(event) => {

@@ -241,6 +241,7 @@
 		margin: 0;
 		color: #4b514e;
 		line-height: 1.55;
+		line-clamp: 3;
 		-webkit-box-orient: vertical;
 		-webkit-line-clamp: 3;
 	}
