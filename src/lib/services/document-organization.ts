@@ -53,7 +53,7 @@ function validId(value: string, label: 'document' | 'notebook') {
 export async function updateDocumentOrganization(
 	documentId: string,
 	input: { title: string; notebookId: string | null },
-	client: DocumentOrganizationClientLike = defaultClient()
+	client?: DocumentOrganizationClientLike
 ): Promise<DocumentOrganization> {
 	validId(documentId, 'document');
 	const title = input.title.trim();
@@ -61,7 +61,8 @@ export async function updateDocumentOrganization(
 		throw new TypeError('Invalid document title');
 	}
 	const notebookId = input.notebookId === null ? null : validId(input.notebookId, 'notebook');
-	const { data, error } = await client
+	const gateway = client ?? defaultClient();
+	const { data, error } = await gateway
 		.from('documents')
 		.update({ title, notebook_id: notebookId })
 		.eq('id', documentId)
