@@ -8,5 +8,6 @@ node tools/checks/check-source-security.mjs
 node tools/checks/check-migrations.mjs
 node tools/checks/check-rpc-types.mjs
 node tools/checks/check-ci-bootstrap.mjs
+node tools/checks/check-static-routing.mjs
 
 echo "Offline source gates completed."
