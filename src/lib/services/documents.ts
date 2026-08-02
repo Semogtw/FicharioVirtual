@@ -52,6 +52,30 @@ async function currentUserId(client: SupabaseClient<Database>): Promise<string> 
 	return data.session.user.id;
 }
 
+export type DocumentPageLoader = (cursor: DocumentCursor | null) => Promise<DocumentPage>;
+
+export async function collectAllDocumentPages(
+	loadPage: DocumentPageLoader
+): Promise<readonly DocumentSummary[]> {
+	const items: DocumentSummary[] = [];
+	const seenCursors = new Set<string>();
+	let cursor: DocumentCursor | null = null;
+
+	while (true) {
+		const page = await loadPage(cursor);
+		items.push(...page.items);
+		if (page.nextCursor === null) break;
+
+		const nextCursor = validCursor(page.nextCursor);
+		const cursorKey = `${nextCursor.createdAt}\n${nextCursor.id}`;
+		if (seenCursors.has(cursorKey)) throw new DocumentServiceError();
+		seenCursors.add(cursorKey);
+		cursor = nextCursor;
+	}
+
+	return Object.freeze(items);
+}
+
 export async function listDocuments({
 	filters = {},
 	cursor = null,
@@ -102,6 +126,18 @@ export async function listDocuments({
 				? Object.freeze({ createdAt: last.created_at, id: last.id })
 				: null
 	});
+}
+
+export function listAllDocuments({
+	filters = {},
+	client
+}: {
+	filters?: DocumentFilters;
+	client?: SupabaseClient<Database>;
+} = {}): Promise<readonly DocumentSummary[]> {
+	return collectAllDocumentPages((cursor) =>
+		listDocuments({ filters, cursor, limit: MAX_PAGE_SIZE, client })
+	);
 }
 
 export async function createDocument(
