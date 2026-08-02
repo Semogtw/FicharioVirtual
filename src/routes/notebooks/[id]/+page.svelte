@@ -5,7 +5,7 @@
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import type { DocumentSummary } from '$lib/domain/document';
 	import type { NotebookSummary } from '$lib/domain/notebook';
-	import { listDocuments } from '$lib/services/documents';
+	import { listAllDocuments } from '$lib/services/documents';
 	import { listNotebooks } from '$lib/services/notebooks';
 
 	let notebook = $state<NotebookSummary | null>(null);
@@ -17,12 +17,12 @@
 		loading = true;
 		error = null;
 		try {
-			const [notebooks, documentPage] = await Promise.all([
+			const [notebooks, loadedDocuments] = await Promise.all([
 				listNotebooks(),
-				listDocuments({ filters: { notebookId: page.params.id }, limit: 60 })
+				listAllDocuments({ filters: { notebookId: page.params.id } })
 			]);
 			notebook = notebooks.find((item) => item.id === page.params.id) ?? null;
-			documents = documentPage.items;
+			documents = loadedDocuments;
 			if (!notebook) error = 'Este caderno não existe ou não está disponível.';
 		} catch {
 			error = 'Não foi possível abrir este caderno agora.';
