@@ -7,34 +7,40 @@ import {
 const documentId = '11111111-1111-4111-8111-111111111111';
 const notebookId = '22222222-2222-4222-8222-222222222222';
 
+type OrganizationUpdate = { title: string; notebook_id: string | null };
+
 function client() {
-	let update: Record<string, unknown> | null = null;
+	let update: OrganizationUpdate | null = null;
 	let selectedId: string | null = null;
+
 	const value: DocumentOrganizationClientLike = {
 		from(table) {
 			expect(table).toBe('documents');
 			return {
 				update(input) {
 					update = input;
-					return this;
-				},
-				eq(column, value) {
-					expect(column).toBe('id');
-					selectedId = value;
-					return this;
-				},
-				select() {
-					return this;
-				},
-				async maybeSingle() {
 					return {
-						data: {
-							id: documentId,
-							title: update?.title,
-							notebook_id: update?.notebook_id,
-							updated_at: '2026-08-02T10:00:00.000Z'
-						},
-						error: null
+						eq(column, value) {
+							expect(column).toBe('id');
+							selectedId = value;
+							return {
+								select() {
+									return {
+										async maybeSingle() {
+											return {
+												data: {
+													id: documentId,
+													title: input.title,
+													notebook_id: input.notebook_id,
+													updated_at: '2026-08-02T10:00:00.000Z'
+												},
+												error: null
+											};
+										}
+									};
+								}
+							};
+						}
 					};
 				}
 			};
