@@ -44,7 +44,12 @@ try {
 }
 
 if (restoreScript) {
-	for (const required of ['pnpm-lock.yaml.gz.b64.part-*', 'base64 --decode', 'gzip -dc']) {
+	for (const required of [
+		'pnpm-lock.yaml.gz.b64.part-*',
+		'for part in "${parts[@]}"',
+		'base64 --decode',
+		'gzip -dc'
+	]) {
 		if (!restoreScript.includes(required)) {
 			fail(`lockfile restore script is missing ${required}`);
 		}
@@ -67,7 +72,16 @@ if (partNames.length === 0) {
 		const encodedParts = await Promise.all(
 			partNames.map((name) => readFile(join(lockfilePartsDirectory, name), 'utf8'))
 		);
-		const compressed = Buffer.from(encodedParts.join('').replace(/\s+/g, ''), 'base64');
+		const compressedParts = encodedParts.map((part, index) => {
+			const encoded = part.replace(/\s+/g, '');
+			if (!/^[A-Za-z0-9+/]+={0,2}$/.test(encoded) || encoded.length % 4 !== 0) {
+				throw new Error(`${partNames[index]} is not a complete base64 payload`);
+			}
+			const decoded = Buffer.from(encoded, 'base64');
+			if (decoded.length === 0) throw new Error(`${partNames[index]} decoded to an empty payload`);
+			return decoded;
+		});
+		const compressed = Buffer.concat(compressedParts);
 		const lockfile = (await unzip(compressed)).toString('utf8');
 		if (!/^lockfileVersion:/m.test(lockfile)) fail('restored content is not a pnpm lockfile');
 		if (!lockfile.includes('@sveltejs/kit')) fail('restored lockfile does not contain application dependencies');
