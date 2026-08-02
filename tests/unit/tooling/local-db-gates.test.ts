@@ -41,6 +41,7 @@ describe('local database gate runner', () => {
 		const runner = read('tools/checks/check-edge-functions.sh');
 
 		for (const path of [
+			'supabase/functions/_shared/cors.ts',
 			'supabase/functions/_shared/ocr-contract.ts',
 			'supabase/functions/_shared/gemini-ocr-client.ts',
 			'supabase/functions/process-ocr/index.ts',
