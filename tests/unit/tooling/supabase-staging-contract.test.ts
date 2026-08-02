@@ -116,7 +116,9 @@ describe('Supabase staging contract', () => {
 		const supabaseUrl = 'https://project.supabase.co';
 		const signedUrl = `${supabaseUrl}/storage/v1/object/sign/documents/${storagePath}?token=signed-token`;
 
-		expect(() => assertSignedStorageUrl({ signedUrl, supabaseUrl, objectPath: storagePath })).not.toThrow();
+		expect(() =>
+			assertSignedStorageUrl({ signedUrl, supabaseUrl, objectPath: storagePath })
+		).not.toThrow();
 		expect(() =>
 			assertSignedStorageUrl({
 				signedUrl: `https://other.example/storage/v1/object/sign/documents/${storagePath}?token=x`,
