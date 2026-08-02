@@ -1,13 +1,26 @@
+/**
+ * @param {string} message
+ * @returns {never}
+ */
 function fail(message) {
 	throw new Error(`Deployment contract failed: ${message}`);
 }
 
+/**
+ * @param {Headers} headers
+ * @param {string} name
+ * @returns {string}
+ */
 function requireHeader(headers, name) {
 	const value = headers.get(name);
 	if (!value) fail(`missing ${name} header`);
 	return value;
 }
 
+/**
+ * @param {unknown} value
+ * @returns {URL}
+ */
 export function parseDeploymentUrl(value) {
 	if (typeof value !== 'string' || value.trim() === '') {
 		fail('deployment URL is required');
@@ -31,6 +44,9 @@ export function parseDeploymentUrl(value) {
 	return new URL(`${url.origin}/`);
 }
 
+/**
+ * @param {Headers} headers
+ */
 export function assertSecurityHeaders(headers) {
 	const csp = requireHeader(headers, 'content-security-policy');
 	for (const directive of ["default-src 'self'", "object-src 'none'", "frame-ancestors 'none'"]) {
@@ -63,6 +79,9 @@ export function assertSecurityHeaders(headers) {
 	}
 }
 
+/**
+ * @param {unknown} html
+ */
 export function assertAppShell(html) {
 	if (typeof html !== 'string' || html.trim() === '') fail('app shell HTML is empty');
 	if (!/<link[^>]+rel=["']manifest["'][^>]+href=["']\/manifest\.webmanifest["']/i.test(html)) {
@@ -73,23 +92,35 @@ export function assertAppShell(html) {
 	}
 }
 
+/**
+ * @param {unknown} manifest
+ */
 export function assertManifest(manifest) {
 	if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) {
 		fail('web manifest is not a JSON object');
 	}
-	if (manifest.name !== 'Fichário Virtual') fail('web manifest name is unexpected');
-	if (manifest.start_url !== '/') fail('web manifest start_url must be /');
-	if (manifest.display !== 'standalone') fail('web manifest display must be standalone');
-	if (!Array.isArray(manifest.icons) || manifest.icons.length === 0) {
+
+	const value = /** @type {Record<string, unknown>} */ (manifest);
+	if (value.name !== 'Fichário Virtual') fail('web manifest name is unexpected');
+	if (value.start_url !== '/') fail('web manifest start_url must be /');
+	if (value.display !== 'standalone') fail('web manifest display must be standalone');
+	if (!Array.isArray(value.icons) || value.icons.length === 0) {
 		fail('web manifest must provide at least one icon');
 	}
-	for (const icon of manifest.icons) {
-		if (!icon || typeof icon.src !== 'string' || !icon.src.startsWith('/')) {
+	for (const icon of value.icons) {
+		if (!icon || typeof icon !== 'object' || Array.isArray(icon)) {
+			fail('web manifest icons must be objects');
+		}
+		const iconValue = /** @type {Record<string, unknown>} */ (icon);
+		if (typeof iconValue.src !== 'string' || !iconValue.src.startsWith('/')) {
 			fail('web manifest icons must use root-relative URLs');
 		}
 	}
 }
 
+/**
+ * @param {unknown} source
+ */
 export function assertServiceWorker(source) {
 	if (typeof source !== 'string' || source.trim() === '') fail('service worker is empty');
 	if (/https?:\/\/[^"'\s)]*\.supabase\.co/i.test(source)) {
@@ -103,6 +134,11 @@ export function assertServiceWorker(source) {
 	}
 }
 
+/**
+ * @param {URL} baseUrl
+ * @param {number} status
+ * @param {string | null} location
+ */
 export function assertHttpRedirect(baseUrl, status, location) {
 	if (![301, 302, 307, 308].includes(status)) {
 		fail('cleartext HTTP origin did not redirect');
