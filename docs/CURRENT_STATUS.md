@@ -2,11 +2,19 @@
 
 _Atualizado: 2026-08-02_  
 _Branch ativa: `main`_  
-_Estado: MVP implementado e validado localmente; em preparação para staging, sem deployment ou release_
+_Estado: MVP implementado e validado localmente; gates externos preparados para staging, sem deployment ou release_
 
 ## Resumo executivo
 
 O repositório contém uma aplicação SvelteKit estática funcional com Supabase, autenticação de usuário único, biblioteca privada, cadernos, tags, importação de imagens e PDFs, OCR seletivo, busca textual, leitura/revisão, exportação portátil, painel operacional e PWA.
+
+Estimativa atual:
+
+- **97% do MVP implementado em código**;
+- **85% de prontidão operacional para release**;
+- **93% de progresso total ponderado do MVP**.
+
+A metodologia e os itens restantes estão em `docs/READINESS.md`.
 
 A política central permanece:
 
@@ -109,7 +117,7 @@ A política central permanece:
 - fila de revisão ordenada por ação necessária;
 - retomada individual ou por documento sem reupload.
 
-### Portabilidade e operação
+### Portabilidade, deployment e operação
 
 - exportação JSON versionada com cadernos, documentos, páginas, tags, fontes e correções;
 - nenhuma URL assinada, token ou caminho de Storage no manifesto;
@@ -117,13 +125,17 @@ A política central permanece:
 - configurações com exportação, política operacional e encerramento de sessão;
 - documentação de deployment, privacidade, recuperação, limites gratuitos e testes;
 - gates offline de segurança/migrations e runners locais de funções/banco;
+- verificador do host HTTPS, headers, fallback SPA, manifesto e service worker;
+- Action manual `Verify deployed Fichário` com entrada de URL não interpolada no shell;
+- verificador Supabase remoto com duas contas, allowlist e sentinela RLS descartável;
+- Action manual `Verify Supabase staging`, protegida pelo environment `staging` e sem service-role key;
 - workspace offline portátil fabricado pelo repositório `Offline-Toolchains`.
 
 ## Validação e evidência
 
-### HEAD integralmente validado
+### HEAD funcional integralmente validado
 
-O commit `cccce3f819b1e72dcf41f2342f04a476a8bbf150` recebeu `SUCCESS` no workflow `Validate current head`, run `30770283157`.
+O commit `f961461cf27df2fe6e860e2ac50236ec2eb70a23` recebeu `SUCCESS` no workflow `Validate current head`, run `30772068104`.
 
 A execução comprovou:
 
@@ -131,7 +143,7 @@ A execução comprovou:
 pnpm install --frozen-lockfile
 Prettier + ESLint
 svelte-check: 0 erros, 0 warnings
-120 testes unitários
+134 testes unitários
 build estático + validação dos artefatos PWA
 gates offline de segurança, migrations, RPCs, toolchain e rotas
 3 testes E2E no Chromium
@@ -146,29 +158,51 @@ cota e retomada na virada do dia UTC
 
 Recibo persistente: issue `#1`, `[CI] Fichário current HEAD validation`.
 
-Relatório: `docs/reports/2026-08-02-current-head-validation.md`.
+O mesmo SHA também foi instalado e verificado no workspace offline já publicado, sem acesso ao registry: lint, tipos, 134 unitários, build PWA, cinco gates de fonte e três E2E passaram.
+
+### Gates externos preparados
+
+- `pnpm test:deployment -- https://host.example` valida HTTPS, redirect, CSP, HSTS, Permissions Policy, cache, SPA, manifesto e PWA;
+- `Verify deployed Fichário` executa esse contrato manualmente no GitHub Actions;
+- `pnpm test:staging:supabase` usa duas contas de teste e chave publicável para validar allowlist e RLS;
+- `Verify Supabase staging` lê somente secrets do environment protegido `staging`;
+- nenhuma das duas verificações externas foi executada ainda porque o host e o projeto remoto não estão configurados.
 
 ### Workspace offline
 
-O workflow `Build Fichário offline workspace` do repositório `Semogtw/Offline-Toolchains` concluiu com sucesso no run `30769889858` e publicou manifest mais duas partes compactadas.
+O primeiro workflow `Build Fichário offline workspace` do repositório `Semogtw/Offline-Toolchains` concluiu com sucesso no run `30769889858` e publicou manifest mais duas partes compactadas.
 
-O bundle inclui checkout, Node, pnpm/store, Chromium, Deno e Supabase CLI. O gate de banco ainda requer Docker e as imagens Supabase, que não são incluídas no archive.
+O bundle comprovou utilidade nesta execução: foi remontado por checksum, instalou o HEAD pelo store local e reproduziu uma falha unitária antes do CI terminar.
+
+A fabricação v2 está fixada no SHA validado `f961461cf27df2fe6e860e2ac50236ec2eb70a23` e adiciona:
+
+- cache Deno com verificação `--cached-only`;
+- gates de fonte no smoke test;
+- checksum do archive com caminho portátil;
+- gate contra material de chave privada rastreado;
+- manifest de evidência atualizado.
+
+O gate de banco ainda requer Docker e as imagens Supabase, que não são incluídas no archive.
 
 ## Próximas prioridades
 
-1. implantar um projeto Supabase de staging gratuito, sem dados reais;
-2. validar Auth, RLS, Storage e URLs assinadas com duas contas de teste;
-3. configurar secrets e testar OCR real com imagens sintéticas;
-4. injetar 429 diário/transitório, 503, timeout e resposta inválida;
-5. validar PDFs textuais, digitalizados e mistos em tablet/celular;
-6. verificar headers, fallback SPA, PWA, atualização e expiração de URL no host final;
-7. validar limites gratuitos e billing desativado na conta real;
-8. somente depois considerar um release.
+1. concluir e publicar a fabricação v2 do workspace offline fixado no SHA verde;
+2. criar um projeto Supabase de staging gratuito, sem dados reais;
+3. configurar o environment `staging` e executar a verificação com duas contas;
+4. ampliar o gate remoto para Storage privado e expiração de URL assinada;
+5. implantar Edge Functions e testar OCR real com imagens sintéticas;
+6. injetar 429 diário/transitório, 503, timeout e resposta inválida;
+7. publicar um host HTTPS e executar `Verify deployed Fichário`;
+8. validar PDFs textuais, digitalizados e mistos em tablet/celular;
+9. validar limites gratuitos e billing desativado na conta real;
+10. somente depois considerar um release.
 
 ## Ainda não validado externamente
 
-- migrações em projeto Supabase remoto;
-- autenticação/Storage reais e comportamento de URLs assinadas;
+- migrations em projeto Supabase remoto;
+- autenticação e Storage reais;
+- isolamento RLS remoto com as duas contas preparadas;
+- comportamento e expiração de URLs assinadas;
 - resposta e quota reais do modelo configurado;
 - falha de rede/process death na infraestrutura implantada;
 - PDFs extensos e consumo de memória em dispositivo físico;
@@ -179,6 +213,7 @@ O bundle inclui checkout, Node, pnpm/store, Chromium, Deno e Supabase CLI. O gat
 ## Regras de continuidade
 
 - não inserir chaves Gemini/Supabase privadas no frontend;
+- não inserir a chave OpenPGP privada no GitHub, em Actions ou artifacts;
 - não transformar falha de OCR em perda de arquivo;
 - não enviar páginas de PDF com texto para OCR;
 - não cachear respostas autenticadas;
