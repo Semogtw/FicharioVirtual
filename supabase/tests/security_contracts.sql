@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(30);
+select plan(31);
 
 select has_table('public', 'app_users', 'allowlist table exists');
 select has_table('public', 'notebooks', 'notebooks table exists');
@@ -11,6 +11,7 @@ select has_table('public', 'ocr_jobs', 'OCR jobs table exists');
 select has_table('public', 'usage_daily', 'daily usage table exists');
 select has_table('public', 'tags', 'tags table exists');
 select has_table('public', 'document_tags', 'document tags table exists');
+select has_column('public', 'tags', 'updated_at', 'tags expose an update timestamp');
 
 select ok(
   (select relrowsecurity from pg_class where oid = 'public.app_users'::regclass),
