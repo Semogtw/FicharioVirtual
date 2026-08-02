@@ -83,7 +83,9 @@ export function assertProbeBytes({ expected, actual }) {
 		fail('Storage probe bytes must be Uint8Array values');
 	}
 	if (expected.byteLength !== actual.byteLength) {
-		fail(`Storage probe bytes have different lengths: ${expected.byteLength} != ${actual.byteLength}`);
+		fail(
+			`Storage probe bytes have different lengths: ${expected.byteLength} != ${actual.byteLength}`
+		);
 	}
 	for (let index = 0; index < expected.byteLength; index += 1) {
 		if (expected[index] !== actual[index]) {
