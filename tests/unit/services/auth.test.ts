@@ -85,4 +85,13 @@ describe('password sign in', () => {
 			expect.objectContaining({ code: 'not_authorized' })
 		);
 	});
+
+	it('validates credentials before constructing the default Supabase client', async () => {
+		await expect(signIn('invalid', 'password')).rejects.toEqual(
+			expect.objectContaining({ code: 'invalid_input' })
+		);
+		await expect(signIn('owner@example.test', '')).rejects.toEqual(
+			expect.objectContaining({ code: 'invalid_input' })
+		);
+	});
 });
