@@ -116,13 +116,18 @@
 							<span>Título</span>
 							<input
 								bind:value={row.title}
+								disabled={row.saving}
 								maxlength="240"
 								oninput={() => changed(row)}
 							/>
 						</label>
 						<label>
 							<span>Caderno</span>
-							<select bind:value={row.notebookId} onchange={() => changed(row)}>
+							<select
+								bind:value={row.notebookId}
+								disabled={row.saving}
+								onchange={() => changed(row)}
+							>
 								<option value="">Sem caderno</option>
 								{#each notebooks as notebook}
 									<option value={notebook.id}>{notebook.name}</option>
