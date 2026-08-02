@@ -24,6 +24,18 @@ SQL
 }
 trap cleanup EXIT
 
+parse_claim_state() {
+  awk '
+    NF && $0 != "BEGIN" && $0 != "COMMIT" && $0 != "SET" && $0 !~ /^aaaaaaaa-/ {
+      value = $0
+    }
+    END {
+      if (value == "") exit 1
+      print value
+    }
+  ' "$@"
+}
+
 psql "$db_url" -v ON_ERROR_STOP=1 \
   -f "$repo_root/tools/checks/fixtures/ocr-concurrency-fixture.sql" >/dev/null
 
@@ -51,27 +63,15 @@ pid_b=$!
 wait "$pid_a"
 wait "$pid_b"
 
-python - "$temporary_directory/claim-a.out" "$temporary_directory/claim-b.out" <<'PY'
-from pathlib import Path
-import sys
-
-states = []
-for path in sys.argv[1:]:
-    values = [
-        value.strip()
-        for value in Path(path).read_text(encoding='utf-8').splitlines()
-        if value.strip()
-        and value.strip() not in {'BEGIN', 'COMMIT', 'SET'}
-        and not value.strip().startswith('aaaaaaaa-')
-    ]
-    if not values:
-        raise SystemExit(f'claim produced no state: {path}')
-    states.append(values[-1])
-
-expected = ['claimed', 'quota_exhausted']
-if sorted(states) != expected:
-    raise SystemExit(f'expected {expected}, received {states}')
-PY
+state_a="$(parse_claim_state "$temporary_directory/claim-a.out")"
+state_b="$(parse_claim_state "$temporary_directory/claim-b.out")"
+if ! {
+  [[ "$state_a" == "claimed" && "$state_b" == "quota_exhausted" ]] ||
+    [[ "$state_a" == "quota_exhausted" && "$state_b" == "claimed" ]]
+}; then
+  echo "Expected one claimed and one quota_exhausted state, received: $state_a, $state_b" >&2
+  exit 1
+fi
 
 reserved_count="$(
   psql "$db_url" -Atq -v ON_ERROR_STOP=1 -c \
@@ -119,7 +119,7 @@ if [[ "$scheduled_count" != "1" ]]; then
 fi
 
 same_day_state="$(
-  psql "$db_url" -Atq -v ON_ERROR_STOP=1 <<SQL
+  psql "$db_url" -Atq -v ON_ERROR_STOP=1 <<SQL | parse_claim_state
 begin;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '$user_id', true);
@@ -132,7 +132,6 @@ select public.claim_ocr_job(
 commit;
 SQL
 )"
-same_day_state="$(printf '%s\n' "$same_day_state" | grep -vE '^(BEGIN|COMMIT|SET|aaaaaaaa-)' | tail -n 1)"
 if [[ "$same_day_state" != "retry_later" ]]; then
   echo "Expected local quota retry_later, received: $same_day_state" >&2
   exit 1
