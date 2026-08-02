@@ -43,17 +43,14 @@ O último checkpoint local completo está documentado em [`docs/reports/2026-08-
 
 Requisitos: Node.js `>=22.12`, pnpm `>=10`, Chromium do Playwright, Supabase CLI, Docker, PostgreSQL `psql` e Deno.
 
-O lockfile canônico é armazenado como partes Base64 compactadas em `tools/lockfile/` para permitir transporte reprodutível pelo conector. Restaure-o antes da instalação:
-
 ```bash
 corepack enable
-bash tools/lockfile/restore-pnpm-lockfile.sh
 pnpm install --frozen-lockfile
 pnpm exec playwright install chromium
 pnpm verify
 ```
 
-O `pnpm-lock.yaml` restaurado é um artefato local ignorado pelo Git; as partes versionadas permanecem a fonte reproduzível.
+O `pnpm-lock.yaml` é versionado na raiz e deve acompanhar toda alteração de dependências.
 
 Validação completa local, incluindo E2E, análise offline, Edge Functions e banco Supabase:
 
