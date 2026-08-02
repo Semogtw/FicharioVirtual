@@ -61,7 +61,7 @@ export async function renderPdfPage(
 	GlobalWorkerOptions.workerSrc = workerModule.default;
 
 	const bytes = new Uint8Array(await file.arrayBuffer());
-	const loadingTask = getDocument({ data: bytes, isEvalSupported: false, useSystemFonts: true });
+	const loadingTask = getDocument({ data: bytes, useSystemFonts: true });
 	let pdfDocument: PDFDocumentProxy | null = null;
 	let pdfPage: PDFPageProxy | null = null;
 	let canvas: HTMLCanvasElement | null = null;
@@ -107,8 +107,8 @@ export async function renderPdfPage(
 		options.signal?.removeEventListener('abort', cancel);
 		renderTask?.cancel();
 		pdfPage?.cleanup();
-		if (pdfDocument) await pdfDocument.destroy();
-		else await loadingTask.destroy();
+		pdfDocument?.cleanup();
+		await loadingTask.destroy();
 		if (canvas) {
 			canvas.width = 0;
 			canvas.height = 0;
