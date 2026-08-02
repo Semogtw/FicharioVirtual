@@ -92,14 +92,14 @@ export function assertManifest(manifest) {
 
 export function assertServiceWorker(source) {
 	if (typeof source !== 'string' || source.trim() === '') fail('service worker is empty');
-	if (!source.includes('precacheAndRoute'))
-		fail('service worker does not contain a precache manifest');
-
 	if (/https?:\/\/[^"'\s)]*\.supabase\.co/i.test(source)) {
 		fail('service worker mentions a Supabase origin');
 	}
 	if (/\/(?:rest|auth|storage|functions)\/v1(?:\/|["'`?])/i.test(source)) {
 		fail('service worker mentions a private API surface');
+	}
+	if (!source.includes('precacheAndRoute')) {
+		fail('service worker does not contain a precache manifest');
 	}
 }
 
@@ -113,6 +113,7 @@ export function assertHttpRedirect(baseUrl, status, location) {
 	cleartextUrl.protocol = 'http:';
 	const redirectUrl = new URL(location, cleartextUrl);
 	if (redirectUrl.protocol !== 'https:') fail('cleartext HTTP redirect did not upgrade to HTTPS');
-	if (redirectUrl.host !== baseUrl.host)
+	if (redirectUrl.host !== baseUrl.host) {
 		fail('cleartext HTTP redirect did not preserve the same host');
+	}
 }
