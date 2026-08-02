@@ -7,15 +7,14 @@ function client(rows: unknown[] = []) {
 	const value: SearchClientLike = {
 		rpc(_name, input) {
 			args = input;
-			return {
-				abortSignal(inputSignal) {
-					signal = inputSignal;
-					return this;
-				},
-				then(resolve) {
-					return Promise.resolve(resolve({ data: rows, error: null }));
-				}
+			const request = Promise.resolve({ data: rows, error: null }) as ReturnType<
+				SearchClientLike['rpc']
+			>;
+			request.abortSignal = (inputSignal) => {
+				signal = inputSignal;
+				return request;
 			};
+			return request;
 		}
 	};
 	return {
