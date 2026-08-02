@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import Button from '$lib/components/Button.svelte';
-	import type { ImagePreparationMode } from '$lib/import/image-types';
 	import type { NotebookSummary } from '$lib/domain/notebook';
+	import type { ImagePreparationMode } from '$lib/import/image-types';
 	import { listNotebooks } from '$lib/services/notebooks';
 	import {
 		addImages,
@@ -10,7 +10,8 @@
 		clearFinishedImports,
 		importQueue,
 		removeImport,
-		retryImport
+		retryImport,
+		type ImportQueueItem
 	} from '$lib/stores/import-queue.svelte';
 
 	let notebooks = $state<readonly NotebookSummary[]>([]);
@@ -24,11 +25,14 @@
 		queued: 'Na fila',
 		preparing: 'Preparando no dispositivo',
 		uploading: 'Enviando com segurança',
+		reading: 'Lendo a página',
+		waiting: 'Leitura pendente',
+		needs_review: 'Pronto para revisão',
 		complete: 'Importação concluída',
 		duplicate: 'Já existe no fichário',
 		failed: 'Falha na importação',
 		cancelled: 'Cancelado'
-	} as const;
+	} satisfies Record<ImportQueueItem['status'], string>;
 
 	function formatBytes(bytes: number) {
 		if (bytes < 1024) return `${bytes} B`;
@@ -44,7 +48,7 @@
 		}
 		const images = files.filter((file) => ['image/jpeg', 'image/png', 'image/webp'].includes(file.type));
 		if (images.length !== files.length) {
-			selectionError = 'Nesta etapa, selecione somente imagens JPG, PNG ou WebP. PDFs entram a seguir.';
+			selectionError = 'Nesta etapa, selecione somente imagens JPG, PNG ou WebP.';
 		}
 		if (images.length > 0) addImages(images, { mode, notebookId: notebookId || null });
 	}
@@ -59,6 +63,18 @@
 		event.preventDefault();
 		dragging = false;
 		queue(Array.from(event.dataTransfer?.files ?? []));
+	}
+
+	function canCancel(item: ImportQueueItem) {
+		return item.status === 'preparing' || item.status === 'uploading';
+	}
+
+	function canRetry(item: ImportQueueItem) {
+		return item.status === 'failed' || item.status === 'cancelled' || item.status === 'waiting';
+	}
+
+	function canOpen(item: ImportQueueItem) {
+		return (item.status === 'complete' || item.status === 'needs_review') && item.result !== null;
 	}
 
 	onMount(() => {
@@ -76,11 +92,11 @@
 			<p class="eyebrow">Entrada do arquivo</p>
 			<h1 id="page-title">Importar imagens</h1>
 			<p>
-				A preparação e a miniatura acontecem no dispositivo. Somente a versão preparada segue
-				para o arquivo privado e para a leitura automática.
+				A preparação e a miniatura acontecem no dispositivo. O arquivo privado permanece salvo
+				mesmo quando a leitura precisa ser retomada mais tarde.
 			</p>
 		</div>
-		{#if importQueue.items.some((item) => ['complete', 'duplicate', 'cancelled'].includes(item.status))}
+		{#if importQueue.items.some((item) => ['complete', 'needs_review', 'duplicate', 'cancelled'].includes(item.status))}
 			<Button label="Limpar concluídos" variant="secondary" onclick={clearFinishedImports} />
 		{/if}
 	</header>
@@ -181,13 +197,15 @@
 							{#if item.error}<p>{item.error}</p>{/if}
 						</div>
 						<div class="item-actions">
-							{#if item.status === 'preparing' || item.status === 'uploading'}
+							{#if canCancel(item)}
 								<button type="button" onclick={() => cancelImport(item.id)}>Cancelar</button>
-							{:else if item.status === 'failed' || item.status === 'cancelled'}
-								<button type="button" onclick={() => retryImport(item.id)}>Tentar novamente</button>
-								<button type="button" onclick={() => removeImport(item.id)}>Remover</button>
-							{:else if item.status === 'complete' && item.result}
-								<a href={`/documents/${item.result.documentId}/`}>Abrir</a>
+							{:else if canRetry(item)}
+								<button type="button" onclick={() => retryImport(item.id)}>Retomar</button>
+								<button type="button" onclick={() => removeImport(item.id)}>Remover da lista</button>
+							{:else if canOpen(item) && item.result}
+								<a href={`/documents/${item.result.documentId}/`}>
+									{item.status === 'needs_review' ? 'Revisar' : 'Abrir'}
+								</a>
 								<button type="button" onclick={() => removeImport(item.id)}>Ocultar</button>
 							{:else if item.status === 'duplicate' && item.duplicateDocumentId}
 								<a href={`/documents/${item.duplicateDocumentId}/`}>Abrir existente</a>
@@ -207,7 +225,8 @@
 		gap: 1.4rem;
 	}
 
-	header {
+	header,
+	.queue-heading {
 		display: flex;
 		align-items: end;
 		justify-content: space-between;
@@ -285,10 +304,14 @@
 		grid-column: 1 / -1;
 	}
 
-	.choice {
+	.choice,
+	.consent {
 		display: flex;
-		align-items: center;
+		align-items: flex-start;
 		gap: 0.65rem;
+	}
+
+	.choice {
 		min-height: 3rem;
 		padding: 0.6rem 0.75rem;
 		border: 1px solid var(--line-strong);
@@ -296,19 +319,18 @@
 		background: var(--surface-strong);
 	}
 
-	.choice span {
+	.choice span,
+	.consent span {
 		display: grid;
-		gap: 0.12rem;
+		gap: 0.2rem;
 	}
 
-	.choice small {
+	.choice small,
+	.consent small {
 		color: var(--muted);
 	}
 
 	.consent {
-		display: flex;
-		align-items: flex-start;
-		gap: 0.75rem;
 		padding: 1rem;
 		border-left: 0.3rem solid var(--accent);
 		background: rgb(166 94 67 / 7%);
@@ -320,14 +342,8 @@
 		margin-top: 0.18rem;
 	}
 
-	.consent span {
-		display: grid;
-		gap: 0.3rem;
-	}
-
 	.consent small {
 		max-width: 68rem;
-		color: var(--muted);
 		line-height: 1.5;
 	}
 
@@ -371,23 +387,33 @@
 		color: var(--muted);
 	}
 
-	.picker-actions {
+	.picker-actions,
+	.item-actions {
 		display: flex;
 		flex-wrap: wrap;
+		gap: 0.55rem;
+	}
+
+	.picker-actions {
 		justify-content: center;
-		gap: 0.65rem;
+	}
+
+	.file-button,
+	.camera-button,
+	.item-actions button,
+	.item-actions a {
+		min-height: 2.75rem;
+		display: inline-flex;
+		align-items: center;
+		padding: 0.65rem 0.9rem;
+		border-radius: var(--radius-sm);
+		font-weight: 740;
+		cursor: pointer;
 	}
 
 	.file-button,
 	.camera-button {
 		position: relative;
-		min-height: 2.8rem;
-		display: inline-flex;
-		align-items: center;
-		padding: 0.7rem 1rem;
-		border-radius: var(--radius-sm);
-		font-weight: 740;
-		cursor: pointer;
 	}
 
 	.file-button {
@@ -395,7 +421,9 @@
 		color: white;
 	}
 
-	.camera-button {
+	.camera-button,
+	.item-actions button,
+	.item-actions a {
 		border: 1px solid var(--line-strong);
 		background: var(--surface-strong);
 		color: var(--ink);
@@ -422,18 +450,13 @@
 		gap: 0.8rem;
 	}
 
-	.queue-heading {
-		display: flex;
-		align-items: end;
-		justify-content: space-between;
-	}
-
 	.queue-heading h2 {
 		margin-bottom: 0;
 		font-size: 2rem;
 	}
 
-	.queue-heading > span {
+	.queue-heading > span,
+	.item-copy small {
 		color: var(--muted);
 		font-size: 0.85rem;
 	}
@@ -488,10 +511,6 @@
 		white-space: nowrap;
 	}
 
-	.item-copy small {
-		color: var(--muted);
-	}
-
 	.status {
 		width: fit-content;
 		color: var(--archive);
@@ -499,13 +518,19 @@
 		font-weight: 740;
 	}
 
+	.status.reading {
+		color: var(--focus);
+	}
+
+	.status.waiting,
+	.status.needs_review,
+	.status.duplicate {
+		color: var(--accent-strong);
+	}
+
 	.status.failed,
 	.status.cancelled {
 		color: var(--danger);
-	}
-
-	.status.duplicate {
-		color: var(--accent-strong);
 	}
 
 	.item-copy p {
@@ -515,25 +540,14 @@
 	}
 
 	.item-actions {
-		display: flex;
-		flex-wrap: wrap;
 		justify-content: flex-end;
-		gap: 0.4rem;
 	}
 
 	.item-actions button,
 	.item-actions a {
 		min-height: 2.35rem;
-		display: inline-flex;
-		align-items: center;
 		padding: 0.5rem 0.7rem;
-		border: 1px solid var(--line-strong);
-		border-radius: var(--radius-sm);
-		background: var(--surface-strong);
-		color: var(--ink);
 		font-size: 0.78rem;
-		font-weight: 700;
-		cursor: pointer;
 	}
 
 	@media (max-width: 820px) {
