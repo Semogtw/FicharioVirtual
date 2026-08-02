@@ -11,11 +11,7 @@
 		onSearch
 	}: TopSearchProps = $props();
 
-	let query = $state('');
-
-	$effect(() => {
-		query = initialValue;
-	});
+	let query = $derived(initialValue);
 
 	function submit(event: SubmitEvent) {
 		event.preventDefault();
