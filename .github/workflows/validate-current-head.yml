@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths:
       - .github/workflows/validate-current-head.yml
+      - tools/lockfile/**
+      - tools/checks/check-ci-bootstrap.mjs
+      - tools/checks/run-offline-source-gates.sh
   workflow_dispatch:
 
 permissions:
