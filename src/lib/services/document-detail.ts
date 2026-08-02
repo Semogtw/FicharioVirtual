@@ -165,9 +165,10 @@ class SupabaseDocumentGateway implements DocumentDetailGateway {
 }
 
 export function loadDocumentDetail(
-	documentId: string,
+	documentId: string | undefined,
 	client: SupabaseClient<Database> = getSupabaseClient()
 ) {
+	if (!documentId) throw new TypeError('Invalid document identifier');
 	return loadDocumentDetailWithGateway(documentId, new SupabaseDocumentGateway(client));
 }
 
