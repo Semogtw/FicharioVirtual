@@ -5,13 +5,8 @@ on:
     branches: [main]
     paths:
       - .github/workflows/validate-current-head.yml
-      - .github/workflows/rebuild-pnpm-lockfile.yml
-      - .gitignore
-      - README.md
-      - docs/TESTING.md
       - package.json
       - pnpm-lock.yaml
-      - tools/lockfile/**
       - tools/checks/check-ci-bootstrap.mjs
       - tools/checks/run-offline-source-gates.sh
   workflow_dispatch:
