@@ -19,7 +19,7 @@ describe('Edge Function CORS adoption', () => {
 			expect(source).toContain('parseAppOrigin');
 			expect(source).toContain('corsHeaders');
 			expect(source).not.toContain("'Access-Control-Allow-Origin': '*'");
-			expect(source).not.toContain('?? \"*\"');
+			expect(source).not.toContain('?? "*"');
 			expect(source).not.toContain("?? '*'");
 		});
 	}
