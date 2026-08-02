@@ -10,8 +10,7 @@ function client(rows: unknown[] = []) {
 	const value: SearchClientLike = {
 		rpc(_name, input) {
 			args = input;
-			let request: SearchRequest;
-			request = {
+			const request: SearchRequest = {
 				abortSignal(inputSignal) {
 					signal = inputSignal;
 					return request;
