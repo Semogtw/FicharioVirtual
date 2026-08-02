@@ -12,7 +12,9 @@
 	import type { NotebookSummary } from '$lib/domain/notebook';
 	import { listDocuments } from '$lib/services/documents';
 	import { listNotebooks } from '$lib/services/notebooks';
+	import { RequestVersion } from '$lib/services/request-version';
 
+	const requests = new RequestVersion();
 	let documents = $state<DocumentSummary[]>([]);
 	let notebooks = $state<readonly NotebookSummary[]>([]);
 	let nextCursor = $state<DocumentCursor | null>(null);
@@ -34,6 +36,8 @@
 	}
 
 	async function load(reset: boolean) {
+		if (!reset && loadingMore) return;
+		const requestVersion = reset ? requests.next() : requests.current();
 		if (reset) loading = true;
 		else loadingMore = true;
 		error = null;
@@ -48,13 +52,18 @@
 				},
 				cursor: reset ? null : nextCursor
 			});
+			if (!requests.isCurrent(requestVersion)) return;
 			documents = reset ? [...page.items] : [...documents, ...page.items];
 			nextCursor = page.nextCursor;
 		} catch {
-			error = 'Não foi possível carregar a biblioteca agora.';
+			if (requests.isCurrent(requestVersion)) {
+				error = 'Não foi possível carregar a biblioteca agora.';
+			}
 		} finally {
-			loading = false;
-			loadingMore = false;
+			if (requests.isCurrent(requestVersion)) {
+				loading = false;
+				loadingMore = false;
+			}
 		}
 	}
 
