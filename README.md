@@ -1,44 +1,88 @@
 # Fichário Virtual
 
-Biblioteca pessoal pesquisável para fotos, capturas de tela e PDFs de anotações manuscritas ou digitadas.
+PWA privada e pesquisável para organizar fotos, capturas de tela e PDFs de anotações manuscritas ou digitadas.
 
-O projeto será uma PWA otimizada para tablet e desktop. O dispositivo cuida da interface, preparação de imagens e inspeção de PDFs; o reconhecimento manuscrito é executado por uma API externa gratuita. O alvo principal é um Samsung Galaxy Tab S6 Lite, portanto a prioridade é velocidade percebida e fluidez, sem tentar reduzir cada dependência ao mínimo absoluto.
+O aplicativo prepara imagens e inspeciona PDFs no próprio dispositivo, preserva texto nativo sem OCR e encaminha somente as páginas que realmente precisam de reconhecimento. Supabase fornece autenticação, PostgreSQL, Storage privado e Edge Functions; a integração Gemini fica isolada no backend e possui consentimento, idempotência, limite diário e recuperação sem reupload.
 
-## Objetivos
+## Estado atual
 
-- Importar fotos, imagens e PDFs.
-- Extrair texto nativo de PDFs sem consumir OCR.
-- Reconhecer escrita manual sem executar modelos locais.
-- Pesquisar por palavra ou frase, tolerando acentos e pequenos erros de OCR.
-- Abrir o documento original diretamente na página encontrada.
-- Permitir correção manual da transcrição.
-- Funcionar com uma única conta e dados privados.
-- Permanecer 100% gratuito, sem faturamento automático ou fallback pago.
-- Ter uma interface editorial agradável, sem aparência de chatbot ou demonstração de IA.
+O MVP está implementado na branch `main`, sem deployment ou release público. O repositório inclui:
 
-## Arquitetura planejada
+- autenticação de conta única com allowlist fail-closed;
+- biblioteca privada, cadernos, tags e organização em lote;
+- importação cancelável e retomável de imagens e PDFs;
+- OCR seletivo por página, com quota e backoff explícitos;
+- busca textual ranqueada e tolerante a acentos/erros pequenos;
+- leitor lado a lado, revisão manual e recuperação de rascunhos locais;
+- painel operacional de uso;
+- exportação JSON portátil e exclusão completa;
+- PWA com cache limitado ao shell e ativos públicos;
+- testes unitários, E2E, pgTAP, gates de segurança e verificações locais de concorrência/idempotência OCR.
 
-- **Frontend/PWA:** SvelteKit + TypeScript, hospedado na Vercel Hobby.
-- **Backend:** Supabase Free para Auth, PostgreSQL, Storage e Edge Functions.
-- **OCR:** Gemini Developer API no nível gratuito, encapsulada por um adaptador substituível.
-- **PDFs:** `pdf-inspector` em WebAssembly para classificar e extrair texto; PDF.js apenas para renderizar páginas que realmente exigem OCR.
-- **Busca:** PostgreSQL Full Text Search, `unaccent` e `pg_trgm`; sem banco vetorial no MVP.
-
-## Documentação
-
-- [Especificação do produto e arquitetura](docs/PROJECT_SPEC.md)
-- [Plano detalhado de implementação](docs/IMPLEMENTATION_PLAN.md)
-- [Operação sem custos e limites](docs/FREE_TIER_OPERATIONS.md)
-
-## Estado
-
-O repositório está na fase de especificação. A implementação deve começar pela fundação da PWA, banco e autenticação, antes de integrar o OCR.
+O último checkpoint local completo está documentado em [`docs/reports/2026-08-02-local-validation-checkpoint.md`](docs/reports/2026-08-02-local-validation-checkpoint.md). Commits posteriores adicionaram organização em lote e novos gates OCR; execute `pnpm verify:full` no commit exato antes de declarar uma nova evidência verde.
 
 ## Princípios
 
 1. **Recuperar o documento é mais importante que gerar respostas sofisticadas.**
-2. **Texto nativo nunca deve ser enviado ao OCR sem necessidade.**
-3. **Nenhum serviço pode gerar cobrança automaticamente.**
-4. **O usuário sempre mantém o arquivo original e pode exportar seus dados.**
-5. **Recursos pesados são carregados apenas quando a tarefa exige.**
-6. **A interface deve parecer um fichário digital profissional, não um produto genérico de IA.**
+2. **Texto nativo nunca é enviado ao OCR sem necessidade.**
+3. **Nenhum serviço pode ativar cobrança ou fallback pago automaticamente.**
+4. **Arquivos, transcrições e buscas permanecem privados por padrão.**
+5. **Falha de OCR não implica perda nem novo upload do arquivo.**
+6. **Recursos pesados são carregados apenas quando a tarefa exige.**
+7. **A interface deve parecer um fichário digital profissional, não um chatbot.**
+
+## Arquitetura
+
+- **Frontend/PWA:** SvelteKit 5 + TypeScript, build estático e Web Workers.
+- **Backend:** Supabase Auth, PostgreSQL, RLS, Storage privado e Edge Functions.
+- **OCR:** Gemini Developer API por adaptador backend substituível.
+- **PDFs:** `@firecrawl/pdf-inspector-wasm` para classificação/texto e PDF.js somente para páginas sem texto.
+- **Busca:** PostgreSQL FTS, `unaccent` e `pg_trgm`; sem banco vetorial no MVP.
+
+## Desenvolvimento
+
+Requisitos: Node.js `>=22.12`, pnpm `>=10`, Chromium do Playwright, Supabase CLI, Docker, PostgreSQL `psql` e Deno.
+
+```bash
+corepack enable
+pnpm install --frozen-lockfile
+pnpm exec playwright install chromium
+pnpm verify
+```
+
+Validação completa local, incluindo E2E, análise offline, Edge Functions e banco Supabase:
+
+```bash
+pnpm verify:full
+```
+
+Comandos segmentados:
+
+```bash
+pnpm test:source:offline
+pnpm test:functions:check
+pnpm test:db:local
+```
+
+`test:db:local` inicia/reutiliza a stack Supabase, recria o banco, executa pgTAP e roda os testes reais de concorrência, idempotência e virada UTC do OCR.
+
+## Documentação
+
+- [Estado atual canônico](docs/CURRENT_STATUS.md)
+- [Especificação do produto e arquitetura](docs/PROJECT_SPEC.md)
+- [Plano detalhado de implementação](docs/IMPLEMENTATION_PLAN.md)
+- [Estratégia de testes e evidência](docs/TESTING.md)
+- [Deployment e rollback](docs/DEPLOYMENT.md)
+- [Operação sem custos e limites](docs/FREE_TIER_OPERATIONS.md)
+- [Privacidade](docs/PRIVACY.md)
+- [Recuperação](docs/RECOVERY.md)
+
+## Antes de uma release
+
+Ainda é necessário validar em staging e dispositivo real:
+
+- Auth, RLS, Storage e URLs assinadas em projeto Supabase remoto;
+- chamadas reais ao modelo configurado, incluindo 429/503/resposta inválida;
+- PDFs textuais, digitalizados e mistos em tablet/celular;
+- instalação/atualização do PWA e headers no host final;
+- limites gratuitos e ausência de billing habilitado.
