@@ -161,10 +161,7 @@ async function main() {
 		console.log('Supabase staging contract: PASS');
 	} finally {
 		if (probeId) await deleteProbeNotebook(authorizedClient, probeId);
-		await Promise.allSettled([
-			authorizedClient.auth.signOut(),
-			unauthorizedClient.auth.signOut()
-		]);
+		await Promise.allSettled([authorizedClient.auth.signOut(), unauthorizedClient.auth.signOut()]);
 	}
 }
 

@@ -16,7 +16,8 @@ function fail(message) {
 export function assertAuthorizedAccount({ userId, authorized, appUser }) {
 	if (typeof userId !== 'string' || userId === '') fail('authorized account has no user id');
 	if (authorized !== true) fail('authorized account is not active in the allowlist');
-	if (!appUser || typeof appUser !== 'object') fail('authorized account cannot read its app_users row');
+	if (!appUser || typeof appUser !== 'object')
+		fail('authorized account cannot read its app_users row');
 	if (appUser.user_id !== userId) fail('app_users row does not match the authenticated user');
 	if (appUser.is_active !== true) fail('authorized account app_users row is not active');
 }

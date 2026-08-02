@@ -86,7 +86,8 @@ export function assertSecurityHeaders(headers) {
 	requireCspDirective(csp, 'frame-ancestors', ["'none'"]);
 	const scripts = requireCspDirective(csp, 'script-src', ["'self'", "'wasm-unsafe-eval'"]);
 	for (const forbidden of ["'unsafe-inline'", "'unsafe-eval'"]) {
-		if (scripts.has(forbidden)) fail(`Content-Security-Policy script-src must not include ${forbidden}`);
+		if (scripts.has(forbidden))
+			fail(`Content-Security-Policy script-src must not include ${forbidden}`);
 	}
 
 	const hsts = requireHeader(headers, 'strict-transport-security');

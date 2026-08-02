@@ -60,9 +60,7 @@ describe('deployment contract', () => {
 			)
 		).toThrow(/at least 31536000/);
 		expect(() =>
-			assertSecurityHeaders(
-				secureHeaders({ 'strict-transport-security': 'max-age=31536000' })
-			)
+			assertSecurityHeaders(secureHeaders({ 'strict-transport-security': 'max-age=31536000' }))
 		).toThrow(/includeSubDomains/);
 	});
 
