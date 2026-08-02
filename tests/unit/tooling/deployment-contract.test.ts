@@ -50,7 +50,7 @@ describe('deployment contract', () => {
 			assertSecurityHeaders(
 				secureHeaders({
 					'content-security-policy':
-						"default-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'unsafe-inline'"
+						"default-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline'"
 				})
 			)
 		).toThrow(/unsafe-inline/);
