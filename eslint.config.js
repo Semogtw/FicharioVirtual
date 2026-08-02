@@ -31,6 +31,20 @@ export default ts.config(
 			parserOptions: {
 				parser: ts.parser
 			}
+		},
+		rules: {
+			// Existing routes use absolute internal paths. Adopt resolve() separately with route typing.
+			'svelte/no-navigation-without-resolve': 'off',
+			// Keying lists and replacing Map/Set can change component state semantics; migrate deliberately.
+			'svelte/require-each-key': 'off',
+			'svelte/prefer-svelte-reactivity': 'off'
+		}
+	},
+	{
+		files: ['src/lib/services/document-organization.ts', 'src/lib/services/tags.ts'],
+		rules: {
+			// These expressions intentionally reject ASCII control characters from user-visible labels.
+			'no-control-regex': 'off'
 		}
 	},
 	prettier
