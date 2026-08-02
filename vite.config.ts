@@ -8,7 +8,7 @@ export default defineConfig({
 		SvelteKitPWA({
 			strategies: 'generateSW',
 			registerType: 'autoUpdate',
-			injectRegister: 'script-defer',
+			injectRegister: false,
 			base: '/',
 			scope: '/',
 			includeAssets: ['favicon.svg'],
