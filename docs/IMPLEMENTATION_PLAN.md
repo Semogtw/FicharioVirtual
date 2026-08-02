@@ -77,6 +77,7 @@ FicharioVirtual/
 ### Task 1: Fundação do aplicativo e gates locais
 
 **Files:**
+
 - Create: `package.json`
 - Create: `pnpm-lock.yaml`
 - Create: `svelte.config.js`
@@ -88,6 +89,7 @@ FicharioVirtual/
 - Create: `tests/unit/smoke.test.ts`
 
 **Interfaces:**
+
 - Produces: aplicativo SvelteKit estático; scripts `dev`, `build`, `check`, `lint`, `test`, `test:e2e`.
 - Produces: `publicEnv` com `PUBLIC_SUPABASE_URL` e `PUBLIC_SUPABASE_PUBLISHABLE_KEY` validados.
 
@@ -115,18 +117,18 @@ Em `package.json`:
 
 ```json
 {
-  "scripts": {
-    "dev": "vite dev",
-    "build": "vite build",
-    "preview": "vite preview",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "lint": "prettier --check . && eslint .",
-    "format": "prettier --write .",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:e2e": "playwright test",
-    "verify": "pnpm lint && pnpm check && pnpm test && pnpm build"
-  }
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build",
+		"preview": "vite preview",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"lint": "prettier --check . && eslint .",
+		"format": "prettier --write .",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"test:e2e": "playwright test",
+		"verify": "pnpm lint && pnpm check && pnpm test && pnpm build"
+	}
 }
 ```
 
@@ -136,9 +138,9 @@ Em `package.json`:
 import { describe, expect, it } from 'vitest';
 
 describe('project foundation', () => {
-  it('runs the test harness', () => {
-    expect(true).toBe(true);
-  });
+	it('runs the test harness', () => {
+		expect(true).toBe(true);
+	});
 });
 ```
 
@@ -163,6 +165,7 @@ git push
 ### Task 2: Sistema visual editorial e shell responsivo
 
 **Files:**
+
 - Create: `src/lib/design/tokens.css`
 - Create: `src/lib/design/global.css`
 - Create: `src/lib/components/AppShell.svelte`
@@ -175,6 +178,7 @@ git push
 - Test: `tests/e2e/navigation.spec.ts`
 
 **Interfaces:**
+
 - Produces: `AppShell` com slot de conteúdo e navegação adaptativa.
 - Produces: componentes básicos sem biblioteca visual pesada.
 
@@ -182,19 +186,19 @@ git push
 
 ```css
 :root {
-  --paper: #f7f4ee;
-  --surface: #fcfaf6;
-  --ink: #202124;
-  --muted: #66706b;
-  --line: #ddd7cc;
-  --accent: #a65e43;
-  --archive: #536a5b;
-  --danger: #9b3f36;
-  --radius-sm: 8px;
-  --radius-md: 14px;
-  --shadow-soft: 0 10px 30px rgb(32 33 36 / 8%);
-  --font-heading: Georgia, Cambria, "Times New Roman", serif;
-  --font-body: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+	--paper: #f7f4ee;
+	--surface: #fcfaf6;
+	--ink: #202124;
+	--muted: #66706b;
+	--line: #ddd7cc;
+	--accent: #a65e43;
+	--archive: #536a5b;
+	--danger: #9b3f36;
+	--radius-sm: 8px;
+	--radius-md: 14px;
+	--shadow-soft: 0 10px 30px rgb(32 33 36 / 8%);
+	--font-heading: Georgia, Cambria, 'Times New Roman', serif;
+	--font-body: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 ```
 
@@ -224,9 +228,9 @@ import { expect, test } from '@playwright/test';
 test.use({ viewport: { width: 1200, height: 800 } });
 
 test('shows persistent library navigation', async ({ page }) => {
-  await page.goto('/');
-  await expect(page.getByRole('navigation')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Biblioteca' })).toBeVisible();
+	await page.goto('/');
+	await expect(page.getByRole('navigation')).toBeVisible();
+	await expect(page.getByRole('link', { name: 'Biblioteca' })).toBeVisible();
 });
 ```
 
@@ -251,6 +255,7 @@ git push
 ### Task 3: Banco, extensões, busca e Row Level Security
 
 **Files:**
+
 - Create: `supabase/config.toml`
 - Create: `supabase/migrations/202608020001_extensions.sql`
 - Create: `supabase/migrations/202608020002_schema.sql`
@@ -260,6 +265,7 @@ git push
 - Create: `src/lib/types/database.ts`
 
 **Interfaces:**
+
 - Produces: tabelas `app_users`, `notebooks`, `documents`, `pages`, `ocr_jobs`, `tags`, `document_tags`, `import_sessions`, `usage_daily`.
 - Produces: RPC `search_pages(search_query, notebook_filter, result_limit, result_offset)`.
 
@@ -360,6 +366,7 @@ git push
 ### Task 4: Cliente Supabase e autenticação de usuário único
 
 **Files:**
+
 - Create: `src/lib/services/supabase.ts`
 - Create: `src/lib/services/auth.ts`
 - Create: `src/lib/stores/session.svelte.ts`
@@ -369,6 +376,7 @@ git push
 - Test: `tests/e2e/auth.spec.ts`
 
 **Interfaces:**
+
 - Produces: `signIn(email, password)`, `signOut()`, `loadAuthorizedSession()`.
 - Produces: store `sessionState` com `loading`, `user`, `authorized`, `error`.
 
@@ -376,7 +384,7 @@ git push
 
 ```ts
 export const supabase = createClient<Database>(url, publishableKey, {
-  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+	auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
 });
 ```
 
@@ -422,6 +430,7 @@ git push
 ### Task 5: Biblioteca, cadernos e serviços de domínio
 
 **Files:**
+
 - Create: `src/lib/domain/document.ts`
 - Create: `src/lib/domain/notebook.ts`
 - Create: `src/lib/services/documents.ts`
@@ -434,6 +443,7 @@ git push
 - Test: `tests/unit/services/documents.test.ts`
 
 **Interfaces:**
+
 - Produces: `listDocuments`, `createDocument`, `updateDocument`, `deleteDocument`.
 - Produces: `listNotebooks`, `createNotebook`, `updateNotebook`, `deleteNotebook`.
 
@@ -441,13 +451,13 @@ git push
 
 ```ts
 export interface DocumentSummary {
-  id: string;
-  title: string;
-  kind: 'image' | 'pdf';
-  status: string;
-  pageCount: number;
-  thumbnailPath: string | null;
-  createdAt: string;
+	id: string;
+	title: string;
+	kind: 'image' | 'pdf';
+	status: string;
+	pageCount: number;
+	thumbnailPath: string | null;
+	createdAt: string;
 }
 ```
 
@@ -480,6 +490,7 @@ git push
 ### Task 6: Pipeline rápido de imagens
 
 **Files:**
+
 - Create: `src/lib/import/image-types.ts`
 - Create: `src/lib/import/image-worker.ts`
 - Create: `src/lib/import/image-client.ts`
@@ -491,6 +502,7 @@ git push
 - Test: `tests/unit/import/image-client.test.ts`
 
 **Interfaces:**
+
 - Produces: `prepareImage(file, mode): Promise<PreparedImage>`.
 - Produces: `calculateSha256(data): Promise<string>`.
 - Produces: `uploadPreparedImage(input): Promise<UploadedPage>`.
@@ -499,18 +511,18 @@ git push
 
 ```ts
 export type ImageWorkerRequest = {
-  id: string;
-  file: File;
-  maxDimension: 2560 | 3200;
-  quality: number;
+	id: string;
+	file: File;
+	maxDimension: 2560 | 3200;
+	quality: number;
 };
 
 export type ImageWorkerResult = {
-  id: string;
-  image: Blob;
-  thumbnail: Blob;
-  width: number;
-  height: number;
+	id: string;
+	image: Blob;
+	thumbnail: Blob;
+	width: number;
+	height: number;
 };
 ```
 
@@ -556,6 +568,7 @@ git push
 ### Task 7: Inspeção e roteamento de PDFs
 
 **Files:**
+
 - Create: `src/lib/pdf/types.ts`
 - Create: `src/lib/pdf/inspector-worker.ts`
 - Create: `src/lib/pdf/inspector-client.ts`
@@ -566,6 +579,7 @@ git push
 - Test: `tests/unit/pdf/routing.test.ts`
 
 **Interfaces:**
+
 - Produces: `inspectPdf(file): Promise<PdfInspection>`.
 - Produces: `renderPdfPage(file, pageNumber, options): Promise<Blob>`.
 - `PdfInspection` inclui `type`, `pageCount`, `nativePages`, `pagesNeedingOcr` e `markdown` opcional.
@@ -618,6 +632,7 @@ git push
 ### Task 8: Adaptador Gemini e Edge Function idempotente
 
 **Files:**
+
 - Create: `supabase/functions/_shared/auth.ts`
 - Create: `supabase/functions/_shared/cors.ts`
 - Create: `supabase/functions/_shared/ocr-types.ts`
@@ -627,6 +642,7 @@ git push
 - Create: `supabase/functions/process-page/index.test.ts`
 
 **Interfaces:**
+
 - Consumes: página existente e arquivo privado.
 - Produces: `OcrResultV1` persistido em `pages` e estado final em `ocr_jobs`.
 - HTTP: `POST /functions/v1/process-page` com `{ "jobId": "uuid" }`.
@@ -637,16 +653,18 @@ Usar Zod ou validação manual compatível com Deno:
 
 ```ts
 const OcrResultSchema = z.object({
-  schemaVersion: z.literal(1),
-  fullText: z.string(),
-  detectedLanguage: z.string().nullable(),
-  uncertainSegments: z.array(z.object({
-    text: z.string(),
-    context: z.string().nullable()
-  })),
-  suggestedTitle: z.string().nullable(),
-  suggestedTags: z.array(z.string()).max(12),
-  warnings: z.array(z.string()).max(20)
+	schemaVersion: z.literal(1),
+	fullText: z.string(),
+	detectedLanguage: z.string().nullable(),
+	uncertainSegments: z.array(
+		z.object({
+			text: z.string(),
+			context: z.string().nullable()
+		})
+	),
+	suggestedTitle: z.string().nullable(),
+	suggestedTags: z.array(z.string()).max(12),
+	warnings: z.array(z.string()).max(20)
 });
 ```
 
@@ -719,6 +737,7 @@ git push
 ### Task 9: Orquestrador de fila e retomada
 
 **Files:**
+
 - Create: `src/lib/import/semaphore.ts`
 - Create: `src/lib/import/job-runner.ts`
 - Create: `src/lib/services/jobs.ts`
@@ -727,6 +746,7 @@ git push
 - Test: `tests/unit/import/job-runner.test.ts`
 
 **Interfaces:**
+
 - Produces: `startQueue()`, `pauseQueue()`, `resumeQueue()`, `retryJob(jobId)`.
 - OCR padrão: duas requisições simultâneas.
 
@@ -766,6 +786,7 @@ git push
 ### Task 10: Busca rápida e tolerante a OCR
 
 **Files:**
+
 - Create: `src/lib/search/types.ts`
 - Create: `src/lib/search/client.ts`
 - Create: `src/lib/search/highlight.ts`
@@ -776,6 +797,7 @@ git push
 - Test: `tests/integration/search.spec.ts`
 
 **Interfaces:**
+
 - Produces: `searchPages(input): Promise<SearchPage>`.
 - Produces: `highlightSnippet(snippet, query): HighlightPart[]` sem HTML inseguro.
 
@@ -828,6 +850,7 @@ git push
 ### Task 11: Visualizador de fontes e revisão humana
 
 **Files:**
+
 - Create: `src/lib/components/ImageViewer.svelte`
 - Create: `src/lib/components/PdfViewer.svelte`
 - Create: `src/lib/components/TranscriptEditor.svelte`
@@ -837,6 +860,7 @@ git push
 - Test: `tests/e2e/review.spec.ts`
 
 **Interfaces:**
+
 - Produces: `updateCorrectedText(pageId, text)`.
 - Produces: `markPageReviewed(pageId)`.
 
@@ -879,6 +903,7 @@ git push
 ### Task 12: PWA, cache e desempenho no Tab S6 Lite
 
 **Files:**
+
 - Modify: `vite.config.ts`
 - Create: `static/manifest.webmanifest`
 - Create: `static/icons/`
@@ -888,6 +913,7 @@ git push
 - Create: `docs/PERFORMANCE.md`
 
 **Interfaces:**
+
 - Produces: PWA instalável e cache somente do shell e metadados recentes.
 
 - [ ] **Step 1: Configurar manifesto**
@@ -948,6 +974,7 @@ git push
 ### Task 13: Exportação, exclusão e painel de gratuidade
 
 **Files:**
+
 - Create: `src/lib/export/types.ts`
 - Create: `src/lib/export/metadata.ts`
 - Create: `src/lib/export/downloads.ts`
@@ -958,6 +985,7 @@ git push
 - Test: `tests/integration/deletion.spec.ts`
 
 **Interfaces:**
+
 - Produces: `exportMetadata()`, `downloadOriginals()`, `deleteDocumentCompletely(id)`.
 - Produces: painel de uso diário, armazenamento estimado e estado do provedor.
 
@@ -965,12 +993,12 @@ git push
 
 ```ts
 export interface LibraryExportV1 {
-  schemaVersion: 1;
-  exportedAt: string;
-  notebooks: unknown[];
-  documents: unknown[];
-  pages: unknown[];
-  tags: unknown[];
+	schemaVersion: 1;
+	exportedAt: string;
+	notebooks: unknown[];
+	documents: unknown[];
+	pages: unknown[];
+	tags: unknown[];
 }
 ```
 
@@ -1010,6 +1038,7 @@ git push
 ### Task 14: Documentação operacional e implantação gratuita
 
 **Files:**
+
 - Modify: `README.md`
 - Modify: `docs/FREE_TIER_OPERATIONS.md`
 - Create: `docs/DEPLOYMENT.md`
@@ -1018,6 +1047,7 @@ git push
 - Create: `.env.example`
 
 **Interfaces:**
+
 - Produces: procedimento reproduzível de implantação e restauração.
 
 - [ ] **Step 1: Documentar configuração Supabase**

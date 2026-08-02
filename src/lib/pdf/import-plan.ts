@@ -24,7 +24,11 @@ export function buildPdfImportPlan(
 	if (!STORAGE_ROOT.test(storageRoot) || storageRoot.length > 900) {
 		throw new TypeError('Invalid PDF storage root');
 	}
-	if (!Number.isInteger(inspection.pageCount) || inspection.pageCount < 1 || inspection.pageCount > 10_000) {
+	if (
+		!Number.isInteger(inspection.pageCount) ||
+		inspection.pageCount < 1 ||
+		inspection.pageCount > 10_000
+	) {
 		throw new TypeError('Invalid PDF inspection');
 	}
 

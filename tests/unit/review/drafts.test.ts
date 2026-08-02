@@ -39,7 +39,11 @@ describe('correction drafts', () => {
 			)
 		).toBeNull();
 		expect(() =>
-			serializeCorrectionDraft({ pageId, text: 'x'.repeat(1_000_001), updatedAt: new Date().toISOString() })
+			serializeCorrectionDraft({
+				pageId,
+				text: 'x'.repeat(1_000_001),
+				updatedAt: new Date().toISOString()
+			})
 		).toThrow('Invalid correction draft');
 	});
 });

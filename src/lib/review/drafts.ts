@@ -29,7 +29,10 @@ export function serializeCorrectionDraft(draft: CorrectionDraft): string {
 	return JSON.stringify({ version: 1, ...draft } satisfies StoredCorrectionDraft);
 }
 
-export function parseCorrectionDraft(value: string | null, expectedPageId: string): CorrectionDraft | null {
+export function parseCorrectionDraft(
+	value: string | null,
+	expectedPageId: string
+): CorrectionDraft | null {
 	if (value === null || !UUID.test(expectedPageId)) return null;
 	let parsed: unknown;
 	try {

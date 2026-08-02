@@ -4,17 +4,21 @@ import { effectivePageText, mapPageRecord } from '../../../src/lib/domain/page';
 describe('effectivePageText', () => {
 	it('prefers corrected text over native and OCR sources', () => {
 		expect(
-		effectivePageText({
-			correctedText: 'Versão corrigida',
-			nativeText: 'Versão nativa',
-			ocrRawText: 'Versão OCR'
-		})
-	).toBe('Versão corrigida');
+			effectivePageText({
+				correctedText: 'Versão corrigida',
+				nativeText: 'Versão nativa',
+				ocrRawText: 'Versão OCR'
+			})
+		).toBe('Versão corrigida');
 	});
 
 	it('falls back from native PDF text to OCR and then to empty text', () => {
-		expect(effectivePageText({ correctedText: null, nativeText: 'PDF', ocrRawText: 'OCR' })).toBe('PDF');
-		expect(effectivePageText({ correctedText: null, nativeText: null, ocrRawText: 'OCR' })).toBe('OCR');
+		expect(effectivePageText({ correctedText: null, nativeText: 'PDF', ocrRawText: 'OCR' })).toBe(
+			'PDF'
+		);
+		expect(effectivePageText({ correctedText: null, nativeText: null, ocrRawText: 'OCR' })).toBe(
+			'OCR'
+		);
 		expect(effectivePageText({ correctedText: null, nativeText: null, ocrRawText: null })).toBe('');
 	});
 });

@@ -40,18 +40,22 @@ function client() {
 			};
 		}
 	};
-	return { value, get update() { return update; }, get selectedId() { return selectedId; } };
+	return {
+		value,
+		get update() {
+			return update;
+		},
+		get selectedId() {
+			return selectedId;
+		}
+	};
 }
 
 describe('updateDocumentOrganization', () => {
 	it('trims title and persists an optional notebook', async () => {
 		const fixture = client();
 		await expect(
-			updateDocumentOrganization(
-				documentId,
-				{ title: '  Mitose  ', notebookId },
-				fixture.value
-			)
+			updateDocumentOrganization(documentId, { title: '  Mitose  ', notebookId }, fixture.value)
 		).resolves.toEqual({
 			id: documentId,
 			title: 'Mitose',
@@ -64,16 +68,20 @@ describe('updateDocumentOrganization', () => {
 
 	it('supports removing a document from its notebook', async () => {
 		const fixture = client();
-		await updateDocumentOrganization(documentId, { title: 'Avulso', notebookId: null }, fixture.value);
+		await updateDocumentOrganization(
+			documentId,
+			{ title: 'Avulso', notebookId: null },
+			fixture.value
+		);
 		expect(fixture.update).toEqual({ title: 'Avulso', notebook_id: null });
 	});
 
 	it('rejects empty titles and invalid identifiers before the update', async () => {
-		await expect(updateDocumentOrganization(documentId, { title: ' ', notebookId: null })).rejects.toThrow(
-			'Invalid document title'
-		);
-		await expect(updateDocumentOrganization('bad', { title: 'Título', notebookId: null })).rejects.toThrow(
-			'Invalid document identifier'
-		);
+		await expect(
+			updateDocumentOrganization(documentId, { title: ' ', notebookId: null })
+		).rejects.toThrow('Invalid document title');
+		await expect(
+			updateDocumentOrganization('bad', { title: 'Título', notebookId: null })
+		).rejects.toThrow('Invalid document identifier');
 	});
 });

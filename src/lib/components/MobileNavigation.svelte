@@ -25,8 +25,8 @@
 		display: grid;
 		grid-template-columns: repeat(4, 1fr);
 		min-height: var(--mobile-nav-height);
-		padding: 0.4rem max(0.5rem, env(safe-area-inset-right))
-			max(0.4rem, env(safe-area-inset-bottom)) max(0.5rem, env(safe-area-inset-left));
+		padding: 0.4rem max(0.5rem, env(safe-area-inset-right)) max(0.4rem, env(safe-area-inset-bottom))
+			max(0.5rem, env(safe-area-inset-left));
 		border-top: 1px solid var(--line);
 		background: rgb(252 250 246 / 96%);
 		backdrop-filter: blur(0.75rem);

@@ -46,7 +46,10 @@ const responseSchema = {
 	type: 'object',
 	additionalProperties: false,
 	properties: {
-		text: { type: 'string', description: 'Transcrição literal completa, sem comentários externos.' },
+		text: {
+			type: 'string',
+			description: 'Transcrição literal completa, sem comentários externos.'
+		},
 		warnings: {
 			type: 'array',
 			maxItems: 100,
@@ -94,7 +97,11 @@ function candidateText(payload: unknown): string | null {
 		const parts = (content as { parts?: unknown }).parts;
 		if (!Array.isArray(parts)) continue;
 		for (const part of parts) {
-			if (part && typeof part === 'object' && typeof (part as { text?: unknown }).text === 'string') {
+			if (
+				part &&
+				typeof part === 'object' &&
+				typeof (part as { text?: unknown }).text === 'string'
+			) {
 				return (part as { text: string }).text;
 			}
 		}

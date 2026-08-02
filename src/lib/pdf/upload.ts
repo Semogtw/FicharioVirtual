@@ -94,7 +94,12 @@ export class PdfConsentRequiredError extends Error {
 }
 
 export class PdfUploadError extends Error {
-	readonly code: 'invalid_pdf' | 'not_authenticated' | 'duplicate_check_failed' | 'upload_failed' | 'metadata_failed';
+	readonly code:
+		| 'invalid_pdf'
+		| 'not_authenticated'
+		| 'duplicate_check_failed'
+		| 'upload_failed'
+		| 'metadata_failed';
 
 	constructor(code: PdfUploadError['code']) {
 		const messages = {
@@ -121,7 +126,12 @@ function uuid() {
 }
 
 function titleFromFile(file: File) {
-	return file.name.replace(/\.pdf$/i, '').trim().slice(0, 240) || 'PDF sem título';
+	return (
+		file.name
+			.replace(/\.pdf$/i, '')
+			.trim()
+			.slice(0, 240) || 'PDF sem título'
+	);
 }
 
 function imageExtension(blob: Blob) {

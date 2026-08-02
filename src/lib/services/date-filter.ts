@@ -10,11 +10,7 @@ function localDate(value: string, endOfDay: boolean): Date | null {
 		? new Date(year, month, day, 23, 59, 59, 999)
 		: new Date(year, month, day, 0, 0, 0, 0);
 
-	if (
-		date.getFullYear() !== year ||
-		date.getMonth() !== month ||
-		date.getDate() !== day
-	) {
+	if (date.getFullYear() !== year || date.getMonth() !== month || date.getDate() !== day) {
 		return null;
 	}
 	return date;

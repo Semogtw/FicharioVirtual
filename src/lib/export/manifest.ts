@@ -54,7 +54,10 @@ const document = z
 			'failed'
 		]),
 		originalFilename: z.string().min(1),
-		sha256: z.string().regex(/^[0-9a-f]{64}$/).nullable(),
+		sha256: z
+			.string()
+			.regex(/^[0-9a-f]{64}$/)
+			.nullable(),
 		notebookId: z.string().nullable(),
 		createdAt: timestamp,
 		updatedAt: timestamp,
@@ -82,6 +85,9 @@ export function parseExportManifest(value: unknown): ExportManifest {
 export function exportFilename(exportedAt: string) {
 	const date = new Date(exportedAt);
 	if (Number.isNaN(date.getTime())) throw new TypeError('Invalid export timestamp');
-	const stable = date.toISOString().replace(/\.\d{3}Z$/, 'Z').replace(/:/g, '-');
+	const stable = date
+		.toISOString()
+		.replace(/\.\d{3}Z$/, 'Z')
+		.replace(/:/g, '-');
 	return `fichario-${stable}.json`;
 }

@@ -17,7 +17,9 @@ export async function calculateSha256(input: HashInput): Promise<string> {
 	const bytes = await copyBytes(input);
 	try {
 		const digest = await subtle.digest('SHA-256', bytes);
-		return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+		return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join(
+			''
+		);
 	} finally {
 		bytes.fill(0);
 	}

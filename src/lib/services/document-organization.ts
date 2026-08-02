@@ -14,7 +14,10 @@ export type DocumentOrganization = {
 export type DocumentOrganizationClientLike = {
 	from(table: 'documents'): {
 		update(input: { title: string; notebook_id: string | null }): {
-			eq(column: 'id', value: string): {
+			eq(
+				column: 'id',
+				value: string
+			): {
 				select(columns?: string): {
 					maybeSingle(): Promise<{
 						data: {

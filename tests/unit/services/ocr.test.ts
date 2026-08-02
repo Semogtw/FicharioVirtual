@@ -7,7 +7,9 @@ import {
 
 const pageId = '11111111-1111-4111-8111-111111111111';
 
-function client(result: Awaited<ReturnType<OcrFunctionClient['functions']['invoke']>>): OcrFunctionClient {
+function client(
+	result: Awaited<ReturnType<OcrFunctionClient['functions']['invoke']>>
+): OcrFunctionClient {
 	return {
 		functions: {
 			async invoke() {

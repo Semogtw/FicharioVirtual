@@ -5,21 +5,9 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 
 export type DocumentKind = 'image' | 'pdf';
 export type DocumentStatus =
-	| 'uploading'
-	| 'pending'
-	| 'processing'
-	| 'ready'
-	| 'partially_ready'
-	| 'needs_review'
-	| 'failed';
+	'uploading' | 'pending' | 'processing' | 'ready' | 'partially_ready' | 'needs_review' | 'failed';
 export type ProcessingStatus =
-	| 'pending'
-	| 'processing'
-	| 'ready'
-	| 'retryable'
-	| 'blocked_quota'
-	| 'needs_review'
-	| 'failed';
+	'pending' | 'processing' | 'ready' | 'retryable' | 'blocked_quota' | 'needs_review' | 'failed';
 export type ExtractionSource = 'native_pdf' | 'ocr' | 'manual';
 export type ImportStatus =
 	| 'draft'

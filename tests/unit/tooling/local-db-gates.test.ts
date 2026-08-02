@@ -16,9 +16,7 @@ describe('local database gate runner', () => {
 		expect(packageJson.scripts?.['test:source:offline']).toBe(
 			'bash tools/checks/run-offline-source-gates.sh'
 		);
-		expect(packageJson.scripts?.['test:db:local']).toBe(
-			'bash tools/checks/run-local-db-gates.sh'
-		);
+		expect(packageJson.scripts?.['test:db:local']).toBe('bash tools/checks/run-local-db-gates.sh');
 		expect(packageJson.scripts?.['test:functions:check']).toBe(
 			'bash tools/checks/check-edge-functions.sh'
 		);

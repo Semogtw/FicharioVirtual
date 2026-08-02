@@ -85,7 +85,11 @@
 		<a class="primary-action" href="/import/">Importar</a>
 	</header>
 
-	<form class="filters" aria-label="Filtrar biblioteca" onsubmit={(event) => event.preventDefault()}>
+	<form
+		class="filters"
+		aria-label="Filtrar biblioteca"
+		onsubmit={(event) => event.preventDefault()}
+	>
 		<label>
 			<span>Caderno</span>
 			<select bind:value={notebookId} onchange={() => void load(true)}>

@@ -41,7 +41,9 @@ function abortError() {
 }
 
 function id() {
-	return globalThis.crypto?.randomUUID?.() ?? `pdf_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+	return (
+		globalThis.crypto?.randomUUID?.() ?? `pdf_${Date.now()}_${Math.random().toString(36).slice(2)}`
+	);
 }
 
 function validate(file: File) {

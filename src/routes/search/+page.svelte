@@ -29,10 +29,7 @@
 		controller = null;
 	}
 
-	async function run(
-		reset: boolean,
-		version = reset ? requests.next() : requests.current()
-	) {
+	async function run(reset: boolean, version = reset ? requests.next() : requests.current()) {
 		if (!reset && loadingMore) return;
 		const normalized = query.trim();
 		if (!normalized) {
@@ -81,7 +78,9 @@
 	}
 
 	onMount(() => {
-		void listNotebooks().then((items) => (notebooks = items)).catch(() => undefined);
+		void listNotebooks()
+			.then((items) => (notebooks = items))
+			.catch(() => undefined);
 		if (query.trim()) void run(true);
 	});
 
@@ -99,7 +98,10 @@
 	<header>
 		<p class="eyebrow">Busca textual</p>
 		<h1 id="page-title">Pesquisar no fichário</h1>
-		<p>Encontre palavras aproximadas, títulos e conteúdo corrigido sem enviar a consulta a outro serviço.</p>
+		<p>
+			Encontre palavras aproximadas, títulos e conteúdo corrigido sem enviar a consulta a outro
+			serviço.
+		</p>
 	</header>
 
 	<section class="search-panel" aria-label="Pesquisar páginas">
@@ -151,7 +153,9 @@
 			<ol>
 				{#each results as result (result.pageId)}
 					<li>
-						<a href={`/documents/${result.documentId}/?page=${result.pageNumber}&highlight=${encodeURIComponent(query.trim())}`}>
+						<a
+							href={`/documents/${result.documentId}/?page=${result.pageNumber}&highlight=${encodeURIComponent(query.trim())}`}
+						>
 							<div class="result-meta">
 								<strong>{result.documentTitle}</strong>
 								<span>Página {result.pageNumber}</span>

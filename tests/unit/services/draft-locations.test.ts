@@ -49,8 +49,9 @@ describe('resolveDraftLocations', () => {
 	});
 
 	it('rejects more than one hundred page identifiers', async () => {
-		const ids = Array.from({ length: 101 }, (_, index) =>
-			`00000000-0000-4000-8000-${String(index).padStart(12, '0')}`
+		const ids = Array.from(
+			{ length: 101 },
+			(_, index) => `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`
 		);
 		await expect(resolveDraftLocations(ids)).rejects.toThrow('Too many draft locations');
 	});

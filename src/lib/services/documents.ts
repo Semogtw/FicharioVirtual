@@ -91,9 +91,7 @@ export async function listDocuments({
 	const resolvedLimit = pageSize(limit);
 	let query = resolvedClient
 		.from('documents')
-		.select(
-			'id,title,kind,status,page_count,thumbnail_path,notebook_id,created_at,updated_at'
-		)
+		.select('id,title,kind,status,page_count,thumbnail_path,notebook_id,created_at,updated_at')
 		.order('created_at', { ascending: false })
 		.order('id', { ascending: false })
 		.limit(resolvedLimit + 1);
@@ -122,9 +120,7 @@ export async function listDocuments({
 	return Object.freeze({
 		items,
 		nextCursor:
-			hasNextPage && last
-				? Object.freeze({ createdAt: last.created_at, id: last.id })
-				: null
+			hasNextPage && last ? Object.freeze({ createdAt: last.created_at, id: last.id }) : null
 	});
 }
 

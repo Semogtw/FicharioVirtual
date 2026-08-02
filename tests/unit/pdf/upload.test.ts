@@ -56,7 +56,14 @@ function gatewayFixture({ failMetadata = false } = {}) {
 			};
 		}
 	};
-	return { gateway, uploads, removed, get descriptorPayload() { return descriptorPayload; } };
+	return {
+		gateway,
+		uploads,
+		removed,
+		get descriptorPayload() {
+			return descriptorPayload;
+		}
+	};
 }
 
 function dependencies() {
@@ -82,11 +89,21 @@ function dependencies() {
 			return { state: 'complete', needsReview: false, warningCount: 0 };
 		}
 	};
-	return { values, rendered, processed, get consentCalls() { return consentCalls; } };
+	return {
+		values,
+		rendered,
+		processed,
+		get consentCalls() {
+			return consentCalls;
+		}
+	};
 }
 
 function pdf() {
-	return new File(['pdf'], 'apostila.pdf', { type: 'application/pdf', lastModified: 1_700_000_000_000 });
+	return new File(['pdf'], 'apostila.pdf', {
+		type: 'application/pdf',
+		lastModified: 1_700_000_000_000
+	});
 }
 
 describe('uploadPdfWithGateway', () => {
@@ -94,7 +111,12 @@ describe('uploadPdfWithGateway', () => {
 		const fixture = gatewayFixture();
 		const deps = dependencies();
 
-		const result = await uploadPdfWithGateway(pdf(), { consentGranted: true }, fixture.gateway, deps.values);
+		const result = await uploadPdfWithGateway(
+			pdf(),
+			{ consentGranted: true },
+			fixture.gateway,
+			deps.values
+		);
 
 		expect(deps.rendered).toEqual([2]);
 		expect(deps.consentCalls).toBe(1);

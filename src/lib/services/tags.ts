@@ -49,7 +49,11 @@ function id(value: string, label: 'tag' | 'document') {
 
 function tagName(value: string) {
 	const normalized = value.trim();
-	if (normalized.length < 1 || normalized.length > 120 || /[\u0000-\u001f\u007f]/u.test(normalized)) {
+	if (
+		normalized.length < 1 ||
+		normalized.length > 120 ||
+		/[\u0000-\u001f\u007f]/u.test(normalized)
+	) {
 		throw new TypeError('Invalid tag name');
 	}
 	return normalized;
@@ -59,7 +63,8 @@ export async function listTags(
 	client: TagsClientLike = defaultClient()
 ): Promise<readonly TagSummary[]> {
 	const { data, error } = await client.rpc('list_tags');
-	if (error || !Array.isArray(data)) throw new TagServiceError('Não foi possível carregar as tags.');
+	if (error || !Array.isArray(data))
+		throw new TagServiceError('Não foi possível carregar as tags.');
 	return Object.freeze(
 		(data as TagRow[]).map((row) =>
 			Object.freeze({

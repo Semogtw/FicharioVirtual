@@ -39,7 +39,9 @@ if (manifestSource) {
 			fail('manifest must expose at least one application icon');
 		}
 	} catch (error) {
-		fail(`manifest.webmanifest is not valid JSON: ${error instanceof Error ? error.message : String(error)}`);
+		fail(
+			`manifest.webmanifest is not valid JSON: ${error instanceof Error ? error.message : String(error)}`
+		);
 	}
 }
 
@@ -57,16 +59,12 @@ if (registerScript && !/serviceWorker/.test(registerScript)) {
 }
 
 if (serviceWorker) {
-	for (const forbidden of [
-		'supabase.co',
-		'/rest/v1',
-		'/storage/v1',
-		'/functions/v1',
-		'/auth/v1'
-	]) {
+	for (const forbidden of ['supabase.co', '/rest/v1', '/storage/v1', '/functions/v1', '/auth/v1']) {
 		if (serviceWorker.includes(forbidden)) fail(`sw.js must not contain ${forbidden}`);
 	}
-	if (/(?:library|notebooks|search|review|settings|import|login)\/index\.html/.test(serviceWorker)) {
+	if (
+		/(?:library|notebooks|search|review|settings|import|login)\/index\.html/.test(serviceWorker)
+	) {
 		fail('sw.js must not precache route-specific HTML; only the public fallback shell is allowed');
 	}
 	if (!serviceWorker.includes('200.html')) {

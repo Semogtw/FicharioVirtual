@@ -42,7 +42,10 @@
 		try {
 			assignedDocumentIds = await listTagDocumentIds(tagId);
 		} catch (caught) {
-			error = caught instanceof Error ? caught.message : 'Não foi possível carregar os documentos da tag.';
+			error =
+				caught instanceof Error
+					? caught.message
+					: 'Não foi possível carregar os documentos da tag.';
 		} finally {
 			loadingAssignments = false;
 		}
@@ -52,10 +55,7 @@
 		loading = true;
 		error = null;
 		try {
-			const [loadedTags, loadedDocuments] = await Promise.all([
-				listTags(),
-				listAllDocuments()
-			]);
+			const [loadedTags, loadedDocuments] = await Promise.all([listTags(), listAllDocuments()]);
 			tags = loadedTags;
 			documents = loadedDocuments;
 			activeTagId = tags[0]?.id ?? null;
@@ -103,7 +103,8 @@
 
 	async function removeActiveTag() {
 		if (!activeTag || saving) return;
-		if (!window.confirm(`Excluir a tag “${activeTag.name}”? Os documentos não serão apagados.`)) return;
+		if (!window.confirm(`Excluir a tag “${activeTag.name}”? Os documentos não serão apagados.`))
+			return;
 		saving = true;
 		error = null;
 		try {
@@ -160,12 +161,22 @@
 		</div>
 	</header>
 
-	<form class="create-form" onsubmit={(event) => { event.preventDefault(); void addTag(); }}>
+	<form
+		class="create-form"
+		onsubmit={(event) => {
+			event.preventDefault();
+			void addTag();
+		}}
+	>
 		<label>
 			<span class="visually-hidden">Nome da nova tag</span>
 			<input bind:value={newTagName} maxlength="120" placeholder="Nova tag, ex.: Citologia" />
 		</label>
-		<Button label={saving ? 'Salvando…' : 'Criar tag'} disabled={saving || !newTagName.trim()} type="submit" />
+		<Button
+			label={saving ? 'Salvando…' : 'Criar tag'}
+			disabled={saving || !newTagName.trim()}
+			type="submit"
+		/>
 	</form>
 
 	{#if error}<p class="error" role="alert">{error}</p>{/if}
@@ -208,8 +219,15 @@
 						<h2 id="assignment-title">{activeTag?.name}</h2>
 					</div>
 					<div class="tag-actions">
-						<button type="button" disabled={saving} onclick={() => void renameActiveTag()}>Renomear</button>
-						<button class="danger" type="button" disabled={saving} onclick={() => void removeActiveTag()}>
+						<button type="button" disabled={saving} onclick={() => void renameActiveTag()}
+							>Renomear</button
+						>
+						<button
+							class="danger"
+							type="button"
+							disabled={saving}
+							onclick={() => void removeActiveTag()}
+						>
 							Excluir
 						</button>
 					</div>
@@ -232,7 +250,10 @@
 										checked={assignedDocumentIds.has(document.id)}
 										disabled={pendingDocumentId !== null}
 										onchange={(event) =>
-											void toggleDocument(document.id, (event.currentTarget as HTMLInputElement).checked)}
+											void toggleDocument(
+												document.id,
+												(event.currentTarget as HTMLInputElement).checked
+											)}
 									/>
 									<span>
 										<strong>{document.title}</strong>

@@ -66,7 +66,9 @@
 	}
 
 	onMount(() => {
-		void listNotebooks().then((items) => (notebooks = items)).catch(() => undefined);
+		void listNotebooks()
+			.then((items) => (notebooks = items))
+			.catch(() => undefined);
 	});
 </script>
 
@@ -84,7 +86,7 @@
 				texto que o inspetor marcar para OCR.
 			</p>
 		</div>
-		{#if pdfImportQueue.items.some((item) => ['complete', 'needs_review', 'duplicate', 'cancelled'].includes(item.status))}
+		{#if pdfImportQueue.items.some( (item) => ['complete', 'needs_review', 'duplicate', 'cancelled'].includes(item.status) )}
 			<Button label="Limpar concluídos" variant="secondary" onclick={clearFinishedPdfImports} />
 		{/if}
 	</header>
@@ -104,8 +106,8 @@
 			<span>
 				<strong>Permitir OCR quando uma página não possuir texto</strong>
 				<small>
-					PDFs totalmente textuais não precisam desta autorização. Sem ela, PDFs digitalizados
-					serão interrompidos após a inspeção local.
+					PDFs totalmente textuais não precisam desta autorização. Sem ela, PDFs digitalizados serão
+					interrompidos após a inspeção local.
 				</small>
 			</span>
 		</label>
@@ -153,7 +155,8 @@
 							{#if item.progress}
 								<small>
 									{item.progress.completed}/{item.progress.total}
-									{#if item.progress.pageNumber} · página {item.progress.pageNumber}{/if}
+									{#if item.progress.pageNumber}
+										· página {item.progress.pageNumber}{/if}
 								</small>
 							{/if}
 							{#if item.result}
@@ -168,7 +171,9 @@
 								<button type="button" onclick={() => cancelPdfImport(item.id)}>Cancelar</button>
 							{:else if canRetry(item)}
 								<button type="button" onclick={() => void retryPdfImport(item.id)}>Retomar</button>
-								<button type="button" onclick={() => removePdfImport(item.id)}>Remover da lista</button>
+								<button type="button" onclick={() => removePdfImport(item.id)}
+									>Remover da lista</button
+								>
 							{/if}
 							{#if canOpen(item) && item.result}
 								<a href={`/documents/${item.result.documentId}/`}>

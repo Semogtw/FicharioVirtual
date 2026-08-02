@@ -21,13 +21,7 @@
 	}: ButtonProps = $props();
 </script>
 
-<button
-	{type}
-	class={`button ${variant}`}
-	{disabled}
-	aria-label={ariaLabel}
-	{onclick}
->
+<button {type} class={`button ${variant}`} {disabled} aria-label={ariaLabel} {onclick}>
 	{label}
 </button>
 

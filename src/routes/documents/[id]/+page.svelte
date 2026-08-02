@@ -5,10 +5,7 @@
 	import CorrectionEditor from '$lib/components/CorrectionEditor.svelte';
 	import type { PageDetail } from '$lib/domain/page';
 	import { deleteDocument } from '$lib/services/documents';
-	import {
-		loadDocumentDetail,
-		type DocumentDetail
-	} from '$lib/services/document-detail';
+	import { loadDocumentDetail, type DocumentDetail } from '$lib/services/document-detail';
 	import { resumeDocumentOcr } from '$lib/services/ocr-resume';
 
 	let detail = $state<DocumentDetail | null>(null);
@@ -102,15 +99,28 @@
 			<div>
 				<p class="eyebrow">{detail.kind === 'pdf' ? 'Documento PDF' : 'Imagem'}</p>
 				<h1>{detail.title}</h1>
-				<p>{detail.pageCount} {detail.pageCount === 1 ? 'página' : 'páginas'} · {detail.originalFilename}</p>
+				<p>
+					{detail.pageCount}
+					{detail.pageCount === 1 ? 'página' : 'páginas'} · {detail.originalFilename}
+				</p>
 			</div>
 			<div class="header-actions">
 				{#if ['processing', 'partially_ready', 'needs_review', 'failed'].includes(detail.status)}
-					<button type="button" class="secondary" disabled={retrying} onclick={() => void retryOcr()}>
+					<button
+						type="button"
+						class="secondary"
+						disabled={retrying}
+						onclick={() => void retryOcr()}
+					>
 						{retrying ? 'Retomando…' : 'Retomar leitura'}
 					</button>
 				{/if}
-				<button type="button" class="danger" disabled={deleting} onclick={() => void removeDocument()}>
+				<button
+					type="button"
+					class="danger"
+					disabled={deleting}
+					onclick={() => void removeDocument()}
+				>
 					{deleting ? 'Excluindo…' : 'Excluir'}
 				</button>
 			</div>

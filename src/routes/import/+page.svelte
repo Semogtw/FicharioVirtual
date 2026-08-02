@@ -46,7 +46,9 @@
 			selectionError = 'Confirme o aviso de privacidade antes de enviar imagens para leitura.';
 			return;
 		}
-		const images = files.filter((file) => ['image/jpeg', 'image/png', 'image/webp'].includes(file.type));
+		const images = files.filter((file) =>
+			['image/jpeg', 'image/png', 'image/webp'].includes(file.type)
+		);
 		if (images.length !== files.length) {
 			selectionError = 'Nesta etapa, selecione somente imagens JPG, PNG ou WebP.';
 		}
@@ -78,7 +80,9 @@
 	}
 
 	onMount(() => {
-		void listNotebooks().then((items) => (notebooks = items)).catch(() => undefined);
+		void listNotebooks()
+			.then((items) => (notebooks = items))
+			.catch(() => undefined);
 	});
 </script>
 
@@ -92,11 +96,11 @@
 			<p class="eyebrow">Entrada do arquivo</p>
 			<h1 id="page-title">Importar imagens</h1>
 			<p>
-				A preparação e a miniatura acontecem no dispositivo. O arquivo privado permanece salvo
-				mesmo quando a leitura precisa ser retomada mais tarde.
+				A preparação e a miniatura acontecem no dispositivo. O arquivo privado permanece salvo mesmo
+				quando a leitura precisa ser retomada mais tarde.
 			</p>
 		</div>
-		{#if importQueue.items.some((item) => ['complete', 'needs_review', 'duplicate', 'cancelled'].includes(item.status))}
+		{#if importQueue.items.some( (item) => ['complete', 'needs_review', 'duplicate', 'cancelled'].includes(item.status) )}
 			<Button label="Limpar concluídos" variant="secondary" onclick={clearFinishedImports} />
 		{/if}
 	</header>
@@ -119,7 +123,8 @@
 			</label>
 			<label class="choice">
 				<input type="radio" bind:group={mode} value="high-definition" />
-				<span><strong>Alta definição</strong><small>Até 3.200 px · texto muito pequeno</small></span>
+				<span><strong>Alta definição</strong><small>Até 3.200 px · texto muito pequeno</small></span
+				>
 			</label>
 		</fieldset>
 	</section>
@@ -152,7 +157,12 @@
 		<div class="picker-actions">
 			<label class="file-button">
 				Selecionar imagens
-				<input type="file" accept="image/jpeg,image/png,image/webp" multiple onchange={selectFiles} />
+				<input
+					type="file"
+					accept="image/jpeg,image/png,image/webp"
+					multiple
+					onchange={selectFiles}
+				/>
 			</label>
 			<label class="camera-button">
 				Usar câmera
@@ -201,7 +211,8 @@
 								<button type="button" onclick={() => cancelImport(item.id)}>Cancelar</button>
 							{:else if canRetry(item)}
 								<button type="button" onclick={() => retryImport(item.id)}>Retomar</button>
-								<button type="button" onclick={() => removeImport(item.id)}>Remover da lista</button>
+								<button type="button" onclick={() => removeImport(item.id)}>Remover da lista</button
+								>
 							{:else if canOpen(item) && item.result}
 								<a href={`/documents/${item.result.documentId}/`}>
 									{item.status === 'needs_review' ? 'Revisar' : 'Abrir'}

@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-	ImagePreparationClient,
-	type ImageWorkerLike
-} from '../../../src/lib/import/image-client';
+import { ImagePreparationClient, type ImageWorkerLike } from '../../../src/lib/import/image-client';
 import type { ImageWorkerRequest, ImageWorkerResponse } from '../../../src/lib/import/image-types';
 
 class FakeWorker implements ImageWorkerLike {
@@ -71,14 +68,11 @@ describe('ImagePreparationClient', () => {
 
 	it('runs no more than two preparation workers at once', async () => {
 		const workers: FakeWorker[] = [];
-		const client = new ImagePreparationClient(
-			() => {
-				const worker = new FakeWorker();
-				workers.push(worker);
-				return worker;
-			},
-			2
-		);
+		const client = new ImagePreparationClient(() => {
+			const worker = new FakeWorker();
+			workers.push(worker);
+			return worker;
+		}, 2);
 
 		const first = client.prepare(image('one.jpg'));
 		const second = client.prepare(image('two.jpg'));
@@ -97,14 +91,11 @@ describe('ImagePreparationClient', () => {
 
 	it('cancels a queued task without starting another worker', async () => {
 		const workers: FakeWorker[] = [];
-		const client = new ImagePreparationClient(
-			() => {
-				const worker = new FakeWorker();
-				workers.push(worker);
-				return worker;
-			},
-			1
-		);
+		const client = new ImagePreparationClient(() => {
+			const worker = new FakeWorker();
+			workers.push(worker);
+			return worker;
+		}, 1);
 		const controller = new AbortController();
 		const active = client.prepare(image('active.jpg'));
 		const cancelled = client.prepare(image('cancelled.jpg'), 'standard', {

@@ -5,10 +5,7 @@ import {
 	type DocumentSummary
 } from '../../../src/lib/domain/document';
 import { mapNotebookRecord } from '../../../src/lib/domain/notebook';
-import {
-	collectAllDocumentPages,
-	DocumentServiceError
-} from '../../../src/lib/services/documents';
+import { collectAllDocumentPages, DocumentServiceError } from '../../../src/lib/services/documents';
 
 function document(id: string, createdAt: string): DocumentSummary {
 	return Object.freeze({

@@ -36,7 +36,9 @@
 	<header>
 		<p class="eyebrow">Operação local e gratuita</p>
 		<h1 id="page-title">Uso</h1>
-		<p>Contadores técnicos do seu próprio arquivo. Nenhum texto, imagem ou consulta aparece aqui.</p>
+		<p>
+			Contadores técnicos do seu próprio arquivo. Nenhum texto, imagem ou consulta aparece aqui.
+		</p>
 	</header>
 
 	{#if loading}
@@ -79,9 +81,11 @@
 				<p class="eyebrow">Hoje · {overview.today.date}</p>
 				<h2 id="today-title">Leitura automática</h2>
 				<p>
-					{overview.today.ocrPages} {overview.today.ocrPages === 1 ? 'página processada' : 'páginas processadas'}
+					{overview.today.ocrPages}
+					{overview.today.ocrPages === 1 ? 'página processada' : 'páginas processadas'}
 					{#if overview.today.quotaErrors > 0}
-						· {overview.today.quotaErrors} {overview.today.quotaErrors === 1 ? 'bloqueio de cota' : 'bloqueios de cota'}
+						· {overview.today.quotaErrors}
+						{overview.today.quotaErrors === 1 ? 'bloqueio de cota' : 'bloqueios de cota'}
 					{/if}
 				</p>
 			</div>

@@ -50,13 +50,7 @@
 		<form onsubmit={submit}>
 			<div class="field">
 				<label for="email">E-mail</label>
-				<input
-					id="email"
-					type="email"
-					bind:value={email}
-					autocomplete="username"
-					required
-				/>
+				<input id="email" type="email" bind:value={email} autocomplete="username" required />
 			</div>
 
 			<div class="field">
@@ -82,8 +76,8 @@
 		</form>
 
 		<p class="access-note">
-			Este projeto possui <strong>cadastro público desativado</strong>. Novas contas são
-			adicionadas manualmente pelo proprietário.
+			Este projeto possui <strong>cadastro público desativado</strong>. Novas contas são adicionadas
+			manualmente pelo proprietário.
 		</p>
 	</section>
 </main>

@@ -45,7 +45,8 @@
 		<div class="body">
 			<h2>{document.title}</h2>
 			<p>
-				{document.pageCount} {document.pageCount === 1 ? 'página' : 'páginas'} ·
+				{document.pageCount}
+				{document.pageCount === 1 ? 'página' : 'páginas'} ·
 				{dateFormatter.format(new Date(document.createdAt))}
 			</p>
 		</div>
@@ -81,9 +82,7 @@
 		display: grid;
 		place-items: center;
 		overflow: hidden;
-		background:
-			linear-gradient(135deg, rgb(83 106 91 / 8%), rgb(166 94 67 / 8%)),
-			var(--paper);
+		background: linear-gradient(135deg, rgb(83 106 91 / 8%), rgb(166 94 67 / 8%)), var(--paper);
 	}
 
 	img {

@@ -64,7 +64,9 @@
 	<header>
 		<p class="eyebrow">Qualidade e continuidade</p>
 		<h1 id="page-title">Fila de revisão</h1>
-		<p>Corrija trechos incertos e retome páginas interrompidas sem reenviar os arquivos originais.</p>
+		<p>
+			Corrija trechos incertos e retome páginas interrompidas sem reenviar os arquivos originais.
+		</p>
 	</header>
 
 	{#if error}

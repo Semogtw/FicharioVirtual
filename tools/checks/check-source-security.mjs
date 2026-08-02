@@ -63,23 +63,43 @@ for (const path of edgeFunctions) {
 
 const processOcr = await readFile(processOcrPath, 'utf8');
 if (/generativelanguage\.googleapis\.com/i.test(processOcr)) {
-	fail(processOcrPath, 'provider-duplication', 'provider endpoint belongs only in the shared Gemini client');
+	fail(
+		processOcrPath,
+		'provider-duplication',
+		'provider endpoint belongs only in the shared Gemini client'
+	);
 }
 if (!processOcr.includes('requestGeminiOcr')) {
-	fail(processOcrPath, 'provider-duplication', 'process-ocr must delegate provider transport and parsing');
+	fail(
+		processOcrPath,
+		'provider-duplication',
+		'process-ocr must delegate provider transport and parsing'
+	);
 }
 
 const geminiClient = await readFile(geminiClientPath, 'utf8');
 if (!/generativelanguage\.googleapis\.com/i.test(geminiClient)) {
-	fail(geminiClientPath, 'provider-boundary', 'shared Gemini client must own the provider endpoint');
+	fail(
+		geminiClientPath,
+		'provider-boundary',
+		'shared Gemini client must own the provider endpoint'
+	);
 }
 
 const pwaConfig = await readFile(join(root, 'vite.config.ts'), 'utf8');
 if (/supabase\.co[^\n]*(?:CacheFirst|NetworkFirst|StaleWhileRevalidate)/i.test(pwaConfig)) {
-	fail(join(root, 'vite.config.ts'), 'private-cache', 'Supabase requests must not be runtime cached');
+	fail(
+		join(root, 'vite.config.ts'),
+		'private-cache',
+		'Supabase requests must not be runtime cached'
+	);
 }
 if (!/injectRegister:\s*['"]script-defer['"]/.test(pwaConfig)) {
-	fail(join(root, 'vite.config.ts'), 'csp', 'PWA registration must use an external deferred script');
+	fail(
+		join(root, 'vite.config.ts'),
+		'csp',
+		'PWA registration must use an external deferred script'
+	);
 }
 
 const headers = await readFile(join(root, 'static/_headers'), 'utf8');
@@ -89,7 +109,8 @@ for (const required of [
 	"script-src 'self' 'wasm-unsafe-eval'",
 	"connect-src 'self' https://*.supabase.co wss://*.supabase.co"
 ]) {
-	if (!headers.includes(required)) fail(join(root, 'static/_headers'), 'headers', `missing ${required}`);
+	if (!headers.includes(required))
+		fail(join(root, 'static/_headers'), 'headers', `missing ${required}`);
 }
 
 if (failures.length > 0) {

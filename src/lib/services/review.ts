@@ -49,7 +49,8 @@ function warnings(value: Json): readonly PageWarning[] {
 	if (!Array.isArray(value)) return Object.freeze([]);
 	return Object.freeze(
 		value.flatMap((candidate) => {
-			if (candidate === null || typeof candidate !== 'object' || Array.isArray(candidate)) return [];
+			if (candidate === null || typeof candidate !== 'object' || Array.isArray(candidate))
+				return [];
 			if (typeof candidate.code !== 'string' || typeof candidate.message !== 'string') return [];
 			return [Object.freeze({ code: candidate.code, message: candidate.message })];
 		})

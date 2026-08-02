@@ -9,7 +9,10 @@
 	<a href="/import/" aria-current={page.url.pathname === '/import/' ? 'page' : undefined}>
 		Imagens
 	</a>
-	<a href="/import/pdf/" aria-current={page.url.pathname.startsWith('/import/pdf') ? 'page' : undefined}>
+	<a
+		href="/import/pdf/"
+		aria-current={page.url.pathname.startsWith('/import/pdf') ? 'page' : undefined}
+	>
 		PDFs
 	</a>
 </nav>

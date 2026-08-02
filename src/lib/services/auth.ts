@@ -2,10 +2,7 @@ import type { Session } from '@supabase/supabase-js';
 import { getSupabaseClient } from './supabase';
 
 export type AuthServiceErrorCode =
-	| 'invalid_input'
-	| 'invalid_credentials'
-	| 'not_authorized'
-	| 'auth_unavailable';
+	'invalid_input' | 'invalid_credentials' | 'not_authorized' | 'auth_unavailable';
 
 type ServiceError = { message: string; status?: number };
 
@@ -67,10 +64,7 @@ async function closeUnauthorizedSession(client: AuthClientLike) {
 	if (error) throw new AuthServiceError('auth_unavailable');
 }
 
-async function authorizeSession(
-	session: Session,
-	client: AuthClientLike
-): Promise<Session | null> {
+async function authorizeSession(session: Session, client: AuthClientLike): Promise<Session | null> {
 	const { data, error } = await client
 		.from('app_users')
 		.select('is_active')

@@ -40,7 +40,9 @@ const fingerprints = new Set<string>();
 let running = false;
 
 function id() {
-	return globalThis.crypto?.randomUUID?.() ?? `pdf_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+	return (
+		globalThis.crypto?.randomUUID?.() ?? `pdf_${Date.now()}_${Math.random().toString(36).slice(2)}`
+	);
 }
 
 function fingerprint(file: File) {

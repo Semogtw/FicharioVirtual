@@ -90,7 +90,9 @@
 		<ul>
 			<li>Nenhuma cobrança é ativada automaticamente.</li>
 			<li>A leitura externa exige consentimento e usa limite diário configurado no backend.</li>
-			<li>Quando a cota termina, páginas ficam pendentes em vez de trocar silenciosamente de modelo.</li>
+			<li>
+				Quando a cota termina, páginas ficam pendentes em vez de trocar silenciosamente de modelo.
+			</li>
 			<li>O service worker não guarda respostas autenticadas, documentos ou transcrições.</li>
 		</ul>
 	</section>

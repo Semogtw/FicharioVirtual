@@ -33,7 +33,11 @@ worker.onmessage = async (event: MessageEvent<PdfWorkerRequest>) => {
 		request.file.size < 1 ||
 		request.file.size > MAX_PDF_BYTES
 	) {
-		worker.postMessage({ type: 'failure', id: request.id, code: 'invalid_pdf' } satisfies PdfWorkerFailure);
+		worker.postMessage({
+			type: 'failure',
+			id: request.id,
+			code: 'invalid_pdf'
+		} satisfies PdfWorkerFailure);
 		return;
 	}
 

@@ -18,7 +18,15 @@ function client(rows: unknown[] = []) {
 			};
 		}
 	};
-	return { value, get args() { return args; }, get signal() { return signal; } };
+	return {
+		value,
+		get args() {
+			return args;
+		},
+		get signal() {
+			return signal;
+		}
+	};
 }
 
 describe('searchPages', () => {

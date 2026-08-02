@@ -31,11 +31,7 @@ type QueuedTask = {
 
 export class ImagePreparationError extends Error {
 	readonly code:
-		| 'invalid_image'
-		| 'image_too_large'
-		| 'decode_failed'
-		| 'encode_failed'
-		| 'worker_failed';
+		'invalid_image' | 'image_too_large' | 'decode_failed' | 'encode_failed' | 'worker_failed';
 
 	constructor(code: ImagePreparationError['code']) {
 		const messages = {
@@ -56,7 +52,10 @@ function abortError() {
 }
 
 function taskId() {
-	return globalThis.crypto?.randomUUID?.() ?? `image_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+	return (
+		globalThis.crypto?.randomUUID?.() ??
+		`image_${Date.now()}_${Math.random().toString(36).slice(2)}`
+	);
 }
 
 function profile(mode: ImagePreparationMode) {

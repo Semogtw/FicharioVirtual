@@ -3,10 +3,7 @@
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import { discardCorrectionDraft, listCorrectionDrafts } from '$lib/review/draft-index';
 	import type { CorrectionDraft } from '$lib/review/drafts';
-	import {
-		resolveDraftLocations,
-		type DraftLocation
-	} from '$lib/services/draft-locations';
+	import { resolveDraftLocations, type DraftLocation } from '$lib/services/draft-locations';
 
 	type DraftRow = {
 		draft: CorrectionDraft;
@@ -35,7 +32,8 @@
 	}
 
 	function discard(pageId: string) {
-		if (!window.confirm('Descartar somente este rascunho local? O texto remoto não será alterado.')) return;
+		if (!window.confirm('Descartar somente este rascunho local? O texto remoto não será alterado.'))
+			return;
 		discardCorrectionDraft(pageId);
 		rows = rows.filter((row) => row.draft.pageId !== pageId);
 	}
@@ -53,7 +51,10 @@
 	<header>
 		<p class="eyebrow">Recuperação no dispositivo</p>
 		<h1 id="page-title">Rascunhos locais</h1>
-		<p>Correções ainda não confirmadas no servidor ficam limitadas e isoladas por página neste navegador.</p>
+		<p>
+			Correções ainda não confirmadas no servidor ficam limitadas e isoladas por página neste
+			navegador.
+		</p>
 	</header>
 
 	{#if loading}
@@ -73,12 +74,18 @@
 			{#each rows as row (row.draft.pageId)}
 				<article>
 					<div class="copy">
-						<p class="eyebrow">Atualizado {new Date(row.draft.updatedAt).toLocaleString('pt-BR')}</p>
+						<p class="eyebrow">
+							Atualizado {new Date(row.draft.updatedAt).toLocaleString('pt-BR')}
+						</p>
 						<h2>{row.location?.documentTitle ?? 'Página não encontrada no servidor'}</h2>
 						{#if row.location}
-							<p>Página {row.location.pageNumber} · {row.draft.text.length.toLocaleString('pt-BR')} caracteres</p>
+							<p>
+								Página {row.location.pageNumber} · {row.draft.text.length.toLocaleString('pt-BR')} caracteres
+							</p>
 							{#if Date.parse(row.draft.updatedAt) <= Date.parse(row.location.pageUpdatedAt)}
-								<span class="notice">O servidor possui uma versão igual ou mais recente; revise antes de salvar.</span>
+								<span class="notice"
+									>O servidor possui uma versão igual ou mais recente; revise antes de salvar.</span
+								>
 							{/if}
 						{:else}
 							<p>O documento pode ter sido excluído ou o acesso não está mais disponível.</p>

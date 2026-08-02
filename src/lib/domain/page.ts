@@ -43,7 +43,8 @@ function safeWarnings(value: Json): readonly PageWarning[] {
 	if (!Array.isArray(value)) return Object.freeze([]);
 	return Object.freeze(
 		value.flatMap((candidate) => {
-			if (candidate === null || typeof candidate !== 'object' || Array.isArray(candidate)) return [];
+			if (candidate === null || typeof candidate !== 'object' || Array.isArray(candidate))
+				return [];
 			const code = candidate.code;
 			const message = candidate.message;
 			if (

@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-	exportFilename,
-	parseExportManifest
-} from '../../../src/lib/export/manifest';
+import { exportFilename, parseExportManifest } from '../../../src/lib/export/manifest';
 
 const manifest = {
 	schemaVersion: 1,

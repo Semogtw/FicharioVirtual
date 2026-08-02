@@ -26,15 +26,17 @@ function normalizeWithIndexes(input: string): NormalizedText {
 }
 
 function queryTerms(query: string) {
-	return [...new Set(
-		query
-			.normalize('NFD')
-			.replace(/[\u0300-\u036f]/g, '')
-			.toLocaleLowerCase('pt-BR')
-			.split(/[^\p{L}\p{N}_-]+/u)
-			.map((term) => term.trim())
-			.filter((term) => term.length >= 2)
-	)].sort((left, right) => right.length - left.length);
+	return [
+		...new Set(
+			query
+				.normalize('NFD')
+				.replace(/[\u0300-\u036f]/g, '')
+				.toLocaleLowerCase('pt-BR')
+				.split(/[^\p{L}\p{N}_-]+/u)
+				.map((term) => term.trim())
+				.filter((term) => term.length >= 2)
+		)
+	].sort((left, right) => right.length - left.length);
 }
 
 export function highlightSnippet(snippet: string, query: string): readonly HighlightPart[] {

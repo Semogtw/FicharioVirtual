@@ -58,7 +58,12 @@ function gateway() {
 			});
 		}
 	};
-	return { value, get correction() { return correction; } };
+	return {
+		value,
+		get correction() {
+			return correction;
+		}
+	};
 }
 
 describe('loadDocumentDetailWithGateway', () => {

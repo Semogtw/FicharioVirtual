@@ -1,10 +1,6 @@
 import type { ImagePreparationMode } from '$lib/import/image-types';
 import { prepareImage } from '$lib/import/image-client';
-import {
-	DuplicateImageError,
-	uploadPreparedImage,
-	type UploadedPage
-} from '$lib/import/upload';
+import { DuplicateImageError, uploadPreparedImage, type UploadedPage } from '$lib/import/upload';
 import { recordOcrConsent } from '$lib/services/ocr-consent';
 import { OcrProcessingError, processPageOcr } from '$lib/services/ocr';
 
@@ -40,7 +36,10 @@ const localFingerprints = new Set<string>();
 let consentPromise: Promise<void> | null = null;
 
 function id() {
-	return globalThis.crypto?.randomUUID?.() ?? `import_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+	return (
+		globalThis.crypto?.randomUUID?.() ??
+		`import_${Date.now()}_${Math.random().toString(36).slice(2)}`
+	);
 }
 
 function fingerprint(file: File) {

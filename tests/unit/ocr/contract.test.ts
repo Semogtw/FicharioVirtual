@@ -19,9 +19,7 @@ describe('OCR response contract', () => {
 			)
 		).toEqual({
 			text: 'Mitose e meiose',
-			warnings: [
-				{ code: 'uncertain_text', message: 'Uma palavra na margem está pouco legível.' }
-			],
+			warnings: [{ code: 'uncertain_text', message: 'Uma palavra na margem está pouco legível.' }],
 			needsReview: true
 		});
 	});
@@ -55,10 +53,18 @@ describe('OCR claim HTTP mapping', () => {
 describe('Gemini failure classification', () => {
 	it('separates daily quota exhaustion from transient rate limiting', () => {
 		expect(classifyGeminiFailure(429, 'Requests per day quota exceeded')).toEqual(
-			expect.objectContaining({ code: 'gemini_daily_quota', retryable: false, quotaExhausted: true })
+			expect.objectContaining({
+				code: 'gemini_daily_quota',
+				retryable: false,
+				quotaExhausted: true
+			})
 		);
 		expect(classifyGeminiFailure(429, 'Rate limit exceeded')).toEqual(
-			expect.objectContaining({ code: 'gemini_rate_limited', retryable: true, quotaExhausted: false })
+			expect.objectContaining({
+				code: 'gemini_rate_limited',
+				retryable: true,
+				quotaExhausted: false
+			})
 		);
 	});
 
@@ -71,7 +77,9 @@ describe('Gemini failure classification', () => {
 	});
 
 	it('returns persisted deferred states as 202 instead of SDK exceptions', () => {
-		expect(geminiFailureResponse(classifyGeminiFailure(429, 'Requests per day quota exceeded'), 429)).toEqual({
+		expect(
+			geminiFailureResponse(classifyGeminiFailure(429, 'Requests per day quota exceeded'), 429)
+		).toEqual({
 			status: 202,
 			body: { state: 'quota_exhausted' }
 		});

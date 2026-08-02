@@ -1,8 +1,4 @@
-import {
-	correctionDraftKey,
-	parseCorrectionDraft,
-	type CorrectionDraft
-} from './drafts';
+import { correctionDraftKey, parseCorrectionDraft, type CorrectionDraft } from './drafts';
 
 const PREFIX = 'fichario:correction-draft:v1:';
 

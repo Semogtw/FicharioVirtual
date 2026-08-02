@@ -6,7 +6,13 @@ import ts from 'typescript-eslint';
 
 export default ts.config(
 	{
-		ignores: ['.svelte-kit/**', 'build/**', 'coverage/**', 'playwright-report/**', 'test-results/**']
+		ignores: [
+			'.svelte-kit/**',
+			'build/**',
+			'coverage/**',
+			'playwright-report/**',
+			'test-results/**'
+		]
 	},
 	js.configs.recommended,
 	...ts.configs.recommended,

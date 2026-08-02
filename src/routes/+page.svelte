@@ -17,8 +17,7 @@
 			<p class="eyebrow">Seu arquivo pessoal</p>
 			<h1 id="page-title">Encontre a página certa.</h1>
 			<p class="summary">
-				Imagens, PDFs e anotações organizados como um fichário — pesquisáveis sem perder o
-				original.
+				Imagens, PDFs e anotações organizados como um fichário — pesquisáveis sem perder o original.
 			</p>
 		</div>
 		<a class="primary-action" href="/import/">Importar documento</a>

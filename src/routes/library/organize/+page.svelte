@@ -89,7 +89,9 @@
 	<header>
 		<p class="eyebrow">Metadados em lote</p>
 		<h1 id="page-title">Organizar documentos</h1>
-		<p>Renomeie e mova documentos entre cadernos sem alterar páginas, arquivos, tags ou histórico.</p>
+		<p>
+			Renomeie e mova documentos entre cadernos sem alterar páginas, arquivos, tags ou histórico.
+		</p>
 	</header>
 
 	{#if loading}

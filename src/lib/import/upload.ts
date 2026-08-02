@@ -97,10 +97,7 @@ export class DuplicateImageError extends Error {
 
 export class ImageUploadError extends Error {
 	readonly code:
-		| 'not_authenticated'
-		| 'duplicate_check_failed'
-		| 'upload_failed'
-		| 'metadata_failed';
+		'not_authenticated' | 'duplicate_check_failed' | 'upload_failed' | 'metadata_failed';
 
 	constructor(code: ImageUploadError['code']) {
 		const messages = {
@@ -215,9 +212,9 @@ export async function uploadPreparedImage(
 				name: 'create_image_import',
 				args: Record<string, unknown>
 			): Promise<{
-					data: Array<{ document_id: string; page_id: string; ocr_job_id: string }> | null;
-					error: unknown;
-				}>;
+				data: Array<{ document_id: string; page_id: string; ocr_job_id: string }> | null;
+				error: unknown;
+			}>;
 		};
 		const { data, error } = await (client as unknown as RpcClient).rpc('create_image_import', {
 			target_document_id: documentId,

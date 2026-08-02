@@ -20,7 +20,10 @@ for (const name of names) {
 	if (/\b(drop\s+(?:table|schema|type)|truncate\s+table)\b/i.test(content)) {
 		failures.push(`${name}: destructive schema operation requires explicit reviewed exception`);
 	}
-	if (/create\s+or\s+replace\s+function/i.test(content) && !/set\s+search_path\s*=\s*''/i.test(content)) {
+	if (
+		/create\s+or\s+replace\s+function/i.test(content) &&
+		!/set\s+search_path\s*=\s*''/i.test(content)
+	) {
 		failures.push(`${name}: function definition missing explicit empty search_path`);
 	}
 	if (/security\s+definer/i.test(content) && !/revoke\s+execute/i.test(content)) {

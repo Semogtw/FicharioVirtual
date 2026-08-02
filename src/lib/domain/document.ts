@@ -1,12 +1,6 @@
 export type DocumentKind = 'image' | 'pdf';
 export type DocumentStatus =
-	| 'uploading'
-	| 'pending'
-	| 'processing'
-	| 'ready'
-	| 'partially_ready'
-	| 'needs_review'
-	| 'failed';
+	'uploading' | 'pending' | 'processing' | 'ready' | 'partially_ready' | 'needs_review' | 'failed';
 
 export interface DocumentSummary {
 	id: string;

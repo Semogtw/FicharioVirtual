@@ -83,7 +83,9 @@ export async function loadDocumentDetailWithGateway(
 		notebookId: document.notebook_id,
 		originalFilename: document.original_filename,
 		originalUrl,
-		pages: Object.freeze([...pages].map(mapPageRecord).sort((left, right) => left.pageNumber - right.pageNumber)),
+		pages: Object.freeze(
+			[...pages].map(mapPageRecord).sort((left, right) => left.pageNumber - right.pageNumber)
+		),
 		createdAt: document.created_at,
 		updatedAt: document.updated_at
 	});
@@ -133,7 +135,9 @@ class SupabaseDocumentGateway implements DocumentDetailGateway {
 	}
 
 	async createSignedUrl(storagePath: string) {
-		const { data, error } = await this.client.storage.from('documents').createSignedUrl(storagePath, 600);
+		const { data, error } = await this.client.storage
+			.from('documents')
+			.createSignedUrl(storagePath, 600);
 		if (error || !data?.signedUrl) throw new DocumentDetailError('unavailable');
 		return data.signedUrl;
 	}

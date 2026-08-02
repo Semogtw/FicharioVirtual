@@ -44,7 +44,11 @@ describe('listReviewItems', () => {
 	});
 
 	it('rejects pagination outside the bounded contract', async () => {
-		await expect(listReviewItems({ limit: 101 }, client([]))).rejects.toThrow('Invalid review limit');
-		await expect(listReviewItems({ offset: -1 }, client([]))).rejects.toThrow('Invalid review offset');
+		await expect(listReviewItems({ limit: 101 }, client([]))).rejects.toThrow(
+			'Invalid review limit'
+		);
+		await expect(listReviewItems({ offset: -1 }, client([]))).rejects.toThrow(
+			'Invalid review offset'
+		);
 	});
 });

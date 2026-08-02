@@ -82,11 +82,7 @@
 					placeholder="Conteúdo, semestre ou finalidade"
 				></textarea>
 			</label>
-			<Button
-				label={creating ? 'Criando…' : 'Criar caderno'}
-				type="submit"
-				disabled={creating}
-			/>
+			<Button label={creating ? 'Criando…' : 'Criar caderno'} type="submit" disabled={creating} />
 		</form>
 	{/if}
 

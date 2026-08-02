@@ -176,7 +176,7 @@ A aplicação terá uma interface de provedor:
 
 ```ts
 export interface OcrProvider {
-  transcribe(input: OcrInput): Promise<OcrResultV1>;
+	transcribe(input: OcrInput): Promise<OcrResultV1>;
 }
 ```
 
@@ -186,16 +186,16 @@ A resposta interna será estável:
 
 ```ts
 export interface OcrResultV1 {
-  schemaVersion: 1;
-  fullText: string;
-  detectedLanguage: string | null;
-  uncertainSegments: Array<{
-    text: string;
-    context: string | null;
-  }>;
-  suggestedTitle: string | null;
-  suggestedTags: string[];
-  warnings: string[];
+	schemaVersion: 1;
+	fullText: string;
+	detectedLanguage: string | null;
+	uncertainSegments: Array<{
+		text: string;
+		context: string | null;
+	}>;
+	suggestedTitle: string | null;
+	suggestedTags: string[];
+	warnings: string[];
 }
 ```
 

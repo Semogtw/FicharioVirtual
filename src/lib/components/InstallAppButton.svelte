@@ -44,7 +44,10 @@
 <div class="install-card">
 	<div>
 		<strong>Aplicativo instalável</strong>
-		<p>O PWA guarda apenas o shell e ativos públicos. Documentos privados continuam vindo da sessão autenticada.</p>
+		<p>
+			O PWA guarda apenas o shell e ativos públicos. Documentos privados continuam vindo da sessão
+			autenticada.
+		</p>
 	</div>
 	{#if installed}
 		<span>Instalado</span>

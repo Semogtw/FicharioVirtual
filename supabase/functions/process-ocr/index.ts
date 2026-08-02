@@ -198,7 +198,8 @@ Deno.serve(async (request) => {
 		if (!persisted) return respond(503, { code: 'ocr_failure_persistence_failed' });
 		return respond(409, { code: 'ocr_source_missing' });
 	}
-	const sourcePath = page.temporary_image_path ?? (document.kind === 'image' ? document.storage_path : null);
+	const sourcePath =
+		page.temporary_image_path ?? (document.kind === 'image' ? document.storage_path : null);
 	if (!sourcePath) {
 		const failedAt = new Date().toISOString();
 		const persisted = await failJob({
