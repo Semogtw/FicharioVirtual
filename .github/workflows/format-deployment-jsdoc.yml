@@ -1,0 +1,39 @@
+name: Format deployment JSDoc
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/format-deployment-jsdoc.yml
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.16.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prettier --write tools/checks/deployment-contract.mjs tools/checks/check-deployed-site.mjs
+      - name: Commit formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo 'No formatting changes.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tools/checks/deployment-contract.mjs tools/checks/check-deployed-site.mjs
+          git commit -m 'style: format deployment JSDoc'
+          git push origin HEAD:main
