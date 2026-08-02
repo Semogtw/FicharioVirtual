@@ -1,10 +1,15 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import AppShell from '$lib/components/AppShell.svelte';
 	import '$lib/design/global.css';
 
 	let { children } = $props();
 </script>
 
-<AppShell>
+{#if page.url.pathname.startsWith('/login')}
 	{@render children()}
-</AppShell>
+{:else}
+	<AppShell>
+		{@render children()}
+	</AppShell>
+{/if}
