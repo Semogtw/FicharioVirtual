@@ -40,8 +40,9 @@ test.beforeEach(async ({ page }) => {
 test('shows persistent library navigation on the tablet viewport', async ({ page }) => {
 	await page.goto('/');
 
-	await expect(page.getByRole('navigation', { name: 'Navegação principal' })).toBeVisible();
-	await expect(page.getByRole('link', { name: 'Biblioteca' })).toBeVisible();
-	await expect(page.getByRole('link', { name: 'Importar' })).toBeVisible();
+	const navigation = page.getByRole('navigation', { name: 'Navegação principal' });
+	await expect(navigation).toBeVisible();
+	await expect(navigation.getByRole('link', { name: 'Biblioteca', exact: true })).toBeVisible();
+	await expect(navigation.getByRole('link', { name: 'Importar', exact: true })).toBeVisible();
 	await expect(page.getByRole('search')).toBeVisible();
 });
