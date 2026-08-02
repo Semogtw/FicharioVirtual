@@ -24,7 +24,7 @@ const manifest = JSON.parse(packageSource);
 if (!/^lockfileVersion:\s*['"]?9(?:\.0)?['"]?\s*$/m.test(lockfile)) {
 	fail('pnpm-lock.yaml must use lockfile version 9');
 }
-if (!/^importers:\s*$/m.test(lockfile) || !/^\s{2}\.\:\s*$/m.test(lockfile)) {
+if (!/^importers:\s*$/m.test(lockfile) || !lockfile.includes('\n  .:\n')) {
 	fail('pnpm-lock.yaml must contain the root importer');
 }
 
