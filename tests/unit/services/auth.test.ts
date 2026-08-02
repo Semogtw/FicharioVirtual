@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-	AuthServiceError,
-	loadAuthorizedSession,
-	signIn,
-	type AuthClientLike
-} from '../../../src/lib/services/auth';
+import { loadAuthorizedSession, signIn, type AuthClientLike } from '../../../src/lib/services/auth';
 
 function clientFixture({ active = true, sessionPresent = true } = {}) {
 	let signedOut = 0;
@@ -87,7 +82,7 @@ describe('password sign in', () => {
 		const fixture = clientFixture({ active: false });
 
 		await expect(signIn('owner@example.test', 'password', fixture.client)).rejects.toEqual(
-			expect.objectContaining<AuthServiceError>({ code: 'not_authorized' })
+			expect.objectContaining({ code: 'not_authorized' })
 		);
 	});
 });
