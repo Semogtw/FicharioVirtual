@@ -37,7 +37,7 @@ select set_config('request.jwt.claim.sub', '$user_id', true);
 select public.claim_ocr_job(
   '$page_id'::uuid,
   'gemini-test',
-  timezone('utc', now()),
+  now(),
   1
 )->>'state';
 commit;
@@ -79,6 +79,44 @@ reserved_count="$(
 )"
 if [[ "$reserved_count" != "1" ]]; then
   echo "Expected one reserved OCR page, received: $reserved_count" >&2
+  exit 1
+fi
+
+blocked_page="$(
+  psql "$db_url" -Atq -v ON_ERROR_STOP=1 -c \
+    "select page_id from public.ocr_jobs where user_id='$user_id'::uuid and status='blocked_quota' limit 1"
+)"
+if [[ -z "$blocked_page" ]]; then
+  echo "Expected one locally quota-blocked page." >&2
+  exit 1
+fi
+
+scheduled_count="$(
+  psql "$db_url" -Atq -v ON_ERROR_STOP=1 -c \
+    "select count(*) from public.ocr_jobs where page_id='$blocked_page'::uuid and next_retry_at=((date_trunc('day', timezone('utc', now())) + interval '1 day') at time zone 'utc')"
+)"
+if [[ "$scheduled_count" != "1" ]]; then
+  echo "Local quota block was not scheduled for the next UTC day." >&2
+  exit 1
+fi
+
+same_day_state="$(
+  psql "$db_url" -Atq -v ON_ERROR_STOP=1 <<SQL
+begin;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '$user_id', true);
+select public.claim_ocr_job(
+  '$blocked_page'::uuid,
+  'gemini-test',
+  now(),
+  1
+)->>'state';
+commit;
+SQL
+)"
+same_day_state="$(printf '%s\n' "$same_day_state" | grep -vE '^(BEGIN|COMMIT|SET|aaaaaaaa-)' | tail -n 1)"
+if [[ "$same_day_state" != "retry_later" ]]; then
+  echo "Expected local quota retry_later, received: $same_day_state" >&2
   exit 1
 fi
 
