@@ -1,13 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import {
 	assertAuthorizedAccount,
+	assertDeniedStorageOperation,
+	assertProbeBytes,
 	assertProbeIsolation,
+	assertSignedStorageUrl,
+	assertStorageListIsolation,
 	assertUnauthorizedAccount
 } from '../../../tools/checks/supabase-staging-contract.mjs';
 
 const authorizedUserId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const unauthorizedUserId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const probeId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const storageFolder = `${authorizedUserId}/__staging_probe_cccccccc`;
+const storageFileName = 'probe.png';
+const storagePath = `${storageFolder}/${storageFileName}`;
 
 describe('Supabase staging contract', () => {
 	it('accepts an active allowlisted account bound to the authenticated user', () => {
@@ -61,5 +68,68 @@ describe('Supabase staging contract', () => {
 				outsiderRows: [{ id: probeId, user_id: authorizedUserId }]
 			})
 		).toThrow(/second account/);
+	});
+
+	it('requires Storage listing to expose the sentinel only to its owner', () => {
+		expect(() =>
+			assertStorageListIsolation({
+				fileName: storageFileName,
+				ownerRows: [{ name: storageFileName, metadata: { mimetype: 'image/png' } }],
+				outsiderRows: []
+			})
+		).not.toThrow();
+		expect(() =>
+			assertStorageListIsolation({
+				fileName: storageFileName,
+				ownerRows: [{ name: storageFileName }],
+				outsiderRows: [{ name: storageFileName }]
+			})
+		).toThrow(/second account/);
+	});
+
+	it('compares downloaded Storage bytes without text coercion', () => {
+		const expected = Uint8Array.from([0, 1, 2, 127, 128, 255]);
+		expect(() => assertProbeBytes({ expected, actual: expected.slice() })).not.toThrow();
+		expect(() =>
+			assertProbeBytes({ expected, actual: Uint8Array.from([0, 1, 2, 127, 128, 254]) })
+		).toThrow(/bytes/);
+	});
+
+	it('requires denied Storage operations to return no usable data', () => {
+		expect(() =>
+			assertDeniedStorageOperation({
+				label: 'download',
+				data: null,
+				error: new Error('Object not found')
+			})
+		).not.toThrow();
+		expect(() =>
+			assertDeniedStorageOperation({
+				label: 'signed URL',
+				data: { signedUrl: 'https://example.test/leak' },
+				error: null
+			})
+		).toThrow(/unexpectedly succeeded/);
+	});
+
+	it('accepts only a same-origin signed URL for the exact sentinel object', () => {
+		const supabaseUrl = 'https://project.supabase.co';
+		const signedUrl = `${supabaseUrl}/storage/v1/object/sign/documents/${storagePath}?token=signed-token`;
+
+		expect(() => assertSignedStorageUrl({ signedUrl, supabaseUrl, objectPath: storagePath })).not.toThrow();
+		expect(() =>
+			assertSignedStorageUrl({
+				signedUrl: `https://other.example/storage/v1/object/sign/documents/${storagePath}?token=x`,
+				supabaseUrl,
+				objectPath: storagePath
+			})
+		).toThrow(/origin/);
+		expect(() =>
+			assertSignedStorageUrl({
+				signedUrl: `${supabaseUrl}/storage/v1/object/sign/documents/${authorizedUserId}/other.png?token=x`,
+				supabaseUrl,
+				objectPath: storagePath
+			})
+		).toThrow(/exact Storage object/);
 	});
 });
