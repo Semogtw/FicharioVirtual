@@ -81,7 +81,7 @@ function mapRow(row: SearchRow): SearchResult {
 export async function searchPages(
 	query: string,
 	options: SearchOptions = {},
-	client: SearchClientLike = defaultClient()
+	client?: SearchClientLike
 ): Promise<readonly SearchResult[]> {
 	const normalized = query.trim();
 	if (normalized.length === 0) return Object.freeze([]);
@@ -97,7 +97,8 @@ export async function searchPages(
 	}
 	if (options.signal?.aborted) throw new DOMException('Search cancelled', 'AbortError');
 
-	let request = client.rpc('search_pages', {
+	const gateway = client ?? defaultClient();
+	let request = gateway.rpc('search_pages', {
 		search_query: normalized,
 		notebook_filter: notebookId,
 		result_limit: limit,
