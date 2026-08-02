@@ -157,7 +157,9 @@
 					</div>
 				</div>
 
-				<CorrectionEditor page={selectedPage} onSaved={pageSaved} />
+				{#key selectedPage.id}
+					<CorrectionEditor page={selectedPage} onSaved={pageSaved} />
+				{/key}
 			</section>
 		{/if}
 	{/if}
