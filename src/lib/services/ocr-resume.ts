@@ -62,29 +62,20 @@ class SupabaseGateway implements OcrResumeGateway {
 	constructor(private readonly client: SupabaseClient<Database>) {}
 
 	async recoverStaleJobs() {
-		type RecoveryClient = {
-			rpc(
-				name: 'recover_stale_ocr_jobs'
-			): Promise<{ data: number | null; error: unknown }>;
-		};
-		const { error } = await (this.client as unknown as RecoveryClient).rpc(
-			'recover_stale_ocr_jobs'
-		);
+		const { error } = await this.client.rpc('recover_stale_ocr_jobs');
 		if (error) throw new Error('Não foi possível recuperar leituras interrompidas.');
 	}
 
 	async listPendingPages(documentId: string) {
-		const { data, error } = await this.client
-			.from('pages')
-			.select('id,page_number')
-			.eq('document_id', validId(documentId))
-			.in('status', ['pending', 'retryable', 'blocked_quota'])
-			.order('page_number', { ascending: true });
+		const { data, error } = await this.client.rpc('list_resumable_ocr_pages', {
+			target_document_id: validId(documentId),
+			selection_at: new Date().toISOString()
+		});
 		if (error || !Array.isArray(data)) {
 			throw new Error('Não foi possível localizar as páginas pendentes.');
 		}
 		return Object.freeze(
-			data.map((page) => Object.freeze({ id: page.id, pageNumber: page.page_number }))
+			data.map((page) => Object.freeze({ id: page.page_id, pageNumber: page.page_number }))
 		);
 	}
 }
