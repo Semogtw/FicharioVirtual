@@ -59,6 +59,9 @@ jobs:
           fi
           echo "RECEIPT_ISSUE=$issue_number" >> "$GITHUB_ENV"
 
+      - name: Restore reproducible pnpm lockfile
+        run: bash tools/lockfile/restore-pnpm-lockfile.sh
+
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
         with:
