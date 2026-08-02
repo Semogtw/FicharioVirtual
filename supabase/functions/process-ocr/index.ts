@@ -1,5 +1,11 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { classifyGeminiFailure, parseOcrPayload } from '../_shared/ocr-contract.ts';
+import { classifyGeminiFailure } from '../_shared/ocr-contract.ts';
+import {
+	GeminiHttpError,
+	GeminiResponseError,
+	GeminiTransportError,
+	requestGeminiOcr
+} from '../_shared/gemini-ocr-client.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MODEL = /^[A-Za-z0-9._-]{3,128}$/;
@@ -26,81 +32,12 @@ function empty(status: number) {
 	return new Response(null, { status, headers: corsHeaders() });
 }
 
-function base64(bytes: Uint8Array) {
-	let binary = '';
-	const chunkSize = 0x8000;
-	for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-		binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
-	}
-	return btoa(binary);
-}
-
-function responseText(payload: unknown): string | null {
-	if (payload === null || typeof payload !== 'object') return null;
-	const candidates = (payload as { candidates?: unknown }).candidates;
-	if (!Array.isArray(candidates)) return null;
-	for (const candidate of candidates) {
-		if (candidate === null || typeof candidate !== 'object') continue;
-		const content = (candidate as { content?: unknown }).content;
-		if (content === null || typeof content !== 'object') continue;
-		const parts = (content as { parts?: unknown }).parts;
-		if (!Array.isArray(parts)) continue;
-		for (const part of parts) {
-			if (part && typeof part === 'object' && typeof (part as { text?: unknown }).text === 'string') {
-				return (part as { text: string }).text;
-			}
-		}
-	}
-	return null;
-}
-
 function retryAt(attemptCount: number, baseSeconds: number) {
 	const exponent = Math.min(Math.max(attemptCount - 1, 0), 6);
 	const jitter = crypto.getRandomValues(new Uint16Array(1))[0] % 1000;
 	const delayMs = Math.min(60 * 60 * 1000, baseSeconds * 1000 * 2 ** exponent + jitter);
 	return new Date(Date.now() + delayMs).toISOString();
 }
-
-const prompt = `Você é um transcritor literal de anotações acadêmicas.
-Transcreva todo texto visível da imagem em português, preservando ordem de leitura, títulos, listas, quebras relevantes, símbolos e fórmulas em texto quando possível.
-Não resuma, não explique, não complete lacunas e não adivinhe palavras ilegíveis.
-Quando algo não puder ser lido com segurança, mantenha o trecho mais conservador possível e adicione um aviso curto.
-Retorne exclusivamente o objeto JSON exigido pelo schema.`;
-
-const responseSchema = {
-	type: 'object',
-	additionalProperties: false,
-	properties: {
-		text: {
-			type: 'string',
-			description: 'Transcrição literal completa, sem comentários externos.'
-		},
-		warnings: {
-			type: 'array',
-			maxItems: 100,
-			items: {
-				type: 'object',
-				additionalProperties: false,
-				properties: {
-					code: {
-						type: 'string',
-						enum: [
-							'uncertain_text',
-							'illegible_region',
-							'layout_ambiguous',
-							'formula_uncertain',
-							'truncated_content',
-							'empty_page'
-						]
-					},
-					message: { type: 'string', maxLength: 300 }
-				},
-				required: ['code', 'message']
-			}
-		}
-	},
-	required: ['text', 'warnings']
-};
 
 Deno.serve(async (request) => {
 	if (request.method === 'OPTIONS') return empty(204);
@@ -273,47 +210,35 @@ Deno.serve(async (request) => {
 	const timeoutId = setTimeout(() => timeout.abort(), REQUEST_TIMEOUT_MS);
 	try {
 		bytes = new Uint8Array(await sourceBlob.arrayBuffer());
-		const providerResponse = await fetch(
-			`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-			{
-				method: 'POST',
-				headers: {
-					'x-goog-api-key': apiKey,
-					'Content-Type': 'application/json'
-				},
-				signal: timeout.signal,
-				body: JSON.stringify({
-					contents: [
-						{
-							role: 'user',
-							parts: [
-								{
-									inlineData: {
-										mimeType: sourceBlob.type || 'image/jpeg',
-										data: base64(bytes)
-									}
-								},
-								{ text: `${prompt}\nVersão do prompt: ${promptVersion}.` }
-							]
-						}
-					],
-					generationConfig: {
-						temperature: 0,
-						maxOutputTokens: 8192,
-						responseFormat: {
-							text: {
-								mimeType: 'application/json',
-								schema: responseSchema
-							}
-						}
-					}
-				})
-			}
-		);
+		const result = await requestGeminiOcr({
+			apiKey,
+			model,
+			mimeType: sourceBlob.type || 'image/jpeg',
+			bytes,
+			promptVersion,
+			signal: timeout.signal
+		});
+		const completedAt = new Date().toISOString();
+		const { data: completed, error: completionError } = await supabase.rpc('complete_ocr_job', {
+			target_page_id: pageId,
+			extracted_text: result.text,
+			extraction_warnings: result.warnings,
+			terminal_status: result.needsReview ? 'needs_review' : 'ready',
+			completed_at: completedAt
+		});
+		if (completionError || completed !== true) {
+			return json(503, { code: 'ocr_completion_failed' });
+		}
 
-		if (!providerResponse.ok) {
-			const providerBody = (await providerResponse.text()).slice(0, 8_000);
-			const failure = classifyGeminiFailure(providerResponse.status, providerBody);
+		await cleanupTemporaryImage(page.temporary_image_path);
+		return json(200, {
+			state: 'complete',
+			needsReview: result.needsReview,
+			warningCount: result.warnings.length
+		});
+	} catch (error) {
+		if (error instanceof GeminiHttpError) {
+			const failure = classifyGeminiFailure(error.status, error.responseBody);
 			if (failure.quotaExhausted) {
 				await supabase.rpc('block_ocr_job_quota', {
 					target_page_id: pageId,
@@ -334,50 +259,33 @@ Deno.serve(async (request) => {
 							: null
 				});
 			}
-			return json(failure.quotaExhausted ? 429 : failure.retryable ? 503 : providerResponse.status, {
+			const providerStatus = error.status >= 400 && error.status <= 599 ? error.status : 502;
+			return json(failure.quotaExhausted ? 429 : failure.retryable ? 503 : providerStatus, {
 				code: failure.code,
 				retryable: failure.retryable
 			});
 		}
 
-		const providerPayload = await providerResponse.json();
-		const text = responseText(providerPayload);
-		if (text === null) throw new TypeError('Missing structured response');
-		const result = parseOcrPayload(text);
-		const completedAt = new Date().toISOString();
-		const { data: completed, error: completionError } = await supabase.rpc('complete_ocr_job', {
-			target_page_id: pageId,
-			extracted_text: result.text,
-			extraction_warnings: result.warnings,
-			terminal_status: result.needsReview ? 'needs_review' : 'ready',
-			completed_at: completedAt
-		});
-		if (completionError || completed !== true) {
-			return json(503, { code: 'ocr_completion_failed' });
-		}
-
-		await cleanupTemporaryImage(page.temporary_image_path);
-		return json(200, {
-			state: 'complete',
-			needsReview: result.needsReview,
-			warningCount: result.warnings.length
-		});
-	} catch (error) {
 		const retryable = attemptCount < 3;
 		const failedAt = new Date();
-		const code = error instanceof TypeError ? 'ocr_response_invalid' : 'ocr_request_failed';
+		const responseInvalid = error instanceof GeminiResponseError;
+		const requestInterrupted =
+			error instanceof GeminiTransportError ||
+			(error instanceof DOMException && error.name === 'AbortError');
+		const code = responseInvalid ? 'ocr_response_invalid' : 'ocr_request_failed';
 		await supabase.rpc('fail_ocr_job', {
 			target_page_id: pageId,
 			error_code: code,
-			safe_error_message:
-				code === 'ocr_response_invalid'
-					? 'O provedor retornou um formato de transcrição inválido.'
-					: 'A solicitação de leitura foi interrompida.',
+			safe_error_message: responseInvalid
+				? 'O provedor retornou um formato de transcrição inválido.'
+				: requestInterrupted
+					? 'A solicitação de leitura foi interrompida.'
+					: 'A leitura falhou antes de produzir um resultado válido.',
 			retryable,
 			failed_at: failedAt.toISOString(),
 			retry_at: retryable ? retryAt(attemptCount, 45) : null
 		});
-		return json(retryable ? 503 : 422, { code, retryable });
+		return json(retryable ? 503 : responseInvalid ? 422 : 503, { code, retryable });
 	} finally {
 		clearTimeout(timeoutId);
 		bytes?.fill(0);
