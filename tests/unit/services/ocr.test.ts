@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-	OcrProcessingError,
-	processPageOcr,
-	type OcrFunctionClient
-} from '../../../src/lib/services/ocr';
+import { processPageOcr, type OcrFunctionClient } from '../../../src/lib/services/ocr';
 
 const pageId = '11111111-1111-4111-8111-111111111111';
 
@@ -54,7 +50,7 @@ describe('processPageOcr', () => {
 		await expect(
 			processPageOcr(pageId, client({ data: null, error: { context: response } }))
 		).rejects.toEqual(
-			expect.objectContaining<OcrProcessingError>({
+			expect.objectContaining({
 				code: 'gemini_authentication_failed',
 				retryable: false
 			})
