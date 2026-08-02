@@ -1,6 +1,28 @@
 import { describe, expect, it } from 'vitest';
-import { mapDocumentRecord } from '../../../src/lib/domain/document';
+import {
+	mapDocumentRecord,
+	type DocumentPage,
+	type DocumentSummary
+} from '../../../src/lib/domain/document';
 import { mapNotebookRecord } from '../../../src/lib/domain/notebook';
+import {
+	collectAllDocumentPages,
+	DocumentServiceError
+} from '../../../src/lib/services/documents';
+
+function document(id: string, createdAt: string): DocumentSummary {
+	return Object.freeze({
+		id,
+		title: `Document ${id}`,
+		kind: 'image',
+		status: 'ready',
+		pageCount: 1,
+		thumbnailPath: null,
+		notebookId: null,
+		createdAt,
+		updatedAt: createdAt
+	});
+}
 
 describe('document mapping', () => {
 	it('maps database fields into a UI-safe camelCase summary', () => {
@@ -29,6 +51,51 @@ describe('document mapping', () => {
 		});
 		expect(summary).not.toHaveProperty('storage_path');
 		expect(summary).not.toHaveProperty('user_id');
+	});
+});
+
+describe('collectAllDocumentPages', () => {
+	it('loads every cursor page in order', async () => {
+		const firstCursor = {
+			createdAt: '2026-08-02T09:00:00.000Z',
+			id: '11111111-1111-4111-8111-111111111111'
+		};
+		const calls: Array<null | typeof firstCursor> = [];
+		const pages: DocumentPage[] = [
+			{
+				items: [document('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '2026-08-02T10:00:00.000Z')],
+				nextCursor: firstCursor
+			},
+			{
+				items: [document('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', firstCursor.createdAt)],
+				nextCursor: null
+			}
+		];
+
+		const result = await collectAllDocumentPages(async (cursor) => {
+			calls.push(cursor);
+			const page = pages.shift();
+			if (!page) throw new Error('unexpected page request');
+			return page;
+		});
+
+		expect(calls).toEqual([null, firstCursor]);
+		expect(result.map((item) => item.id)).toEqual([
+			'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+			'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+		]);
+		expect(Object.isFrozen(result)).toBe(true);
+	});
+
+	it('rejects a repeated cursor instead of looping forever', async () => {
+		const repeatedCursor = {
+			createdAt: '2026-08-02T09:00:00.000Z',
+			id: '11111111-1111-4111-8111-111111111111'
+		};
+
+		await expect(
+			collectAllDocumentPages(async () => ({ items: [], nextCursor: repeatedCursor }))
+		).rejects.toBeInstanceOf(DocumentServiceError);
 	});
 });
 
