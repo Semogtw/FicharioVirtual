@@ -187,6 +187,7 @@
 							<button
 								type="button"
 								class:active={tag.id === activeTagId}
+								disabled={saving || loadingAssignments || pendingDocumentId !== null}
 								onclick={() => {
 									activeTagId = tag.id;
 									void loadAssignments(tag.id);
