@@ -10,6 +10,8 @@ Um arquivo de teste presente no repositório não prova que o comportamento pass
 - pnpm `>=10`;
 - navegador Chromium instalado pelo Playwright;
 - Supabase CLI e runtime Docker para testes locais do banco;
+- PostgreSQL `psql` para os testes concorrentes reais;
+- Deno para verificação das Edge Functions;
 - projeto Supabase real somente para validação final de Auth, Storage e Edge Functions.
 
 ## Instalação
@@ -21,6 +23,36 @@ pnpm exec playwright install chromium
 ```
 
 O lockfile deve ser atualizado e versionado em um ambiente com acesso ao registro antes de exigir `--frozen-lockfile` em todos os agentes.
+
+## Entry points canônicos
+
+Validação rápida do frontend:
+
+```bash
+pnpm verify
+```
+
+Validação local completa no commit atual:
+
+```bash
+pnpm verify:full
+```
+
+`verify:full` executa, nesta ordem:
+
+1. lint, Svelte/TypeScript, unitários e build;
+2. Playwright E2E;
+3. gates offline de fonte e migrations;
+4. `deno check` de todos os módulos/funções Supabase;
+5. recriação do banco local, pgTAP e testes OCR reais.
+
+Os blocos também podem ser executados isoladamente:
+
+```bash
+pnpm test:source:offline
+pnpm test:functions:check
+pnpm test:db:local
+```
 
 ## Gates de frontend
 
@@ -37,20 +69,53 @@ pnpm test:e2e
 
 - `lint`: estilo, regras estáticas e formatação;
 - `check`: Svelte e TypeScript completos;
-- `test`: contratos unitários de domínio, filas, serviços, PDF, OCR, busca, exportação, PWA e segurança;
+- `test`: contratos unitários de domínio, filas, serviços, PDF, OCR, busca, exportação, PWA, tooling e segurança;
 - `build`: bundle estático, workers, WASM, PDF.js e PWA;
 - `test:e2e`: autenticação simulada, shell responsivo, importação e rotas principais.
 
 Nenhum desses gates comprova RLS, Storage ou Edge Functions implantadas.
 
-## Gates do Supabase
+## Gates offline de fonte
 
 ```bash
-supabase start
-supabase db reset
-supabase test db
-supabase functions serve --env-file supabase/.env.local
+pnpm test:source:offline
 ```
+
+Esse runner não depende do Supabase ou do navegador. Ele verifica, entre outros contratos:
+
+- segredo/provider ausente do frontend;
+- caminhos privados ausentes de componentes e rotas;
+- cache do PWA limitado a ativos públicos;
+- migrations com `search_path`, grants e padrões de segurança esperados.
+
+## Edge Functions
+
+```bash
+pnpm test:functions:check
+```
+
+Executa `deno check` explicitamente em:
+
+- `supabase/functions/_shared/ocr-contract.ts`;
+- `supabase/functions/_shared/gemini-ocr-client.ts`;
+- `supabase/functions/process-ocr/index.ts`;
+- `supabase/functions/delete-document/index.ts`.
+
+Esse gate valida imports e tipos no runtime Deno, mas não substitui uma chamada real ao Storage ou ao modelo.
+
+## Gates do Supabase local
+
+```bash
+pnpm test:db:local
+```
+
+O runner:
+
+1. inicia ou reutiliza a stack local com `supabase start`;
+2. aplica todas as migrations desde zero com `supabase db reset`;
+3. executa os testes pgTAP com `supabase test db`;
+4. executa duas claims OCR concorrentes com limite diário igual a 1;
+5. valida replay idempotente de conclusão, reconciliação após resposta perdida e virada UTC da cota.
 
 Validar no banco local:
 
@@ -65,7 +130,8 @@ Validar no banco local:
 - estados `retryable`, `blocked_quota`, `needs_review` e `failed`;
 - rollup do estado de páginas para documentos;
 - busca usando correção antes da fonte original;
-- exportação sem caminhos privados.
+- exportação sem caminhos privados;
+- tags, rascunhos e operações em lote sem vazamento entre usuários.
 
 ## Testes da Edge Function OCR
 
@@ -149,3 +215,5 @@ Status: BLOCKED
 Reason: pnpm/dependencies unavailable because DNS could not resolve registry
 Next environment: checkout with Node 22, pnpm 10 and network or complete offline bundle
 ```
+
+Um checkpoint anterior não pode ser automaticamente atribuído a commits posteriores. Depois de qualquer mudança, execute ao menos o gate específico; antes de release, execute `pnpm verify:full` no SHA final.
