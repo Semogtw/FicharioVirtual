@@ -5,6 +5,12 @@ on:
     branches: [main]
     paths:
       - .github/workflows/validate-current-head.yml
+      - .github/workflows/rebuild-pnpm-lockfile.yml
+      - .gitignore
+      - README.md
+      - docs/TESTING.md
+      - package.json
+      - pnpm-lock.yaml
       - tools/lockfile/**
       - tools/checks/check-ci-bootstrap.mjs
       - tools/checks/run-offline-source-gates.sh
@@ -62,9 +68,6 @@ jobs:
           fi
           echo "RECEIPT_ISSUE=$issue_number" >> "$GITHUB_ENV"
 
-      - name: Restore reproducible pnpm lockfile
-        run: bash tools/lockfile/restore-pnpm-lockfile.sh
-
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
         with:
@@ -75,6 +78,7 @@ jobs:
         with:
           node-version: 22.16.0
           cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
