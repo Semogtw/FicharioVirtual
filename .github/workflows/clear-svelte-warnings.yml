@@ -1,0 +1,71 @@
+name: Clear Svelte warnings
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/clear-svelte-warnings.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: clear-svelte-warnings
+  cancel-in-progress: true
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Apply asserted warning fixes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          replacements = {
+              Path('src/routes/import/+page.svelte'): [
+                  (
+                      '\t<section\n\t\tclass:dragging\n\t\tclass="drop-zone"',
+                      '\t<section\n\t\trole="region"\n\t\taria-label="Área para importar imagens"\n\t\tclass:dragging\n\t\tclass="drop-zone"',
+                  )
+              ],
+              Path('src/routes/import/pdf/+page.svelte'): [
+                  (
+                      '\t<section\n\t\tclass:dragging\n\t\tclass="drop-zone"',
+                      '\t<section\n\t\trole="region"\n\t\taria-label="Área para importar PDFs"\n\t\tclass:dragging\n\t\tclass="drop-zone"',
+                  )
+              ],
+              Path('src/routes/library/tags/+page.svelte'): [
+                  ("\tinput[type='text'],\n\t.create-form input {", '\t.create-form input {')
+              ],
+              Path('src/routes/review/+page.svelte'): [
+                  (
+                      '\t\t-webkit-box-orient: vertical;\n\t\t-webkit-line-clamp: 3;',
+                      '\t\tline-clamp: 3;\n\t\t-webkit-box-orient: vertical;\n\t\t-webkit-line-clamp: 3;',
+                  )
+              ],
+          }
+
+          for path, edits in replacements.items():
+              source = path.read_text()
+              for old, new in edits:
+                  count = source.count(old)
+                  if count != 1:
+                      raise SystemExit(f'{path}: expected one match, found {count}: {old!r}')
+                  source = source.replace(old, new)
+              path.write_text(source)
+          PY
+
+      - name: Commit warning fixes
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/routes/import/+page.svelte src/routes/import/pdf/+page.svelte src/routes/library/tags/+page.svelte src/routes/review/+page.svelte
+          git commit -m 'fix: clear remaining Svelte diagnostics'
+          git push origin HEAD:main
