@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
 	createTag,
+	deleteTag,
+	listTagDocumentIds,
 	listTags,
+	renameTag,
 	setTagMembership,
 	type TagsClientLike
 } from '../../../src/lib/services/tags';
@@ -30,6 +33,9 @@ function client() {
 			}
 			if (name === 'create_tag') {
 				return { data: tagId, error: null };
+			}
+			if (name === 'list_tag_document_ids') {
+				return { data: [{ document_id: documentId }], error: null };
 			}
 			return { data: true, error: null };
 		}
@@ -69,6 +75,23 @@ describe('tag service', () => {
 		});
 		await expect(setTagMembership('bad', documentId, true, fixture.value)).rejects.toThrow(
 			'Invalid tag identifier'
+		);
+	});
+
+	it('validates all local inputs before constructing the default Supabase client', async () => {
+		await expect(createTag('   ')).rejects.toThrow('Invalid tag name');
+		await expect(renameTag('bad', 'Citologia')).rejects.toThrow('Invalid tag identifier');
+		await expect(renameTag(tagId, '\u0000')).rejects.toThrow('Invalid tag name');
+		await expect(deleteTag('bad')).rejects.toThrow('Invalid tag identifier');
+		await expect(listTagDocumentIds('bad')).rejects.toThrow('Invalid tag identifier');
+		await expect(setTagMembership('bad', documentId, true)).rejects.toThrow(
+			'Invalid tag identifier'
+		);
+		await expect(setTagMembership(tagId, 'bad', true)).rejects.toThrow(
+			'Invalid document identifier'
+		);
+		await expect(setTagMembership(tagId, documentId, 'yes' as never)).rejects.toThrow(
+			'Invalid tag assignment'
 		);
 	});
 });
