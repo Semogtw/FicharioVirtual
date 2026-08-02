@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import type { ExportManifest } from '../../../src/lib/export/manifest';
 import {
 	createPortableExport,
 	serializePortableExport,
 	type ExportClientLike
 } from '../../../src/lib/services/export';
 
-const manifest = {
+const manifest: ExportManifest = {
 	schemaVersion: 1,
 	exportedAt: '2026-08-02T06:07:08.000Z',
 	notebooks: [],
