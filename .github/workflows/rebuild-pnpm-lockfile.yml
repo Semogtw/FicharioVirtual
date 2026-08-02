@@ -1,0 +1,51 @@
+name: Rebuild pnpm lockfile
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/rebuild-pnpm-lockfile.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rebuild-pnpm-lockfile
+  cancel-in-progress: true
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.16.0
+
+      - name: Generate lockfile from manifest
+        run: pnpm install --lockfile-only --no-frozen-lockfile
+
+      - name: Verify generated lockfile
+        run: |
+          test -s pnpm-lock.yaml
+          grep -q '^lockfileVersion:' pnpm-lock.yaml
+          pnpm install --frozen-lockfile --lockfile-only
+
+      - name: Upload generated lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: pnpm-lock-${{ github.sha }}
+          path: pnpm-lock.yaml
+          if-no-files-found: error
+          retention-days: 1
