@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - .github/workflows/validate-current-head.yml
+      - .github/workflows/**
       - package.json
       - pnpm-lock.yaml
       - svelte.config.js
