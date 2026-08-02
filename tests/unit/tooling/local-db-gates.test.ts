@@ -29,12 +29,15 @@ describe('local database gate runner', () => {
 
 	it('runs every local database contract after rebuilding the schema', () => {
 		const runner = read('tools/checks/run-local-db-gates.sh');
+		const fixture = read('tools/checks/fixtures/ocr-concurrency-fixture.sql');
 
 		expect(runner).toContain('supabase start');
 		expect(runner).toContain('supabase db reset');
 		expect(runner).toContain('supabase test db');
 		expect(runner).toContain('tools/checks/test-ocr-claim-concurrency.sh');
 		expect(runner).toContain('tools/checks/test-ocr-idempotency.sh');
+		expect(fixture).toContain('insert into public.ocr_jobs');
+		expect(fixture).toContain('ocr_consent_version');
 	});
 
 	it('checks every deployed Edge Function and shared OCR module with Deno', () => {
