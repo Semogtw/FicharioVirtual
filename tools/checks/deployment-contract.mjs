@@ -18,6 +18,36 @@ function requireHeader(headers, name) {
 }
 
 /**
+ * @param {string} source
+ * @returns {Map<string, Set<string>>}
+ */
+function parseCspDirectives(source) {
+	const directives = new Map();
+	for (const segment of source.split(';')) {
+		const tokens = segment.trim().split(/\s+/).filter(Boolean);
+		const name = tokens.shift()?.toLowerCase();
+		if (!name) continue;
+		if (directives.has(name)) fail(`Content-Security-Policy repeats ${name}`);
+		directives.set(name, new Set(tokens));
+	}
+	return directives;
+}
+
+/**
+ * @param {Map<string, Set<string>>} directives
+ * @param {string} name
+ * @param {string[]} requiredValues
+ */
+function requireCspDirective(directives, name, requiredValues) {
+	const values = directives.get(name);
+	if (!values) fail(`Content-Security-Policy must include ${name}`);
+	for (const value of requiredValues) {
+		if (!values.has(value)) fail(`Content-Security-Policy ${name} must include ${value}`);
+	}
+	return values;
+}
+
+/**
  * @param {unknown} value
  * @returns {URL}
  */
@@ -48,13 +78,26 @@ export function parseDeploymentUrl(value) {
  * @param {Headers} headers
  */
 export function assertSecurityHeaders(headers) {
-	const csp = requireHeader(headers, 'content-security-policy');
-	for (const directive of ["default-src 'self'", "object-src 'none'", "frame-ancestors 'none'"]) {
-		if (!csp.includes(directive)) fail(`Content-Security-Policy must include ${directive}`);
+	const csp = parseCspDirectives(requireHeader(headers, 'content-security-policy'));
+	requireCspDirective(csp, 'default-src', ["'self'"]);
+	requireCspDirective(csp, 'base-uri', ["'self'"]);
+	requireCspDirective(csp, 'form-action', ["'self'"]);
+	requireCspDirective(csp, 'object-src', ["'none'"]);
+	requireCspDirective(csp, 'frame-ancestors', ["'none'"]);
+	const scripts = requireCspDirective(csp, 'script-src', ["'self'", "'wasm-unsafe-eval'"]);
+	for (const forbidden of ["'unsafe-inline'", "'unsafe-eval'"]) {
+		if (scripts.has(forbidden)) fail(`Content-Security-Policy script-src must not include ${forbidden}`);
 	}
 
 	const hsts = requireHeader(headers, 'strict-transport-security');
-	if (!/max-age=\d+/i.test(hsts)) fail('Strict-Transport-Security must define max-age');
+	const maxAge = hsts.match(/(?:^|;)\s*max-age=(\d+)\s*(?:;|$)/i)?.[1];
+	if (!maxAge) fail('Strict-Transport-Security must define max-age');
+	if (Number(maxAge) < 31_536_000) {
+		fail('Strict-Transport-Security max-age must be at least 31536000 seconds');
+	}
+	if (!/(?:^|;)\s*includeSubDomains\s*(?:;|$)/i.test(hsts)) {
+		fail('Strict-Transport-Security must include includeSubDomains');
+	}
 
 	if (requireHeader(headers, 'referrer-policy').toLowerCase() !== 'no-referrer') {
 		fail('Referrer-Policy must be no-referrer');
