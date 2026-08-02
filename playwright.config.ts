@@ -21,7 +21,8 @@ export default defineConfig({
 		}
 	],
 	webServer: {
-		command: 'pnpm build && pnpm preview --host 127.0.0.1 --port 4173',
+		command:
+			'PUBLIC_SUPABASE_URL=http://127.0.0.1:54321 PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_test_key_1234567890 pnpm build && pnpm preview --host 127.0.0.1 --port 4173',
 		url: 'http://127.0.0.1:4173',
 		reuseExistingServer: !process.env.CI,
 		timeout: 120_000
