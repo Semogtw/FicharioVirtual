@@ -1,0 +1,240 @@
+<script lang="ts">
+	import { goto } from '$app/navigation';
+	import Button from '$lib/components/Button.svelte';
+	import { authenticate, sessionState } from '$lib/stores/session.svelte';
+
+	let email = $state('');
+	let password = $state('');
+	let submitting = $state(false);
+
+	async function submit(event: SubmitEvent) {
+		event.preventDefault();
+		if (submitting) return;
+		submitting = true;
+		try {
+			await authenticate(email, password);
+			await goto('/');
+		} catch {
+			// The store exposes a safe, user-facing error message.
+		} finally {
+			submitting = false;
+		}
+	}
+</script>
+
+<svelte:head>
+	<title>Entrar — Fichário Virtual</title>
+</svelte:head>
+
+<main class="login-page" aria-labelledby="login-title">
+	<section class="introduction">
+		<a class="brand" href="/login/" aria-label="Fichário Virtual">
+			<span aria-hidden="true">FV</span>
+			<strong>Fichário Virtual</strong>
+		</a>
+		<div>
+			<p class="eyebrow">Arquivo pessoal privado</p>
+			<h1 id="login-title">Acesse seu fichário</h1>
+			<p class="summary">
+				Entre com a conta autorizada para consultar, importar e revisar suas anotações.
+			</p>
+		</div>
+		<ul>
+			<li>Arquivos mantidos em armazenamento privado</li>
+			<li>Busca textual sem banco vetorial no MVP</li>
+			<li>Nenhuma ativação automática de plano pago</li>
+		</ul>
+	</section>
+
+	<section class="form-panel" aria-label="Formulário de acesso">
+		<form onsubmit={submit}>
+			<div class="field">
+				<label for="email">E-mail</label>
+				<input
+					id="email"
+					type="email"
+					bind:value={email}
+					autocomplete="username"
+					required
+				/>
+			</div>
+
+			<div class="field">
+				<label for="password">Senha</label>
+				<input
+					id="password"
+					type="password"
+					bind:value={password}
+					autocomplete="current-password"
+					required
+				/>
+			</div>
+
+			{#if sessionState.error}
+				<p class="error" role="alert">{sessionState.error}</p>
+			{/if}
+
+			<Button
+				label={submitting ? 'Confirmando acesso…' : 'Entrar'}
+				type="submit"
+				disabled={submitting}
+			/>
+		</form>
+
+		<p class="access-note">
+			Este projeto possui <strong>cadastro público desativado</strong>. Novas contas são
+			adicionadas manualmente pelo proprietário.
+		</p>
+	</section>
+</main>
+
+<style>
+	.login-page {
+		min-height: 100vh;
+		display: grid;
+		grid-template-columns: minmax(0, 1.1fr) minmax(22rem, 0.9fr);
+		background: var(--paper);
+	}
+
+	.introduction {
+		display: grid;
+		align-content: space-between;
+		gap: 3rem;
+		padding: clamp(2rem, 7vw, 6rem);
+		background:
+			linear-gradient(90deg, rgb(83 106 91 / 8%) 1px, transparent 1px) 0 0 / 4rem 4rem,
+			var(--paper);
+	}
+
+	.brand {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.75rem;
+		width: fit-content;
+	}
+
+	.brand > span {
+		width: 2.75rem;
+		height: 2.75rem;
+		display: grid;
+		place-items: center;
+		border-radius: 0.7rem;
+		background: var(--archive);
+		color: white;
+		font-family: var(--font-heading);
+		font-size: 0.85rem;
+		font-weight: 700;
+	}
+
+	.brand strong {
+		font-family: var(--font-heading);
+		font-size: 1.15rem;
+		font-weight: 600;
+	}
+
+	.eyebrow {
+		margin-bottom: 0.7rem;
+		color: var(--archive);
+		font-size: 0.76rem;
+		font-weight: 780;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+	}
+
+	h1 {
+		max-width: 42rem;
+		margin-bottom: 1rem;
+		font-family: var(--font-heading);
+		font-size: clamp(3rem, 8vw, 6.75rem);
+		font-weight: 520;
+		letter-spacing: -0.055em;
+		line-height: 0.92;
+	}
+
+	.summary {
+		max-width: 37rem;
+		margin-bottom: 0;
+		color: var(--muted);
+		font-size: clamp(1rem, 2vw, 1.2rem);
+		line-height: 1.65;
+	}
+
+	ul {
+		display: grid;
+		gap: 0.65rem;
+		margin: 0;
+		padding-left: 1.15rem;
+		color: var(--muted);
+		line-height: 1.5;
+	}
+
+	.form-panel {
+		display: grid;
+		align-content: center;
+		gap: 1.5rem;
+		padding: clamp(2rem, 7vw, 6rem);
+		border-left: 1px solid var(--line);
+		background: var(--surface);
+	}
+
+	form {
+		display: grid;
+		gap: 1.15rem;
+		width: min(100%, 28rem);
+	}
+
+	.field {
+		display: grid;
+		gap: 0.45rem;
+	}
+
+	label {
+		font-size: 0.86rem;
+		font-weight: 720;
+	}
+
+	input {
+		min-height: 3.2rem;
+		padding: 0.75rem 0.9rem;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--radius-sm);
+		background: var(--surface-strong);
+		color: var(--ink);
+	}
+
+	.error {
+		margin: 0;
+		padding: 0.8rem 0.9rem;
+		border-left: 0.25rem solid var(--danger);
+		background: rgb(155 63 54 / 8%);
+		color: var(--danger);
+		line-height: 1.45;
+	}
+
+	.access-note {
+		max-width: 28rem;
+		margin: 0;
+		color: var(--muted);
+		font-size: 0.86rem;
+		line-height: 1.55;
+	}
+
+	@media (max-width: 820px) {
+		.login-page {
+			grid-template-columns: 1fr;
+		}
+
+		.introduction {
+			min-height: 42vh;
+		}
+
+		.introduction ul {
+			display: none;
+		}
+
+		.form-panel {
+			border-top: 1px solid var(--line);
+			border-left: 0;
+		}
+	}
+</style>
