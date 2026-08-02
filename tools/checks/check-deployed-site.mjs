@@ -11,14 +11,27 @@ import {
 
 const REQUEST_TIMEOUT_MS = 15_000;
 
+/**
+ * @typedef {{ redirect?: RequestRedirect; accept?: string }} RequestOptions
+ */
+
+/**
+ * @param {URL} baseUrl
+ * @param {string} pathname
+ * @returns {URL}
+ */
 function urlAt(baseUrl, pathname) {
 	return new URL(pathname, baseUrl);
 }
 
+/**
+ * @param {URL} url
+ * @param {RequestOptions} [options]
+ * @returns {Promise<Response>}
+ */
 async function request(url, { redirect = 'follow', accept = '*/*' } = {}) {
-	let response;
 	try {
-		response = await fetch(url, {
+		return await fetch(url, {
 			redirect,
 			headers: { accept },
 			signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
@@ -26,15 +39,23 @@ async function request(url, { redirect = 'follow', accept = '*/*' } = {}) {
 	} catch (error) {
 		throw new Error(`Request failed for ${url}: ${error instanceof Error ? error.message : error}`);
 	}
-	return response;
 }
 
+/**
+ * @param {Response} response
+ * @param {string} label
+ */
 function assertOk(response, label) {
 	if (!response.ok) {
 		throw new Error(`${label} returned HTTP ${response.status}`);
 	}
 }
 
+/**
+ * @param {Response} response
+ * @param {string} expected
+ * @param {string} label
+ */
 function assertContentType(response, expected, label) {
 	const contentType = response.headers.get('content-type') ?? '';
 	if (!contentType.toLowerCase().includes(expected)) {
@@ -42,6 +63,10 @@ function assertContentType(response, expected, label) {
 	}
 }
 
+/**
+ * @param {Response} response
+ * @param {string} label
+ */
 function assertNoLongLivedCache(response, label) {
 	const cacheControl = response.headers.get('cache-control') ?? '';
 	if (
@@ -52,6 +77,9 @@ function assertNoLongLivedCache(response, label) {
 	}
 }
 
+/**
+ * @param {URL} baseUrl
+ */
 async function verifyHttpRedirect(baseUrl) {
 	const cleartextUrl = new URL(baseUrl);
 	cleartextUrl.protocol = 'http:';
@@ -60,6 +88,11 @@ async function verifyHttpRedirect(baseUrl) {
 	console.log('PASS HTTP redirects to the same HTTPS host');
 }
 
+/**
+ * @param {URL} baseUrl
+ * @param {string} pathname
+ * @param {string} label
+ */
 async function verifyShell(baseUrl, pathname, label) {
 	const response = await request(urlAt(baseUrl, pathname), { accept: 'text/html' });
 	assertOk(response, label);
@@ -70,6 +103,9 @@ async function verifyShell(baseUrl, pathname, label) {
 	console.log(`PASS ${label}`);
 }
 
+/**
+ * @param {URL} baseUrl
+ */
 async function verifyManifest(baseUrl) {
 	const response = await request(urlAt(baseUrl, '/manifest.webmanifest'), {
 		accept: 'application/manifest+json, application/json'
@@ -79,13 +115,25 @@ async function verifyManifest(baseUrl) {
 	const manifest = await response.json();
 	assertManifest(manifest);
 
-	const icon = manifest.icons[0];
+	const manifestValue = /** @type {Record<string, unknown>} */ (manifest);
+	const icons = manifestValue.icons;
+	if (!Array.isArray(icons) || icons.length === 0) {
+		throw new Error('Web manifest does not expose an icon after validation');
+	}
+	const icon = /** @type {Record<string, unknown>} */ (icons[0]);
+	if (typeof icon.src !== 'string') {
+		throw new Error('Web manifest icon source is unavailable after validation');
+	}
+
 	const iconResponse = await request(urlAt(baseUrl, icon.src), { accept: 'image/*' });
 	assertOk(iconResponse, 'Manifest icon');
 	assertContentType(iconResponse, 'image/', 'Manifest icon');
 	console.log('PASS web manifest and icon');
 }
 
+/**
+ * @param {URL} baseUrl
+ */
 async function verifyRegistrar(baseUrl) {
 	const response = await request(urlAt(baseUrl, '/registerSW.js'), {
 		accept: 'text/javascript, application/javascript'
@@ -100,6 +148,9 @@ async function verifyRegistrar(baseUrl) {
 	console.log('PASS external service-worker registrar');
 }
 
+/**
+ * @param {URL} baseUrl
+ */
 async function verifyServiceWorker(baseUrl) {
 	const response = await request(urlAt(baseUrl, '/sw.js'), {
 		accept: 'text/javascript, application/javascript'
