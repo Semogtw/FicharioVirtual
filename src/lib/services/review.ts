@@ -1,5 +1,5 @@
-import type { DocumentKind, Json, ProcessingStatus } from '$lib/types/database';
 import type { PageWarning } from '$lib/domain/page';
+import type { DocumentKind, Json, ProcessingStatus } from '$lib/types/database';
 import { getSupabaseClient } from './supabase';
 
 export type ReviewItem = {
@@ -63,7 +63,7 @@ function defaultClient(): ReviewClientLike {
 
 export async function listReviewItems(
 	options: ReviewOptions = {},
-	client: ReviewClientLike = defaultClient()
+	client?: ReviewClientLike
 ): Promise<readonly ReviewItem[]> {
 	const limit = options.limit ?? 50;
 	const offset = options.offset ?? 0;
@@ -73,7 +73,8 @@ export async function listReviewItems(
 	if (!Number.isInteger(offset) || offset < 0 || offset > 10_000) {
 		throw new TypeError('Invalid review offset');
 	}
-	const { data, error } = await client.rpc('list_review_pages', {
+	const gateway = client ?? defaultClient();
+	const { data, error } = await gateway.rpc('list_review_pages', {
 		result_limit: limit,
 		result_offset: offset
 	});
