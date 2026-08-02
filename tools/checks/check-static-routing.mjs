@@ -14,7 +14,9 @@ try {
 		message: 'expected client-only routes were unseen'
 	});
 } catch (error) {
-	fail(`known client-only routes must be accepted: ${error instanceof Error ? error.message : String(error)}`);
+	fail(
+		`known client-only routes must be accepted: ${error instanceof Error ? error.message : String(error)}`
+	);
 }
 
 try {
@@ -23,7 +25,9 @@ try {
 		message: 'route order must not matter'
 	});
 } catch (error) {
-	fail(`known route order must not matter: ${error instanceof Error ? error.message : String(error)}`);
+	fail(
+		`known route order must not matter: ${error instanceof Error ? error.message : String(error)}`
+	);
 }
 
 for (const routes of [
