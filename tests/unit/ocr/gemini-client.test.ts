@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-	GeminiHttpError,
 	GeminiResponseError,
 	GeminiTransportError,
 	requestGeminiOcr
@@ -98,7 +97,7 @@ describe('requestGeminiOcr', () => {
 				...input,
 				fetchImpl: async () => new Response('Rate limit exceeded', { status: 429 })
 			})
-		).rejects.toEqual(expect.objectContaining<GeminiHttpError>({ status: 429 }));
+		).rejects.toEqual(expect.objectContaining({ status: 429 }));
 	});
 
 	it('classifies malformed successful payloads separately from transport errors', async () => {
