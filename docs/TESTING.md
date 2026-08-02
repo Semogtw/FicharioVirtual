@@ -18,11 +18,12 @@ Um arquivo de teste presente no repositório não prova que o comportamento pass
 
 ```bash
 corepack enable
+bash tools/lockfile/restore-pnpm-lockfile.sh
 pnpm install --frozen-lockfile
 pnpm exec playwright install chromium
 ```
 
-O lockfile deve ser atualizado e versionado em um ambiente com acesso ao registro antes de exigir `--frozen-lockfile` em todos os agentes.
+O lockfile canônico é transportado como partes Base64 compactadas e versionadas em `tools/lockfile/`. O script decodifica cada parte separadamente, concatena o gzip e restaura `pnpm-lock.yaml`; o arquivo restaurado é local e ignorado pelo Git.
 
 ## Entry points canônicos
 
@@ -86,7 +87,9 @@ Esse runner não depende do Supabase ou do navegador. Ele verifica, entre outros
 - segredo/provider ausente do frontend;
 - caminhos privados ausentes de componentes e rotas;
 - cache do PWA limitado a ativos públicos;
-- migrations com `search_path`, grants e padrões de segurança esperados.
+- migrations com `search_path`, grants e padrões de segurança esperados;
+- integridade e sequência das partes do lockfile;
+- restauração do lockfile antes de o workflow habilitar o cache do pnpm.
 
 ## Edge Functions
 
