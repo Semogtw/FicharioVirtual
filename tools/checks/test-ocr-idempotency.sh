@@ -32,9 +32,13 @@ do $$
 declare
   first_claim jsonb;
   replay_claim jsonb;
+  quota_claim jsonb;
+  same_day_claim jsonb;
   next_day_claim jsonb;
   completed boolean;
   completed_again boolean;
+  blocked boolean;
+  provider_retry_at timestamptz;
   day_one_count integer;
   day_two_count integer;
 begin
@@ -42,7 +46,7 @@ begin
     '22222222-2222-4222-8222-222222222222'::uuid,
     'gemini-test',
     '2026-08-01T12:00:00Z'::timestamptz,
-    1
+    2
   );
   if first_claim->>'state' <> 'claimed' then
     raise exception 'expected first claim, got %', first_claim;
@@ -74,10 +78,46 @@ begin
     '22222222-2222-4222-8222-222222222222'::uuid,
     'gemini-test',
     '2026-08-01T12:02:00Z'::timestamptz,
-    1
+    2
   );
   if replay_claim->>'state' <> 'already_complete' then
     raise exception 'response-loss reconciliation failed: %', replay_claim;
+  end if;
+
+  quota_claim := public.claim_ocr_job(
+    '55555555-5555-4555-8555-555555555555'::uuid,
+    'gemini-test',
+    '2026-08-01T12:03:00Z'::timestamptz,
+    2
+  );
+  if quota_claim->>'state' <> 'claimed' then
+    raise exception 'expected provider-quota setup claim, got %', quota_claim;
+  end if;
+
+  blocked := public.block_ocr_job_quota(
+    '55555555-5555-4555-8555-555555555555'::uuid,
+    'gemini_daily_quota',
+    '2026-08-01T12:04:00Z'::timestamptz
+  );
+  if blocked is distinct from true then
+    raise exception 'provider quota terminal was not accepted';
+  end if;
+
+  select next_retry_at into provider_retry_at
+  from public.ocr_jobs
+  where page_id = '55555555-5555-4555-8555-555555555555'::uuid;
+  if provider_retry_at is distinct from '2026-08-02T00:00:00Z'::timestamptz then
+    raise exception 'provider quota retry was not scheduled for next UTC day: %', provider_retry_at;
+  end if;
+
+  same_day_claim := public.claim_ocr_job(
+    '55555555-5555-4555-8555-555555555555'::uuid,
+    'gemini-test',
+    '2026-08-01T23:59:59Z'::timestamptz,
+    2
+  );
+  if same_day_claim->>'state' <> 'retry_later' then
+    raise exception 'provider quota retried before UTC rollover: %', same_day_claim;
   end if;
 
   next_day_claim := public.claim_ocr_job(
@@ -87,7 +127,7 @@ begin
     1
   );
   if next_day_claim->>'state' <> 'claimed' then
-    raise exception 'UTC day rollover did not reset quota: %', next_day_claim;
+    raise exception 'UTC day rollover did not release provider quota: %', next_day_claim;
   end if;
 
   select ocr_pages into day_one_count
@@ -99,7 +139,7 @@ begin
   where user_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'::uuid
     and usage_date = '2026-08-02'::date;
 
-  if day_one_count <> 1 or day_two_count <> 1 then
+  if day_one_count <> 2 or day_two_count <> 1 then
     raise exception 'unexpected UTC counters: %, %', day_one_count, day_two_count;
   end if;
 end;
