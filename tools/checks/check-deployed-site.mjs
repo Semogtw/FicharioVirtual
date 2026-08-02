@@ -44,7 +44,10 @@ function assertContentType(response, expected, label) {
 
 function assertNoLongLivedCache(response, label) {
 	const cacheControl = response.headers.get('cache-control') ?? '';
-	if (/\b(?:public|immutable)\b/i.test(cacheControl) || /max-age=(?:[1-9]\d{2,}|[2-9]\d)/i.test(cacheControl)) {
+	if (
+		/\b(?:public|immutable)\b/i.test(cacheControl) ||
+		/max-age=(?:[1-9]\d{2,}|[2-9]\d)/i.test(cacheControl)
+	) {
 		throw new Error(`${label} is configured with a long-lived cache: ${cacheControl}`);
 	}
 }

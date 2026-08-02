@@ -32,9 +32,7 @@ describe('deployment contract', () => {
 		expect(() => parseDeploymentUrl('https://user:secret@archive.example.test')).toThrow(
 			/credentials/
 		);
-		expect(() => parseDeploymentUrl('https://archive.example.test/?preview=true')).toThrow(
-			/query/
-		);
+		expect(() => parseDeploymentUrl('https://archive.example.test/?preview=true')).toThrow(/query/);
 	});
 
 	it('requires the security headers promised by the static host contract', () => {
@@ -61,9 +59,9 @@ describe('deployment contract', () => {
 				icons: [{ src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' }]
 			})
 		).not.toThrow();
-		expect(() => assertManifest({ name: 'Fichário Virtual', start_url: '/', display: 'browser' })).toThrow(
-			/standalone/
-		);
+		expect(() =>
+			assertManifest({ name: 'Fichário Virtual', start_url: '/', display: 'browser' })
+		).toThrow(/standalone/);
 	});
 
 	it('rejects service workers that mention authenticated API surfaces', () => {
@@ -80,6 +78,8 @@ describe('deployment contract', () => {
 			assertHttpRedirect(baseUrl, 308, 'https://archive.example.test/login')
 		).not.toThrow();
 		expect(() => assertHttpRedirect(baseUrl, 200, null)).toThrow(/redirect/);
-		expect(() => assertHttpRedirect(baseUrl, 302, 'https://other.example.test/')).toThrow(/same host/);
+		expect(() => assertHttpRedirect(baseUrl, 302, 'https://other.example.test/')).toThrow(
+			/same host/
+		);
 	});
 });
