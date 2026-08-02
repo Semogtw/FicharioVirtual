@@ -57,7 +57,7 @@ describe('processPageOcr', () => {
 		);
 	});
 
-	it('rejects malformed page identifiers before invoking the backend', async () => {
+	it('rejects malformed page identifiers before invoking or constructing the backend client', async () => {
 		let invoked = false;
 		const invalidClient: OcrFunctionClient = {
 			functions: {
@@ -72,5 +72,6 @@ describe('processPageOcr', () => {
 			'Invalid page identifier'
 		);
 		expect(invoked).toBe(false);
+		await expect(processPageOcr('bad-id')).rejects.toThrow('Invalid page identifier');
 	});
 });
