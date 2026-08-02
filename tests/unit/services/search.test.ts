@@ -1,18 +1,30 @@
 import { describe, expect, it } from 'vitest';
 import { searchPages, type SearchClientLike } from '../../../src/lib/services/search';
 
+type SearchResponse = { data: unknown; error: unknown };
+type SearchRequest = ReturnType<SearchClientLike['rpc']>;
+
 function client(rows: unknown[] = []) {
 	let args: Record<string, unknown> | null = null;
 	let signal: AbortSignal | null = null;
 	const value: SearchClientLike = {
 		rpc(_name, input) {
 			args = input;
-			const request = Promise.resolve({ data: rows, error: null }) as ReturnType<
-				SearchClientLike['rpc']
-			>;
-			request.abortSignal = (inputSignal) => {
-				signal = inputSignal;
-				return request;
+			let request: SearchRequest;
+			request = {
+				abortSignal(inputSignal) {
+					signal = inputSignal;
+					return request;
+				},
+				then<TResult1 = SearchResponse, TResult2 = never>(
+					onfulfilled?: ((value: SearchResponse) => TResult1 | PromiseLike<TResult1>) | null,
+					onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
+				): PromiseLike<TResult1 | TResult2> {
+					return Promise.resolve<SearchResponse>({ data: rows, error: null }).then(
+						onfulfilled,
+						onrejected
+					);
+				}
 			};
 			return request;
 		}
