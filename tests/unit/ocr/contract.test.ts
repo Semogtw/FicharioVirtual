@@ -16,6 +16,7 @@ describe('OCR response contract', () => {
 						{ code: 'uncertain_text', message: 'Uma palavra na margem está pouco legível.' }
 					]
 				})
+			)
 		).toEqual({
 			text: 'Mitose e meiose',
 			warnings: [
