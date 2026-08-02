@@ -17,12 +17,14 @@ fi
 work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT
 
-encoded="$work_dir/pnpm-lock.yaml.gz.b64"
 compressed="$work_dir/pnpm-lock.yaml.gz"
 restored="$work_dir/pnpm-lock.yaml"
+: > "$compressed"
 
-cat "${parts[@]}" | tr -d '\r\n\t ' > "$encoded"
-base64 --decode "$encoded" > "$compressed"
+for part in "${parts[@]}"; do
+	tr -d '\r\n\t ' < "$part" | base64 --decode >> "$compressed"
+done
+
 gzip -dc "$compressed" > "$restored"
 
 if ! grep -q '^lockfileVersion:' "$restored"; then
@@ -31,4 +33,4 @@ if ! grep -q '^lockfileVersion:' "$restored"; then
 fi
 
 mv "$restored" pnpm-lock.yaml
-printf 'Restored pnpm-lock.yaml from %d archive parts.\n' "${#parts[@]}"
+printf 'Restored pnpm-lock.yaml from %d independently encoded archive parts.\n' "${#parts[@]}"
