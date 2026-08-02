@@ -18,7 +18,11 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
-    "verify": "pnpm lint && pnpm check && pnpm test && pnpm build"
+    "test:source:offline": "bash tools/checks/run-offline-source-gates.sh",
+    "test:functions:check": "bash tools/checks/check-edge-functions.sh",
+    "test:db:local": "bash tools/checks/run-local-db-gates.sh",
+    "verify": "pnpm lint && pnpm check && pnpm test && pnpm build",
+    "verify:full": "pnpm verify && pnpm test:e2e && pnpm test:source:offline && pnpm test:functions:check && pnpm test:db:local"
   },
   "dependencies": {
     "@firecrawl/pdf-inspector-wasm": "0.1.1",
