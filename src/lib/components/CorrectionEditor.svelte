@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy, onMount, untrack } from 'svelte';
 	import type { PageDetail } from '$lib/domain/page';
 	import {
 		correctionDraftKey,
@@ -14,7 +14,7 @@
 	}
 
 	let { page, onSaved }: CorrectionEditorProps = $props();
-	let text = $state(page.text);
+	let text = $state(untrack(() => page.text));
 	let saveState = $state<'idle' | 'draft' | 'saving' | 'saved' | 'error'>('idle');
 	let error = $state<string | null>(null);
 	let timer: ReturnType<typeof setTimeout> | null = null;
