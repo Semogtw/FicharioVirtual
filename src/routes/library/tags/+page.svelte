@@ -3,7 +3,7 @@
 	import Button from '$lib/components/Button.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import type { DocumentSummary } from '$lib/domain/document';
-	import { listDocuments } from '$lib/services/documents';
+	import { listAllDocuments } from '$lib/services/documents';
 	import {
 		createTag,
 		deleteTag,
@@ -52,12 +52,12 @@
 		loading = true;
 		error = null;
 		try {
-			const [loadedTags, documentPage] = await Promise.all([
+			const [loadedTags, loadedDocuments] = await Promise.all([
 				listTags(),
-				listDocuments({ limit: 100 })
+				listAllDocuments()
 			]);
 			tags = loadedTags;
-			documents = documentPage.items;
+			documents = loadedDocuments;
 			activeTagId = tags[0]?.id ?? null;
 			if (activeTagId) await loadAssignments(activeTagId);
 		} catch (caught) {
