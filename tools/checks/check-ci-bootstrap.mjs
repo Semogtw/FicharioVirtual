@@ -1,93 +1,58 @@
-import { readdir, readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import process from 'node:process';
-import { promisify } from 'node:util';
-import { gunzip } from 'node:zlib';
 
 const root = resolve(new URL('../..', import.meta.url).pathname);
 const workflowPath = join(root, '.github/workflows/validate-current-head.yml');
-const restoreScriptPath = join(root, 'tools/lockfile/restore-pnpm-lockfile.sh');
-const lockfilePartsDirectory = join(root, 'tools/lockfile');
+const packagePath = join(root, 'package.json');
+const lockfilePath = join(root, 'pnpm-lock.yaml');
+const gitignorePath = join(root, '.gitignore');
 const failures = [];
-const unzip = promisify(gunzip);
 
 function fail(detail) {
 	failures.push(detail);
 }
 
-const workflow = await readFile(workflowPath, 'utf8');
-const restoreStep = workflow.indexOf('bash tools/lockfile/restore-pnpm-lockfile.sh');
-const setupNodeStep = workflow.indexOf('uses: actions/setup-node@');
-const installStep = workflow.indexOf('pnpm install --frozen-lockfile');
+const [workflow, packageSource, lockfile, gitignore] = await Promise.all([
+	readFile(workflowPath, 'utf8'),
+	readFile(packagePath, 'utf8'),
+	readFile(lockfilePath, 'utf8'),
+	readFile(gitignorePath, 'utf8')
+]);
+const manifest = JSON.parse(packageSource);
 
-if (restoreStep === -1) {
-	fail('workflow must restore pnpm-lock.yaml before package-manager setup');
+if (!/^lockfileVersion:\s*['"]?9(?:\.0)?['"]?\s*$/m.test(lockfile)) {
+	fail('pnpm-lock.yaml must use lockfile version 9');
 }
-if (setupNodeStep === -1) {
-	fail('workflow must configure Node.js');
-}
-if (installStep === -1) {
-	fail('workflow must install dependencies from a frozen lockfile');
-}
-if (restoreStep !== -1 && setupNodeStep !== -1 && restoreStep > setupNodeStep) {
-	fail('lockfile restoration must run before actions/setup-node enables the pnpm cache');
-}
-if (restoreStep !== -1 && installStep !== -1 && restoreStep > installStep) {
-	fail('lockfile restoration must run before pnpm install');
+if (!/^importers:\s*$/m.test(lockfile) || !/^\s{2}\.\:\s*$/m.test(lockfile)) {
+	fail('pnpm-lock.yaml must contain the root importer');
 }
 
-let restoreScript = '';
-try {
-	restoreScript = await readFile(restoreScriptPath, 'utf8');
-} catch {
-	fail('tools/lockfile/restore-pnpm-lockfile.sh is missing');
-}
-
-if (restoreScript) {
-	for (const required of [
-		'pnpm-lock.yaml.gz.b64.part-*',
-		'for part in "${parts[@]}"',
-		'base64 --decode',
-		'gzip -dc'
-	]) {
-		if (!restoreScript.includes(required)) {
-			fail(`lockfile restore script is missing ${required}`);
+for (const section of ['dependencies', 'devDependencies']) {
+	for (const dependency of Object.keys(manifest[section] ?? {})) {
+		const escaped = dependency.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+		if (!new RegExp(`^\\s{6}['"]?${escaped}['"]?:\\s*$`, 'm').test(lockfile)) {
+			fail(`pnpm-lock.yaml is missing ${section}.${dependency}`);
 		}
 	}
 }
 
-const partNames = (await readdir(lockfilePartsDirectory))
-	.filter((name) => /^pnpm-lock\.yaml\.gz\.b64\.part-\d{2}$/.test(name))
-	.sort();
+const setupNodeStep = workflow.indexOf('uses: actions/setup-node@');
+const installStep = workflow.indexOf('pnpm install --frozen-lockfile');
+if (setupNodeStep === -1) fail('workflow must configure Node.js');
+if (!/uses:\s*actions\/setup-node@[^\n]+[\s\S]*?cache:\s*pnpm/.test(workflow)) {
+	fail('workflow must enable the pnpm cache through actions/setup-node');
+}
+if (installStep === -1) fail('workflow must install dependencies from a frozen lockfile');
+if (setupNodeStep !== -1 && installStep !== -1 && setupNodeStep > installStep) {
+	fail('actions/setup-node must run before pnpm install');
+}
+if (workflow.includes('restore-pnpm-lockfile') || workflow.includes('pnpm-lock.yaml.gz.b64')) {
+	fail('workflow must use the versioned root lockfile without a restoration layer');
+}
 
-if (partNames.length === 0) {
-	fail('no reproducible lockfile archive parts were found');
-} else {
-	for (const [index, name] of partNames.entries()) {
-		const expected = `pnpm-lock.yaml.gz.b64.part-${String(index).padStart(2, '0')}`;
-		if (name !== expected) fail(`lockfile archive sequence is not contiguous: expected ${expected}, found ${name}`);
-	}
-
-	try {
-		const encodedParts = await Promise.all(
-			partNames.map((name) => readFile(join(lockfilePartsDirectory, name), 'utf8'))
-		);
-		const compressedParts = encodedParts.map((part, index) => {
-			const encoded = part.replace(/\s+/g, '');
-			if (!/^[A-Za-z0-9+/]+={0,2}$/.test(encoded) || encoded.length % 4 !== 0) {
-				throw new Error(`${partNames[index]} is not a complete base64 payload`);
-			}
-			const decoded = Buffer.from(encoded, 'base64');
-			if (decoded.length === 0) throw new Error(`${partNames[index]} decoded to an empty payload`);
-			return decoded;
-		});
-		const compressed = Buffer.concat(compressedParts);
-		const lockfile = (await unzip(compressed)).toString('utf8');
-		if (!/^lockfileVersion:/m.test(lockfile)) fail('restored content is not a pnpm lockfile');
-		if (!lockfile.includes('@sveltejs/kit')) fail('restored lockfile does not contain application dependencies');
-	} catch (error) {
-		fail(`lockfile archive cannot be decoded and decompressed: ${error instanceof Error ? error.message : String(error)}`);
-	}
+if (/^pnpm-lock\.yaml\/?\s*$/m.test(gitignore)) {
+	fail('pnpm-lock.yaml must remain versioned and cannot be ignored');
 }
 
 if (failures.length > 0) {
@@ -95,5 +60,5 @@ if (failures.length > 0) {
 	for (const failure of failures) console.error(`- ${failure}`);
 	process.exitCode = 1;
 } else {
-	console.log(`CI bootstrap checks passed with ${partNames.length} lockfile archive parts.`);
+	console.log('CI bootstrap checks passed with the versioned root pnpm lockfile.');
 }
