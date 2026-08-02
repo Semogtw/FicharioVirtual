@@ -11,7 +11,7 @@ import {
 function secureHeaders(overrides: Record<string, string> = {}) {
 	return new Headers({
 		'content-security-policy':
-			"default-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'",
+			"default-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'wasm-unsafe-eval'",
 		'strict-transport-security': 'max-age=31536000; includeSubDomains',
 		'referrer-policy': 'no-referrer',
 		'x-content-type-options': 'nosniff',
@@ -39,10 +39,31 @@ describe('deployment contract', () => {
 		expect(() => assertSecurityHeaders(secureHeaders())).not.toThrow();
 		expect(() =>
 			assertSecurityHeaders(secureHeaders({ 'content-security-policy': "default-src 'self'" }))
-		).toThrow(/object-src/);
+		).toThrow(/base-uri|object-src/);
 		expect(() => assertSecurityHeaders(secureHeaders({ 'x-frame-options': 'SAMEORIGIN' }))).toThrow(
 			/X-Frame-Options/
 		);
+	});
+
+	it('rejects permissive CSP script policies and weak HSTS', () => {
+		expect(() =>
+			assertSecurityHeaders(
+				secureHeaders({
+					'content-security-policy':
+						"default-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'unsafe-inline'"
+				})
+			)
+		).toThrow(/unsafe-inline/);
+		expect(() =>
+			assertSecurityHeaders(
+				secureHeaders({ 'strict-transport-security': 'max-age=3600; includeSubDomains' })
+			)
+		).toThrow(/at least 31536000/);
+		expect(() =>
+			assertSecurityHeaders(
+				secureHeaders({ 'strict-transport-security': 'max-age=31536000' })
+			)
+		).toThrow(/includeSubDomains/);
 	});
 
 	it('checks the generated app shell and manifest', () => {
