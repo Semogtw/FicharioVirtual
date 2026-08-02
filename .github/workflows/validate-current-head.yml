@@ -84,21 +84,33 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Run frontend verification
+        run: pnpm verify
+
+      - name: Run offline source gates
+        run: pnpm test:source:offline
+
       - name: Install Chromium
         run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run browser tests
+        run: pnpm test:e2e
 
       - name: Set up Deno
         uses: denoland/setup-deno@v2
         with:
           deno-version: 2.8.1
 
+      - name: Check Edge Functions
+        run: pnpm test:functions:check
+
       - name: Set up Supabase CLI
         uses: supabase/setup-cli@v2
         with:
           version: 2.111.0
 
-      - name: Run complete verification for current HEAD
-        run: pnpm verify:full
+      - name: Run local database gates
+        run: pnpm test:db:local
 
       - name: Publish final receipt
         if: always()
