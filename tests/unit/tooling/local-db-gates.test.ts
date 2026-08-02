@@ -50,4 +50,13 @@ describe('local database gate runner', () => {
 			expect(runner).toContain(`deno check ${path}`);
 		}
 	});
+
+	it('keeps provider and CORS boundaries in the dependency-free source gate', () => {
+		const sourceGate = read('tools/checks/check-source-security.mjs');
+
+		expect(sourceGate).toContain('supabase/functions/process-ocr/index.ts');
+		expect(sourceGate).toContain('supabase/functions/delete-document/index.ts');
+		expect(sourceGate).toContain('edge-cors');
+		expect(sourceGate).toContain('provider-duplication');
+	});
 });
