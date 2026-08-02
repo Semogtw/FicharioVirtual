@@ -59,10 +59,9 @@ function tagName(value: string) {
 	return normalized;
 }
 
-export async function listTags(
-	client: TagsClientLike = defaultClient()
-): Promise<readonly TagSummary[]> {
-	const { data, error } = await client.rpc('list_tags');
+export async function listTags(client?: TagsClientLike): Promise<readonly TagSummary[]> {
+	const gateway = client ?? defaultClient();
+	const { data, error } = await gateway.rpc('list_tags');
 	if (error || !Array.isArray(data))
 		throw new TagServiceError('Não foi possível carregar as tags.');
 	return Object.freeze(
@@ -78,35 +77,40 @@ export async function listTags(
 	);
 }
 
-export async function createTag(name: string, client: TagsClientLike = defaultClient()) {
-	const { data, error } = await client.rpc('create_tag', { tag_name: tagName(name) });
+export async function createTag(name: string, client?: TagsClientLike) {
+	const normalizedName = tagName(name);
+	const gateway = client ?? defaultClient();
+	const { data, error } = await gateway.rpc('create_tag', { tag_name: normalizedName });
 	if (error || typeof data !== 'string' || !UUID.test(data)) throw new TagServiceError();
 	return data;
 }
 
-export async function renameTag(
-	tagId: string,
-	name: string,
-	client: TagsClientLike = defaultClient()
-) {
-	const { data, error } = await client.rpc('rename_tag', {
-		target_tag_id: id(tagId, 'tag'),
-		tag_name: tagName(name)
+export async function renameTag(tagId: string, name: string, client?: TagsClientLike) {
+	const validatedTagId = id(tagId, 'tag');
+	const normalizedName = tagName(name);
+	const gateway = client ?? defaultClient();
+	const { data, error } = await gateway.rpc('rename_tag', {
+		target_tag_id: validatedTagId,
+		tag_name: normalizedName
 	});
 	if (error || data !== true) throw new TagServiceError();
 }
 
-export async function deleteTag(tagId: string, client: TagsClientLike = defaultClient()) {
-	const { data, error } = await client.rpc('delete_tag', { target_tag_id: id(tagId, 'tag') });
+export async function deleteTag(tagId: string, client?: TagsClientLike) {
+	const validatedTagId = id(tagId, 'tag');
+	const gateway = client ?? defaultClient();
+	const { data, error } = await gateway.rpc('delete_tag', { target_tag_id: validatedTagId });
 	if (error || data !== true) throw new TagServiceError();
 }
 
 export async function listTagDocumentIds(
 	tagId: string,
-	client: TagsClientLike = defaultClient()
+	client?: TagsClientLike
 ): Promise<ReadonlySet<string>> {
-	const { data, error } = await client.rpc('list_tag_document_ids', {
-		target_tag_id: id(tagId, 'tag')
+	const validatedTagId = id(tagId, 'tag');
+	const gateway = client ?? defaultClient();
+	const { data, error } = await gateway.rpc('list_tag_document_ids', {
+		target_tag_id: validatedTagId
 	});
 	if (error || !Array.isArray(data)) throw new TagServiceError();
 	return new Set(
@@ -120,12 +124,15 @@ export async function setTagMembership(
 	tagId: string,
 	documentId: string,
 	assigned: boolean,
-	client: TagsClientLike = defaultClient()
+	client?: TagsClientLike
 ) {
 	if (typeof assigned !== 'boolean') throw new TypeError('Invalid tag assignment');
-	const { data, error } = await client.rpc('set_tag_membership', {
-		target_tag_id: id(tagId, 'tag'),
-		target_document_id: id(documentId, 'document'),
+	const validatedTagId = id(tagId, 'tag');
+	const validatedDocumentId = id(documentId, 'document');
+	const gateway = client ?? defaultClient();
+	const { data, error } = await gateway.rpc('set_tag_membership', {
+		target_tag_id: validatedTagId,
+		target_document_id: validatedDocumentId,
 		assigned
 	});
 	if (error || data !== true) throw new TagServiceError();
