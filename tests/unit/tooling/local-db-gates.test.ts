@@ -51,12 +51,14 @@ describe('local database gate runner', () => {
 		}
 	});
 
-	it('keeps provider and CORS boundaries in the dependency-free source gate', () => {
+	it('keeps provider, CORS and RPC typing boundaries in the dependency-free source gate', () => {
 		const sourceGate = read('tools/checks/check-source-security.mjs');
+		const runner = read('tools/checks/run-offline-source-gates.sh');
 
 		expect(sourceGate).toContain('supabase/functions/process-ocr/index.ts');
 		expect(sourceGate).toContain('supabase/functions/delete-document/index.ts');
 		expect(sourceGate).toContain('edge-cors');
 		expect(sourceGate).toContain('provider-duplication');
+		expect(runner).toContain('node tools/checks/check-rpc-types.mjs');
 	});
 });
