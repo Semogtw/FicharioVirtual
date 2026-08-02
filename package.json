@@ -21,6 +21,7 @@
 		"test:source:offline": "bash tools/checks/run-offline-source-gates.sh",
 		"test:functions:check": "bash tools/checks/check-edge-functions.sh",
 		"test:db:local": "bash tools/checks/run-local-db-gates.sh",
+		"test:deployment": "node tools/checks/check-deployed-site.mjs",
 		"verify": "pnpm lint && pnpm check && pnpm test && pnpm build",
 		"verify:full": "pnpm verify && pnpm test:e2e && pnpm test:source:offline && pnpm test:functions:check && pnpm test:db:local"
 	},
