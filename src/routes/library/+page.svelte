@@ -10,6 +10,7 @@
 		DocumentSummary
 	} from '$lib/domain/document';
 	import type { NotebookSummary } from '$lib/domain/notebook';
+	import { localDateEndIso, localDateStartIso } from '$lib/services/date-filter';
 	import { listDocuments } from '$lib/services/documents';
 	import { listNotebooks } from '$lib/services/notebooks';
 	import { RequestVersion } from '$lib/services/request-version';
@@ -27,14 +28,6 @@
 	let createdFrom = $state('');
 	let createdTo = $state('');
 
-	function dateStart(value: string) {
-		return value ? `${value}T00:00:00.000Z` : null;
-	}
-
-	function dateEnd(value: string) {
-		return value ? `${value}T23:59:59.999Z` : null;
-	}
-
 	async function load(reset: boolean) {
 		if (!reset && loadingMore) return;
 		const requestVersion = reset ? requests.next() : requests.current();
@@ -47,8 +40,8 @@
 					notebookId: notebookId || null,
 					kind: kind || null,
 					status: status || null,
-					createdFrom: dateStart(createdFrom),
-					createdTo: dateEnd(createdTo)
+					createdFrom: localDateStartIso(createdFrom),
+					createdTo: localDateEndIso(createdTo)
 				},
 				cursor: reset ? null : nextCursor
 			});
