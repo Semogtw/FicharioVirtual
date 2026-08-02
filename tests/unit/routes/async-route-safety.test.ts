@@ -14,6 +14,9 @@ describe('async route safety', () => {
 		expect(searchRoute).toContain("import { RequestVersion } from '$lib/services/request-version';");
 		expect(searchRoute).toContain('requests.next();');
 		expect(searchRoute).toContain('requests.isCurrent(version)');
+		expect(searchRoute).toMatch(
+			/if \(!requests\.isCurrent\(version\)\) return;[\s\S]*controller\?\.abort\(\)/
+		);
 	});
 
 	it('remounts the correction editor when the selected page changes', () => {
