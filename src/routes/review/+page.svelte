@@ -21,6 +21,7 @@
 	} as const;
 
 	async function load(reset: boolean) {
+		if (!reset && loadingMore) return;
 		if (reset) loading = true;
 		else loadingMore = true;
 		error = null;
@@ -103,7 +104,7 @@
 						{/if}
 					</div>
 					<div class="actions">
-						{#if item.pageStatus !== 'needs_review'}
+						{#if ['retryable', 'blocked_quota'].includes(item.pageStatus)}
 							<button
 								type="button"
 								disabled={processingPageId !== null}
