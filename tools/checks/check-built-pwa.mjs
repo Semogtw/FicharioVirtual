@@ -13,7 +13,7 @@ function fail(detail) {
 async function requiredFile(name) {
 	try {
 		return await readFile(join(build, name), 'utf8');
-	} catch (error) {
+	} catch {
 		fail(`${name} is missing from the static build`);
 		return '';
 	}
