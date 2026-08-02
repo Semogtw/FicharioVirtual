@@ -4,9 +4,21 @@ import { randomUUID } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import {
 	assertAuthorizedAccount,
+	assertDeniedStorageOperation,
+	assertProbeBytes,
 	assertProbeIsolation,
+	assertSignedStorageUrl,
+	assertStorageListIsolation,
 	assertUnauthorizedAccount
 } from './supabase-staging-contract.mjs';
+
+const STORAGE_BUCKET = 'documents';
+const STORAGE_PROBE_BYTES = Uint8Array.from(
+	Buffer.from(
+		'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+		'base64'
+	)
+);
 
 /**
  * @param {string} name
@@ -107,6 +119,91 @@ async function deleteProbeNotebook(client, probeId) {
 	if (result.error) throw new Error(`probe notebook cleanup failed: ${result.error.message}`);
 }
 
+/**
+ * @param {ReturnType<typeof createStagingClient>} client
+ * @param {string} ownerUserId
+ */
+async function createStorageProbe(client, ownerUserId) {
+	const folder = `${ownerUserId}/__staging_probe_${randomUUID()}`;
+	const fileName = 'probe.png';
+	const objectPath = `${folder}/${fileName}`;
+	const result = await client.storage.from(STORAGE_BUCKET).upload(objectPath, STORAGE_PROBE_BYTES, {
+		cacheControl: '0',
+		contentType: 'image/png',
+		upsert: false
+	});
+	if (result.error) throw new Error(`Storage probe upload failed: ${result.error.message}`);
+	if (result.data?.path !== objectPath) {
+		throw new Error(`Storage probe upload returned an unexpected path: ${result.data?.path ?? '(missing)'}`);
+	}
+	return { folder, fileName, objectPath };
+}
+
+/**
+ * @param {unknown} error
+ */
+function isExpectedStorageDenial(error) {
+	if (!error || typeof error !== 'object') return false;
+	const candidate = /** @type {{ status?: unknown; statusCode?: unknown }} */ (error);
+	const status = Number(candidate.status ?? candidate.statusCode);
+	return [400, 401, 403, 404].includes(status);
+}
+
+/**
+ * @param {ReturnType<typeof createStagingClient>} client
+ * @param {string} folder
+ * @param {string} label
+ * @param {boolean} allowDenied
+ */
+async function listStorageFolder(client, folder, label, allowDenied = false) {
+	const result = await client.storage.from(STORAGE_BUCKET).list(folder, {
+		limit: 10,
+		sortBy: { column: 'name', order: 'asc' }
+	});
+	if (result.error) {
+		if (allowDenied && isExpectedStorageDenial(result.error)) return [];
+		throw new Error(`${label} Storage listing failed: ${result.error.message}`);
+	}
+	return result.data ?? [];
+}
+
+/**
+ * @param {ReturnType<typeof createStagingClient>} client
+ * @param {string} objectPath
+ * @param {string} label
+ */
+async function downloadStorageProbe(client, objectPath, label) {
+	const result = await client.storage.from(STORAGE_BUCKET).download(objectPath);
+	if (result.error) throw new Error(`${label} Storage download failed: ${result.error.message}`);
+	if (!result.data) throw new Error(`${label} Storage download returned no data`);
+	return new Uint8Array(await result.data.arrayBuffer());
+}
+
+/**
+ * @param {string} signedUrl
+ */
+async function downloadSignedProbe(signedUrl) {
+	let response;
+	try {
+		response = await fetch(signedUrl, { signal: AbortSignal.timeout(15_000) });
+	} catch (error) {
+		throw new Error(
+			`signed Storage URL request failed: ${error instanceof Error ? error.message : String(error)}`
+		);
+	}
+	if (!response.ok) throw new Error(`signed Storage URL returned HTTP ${response.status}`);
+	return new Uint8Array(await response.arrayBuffer());
+}
+
+/**
+ * @param {ReturnType<typeof createStagingClient>} client
+ * @param {string} objectPath
+ */
+async function deleteStorageProbe(client, objectPath) {
+	const result = await client.storage.from(STORAGE_BUCKET).remove([objectPath]);
+	if (result.error) throw new Error(`Storage probe cleanup failed: ${result.error.message}`);
+}
+
 async function main() {
 	const url = requireEnv('STAGING_SUPABASE_URL');
 	const publishableKey = requireEnv('STAGING_SUPABASE_PUBLISHABLE_KEY');
@@ -118,6 +215,7 @@ async function main() {
 	const authorizedClient = createStagingClient(url, publishableKey);
 	const unauthorizedClient = createStagingClient(url, publishableKey);
 	let probeId = null;
+	let storageObjectPath = null;
 
 	try {
 		const authorizedUser = await signIn(
@@ -158,10 +256,71 @@ async function main() {
 		});
 		console.log('PASS notebook RLS hides the authorized probe from the second account');
 
+		const storageProbe = await createStorageProbe(authorizedClient, authorizedUser.id);
+		storageObjectPath = storageProbe.objectPath;
+		const [ownerStorageRows, outsiderStorageRows] = await Promise.all([
+			listStorageFolder(authorizedClient, storageProbe.folder, 'authorized account'),
+			listStorageFolder(unauthorizedClient, storageProbe.folder, 'second account', true)
+		]);
+		assertStorageListIsolation({
+			fileName: storageProbe.fileName,
+			ownerRows: ownerStorageRows,
+			outsiderRows: outsiderStorageRows
+		});
+		console.log('PASS private Storage listing is isolated by user prefix and allowlist');
+
+		const ownerDownload = await downloadStorageProbe(
+			authorizedClient,
+			storageProbe.objectPath,
+			'authorized account'
+		);
+		assertProbeBytes({ expected: STORAGE_PROBE_BYTES, actual: ownerDownload });
+		console.log('PASS authorized account downloads the exact Storage probe bytes');
+
+		const outsiderDownload = await unauthorizedClient.storage
+			.from(STORAGE_BUCKET)
+			.download(storageProbe.objectPath);
+		assertDeniedStorageOperation({
+			label: 'Storage download',
+			data: outsiderDownload.data,
+			error: outsiderDownload.error
+		});
+		console.log('PASS second account cannot download the authorized Storage probe');
+
+		const ownerSigned = await authorizedClient.storage
+			.from(STORAGE_BUCKET)
+			.createSignedUrl(storageProbe.objectPath, 60);
+		if (ownerSigned.error) {
+			throw new Error(`authorized signed URL creation failed: ${ownerSigned.error.message}`);
+		}
+		assertSignedStorageUrl({
+			signedUrl: ownerSigned.data?.signedUrl,
+			supabaseUrl: url,
+			objectPath: storageProbe.objectPath
+		});
+		const signedDownload = await downloadSignedProbe(ownerSigned.data.signedUrl);
+		assertProbeBytes({ expected: STORAGE_PROBE_BYTES, actual: signedDownload });
+		console.log('PASS authorized signed URL returns the exact private Storage bytes');
+
+		const outsiderSigned = await unauthorizedClient.storage
+			.from(STORAGE_BUCKET)
+			.createSignedUrl(storageProbe.objectPath, 60);
+		assertDeniedStorageOperation({
+			label: 'signed URL creation',
+			data: outsiderSigned.data,
+			error: outsiderSigned.error
+		});
+		console.log('PASS second account cannot sign the authorized Storage object');
+
 		console.log('Supabase staging contract: PASS');
 	} finally {
-		if (probeId) await deleteProbeNotebook(authorizedClient, probeId);
+		const cleanup = [];
+		if (storageObjectPath) cleanup.push(deleteStorageProbe(authorizedClient, storageObjectPath));
+		if (probeId) cleanup.push(deleteProbeNotebook(authorizedClient, probeId));
+		const cleanupResults = await Promise.allSettled(cleanup);
+		const cleanupFailure = cleanupResults.find((result) => result.status === 'rejected');
 		await Promise.allSettled([authorizedClient.auth.signOut(), unauthorizedClient.auth.signOut()]);
+		if (cleanupFailure?.status === 'rejected') throw cleanupFailure.reason;
 	}
 }
 
