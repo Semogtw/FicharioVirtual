@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	claimStateHttpStatus,
 	classifyGeminiFailure,
+	geminiFailureResponse,
 	parseOcrPayload
 } from '../../../supabase/functions/_shared/ocr-contract';
 
@@ -34,15 +35,15 @@ describe('OCR response contract', () => {
 	});
 });
 
-describe('OCR claim state HTTP contract', () => {
-	it('keeps expected resumable states inside successful HTTP responses', () => {
+describe('OCR claim HTTP mapping', () => {
+	it('keeps expected deferred states in successful function responses', () => {
 		expect(claimStateHttpStatus('already_complete')).toBe(200);
 		expect(claimStateHttpStatus('busy')).toBe(202);
 		expect(claimStateHttpStatus('retry_later')).toBe(202);
 		expect(claimStateHttpStatus('quota_exhausted')).toBe(202);
 	});
 
-	it('uses authorization and not-found statuses only for terminal request failures', () => {
+	it('uses authorization and lookup errors only for rejected claims', () => {
 		expect(claimStateHttpStatus('consent_required')).toBe(403);
 		expect(claimStateHttpStatus('not_authorized')).toBe(403);
 		expect(claimStateHttpStatus('not_found')).toBe(404);
@@ -66,5 +67,23 @@ describe('Gemini failure classification', () => {
 		expect(classifyGeminiFailure(404, 'model not found')).toEqual(
 			expect.objectContaining({ code: 'gemini_model_unavailable', retryable: false })
 		);
+	});
+
+	it('returns persisted deferred states as 202 instead of SDK exceptions', () => {
+		expect(geminiFailureResponse(classifyGeminiFailure(429, 'Requests per day quota exceeded'), 429)).toEqual({
+			status: 202,
+			body: { state: 'quota_exhausted' }
+		});
+		expect(geminiFailureResponse(classifyGeminiFailure(503, 'unavailable'), 503)).toEqual({
+			status: 202,
+			body: { state: 'retry_later' }
+		});
+	});
+
+	it('preserves permanent provider failures as HTTP errors', () => {
+		expect(geminiFailureResponse(classifyGeminiFailure(403, 'permission denied'), 403)).toEqual({
+			status: 403,
+			body: { code: 'gemini_authentication_failed', retryable: false }
+		});
 	});
 });
