@@ -16,4 +16,11 @@ describe('static security headers', () => {
 		expect(headers).toContain("script-src 'self' 'wasm-unsafe-eval'");
 		expect(headers).not.toContain("script-src 'self' 'unsafe-inline'");
 	});
+
+	it('disables sensitive browser capabilities that the app does not use', () => {
+		expect(headers).toContain(
+			'Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()'
+		);
+		expect(headers).not.toContain('camera=(self)');
+	});
 });
