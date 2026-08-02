@@ -45,6 +45,7 @@
 			loadingMore = false;
 			return;
 		}
+		if (!requests.isCurrent(version)) return;
 		controller?.abort();
 		const activeController = new AbortController();
 		controller = activeController;
@@ -66,6 +67,7 @@
 			if (requests.isCurrent(version)) error = 'Não foi possível concluir esta pesquisa agora.';
 		} finally {
 			if (requests.isCurrent(version)) {
+				if (controller === activeController) controller = null;
 				loading = false;
 				loadingMore = false;
 			}
