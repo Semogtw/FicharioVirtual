@@ -41,6 +41,8 @@ type TableDefinition<Row, Insert, Update> = {
 type AppUserRow = {
 	user_id: string;
 	is_active: boolean;
+	ocr_consent_at: string | null;
+	ocr_consent_version: number | null;
 	created_at: string;
 	updated_at: string;
 };
@@ -116,6 +118,7 @@ type TagRow = {
 	name: string;
 	normalized_name: string;
 	created_at: string;
+	updated_at: string;
 };
 
 type DocumentTagRow = {
@@ -157,7 +160,14 @@ export type Database = {
 		Tables: {
 			app_users: TableDefinition<
 				AppUserRow,
-				{ user_id: string; is_active?: boolean; created_at?: string; updated_at?: string },
+				{
+					user_id: string;
+					is_active?: boolean;
+					ocr_consent_at?: string | null;
+					ocr_consent_version?: number | null;
+					created_at?: string;
+					updated_at?: string;
+				},
 				Partial<Omit<AppUserRow, 'user_id'>>
 			>;
 			notebooks: TableDefinition<
@@ -237,7 +247,14 @@ export type Database = {
 			>;
 			tags: TableDefinition<
 				TagRow,
-				{ id?: string; user_id: string; name: string; normalized_name?: string; created_at?: string },
+				{
+					id?: string;
+					user_id: string;
+					name: string;
+					normalized_name?: string;
+					created_at?: string;
+					updated_at?: string;
+				},
 				Partial<Omit<TagRow, 'id' | 'user_id'>>
 			>;
 			document_tags: TableDefinition<
@@ -281,7 +298,98 @@ export type Database = {
 		};
 		Views: Record<string, never>;
 		Functions: {
+			create_image_import: {
+				Args: {
+					target_document_id: string;
+					target_page_id: string;
+					target_job_id: string;
+					target_notebook_id: string | null;
+					document_title: string;
+					original_filename: string;
+					original_storage_path: string;
+					thumbnail_storage_path: string;
+					prepared_sha256: string;
+					source_created_at?: string | null;
+					prompt_version?: number;
+				};
+				Returns: Array<{ document_id: string; page_id: string; ocr_job_id: string }>;
+			};
+			create_pdf_import: {
+				Args: {
+					target_document_id: string;
+					target_notebook_id: string | null;
+					document_title: string;
+					original_filename: string;
+					original_storage_path: string;
+					prepared_sha256: string;
+					source_created_at: string | null;
+					page_descriptors: Json;
+					prompt_version?: number;
+				};
+				Returns: Json;
+			};
+			create_tag: { Args: { tag_name: string }; Returns: string };
+			delete_notebook: { Args: { target_notebook_id: string }; Returns: boolean };
+			delete_tag: { Args: { target_tag_id: string }; Returns: boolean };
+			export_portable_manifest: { Args: Record<string, never>; Returns: Json };
+			get_usage_overview: { Args: Record<string, never>; Returns: Json };
 			is_authorized_user: { Args: Record<string, never>; Returns: boolean };
+			list_notebooks: {
+				Args: Record<string, never>;
+				Returns: Array<{
+					id: string;
+					name: string;
+					description: string | null;
+					cover_style: string;
+					created_at: string;
+					updated_at: string;
+					document_count: number;
+				}>;
+			};
+			list_review_pages: {
+				Args: { result_limit?: number; result_offset?: number };
+				Returns: Array<{
+					page_id: string;
+					document_id: string;
+					document_title: string;
+					document_kind: DocumentKind;
+					page_number: number;
+					page_status: ProcessingStatus;
+					excerpt: string;
+					warnings: Json;
+					updated_at: string;
+				}>;
+			};
+			list_tag_document_ids: {
+				Args: { target_tag_id: string };
+				Returns: Array<{ document_id: string }>;
+			};
+			list_tags: {
+				Args: Record<string, never>;
+				Returns: Array<{
+					tag_id: string;
+					name: string;
+					document_count: number;
+					created_at: string;
+					updated_at: string;
+				}>;
+			};
+			record_ocr_consent: { Args: { consent_version?: number }; Returns: boolean };
+			recover_stale_ocr_jobs: { Args: Record<string, never>; Returns: number };
+			rename_tag: {
+				Args: { target_tag_id: string; tag_name: string };
+				Returns: boolean;
+			};
+			resolve_page_locations: {
+				Args: { target_page_ids: string[] };
+				Returns: Array<{
+					page_id: string;
+					document_id: string;
+					document_title: string;
+					page_number: number;
+					page_updated_at: string;
+				}>;
+			};
 			search_pages: {
 				Args: {
 					search_query: string;
@@ -299,6 +407,10 @@ export type Database = {
 					excerpt: string;
 					rank: number;
 				}>;
+			};
+			set_tag_membership: {
+				Args: { target_tag_id: string; target_document_id: string; assigned: boolean };
+				Returns: boolean;
 			};
 		};
 		Enums: {
