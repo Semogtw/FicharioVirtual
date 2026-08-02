@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(32);
+select plan(33);
 
 select has_table('public', 'app_users', 'allowlist table exists');
 select has_table('public', 'notebooks', 'notebooks table exists');
@@ -68,6 +68,12 @@ select has_function('public', 'export_portable_manifest', array[]::text[], 'port
 select has_function('public', 'get_usage_overview', array[]::text[], 'usage overview function exists');
 select has_function('public', 'set_tag_membership', array['uuid','uuid','boolean'], 'tag membership function exists');
 select has_function('public', 'recover_stale_ocr_jobs', array[]::text[], 'stale OCR recovery exists');
+select has_function(
+  'public',
+  'list_resumable_ocr_pages',
+  array['uuid','timestamp with time zone'],
+  'retry-aware document OCR selection exists'
+);
 
 select ok(
   not has_function_privilege('anon', 'public.export_portable_manifest()', 'execute'),
