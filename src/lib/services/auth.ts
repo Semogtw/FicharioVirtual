@@ -2,7 +2,10 @@ import type { Session } from '@supabase/supabase-js';
 import { getSupabaseClient } from './supabase';
 
 export type AuthServiceErrorCode =
-	'invalid_input' | 'invalid_credentials' | 'not_authorized' | 'auth_unavailable';
+	| 'invalid_input'
+	| 'invalid_credentials'
+	| 'not_authorized'
+	| 'auth_unavailable';
 
 type ServiceError = { message: string; status?: number };
 
@@ -91,10 +94,11 @@ export async function loadAuthorizedSession(
 export async function signIn(
 	email: string,
 	password: string,
-	client: AuthClientLike = defaultClient()
+	client?: AuthClientLike
 ): Promise<Session> {
 	const credentials = normalizeCredentials(email, password);
-	const { data, error } = await client.auth.signInWithPassword(credentials);
+	const gateway = client ?? defaultClient();
+	const { data, error } = await gateway.auth.signInWithPassword(credentials);
 
 	if (error) {
 		const invalidCredentials =
@@ -105,7 +109,7 @@ export async function signIn(
 	}
 	if (data.session === null) throw new AuthServiceError('auth_unavailable');
 
-	const authorized = await authorizeSession(data.session, client);
+	const authorized = await authorizeSession(data.session, gateway);
 	if (authorized === null) throw new AuthServiceError('not_authorized');
 	return authorized;
 }
