@@ -56,3 +56,77 @@ export function assertProbeIsolation({ probeId, ownerUserId, ownerRows, outsider
 	if (!Array.isArray(outsiderRows)) fail('second account probe result is invalid');
 	if (outsiderRows.length !== 0) fail('second account could read the authorized probe notebook');
 }
+
+/**
+ * @typedef {{ name?: unknown; metadata?: unknown }} StorageListRow
+ */
+
+/**
+ * @param {{ fileName: string; ownerRows: StorageListRow[]; outsiderRows: StorageListRow[] }} input
+ */
+export function assertStorageListIsolation({ fileName, ownerRows, outsiderRows }) {
+	if (!Array.isArray(ownerRows) || ownerRows.length !== 1) {
+		fail('authorized account did not list exactly one Storage probe object');
+	}
+	if (ownerRows[0]?.name !== fileName) {
+		fail('authorized Storage listing did not return the exact probe filename');
+	}
+	if (!Array.isArray(outsiderRows)) fail('second account Storage listing is invalid');
+	if (outsiderRows.length !== 0) fail('second account could list the authorized Storage probe');
+}
+
+/**
+ * @param {{ expected: Uint8Array; actual: Uint8Array }} input
+ */
+export function assertProbeBytes({ expected, actual }) {
+	if (!(expected instanceof Uint8Array) || !(actual instanceof Uint8Array)) {
+		fail('Storage probe bytes must be Uint8Array values');
+	}
+	if (expected.byteLength !== actual.byteLength) {
+		fail(`Storage probe bytes have different lengths: ${expected.byteLength} != ${actual.byteLength}`);
+	}
+	for (let index = 0; index < expected.byteLength; index += 1) {
+		if (expected[index] !== actual[index]) {
+			fail(`Storage probe bytes differ at offset ${index}`);
+		}
+	}
+}
+
+/**
+ * @param {{ label: string; data: unknown; error: unknown }} input
+ */
+export function assertDeniedStorageOperation({ label, data, error }) {
+	if (error == null || data != null) {
+		fail(`second account ${label} unexpectedly succeeded`);
+	}
+}
+
+/**
+ * @param {{ signedUrl: unknown; supabaseUrl: string; objectPath: string }} input
+ */
+export function assertSignedStorageUrl({ signedUrl, supabaseUrl, objectPath }) {
+	if (typeof signedUrl !== 'string' || signedUrl === '') fail('signed Storage URL is missing');
+
+	let signed;
+	let base;
+	try {
+		signed = new URL(signedUrl);
+		base = new URL(supabaseUrl);
+	} catch {
+		fail('signed Storage URL or Supabase URL is invalid');
+	}
+
+	if (signed.protocol !== 'https:') fail('signed Storage URL must use HTTPS');
+	if (signed.username || signed.password) fail('signed Storage URL must not contain credentials');
+	if (signed.origin !== base.origin) fail('signed Storage URL does not use the Supabase origin');
+
+	const expectedPath = `/storage/v1/object/sign/documents/${objectPath}`;
+	let decodedPath;
+	try {
+		decodedPath = decodeURIComponent(signed.pathname);
+	} catch {
+		fail('signed Storage URL path is not valid percent-encoding');
+	}
+	if (decodedPath !== expectedPath) fail('signed URL does not target the exact Storage object');
+	if (!signed.searchParams.get('token')) fail('signed Storage URL has no token');
+}
