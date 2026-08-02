@@ -31,7 +31,7 @@ function defaultClient(): DraftLocationClientLike {
 
 export async function resolveDraftLocations(
 	pageIds: readonly string[],
-	client: DraftLocationClientLike = defaultClient()
+	client?: DraftLocationClientLike
 ): Promise<readonly DraftLocation[]> {
 	if (pageIds.length === 0) return Object.freeze([]);
 	if (pageIds.length > 100) throw new TypeError('Too many draft locations');
@@ -39,7 +39,8 @@ export async function resolveDraftLocations(
 	if (uniqueIds.some((value) => !UUID.test(value))) {
 		throw new TypeError('Invalid draft page identifier');
 	}
-	const { data, error } = await client.rpc('resolve_page_locations', {
+	const gateway = client ?? defaultClient();
+	const { data, error } = await gateway.rpc('resolve_page_locations', {
 		target_page_ids: uniqueIds
 	});
 	if (error || !Array.isArray(data)) throw new Error('Não foi possível localizar os rascunhos.');
