@@ -1,0 +1,28 @@
+:root {
+	color-scheme: light;
+	--paper: #f7f4ee;
+	--surface: #fcfaf6;
+	--surface-strong: #ffffff;
+	--ink: #202124;
+	--muted: #66706b;
+	--line: #ddd7cc;
+	--line-strong: #c9c0b2;
+	--accent: #a65e43;
+	--accent-strong: #844632;
+	--archive: #536a5b;
+	--archive-soft: #e3e9e3;
+	--danger: #9b3f36;
+	--focus: #2f6f9f;
+	--radius-sm: 0.5rem;
+	--radius-md: 0.875rem;
+	--radius-lg: 1.25rem;
+	--shadow-soft: 0 0.625rem 1.875rem rgb(32 33 36 / 8%);
+	--shadow-raised: 0 1.25rem 3.5rem rgb(32 33 36 / 12%);
+	--font-heading: Georgia, Cambria, 'Times New Roman', serif;
+	--font-body: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+	--content-max: 90rem;
+	--sidebar-compact: 5.25rem;
+	--sidebar-wide: 16.5rem;
+	--topbar-height: 5.25rem;
+	--mobile-nav-height: 4.75rem;
+}
