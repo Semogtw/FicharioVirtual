@@ -9,13 +9,9 @@ command -v deno >/dev/null 2>&1 || {
   exit 1
 }
 
-for path in \
-  supabase/functions/_shared/ocr-contract.ts \
-  supabase/functions/_shared/gemini-ocr-client.ts \
-  supabase/functions/process-ocr/index.ts \
-  supabase/functions/delete-document/index.ts
-do
-  deno check "$path"
-done
+deno check supabase/functions/_shared/ocr-contract.ts
+deno check supabase/functions/_shared/gemini-ocr-client.ts
+deno check supabase/functions/process-ocr/index.ts
+deno check supabase/functions/delete-document/index.ts
 
 echo "Edge Function type checks completed."
