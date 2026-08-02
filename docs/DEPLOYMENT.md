@@ -105,12 +105,39 @@ O host precisa:
 - usar `200.html` como fallback de SPA;
 - preservar `static/_headers` ou configurar headers equivalentes;
 - usar HTTPS;
+- redirecionar HTTP para o mesmo host HTTPS;
 - não reescrever `/assets/*` para `200.html`;
 - servir `sw.js`, `registerSW.js` e manifesto com tipos corretos.
 
 Hosts compatíveis incluem Cloudflare Pages, Netlify, GitHub Pages com configuração própria, Vercel estático ou servidor privado. Não há dependência arquitetural de um host específico.
 
-## 8. Validação pós-deployment
+## 8. Validação automática pós-deployment
+
+Execute contra a origem HTTPS, sem caminho adicional:
+
+```bash
+pnpm test:deployment -- https://seu-dominio.example
+```
+
+Também é possível usar variável de ambiente:
+
+```bash
+STAGING_URL=https://seu-dominio.example pnpm test:deployment
+```
+
+O comando falha se encontrar:
+
+- URL sem HTTPS, com credentials, query, fragmento ou subcaminho;
+- ausência de redirect HTTP para o mesmo host HTTPS;
+- headers de CSP, HSTS, referrer, framing, MIME, permissions ou isolamento inconsistentes;
+- HTML raiz ou fallback SPA sem manifesto e registrador externo adiado;
+- manifesto sem modo `standalone`, `start_url` raiz ou ícone válido;
+- `registerSW.js` ou `sw.js` com cache longo;
+- service worker mencionando origem Supabase ou superfícies privadas de API.
+
+Esse gate valida o host e os artefatos públicos. Ele não autentica usuários nem substitui os testes manuais de RLS, Storage, OCR e expiração de URL assinada.
+
+## 9. Validação funcional pós-deployment
 
 ### Autenticação
 
