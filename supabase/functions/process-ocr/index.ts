@@ -1,6 +1,10 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, parseAppOrigin } from '../_shared/cors.ts';
-import { claimStateHttpStatus, classifyGeminiFailure } from '../_shared/ocr-contract.ts';
+import {
+	claimStateHttpStatus,
+	classifyGeminiFailure,
+	geminiFailureResponse
+} from '../_shared/ocr-contract.ts';
 import {
 	GeminiHttpError,
 	GeminiResponseError,
@@ -99,6 +103,39 @@ Deno.serve(async (request) => {
 	} = await supabase.auth.getUser();
 	if (userError || !user) return respond(401, { code: 'authentication_required' });
 
+	const failJob = async ({
+		code,
+		message,
+		retryable,
+		failedAt,
+		nextRetryAt
+	}: {
+		code: string;
+		message: string;
+		retryable: boolean;
+		failedAt: string;
+		nextRetryAt: string | null;
+	}) => {
+		const { data, error } = await supabase.rpc('fail_ocr_job', {
+			target_page_id: pageId,
+			error_code: code,
+			safe_error_message: message,
+			retryable,
+			failed_at: failedAt,
+			retry_at: nextRetryAt
+		});
+		return !error && data === true;
+	};
+
+	const blockQuota = async (code: string, blockedAt: string) => {
+		const { data, error } = await supabase.rpc('block_ocr_job_quota', {
+			target_page_id: pageId,
+			error_code: code,
+			blocked_at: blockedAt
+		});
+		return !error && data === true;
+	};
+
 	const { data: page, error: pageError } = await supabase
 		.from('pages')
 		.select('id,status,temporary_image_path,document_id,ocr_raw_text,corrected_text')
@@ -150,26 +187,28 @@ Deno.serve(async (request) => {
 		.eq('id', page.document_id)
 		.maybeSingle();
 	if (documentError || !document) {
-		await supabase.rpc('fail_ocr_job', {
-			target_page_id: pageId,
-			error_code: 'ocr_source_missing',
-			safe_error_message: 'O arquivo original não está disponível.',
+		const failedAt = new Date().toISOString();
+		const persisted = await failJob({
+			code: 'ocr_source_missing',
+			message: 'O arquivo original não está disponível.',
 			retryable: false,
-			failed_at: new Date().toISOString(),
-			retry_at: null
+			failedAt,
+			nextRetryAt: null
 		});
+		if (!persisted) return respond(503, { code: 'ocr_failure_persistence_failed' });
 		return respond(409, { code: 'ocr_source_missing' });
 	}
 	const sourcePath = page.temporary_image_path ?? (document.kind === 'image' ? document.storage_path : null);
 	if (!sourcePath) {
-		await supabase.rpc('fail_ocr_job', {
-			target_page_id: pageId,
-			error_code: 'ocr_source_missing',
-			safe_error_message: 'A página ainda não foi preparada para leitura.',
+		const failedAt = new Date().toISOString();
+		const persisted = await failJob({
+			code: 'ocr_source_missing',
+			message: 'A página ainda não foi preparada para leitura.',
 			retryable: false,
-			failed_at: new Date().toISOString(),
-			retry_at: null
+			failedAt,
+			nextRetryAt: null
 		});
+		if (!persisted) return respond(503, { code: 'ocr_failure_persistence_failed' });
 		return respond(409, { code: 'ocr_source_missing' });
 	}
 
@@ -178,25 +217,26 @@ Deno.serve(async (request) => {
 		.download(sourcePath);
 	if (sourceError || !sourceBlob) {
 		const failedAt = new Date();
-		await supabase.rpc('fail_ocr_job', {
-			target_page_id: pageId,
-			error_code: 'ocr_source_unavailable',
-			safe_error_message: 'A página não pôde ser carregada do armazenamento.',
+		const persisted = await failJob({
+			code: 'ocr_source_unavailable',
+			message: 'A página não pôde ser carregada do armazenamento.',
 			retryable: true,
-			failed_at: failedAt.toISOString(),
-			retry_at: retryAt(attemptCount, 30)
+			failedAt: failedAt.toISOString(),
+			nextRetryAt: retryAt(attemptCount, 30)
 		});
-		return respond(503, { code: 'ocr_source_unavailable', retryable: true });
+		if (!persisted) return respond(503, { code: 'ocr_failure_persistence_failed' });
+		return respond(202, { state: 'retry_later' });
 	}
 	if (sourceBlob.size > MAX_INLINE_IMAGE_BYTES) {
-		await supabase.rpc('fail_ocr_job', {
-			target_page_id: pageId,
-			error_code: 'ocr_source_too_large',
-			safe_error_message: 'A página excede o limite seguro para leitura inline.',
+		const failedAt = new Date().toISOString();
+		const persisted = await failJob({
+			code: 'ocr_source_too_large',
+			message: 'A página excede o limite seguro para leitura inline.',
 			retryable: false,
-			failed_at: new Date().toISOString(),
-			retry_at: null
+			failedAt,
+			nextRetryAt: null
 		});
+		if (!persisted) return respond(503, { code: 'ocr_failure_persistence_failed' });
 		return respond(413, { code: 'ocr_source_too_large' });
 	}
 
@@ -234,31 +274,22 @@ Deno.serve(async (request) => {
 	} catch (error) {
 		if (error instanceof GeminiHttpError) {
 			const failure = classifyGeminiFailure(error.status, error.responseBody);
-			if (failure.quotaExhausted) {
-				await supabase.rpc('block_ocr_job_quota', {
-					target_page_id: pageId,
-					error_code: failure.code,
-					blocked_at: new Date().toISOString()
-				});
-			} else {
-				const failedAt = new Date();
-				await supabase.rpc('fail_ocr_job', {
-					target_page_id: pageId,
-					error_code: failure.code,
-					safe_error_message: failure.safeMessage,
-					retryable: failure.retryable,
-					failed_at: failedAt.toISOString(),
-					retry_at:
-						failure.retryable && failure.delaySeconds
-							? retryAt(attemptCount, failure.delaySeconds)
-							: null
-				});
-			}
-			const providerStatus = error.status >= 400 && error.status <= 599 ? error.status : 502;
-			return respond(failure.quotaExhausted ? 429 : failure.retryable ? 503 : providerStatus, {
-				code: failure.code,
-				retryable: failure.retryable
-			});
+			const failedAt = new Date();
+			const persisted = failure.quotaExhausted
+				? await blockQuota(failure.code, failedAt.toISOString())
+				: await failJob({
+						code: failure.code,
+						message: failure.safeMessage,
+						retryable: failure.retryable,
+						failedAt: failedAt.toISOString(),
+						nextRetryAt:
+							failure.retryable && failure.delaySeconds
+								? retryAt(attemptCount, failure.delaySeconds)
+								: null
+					});
+			if (!persisted) return respond(503, { code: 'ocr_failure_persistence_failed' });
+			const failureResponse = geminiFailureResponse(failure, error.status);
+			return respond(failureResponse.status, failureResponse.body);
 		}
 
 		const retryable = attemptCount < 3;
@@ -268,19 +299,20 @@ Deno.serve(async (request) => {
 			error instanceof GeminiTransportError ||
 			(error instanceof DOMException && error.name === 'AbortError');
 		const code = responseInvalid ? 'ocr_response_invalid' : 'ocr_request_failed';
-		await supabase.rpc('fail_ocr_job', {
-			target_page_id: pageId,
-			error_code: code,
-			safe_error_message: responseInvalid
+		const persisted = await failJob({
+			code,
+			message: responseInvalid
 				? 'O provedor retornou um formato de transcrição inválido.'
 				: requestInterrupted
 					? 'A solicitação de leitura foi interrompida.'
 					: 'A leitura falhou antes de produzir um resultado válido.',
 			retryable,
-			failed_at: failedAt.toISOString(),
-			retry_at: retryable ? retryAt(attemptCount, 45) : null
+			failedAt: failedAt.toISOString(),
+			nextRetryAt: retryable ? retryAt(attemptCount, 45) : null
 		});
-		return respond(retryable ? 503 : responseInvalid ? 422 : 503, { code, retryable });
+		if (!persisted) return respond(503, { code: 'ocr_failure_persistence_failed' });
+		if (retryable) return respond(202, { state: 'retry_later' });
+		return respond(responseInvalid ? 422 : 503, { code, retryable: false });
 	} finally {
 		clearTimeout(timeoutId);
 		bytes?.fill(0);
