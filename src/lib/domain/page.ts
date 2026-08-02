@@ -36,7 +36,10 @@ export type PageRecord = {
 };
 
 export function effectivePageText(sources: PageTextSources): string {
-	return sources.correctedText ?? sources.nativeText ?? sources.ocrRawText ?? '';
+	if (sources.correctedText !== null && sources.correctedText.trim().length > 0) {
+		return sources.correctedText;
+	}
+	return sources.nativeText ?? sources.ocrRawText ?? '';
 }
 
 function safeWarnings(value: Json): readonly PageWarning[] {
