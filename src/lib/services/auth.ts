@@ -2,10 +2,7 @@ import type { Session } from '@supabase/supabase-js';
 import { getSupabaseClient } from './supabase';
 
 export type AuthServiceErrorCode =
-	| 'invalid_input'
-	| 'invalid_credentials'
-	| 'not_authorized'
-	| 'auth_unavailable';
+	'invalid_input' | 'invalid_credentials' | 'not_authorized' | 'auth_unavailable';
 
 type ServiceError = { message: string; status?: number };
 
