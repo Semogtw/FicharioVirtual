@@ -4,7 +4,7 @@
 	import type { DocumentSummary } from '$lib/domain/document';
 	import type { NotebookSummary } from '$lib/domain/notebook';
 	import { updateDocumentOrganization } from '$lib/services/document-organization';
-	import { listDocuments } from '$lib/services/documents';
+	import { listAllDocuments } from '$lib/services/documents';
 	import { listNotebooks } from '$lib/services/notebooks';
 
 	type EditableDocument = {
@@ -25,12 +25,12 @@
 		loading = true;
 		error = null;
 		try {
-			const [documentPage, loadedNotebooks] = await Promise.all([
-				listDocuments({ limit: 100 }),
+			const [loadedDocuments, loadedNotebooks] = await Promise.all([
+				listAllDocuments(),
 				listNotebooks()
 			]);
 			notebooks = loadedNotebooks;
-			rows = documentPage.items.map((document) => ({
+			rows = loadedDocuments.map((document) => ({
 				document,
 				title: document.title,
 				notebookId: document.notebookId ?? '',
