@@ -82,12 +82,30 @@ if [[ "$reserved_count" != "1" ]]; then
   exit 1
 fi
 
+claimed_attempt_count="$(
+  psql "$db_url" -Atq -v ON_ERROR_STOP=1 -c \
+    "select attempt_count from public.ocr_jobs where user_id='$user_id'::uuid and status='processing' limit 1"
+)"
+if [[ "$claimed_attempt_count" != "1" ]]; then
+  echo "Expected the provider-bound claim to count one attempt, received: $claimed_attempt_count" >&2
+  exit 1
+fi
+
 blocked_page="$(
   psql "$db_url" -Atq -v ON_ERROR_STOP=1 -c \
     "select page_id from public.ocr_jobs where user_id='$user_id'::uuid and status='blocked_quota' limit 1"
 )"
 if [[ -z "$blocked_page" ]]; then
   echo "Expected one locally quota-blocked page." >&2
+  exit 1
+fi
+
+blocked_attempt_count="$(
+  psql "$db_url" -Atq -v ON_ERROR_STOP=1 -c \
+    "select attempt_count from public.ocr_jobs where page_id='$blocked_page'::uuid"
+)"
+if [[ "$blocked_attempt_count" != "0" ]]; then
+  echo "Local quota must not consume a provider attempt, received: $blocked_attempt_count" >&2
   exit 1
 fi
 
