@@ -19,7 +19,7 @@ as $$
       'pendingPages', (
         select count(*) from public.pages p
         where p.user_id = (select auth.uid())
-          and p.status in ('uploading', 'pending', 'processing', 'retryable', 'blocked_quota')
+          and p.status in ('pending', 'processing', 'retryable', 'blocked_quota')
       ),
       'reviewPages', (
         select count(*) from public.pages p
@@ -69,7 +69,7 @@ as $$
       'pendingPages', (
         select count(*) from public.pages p
         where p.user_id = (select auth.uid())
-          and p.status in ('uploading', 'pending', 'processing', 'retryable', 'blocked_quota')
+          and p.status in ('pending', 'processing', 'retryable', 'blocked_quota')
       ),
       'reviewPages', (
         select count(*) from public.pages p
