@@ -41,7 +41,7 @@ describe('local database gate runner', () => {
 		expect(concurrencyGate).not.toMatch(/\bpython(?:3)?\b/);
 	});
 
-	it('checks every deployed Edge Function and shared OCR module with Deno', () => {
+	it('checks every deployed Edge Function and shared OCR module with isolated Deno config', () => {
 		const runner = read('tools/checks/check-edge-functions.sh');
 
 		for (const path of [
@@ -51,7 +51,7 @@ describe('local database gate runner', () => {
 			'supabase/functions/process-ocr/index.ts',
 			'supabase/functions/delete-document/index.ts'
 		]) {
-			expect(runner).toContain(`deno check ${path}`);
+			expect(runner).toContain(`deno check --no-config ${path}`);
 		}
 	});
 
