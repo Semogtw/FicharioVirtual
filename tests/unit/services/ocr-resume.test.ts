@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { OcrProcessingError } from '../../../src/lib/services/ocr';
 import {
 	resumeDocumentOcrWithGateway,
 	type OcrResumeGateway
@@ -66,9 +67,19 @@ describe('resumeDocumentOcrWithGateway', () => {
 		const result = await resumeDocumentOcrWithGateway(documentId, gateway(pages), async () => {
 			call += 1;
 			if (call === 1) return { state: 'busy' };
-			throw new Error('temporary failure');
+			throw new Error('terminal failure');
 		});
 
 		expect(result).toEqual({ completed: 0, needsReview: 0, pending: 1, failed: 1 });
+	});
+
+	it('keeps retryable OCR processing errors pending for a later resume', async () => {
+		const pages = [{ id: '00000000-0000-4000-8000-000000000001', pageNumber: 1 }];
+
+		const result = await resumeDocumentOcrWithGateway(documentId, gateway(pages), async () => {
+			throw new OcrProcessingError('ocr_transport_failed', true);
+		});
+
+		expect(result).toEqual({ completed: 0, needsReview: 0, pending: 1, failed: 0 });
 	});
 });
