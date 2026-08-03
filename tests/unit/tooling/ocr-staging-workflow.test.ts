@@ -31,6 +31,10 @@ describe('OCR staging verification', () => {
 		expect(workflow).toContain('node-version: 22.16.0');
 		expect(workflow).toContain('pnpm install --frozen-lockfile');
 		expect(workflow).toContain('pnpm test:staging:ocr');
+		expect(workflow).toContain('OCR_STAGING_REPORT_PATH: /tmp/ocr-staging-report.json');
+		expect(workflow).toContain('name: Upload sanitized OCR report');
+		expect(workflow).toContain('if: always()');
+		expect(workflow).toContain('path: /tmp/ocr-staging-report.json');
 		expect(packageJson).toContain('"test:staging:ocr": "node tools/checks/check-ocr-staging.mjs"');
 	});
 
