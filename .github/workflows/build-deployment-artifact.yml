@@ -97,15 +97,15 @@ jobs:
           cp -a build/. fichario-deploy/site/
           cp package.json pnpm-lock.yaml fichario-deploy/source/
           {
-            echo 'schema_version=1'
+            echo 'schema_version=2'
             echo 'source_repository=Semogtw/FicharioVirtual'
             echo "source_commit=${GITHUB_SHA}"
             echo "target_environment=${TARGET_ENVIRONMENT}"
             echo "created_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo "node_version=$(node --version)"
             echo "pnpm_version=$(pnpm --version)"
-            echo "package_sha256=$(sha256sum package.json | cut -d' ' -f1)"
-            echo "lock_sha256=$(sha256sum pnpm-lock.yaml | cut -d' ' -f1)"
+            echo "package_sha256=$(sha256sum fichario-deploy/source/package.json | cut -d' ' -f1)"
+            echo "lock_sha256=$(sha256sum fichario-deploy/source/pnpm-lock.yaml | cut -d' ' -f1)"
           } > fichario-deploy/DEPLOYMENT-MANIFEST.txt
           (
             cd fichario-deploy
