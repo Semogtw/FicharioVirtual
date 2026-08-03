@@ -169,6 +169,9 @@ Deno.serve(async (request) => {
 	if (claimResult === null) {
 		return respond(503, { code: 'ocr_claim_failed' });
 	}
+	if (claimResult.state === 'already_complete') {
+		await cleanupTemporaryImage(page.temporary_image_path);
+	}
 	if (claimResult.state !== 'claimed') {
 		return respond(claimStateHttpStatus(claimResult.state), {
 			state: claimResult.state
