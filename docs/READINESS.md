@@ -28,8 +28,11 @@ A estimativa total usa aproximadamente 70% de peso para implementação e 30% pa
 - PWA com cache restrito ao shell público;
 - 27 migrations aplicáveis em banco limpo;
 - 54 contratos pgTAP;
-- 167 testes unitários em 52 arquivos;
+- 183 testes unitários em 55 arquivos;
 - 3 cenários E2E no Chromium;
+- gate HTTP loopback com 7 cenários de falha OCR;
+- classificação e backoff locais para 429 diário/transitório, 503, payload inválido e timeout;
+- gate anti-backdoor contra endpoint alternativo ou fault control no OCR implantado;
 - gates de fonte, tipos, lint, build, PWA, Deno e banco;
 - verificador automático do host HTTPS e dos headers;
 - verificador remoto com duas contas, sentinela RLS e Storage privado;
@@ -52,12 +55,14 @@ A estimativa total usa aproximadamente 70% de peso para implementação e 30% pa
 - executar `Verify OCR staging` com confirmação explícita;
 - publicar um host HTTPS e executar `Verify deployed Fichário`.
 
-### Falhas OCR reais
+### Persistência de falhas OCR em staging
 
-- provocar 429 diário e rate limit transitório;
-- provocar 503, timeout e payload inválido;
-- confirmar a classificação persistida, o backoff e a retomada;
-- verificar que nenhuma falha habilita cobrança ou fallback silencioso.
+- observar 429 diário/transitório, 503, timeout e payload inválido passando pela função implantada;
+- confirmar `page.status`, `ocr_jobs.status`, `last_error_code`, `next_retry_at` e `finished_at`;
+- confirmar retomada depois do backoff e limpeza somente após terminal válido;
+- verificar que nenhuma falha habilita cobrança, endpoint alternativo ou fallback silencioso.
+
+A classificação, a resposta pública e o cálculo de backoff desses cenários já estão cobertos localmente por HTTP loopback. O item pendente é evidência operacional no Supabase remoto, não ausência do contrato em código.
 
 ### Dispositivos
 
