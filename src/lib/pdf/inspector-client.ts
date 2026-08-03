@@ -312,7 +312,11 @@ export class PdfInspectionClient {
 			this.#finish(task, null, response.inspection);
 		};
 		task.worker.onerror = () => this.#finish(task, new PdfInspectionError('inspection_failed'));
-		task.worker.postMessage({ type: 'inspect', id: task.id, file: task.file });
+		try {
+			task.worker.postMessage({ type: 'inspect', id: task.id, file: task.file });
+		} catch {
+			this.#finish(task, new PdfInspectionError('inspection_failed'));
+		}
 	}
 
 	#abort(task: Task) {
