@@ -9,7 +9,7 @@ const pdfUpload = readFileSync(new URL('../../../src/lib/pdf/upload.ts', import.
 
 describe('duplicate response consumers', () => {
 	it('uses the strict parser for image imports', () => {
-		expect(imageUpload).toContain('parseDuplicateDocumentId(duplicate)');
+		expect(imageUpload).toContain('parseDuplicateDocumentId(duplicateResult.data)');
 		expect(imageUpload).not.toContain('new DuplicateImageError(duplicate.id)');
 	});
 
