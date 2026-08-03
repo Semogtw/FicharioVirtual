@@ -76,6 +76,13 @@ if (!processOcr.includes('requestGeminiOcr')) {
 		'process-ocr must delegate provider transport and parsing'
 	);
 }
+if (/\bfetchImpl\s*:/.test(processOcr)) {
+	fail(
+		processOcrPath,
+		'provider-transport-injection',
+		'process-ocr must not inject an alternate provider transport'
+	);
+}
 
 const geminiClient = await readFile(geminiClientPath, 'utf8');
 if (!/generativelanguage\.googleapis\.com/i.test(geminiClient)) {
