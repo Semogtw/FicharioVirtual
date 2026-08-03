@@ -135,7 +135,7 @@ describe('processPageOcr', () => {
 					}
 				})
 			)
-		).rejects.toEqual(expect.objectContaining({ code: 'ocr_http_403', retryable: true }));
+		).rejects.toEqual(expect.objectContaining({ code: 'ocr_http_403', retryable: false }));
 	});
 
 	it('maps a permanent provider response to a non-retryable safe error', async () => {
@@ -152,6 +152,36 @@ describe('processPageOcr', () => {
 				retryable: false
 			})
 		);
+	});
+
+	it('ignores malformed or extended provider error envelopes', async () => {
+		await expect(
+			processPageOcr(
+				pageId,
+				client({
+					data: null,
+					error: {
+						context: errorResponse(403, {
+							code: 'gemini_authentication_failed',
+							retryable: false,
+							detail: 'secret provider response'
+						})
+					}
+				})
+			)
+		).rejects.toEqual(expect.objectContaining({ code: 'ocr_http_403', retryable: false }));
+
+		await expect(
+			processPageOcr(
+				pageId,
+				client({
+					data: null,
+					error: {
+						context: errorResponse(503, { code: '../invalid', retryable: false })
+					}
+				})
+			)
+		).rejects.toEqual(expect.objectContaining({ code: 'ocr_http_503', retryable: true }));
 	});
 
 	it('rejects malformed page identifiers before invoking or constructing the backend client', async () => {
