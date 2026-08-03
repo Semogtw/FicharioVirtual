@@ -127,13 +127,13 @@ sha256sum -c SHA256SUMS
 cat DEPLOYMENT-MANIFEST.txt
 ```
 
-Sirva o conteúdo da pasta extraída como raiz do site. O manifest fixa commit, environment, runtime e hashes de `package.json`/`pnpm-lock.yaml`, mas não substitui o gate pós-deployment.
+Sirva somente `fichario-deploy/site/` como raiz do site. `DEPLOYMENT-MANIFEST.txt` e `SHA256SUMS` ficam um nível acima, fora da raiz pública. O manifest fixa commit, environment, runtime e hashes de `package.json`/`pnpm-lock.yaml`, mas não substitui o gate pós-deployment.
 
 ## 7. Hospedar
 
 O host precisa:
 
-- servir `build/`;
+- servir o conteúdo de `fichario-deploy/site/` — ou `build/` em uma construção local direta — como raiz pública;
 - usar `200.html` como fallback de SPA;
 - preservar `static/_headers` ou configurar headers equivalentes;
 - usar HTTPS;
