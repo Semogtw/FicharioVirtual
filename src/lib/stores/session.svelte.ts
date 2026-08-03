@@ -44,6 +44,10 @@ function invalidateOperations() {
 	operationVersion += 1;
 }
 
+function supersededError() {
+	return new DOMException('Session operation was superseded', 'AbortError');
+}
+
 export async function initializeSession(): Promise<Session | null> {
 	const version = beginOperation();
 	try {
@@ -66,7 +70,8 @@ export async function authenticate(email: string, password: string): Promise<Ses
 	if (isCurrentOperation(version)) sessionState.error = null;
 	try {
 		const session = await signIn(email, password);
-		if (isCurrentOperation(version)) applySession(session);
+		if (!isCurrentOperation(version)) throw supersededError();
+		applySession(session);
 		return session;
 	} catch (error) {
 		if (isCurrentOperation(version)) {
