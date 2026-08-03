@@ -1,0 +1,122 @@
+name: Build deployable Fichário artifact
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: Protected environment that supplies the public Supabase configuration
+        required: true
+        type: choice
+        default: staging
+        options:
+          - staging
+          - production
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-fichario-${{ inputs.target_environment }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: ${{ inputs.target_environment }}
+    env:
+      TARGET_ENVIRONMENT: ${{ inputs.target_environment }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.16.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate public deployment configuration
+        env:
+          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+          PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          node <<'NODE'
+          const urlValue = process.env.PUBLIC_SUPABASE_URL ?? '';
+          const key = process.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? '';
+          const url = new URL(urlValue);
+          if (
+            url.protocol !== 'https:' ||
+            url.username ||
+            url.password ||
+            url.pathname !== '/' ||
+            url.search ||
+            url.hash
+          ) {
+            throw new Error('PUBLIC_SUPABASE_URL must be a credential-free HTTPS origin');
+          }
+          if (!key.startsWith('sb_publishable_') || key.length < 20 || key.length > 512) {
+            throw new Error('PUBLIC_SUPABASE_PUBLISHABLE_KEY is invalid');
+          }
+          NODE
+
+      - name: Verify and build static site
+        env:
+          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+          PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+        run: pnpm verify
+
+      - name: Verify frozen public configuration
+        env:
+          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+          PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          set -euo pipefail
+          grep -R -F -- "$PUBLIC_SUPABASE_URL" build >/dev/null
+          grep -R -F -- "$PUBLIC_SUPABASE_PUBLISHABLE_KEY" build >/dev/null
+          ! grep -R -F '127.0.0.1:54321' build
+          ! grep -R -F 'sb_publishable_test_key_1234567890' build
+
+      - name: Package static artifact
+        run: |
+          set -euo pipefail
+          rm -rf fichario-deploy
+          mkdir fichario-deploy
+          cp -a build/. fichario-deploy/
+          {
+            echo 'schema_version=1'
+            echo 'source_repository=Semogtw/FicharioVirtual'
+            echo "source_commit=${GITHUB_SHA}"
+            echo "target_environment=${TARGET_ENVIRONMENT}"
+            echo "created_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "node_version=$(node --version)"
+            echo "pnpm_version=$(pnpm --version)"
+            echo "package_sha256=$(sha256sum package.json | cut -d' ' -f1)"
+            echo "lock_sha256=$(sha256sum pnpm-lock.yaml | cut -d' ' -f1)"
+          } > fichario-deploy/DEPLOYMENT-MANIFEST.txt
+          (
+            cd fichario-deploy
+            find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
+            sha256sum -c SHA256SUMS
+          )
+
+      - name: Upload deployable static artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fichario-static-${{ github.sha }}-${{ inputs.target_environment }}
+          path: fichario-deploy/
+          if-no-files-found: error
+          compression-level: 6
+          retention-days: 7
