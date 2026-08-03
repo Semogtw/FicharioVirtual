@@ -8,6 +8,7 @@ import type {
 
 const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const ALLOWED_PREPARED_TYPES = new Set(['image/jpeg', 'image/webp']);
 
 export interface ImageWorkerLike {
 	onmessage: ((event: MessageEvent<ImageWorkerResponse>) => void) | null;
@@ -69,6 +70,100 @@ function validateImage(file: File) {
 		throw new ImagePreparationError('invalid_image');
 	}
 	if (file.size > MAX_IMAGE_BYTES) throw new ImagePreparationError('image_too_large');
+}
+
+function hasExactKeys(record: Record<string, unknown>, expected: readonly string[]) {
+	const actual = Object.keys(record).sort();
+	const sortedExpected = [...expected].sort();
+	return (
+		actual.length === sortedExpected.length &&
+		actual.every((key, index) => key === sortedExpected[index])
+	);
+}
+
+function invalidWorkerResponse(): never {
+	throw new TypeError('Invalid image worker response');
+}
+
+export function parseImageWorkerResponse(
+	data: unknown,
+	expectedId: string,
+	maxDimension: number
+): ImageWorkerResponse {
+	if (
+		typeof expectedId !== 'string' ||
+		expectedId.length < 1 ||
+		!Number.isInteger(maxDimension) ||
+		maxDimension < 1 ||
+		maxDimension > 10_000 ||
+		data === null ||
+		typeof data !== 'object' ||
+		Array.isArray(data)
+	) {
+		invalidWorkerResponse();
+	}
+	const value = data as Record<string, unknown>;
+	if (value.type === 'failure') {
+		if (!hasExactKeys(value, ['type', 'id', 'code']) || value.id !== expectedId) {
+			invalidWorkerResponse();
+		}
+		const code = value.code;
+		if (
+			code !== 'decode_failed' &&
+			code !== 'encode_failed' &&
+			code !== 'unsupported_image' &&
+			code !== 'worker_failed'
+		) {
+			invalidWorkerResponse();
+		}
+		return Object.freeze({ type: 'failure', id: expectedId, code });
+	}
+	if (value.type !== 'success' || !hasExactKeys(value, [
+		'type',
+		'id',
+		'image',
+		'thumbnail',
+		'width',
+		'height',
+		'format'
+	])) {
+		invalidWorkerResponse();
+	}
+	const image = value.image;
+	const thumbnail = value.thumbnail;
+	const width = value.width;
+	const height = value.height;
+	const format = value.format;
+	if (
+		value.id !== expectedId ||
+		!(image instanceof Blob) ||
+		image.size < 1 ||
+		!ALLOWED_PREPARED_TYPES.has(image.type) ||
+		!(thumbnail instanceof Blob) ||
+		thumbnail.size < 1 ||
+		!ALLOWED_PREPARED_TYPES.has(thumbnail.type) ||
+		typeof width !== 'number' ||
+		!Number.isInteger(width) ||
+		width < 1 ||
+		width > maxDimension ||
+		typeof height !== 'number' ||
+		!Number.isInteger(height) ||
+		height < 1 ||
+		height > maxDimension ||
+		(format !== 'image/webp' && format !== 'image/jpeg') ||
+		image.type !== format
+	) {
+		invalidWorkerResponse();
+	}
+	return Object.freeze({
+		type: 'success',
+		id: expectedId,
+		image,
+		thumbnail,
+		width,
+		height,
+		format
+	});
 }
 
 export class ImagePreparationClient {
@@ -138,35 +233,42 @@ export class ImagePreparationClient {
 			return;
 		}
 		task.worker = worker;
+		const selected = profile(task.mode);
 
 		worker.onmessage = (event) => {
-			if (task.settled || event.data.id !== task.id) return;
-			if (event.data.type === 'failure') {
+			if (task.settled) return;
+			let response: ImageWorkerResponse;
+			try {
+				response = parseImageWorkerResponse(event.data, task.id, selected.maxDimension);
+			} catch {
+				this.#finish(task, new ImagePreparationError('worker_failed'));
+				return;
+			}
+			if (response.type === 'failure') {
 				const code =
-					event.data.code === 'decode_failed'
+					response.code === 'decode_failed'
 						? 'decode_failed'
-						: event.data.code === 'encode_failed'
+						: response.code === 'encode_failed'
 							? 'encode_failed'
 							: 'worker_failed';
 				this.#finish(task, new ImagePreparationError(code));
 				return;
 			}
 			this.#finish(task, null, {
-				image: event.data.image,
-				thumbnail: event.data.thumbnail,
-				width: event.data.width,
-				height: event.data.height,
-				format: event.data.format,
+				image: response.image,
+				thumbnail: response.thumbnail,
+				width: response.width,
+				height: response.height,
+				format: response.format,
 				originalName: task.file.name,
 				originalBytes: task.file.size,
-				preparedBytes: event.data.image.size + event.data.thumbnail.size
+				preparedBytes: response.image.size + response.thumbnail.size
 			});
 		};
 		worker.onerror = () => {
 			this.#finish(task, new ImagePreparationError('worker_failed'));
 		};
 
-		const selected = profile(task.mode);
 		worker.postMessage({
 			type: 'prepare',
 			id: task.id,
