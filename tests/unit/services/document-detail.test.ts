@@ -94,3 +94,64 @@ describe('savePageCorrectionWithGateway', () => {
 		expect(fixture.correction).toEqual({ correctedText: null, status: 'needs_review' });
 	});
 });
+
+describe('document detail response contract', () => {
+	it('rejects a mismatched document or malformed page collection', async () => {
+		const mismatched = gateway();
+		mismatched.value.loadDocument = async () => ({
+			id: '33333333-3333-4333-8333-333333333333',
+			title: 'Apostila',
+			kind: 'pdf',
+			status: 'ready',
+			page_count: 1,
+			notebook_id: null,
+			original_filename: 'apostila.pdf',
+			storage_path: 'user/document/original.pdf',
+			created_at: '2026-08-02T03:00:00.000Z',
+			updated_at: '2026-08-02T04:00:00.000Z'
+		});
+		await expect(loadDocumentDetailWithGateway(documentId, mismatched.value)).rejects.toMatchObject({
+			name: 'DocumentDetailError',
+			code: 'unavailable'
+		});
+
+		const malformedPage = gateway();
+		malformedPage.value.listPages = async () => [
+			pageRecord({ warnings: [{ raw: true }] as never })
+		];
+		await expect(
+			loadDocumentDetailWithGateway(documentId, malformedPage.value)
+		).rejects.toMatchObject({ name: 'DocumentDetailError', code: 'unavailable' });
+	});
+
+	it('rejects a correction response that does not match the requested page', async () => {
+		const fixture = gateway();
+		fixture.value.saveCorrection = async (_pageId, input) =>
+			pageRecord({
+				id: '33333333-3333-4333-8333-333333333333',
+				corrected_text: input.correctedText,
+				extraction_source: 'manual',
+				status: input.status,
+				was_manually_reviewed: true
+			});
+
+		await expect(
+			savePageCorrectionWithGateway(pageId, 'Corrigido', fixture.value)
+		).rejects.toMatchObject({ name: 'DocumentDetailError', code: 'unavailable' });
+	});
+
+	it('normalizes gateway failures without leaking details', async () => {
+		const fixture = gateway();
+		fixture.value.loadDocument = async () => {
+			throw new Error('internal documents host');
+		};
+
+		await expect(loadDocumentDetailWithGateway(documentId, fixture.value)).rejects.toEqual(
+			expect.objectContaining({
+				name: 'DocumentDetailError',
+				code: 'unavailable',
+				message: 'Não foi possível abrir o documento agora.'
+			})
+		);
+	});
+});
