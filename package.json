@@ -22,6 +22,7 @@
 		"test:functions:check": "bash tools/checks/check-edge-functions.sh",
 		"test:db:local": "bash tools/checks/run-local-db-gates.sh",
 		"test:deployment": "node tools/checks/check-deployed-site.mjs",
+		"test:deployment:artifact": "node tools/checks/check-deployment-artifact.mjs",
 		"test:staging:supabase": "node tools/checks/check-supabase-staging.mjs",
 		"test:staging:ocr": "node tools/checks/check-ocr-staging.mjs",
 		"verify": "pnpm lint && pnpm check && pnpm test && pnpm build",
