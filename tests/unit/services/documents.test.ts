@@ -90,6 +90,23 @@ describe('collectAllDocumentPages', () => {
 		expect(Object.isFrozen(result)).toBe(true);
 	});
 
+	it('rejects a non-canonical or impossible cursor timestamp', async () => {
+		let calls = 0;
+		await expect(
+			collectAllDocumentPages(async () => {
+				calls += 1;
+				if (calls > 1) throw new Error('unexpected page request');
+				return {
+					items: [],
+					nextCursor: {
+						createdAt: '2026-02-30T00:00:00.000Z',
+						id: '11111111-1111-4111-8111-111111111111'
+					}
+				};
+			})
+		).rejects.toThrow('Invalid document cursor');
+	});
+
 	it('rejects a repeated cursor instead of looping forever', async () => {
 		const repeatedCursor = {
 			createdAt: '2026-08-02T09:00:00.000Z',
@@ -171,6 +188,9 @@ describe('document record response contract', () => {
 		expect(() => parseDocumentRecords([row({ created_at: 'invalid-date' })], 61)).toThrow(
 			'Invalid document response'
 		);
+		expect(() =>
+			parseDocumentRecords([row({ created_at: '2026-02-30T00:00:00.000Z' })], 61)
+		).toThrow('Invalid document response');
 		expect(() => parseDocumentRecords([row({ private_content: 'no' })], 61)).toThrow(
 			'Invalid document response'
 		);
@@ -211,6 +231,12 @@ describe('document filter contract', () => {
 		expect(() => parseDocumentFilters({ kind: 'text' })).toThrow('Invalid document filters');
 		expect(() => parseDocumentFilters({ status: 'deleted' })).toThrow('Invalid document filters');
 		expect(() => parseDocumentFilters({ createdFrom: 'not-a-date' })).toThrow(
+			'Invalid document filters'
+		);
+		expect(() => parseDocumentFilters({ createdFrom: '01/02/2026' })).toThrow(
+			'Invalid document filters'
+		);
+		expect(() => parseDocumentFilters({ createdFrom: '2026-02-30T00:00:00.000Z' })).toThrow(
 			'Invalid document filters'
 		);
 		expect(() =>
