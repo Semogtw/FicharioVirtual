@@ -80,11 +80,7 @@ export async function updateDocumentOrganization(
 			.maybeSingle();
 		if (error || data === null) throw new DocumentOrganizationError();
 		const row = organizationRowSchema.parse(data);
-		if (
-			row.id !== validatedDocumentId ||
-			row.title !== title ||
-			row.notebook_id !== notebookId
-		) {
+		if (row.id !== validatedDocumentId || row.title !== title || row.notebook_id !== notebookId) {
 			throw new DocumentOrganizationError();
 		}
 		return Object.freeze({
