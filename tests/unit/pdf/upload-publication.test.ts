@@ -5,13 +5,16 @@ const documentId = '11111111-1111-4111-8111-111111111111';
 
 describe('parsePdfImportPublication', () => {
 	it('accepts and freezes the exact publication contract', () => {
-		const result = parsePdfImportPublication({
-			documentId,
-			pageCount: 3,
-			ocrPageCount: 1,
-			reviewPageCount: 0,
-			status: 'partially_ready'
-		});
+		const result = parsePdfImportPublication(
+			{
+				documentId,
+				pageCount: 3,
+				ocrPageCount: 1,
+				reviewPageCount: 0,
+				status: 'partially_ready'
+			},
+			documentId
+		);
 
 		expect(result).toEqual({
 			documentId,
@@ -25,6 +28,13 @@ describe('parsePdfImportPublication', () => {
 
 	it.each([
 		{ documentId: 'bad-id', pageCount: 1, ocrPageCount: 0, reviewPageCount: 0, status: 'ready' },
+		{
+			documentId: '22222222-2222-4222-8222-222222222222',
+			pageCount: 1,
+			ocrPageCount: 0,
+			reviewPageCount: 0,
+			status: 'ready'
+		},
 		{ documentId, pageCount: 0, ocrPageCount: 0, reviewPageCount: 0, status: 'ready' },
 		{ documentId, pageCount: 2, ocrPageCount: 3, reviewPageCount: 0, status: 'processing' },
 		{ documentId, pageCount: 2, ocrPageCount: 1, reviewPageCount: 2, status: 'partially_ready' },
@@ -38,7 +48,24 @@ describe('parsePdfImportPublication', () => {
 			status: 'ready',
 			extra: true
 		}
-	])('rejects malformed publication %#', (value) => {
-		expect(() => parsePdfImportPublication(value)).toThrow('Invalid PDF import publication');
+	])('rejects malformed or inconsistent publication %#', (value) => {
+		expect(() => parsePdfImportPublication(value, documentId)).toThrow(
+			'Invalid PDF import publication'
+		);
+	});
+
+	it('rejects an invalid expected document identifier', () => {
+		expect(() =>
+			parsePdfImportPublication(
+				{
+					documentId,
+					pageCount: 1,
+					ocrPageCount: 0,
+					reviewPageCount: 0,
+					status: 'ready'
+				},
+				'bad-id'
+			)
+		).toThrow('Invalid PDF import publication');
 	});
 });
