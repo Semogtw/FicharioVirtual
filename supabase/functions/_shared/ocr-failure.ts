@@ -1,9 +1,5 @@
 import { classifyGeminiFailure, geminiFailureResponse } from './ocr-contract.ts';
-import {
-	GeminiHttpError,
-	GeminiResponseError,
-	GeminiTransportError
-} from './gemini-ocr-client.ts';
+import { GeminiHttpError, GeminiResponseError, GeminiTransportError } from './gemini-ocr-client.ts';
 
 export type OcrFailurePersistence =
 	| {
