@@ -38,7 +38,9 @@ describe('local database gate runner', () => {
 		expect(runner).toContain('tools/checks/test-ocr-idempotency.sh');
 		expect(fixture).toContain('insert into public.ocr_jobs');
 		expect(fixture).toContain('ocr_consent_version');
-		expect(concurrencyGate).toContain('parse_claim_state');
+		expect(concurrencyGate).toContain('validate_claim_shape');
+		expect(concurrencyGate).toContain('Concurrent claim A contract drifted');
+		expect(concurrencyGate).toContain("keys !== 'jobId,nextRetryAt,state'");
 		expect(concurrencyGate).not.toMatch(/\bpython(?:3)?\b/);
 		expect(idempotencyGate).toContain('first claim contract drifted');
 		expect(idempotencyGate).toContain('already-complete claim contract drifted');
