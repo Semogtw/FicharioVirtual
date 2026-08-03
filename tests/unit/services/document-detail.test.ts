@@ -110,10 +110,12 @@ describe('document detail response contract', () => {
 			created_at: '2026-08-02T03:00:00.000Z',
 			updated_at: '2026-08-02T04:00:00.000Z'
 		});
-		await expect(loadDocumentDetailWithGateway(documentId, mismatched.value)).rejects.toMatchObject({
-			name: 'DocumentDetailError',
-			code: 'unavailable'
-		});
+		await expect(loadDocumentDetailWithGateway(documentId, mismatched.value)).rejects.toMatchObject(
+			{
+				name: 'DocumentDetailError',
+				code: 'unavailable'
+			}
+		);
 
 		const malformedPage = gateway();
 		malformedPage.value.listPages = async () => [
