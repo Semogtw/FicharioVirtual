@@ -128,7 +128,7 @@ Esse runner não depende do Supabase ou do navegador. Ele verifica, entre outros
 - migrations com `search_path`, grants e padrões de segurança esperados;
 - presença do lockfile raiz e cobertura de todas as dependências do manifesto;
 - uso do lockfile versionado pelo cache e pela instalação congelada do workflow;
-- ausência de endpoint alternativo ou controles de fault injection no OCR implantado.
+- ausência de endpoint alternativo, transporte injetado ou controles de fault injection no OCR implantado.
 
 ## Edge Functions
 
@@ -158,8 +158,18 @@ O runner:
 1. inicia ou reutiliza a stack local com `supabase start`;
 2. aplica todas as migrations desde zero com `supabase db reset`;
 3. executa os testes pgTAP com `supabase test db`;
-4. executa duas claims OCR concorrentes com limite diário igual a 1;
-5. valida replay idempotente de conclusão, reconciliação após resposta perdida e virada UTC da cota.
+4. valida as formas simples de claim com troca real de roles e consentimento;
+5. executa duas claims OCR concorrentes com limite diário igual a 1;
+6. valida replay idempotente de conclusão, reconciliação após resposta perdida e virada UTC da cota.
+
+O parser TypeScript de `claim_ocr_job` é fail-closed. Ele aceita somente as formas exatas produzidas pelo SQL e valida estado, cobertura de chaves, UUID, timestamp, `attemptCount` e `usageToday`. O banco comprova as mesmas formas em transações reais:
+
+- somente `state` para `not_authorized`, `consent_required`, `invalid_configuration` e `not_found`;
+- `state` e `jobId` para `already_complete`, `busy` e `not_retryable`;
+- `state`, `jobId` e `nextRetryAt` para `retry_later` e `quota_exhausted`;
+- `state`, `jobId`, `attemptCount` e `usageToday` para `claimed`.
+
+Valores desconhecidos, campos extras ou ausentes, UUID inválido, timestamp impossível, string numérica, fração, zero ou contador ausente produzem falha fechada antes de Storage ou provedor.
 
 Validar no banco local:
 
@@ -171,6 +181,7 @@ Validar no banco local:
 - páginas contínuas e únicas;
 - claim OCR idempotente;
 - concorrência no limite diário;
+- formas JSON de todos os resultados de claim;
 - estados `retryable`, `blocked_quota`, `needs_review` e `failed`;
 - rollup do estado de páginas para documentos;
 - busca usando correção antes da fonte original;
