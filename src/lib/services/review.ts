@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { PageWarning } from '$lib/domain/page';
 import type { DocumentKind, ProcessingStatus } from '$lib/types/database';
+import { isIsoTimestamp } from '$lib/validation/iso-timestamp';
 import { getSupabaseClient } from './supabase';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -28,7 +29,7 @@ const reviewRowSchema = z
 		]),
 		excerpt: z.string().max(2_000),
 		warnings: z.array(warningSchema).max(100),
-		updated_at: z.string().refine((value) => !Number.isNaN(Date.parse(value)))
+		updated_at: z.string().refine(isIsoTimestamp)
 	})
 	.strict();
 const reviewRowsSchema = z.array(reviewRowSchema).max(100);
