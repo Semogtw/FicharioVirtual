@@ -129,11 +129,26 @@ export function createOcrStagingReport({ status, failureStage, stages, outcome, 
 	/** @param {unknown} value */
 	const cleanupStatus = (value) =>
 		value === 'success' || value === 'failure' || value === 'not_required' ? value : 'failure';
+	/** @param {unknown} value */
+	const sanitizedFailureStage = (value) =>
+		[
+			'configuration',
+			'authentication',
+			'authorization',
+			'consent',
+			'import',
+			'invocation',
+			'persistence',
+			'cleanup',
+			'confirmation'
+		].includes(typeof value === 'string' ? value : '')
+			? value
+			: null;
 
 	return {
 		schemaVersion: 1,
 		status: status === 'pass' || status === 'not_run' ? status : 'fail',
-		failureStage,
+		failureStage: sanitizedFailureStage(failureStage),
 		stages: {
 			authenticated: stages.authenticated === true,
 			authorized: stages.authorized === true,
