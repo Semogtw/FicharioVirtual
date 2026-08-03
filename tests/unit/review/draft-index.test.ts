@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { discardCorrectionDraft, listCorrectionDrafts } from '../../../src/lib/review/draft-index';
+import {
+	discardCorrectionDraft,
+	listCorrectionDrafts,
+	readCorrectionDraft,
+	writeCorrectionDraft
+} from '../../../src/lib/review/draft-index';
 import { correctionDraftKey, serializeCorrectionDraft } from '../../../src/lib/review/drafts';
 
 const first = '11111111-1111-4111-8111-111111111111';
@@ -67,6 +72,39 @@ describe('correction draft index', () => {
 		discardCorrectionDraft(first, storage);
 		expect(storage.getItem(correctionDraftKey(first))).toBeNull();
 		expect(storage.getItem('unrelated')).toBe('value');
+	});
+
+	it('reads and writes one page draft through the safe storage boundary', () => {
+		const storage = new MemoryStorage();
+		const draft = {
+			pageId: first,
+			text: 'Texto local',
+			updatedAt: '2026-08-02T03:00:00.000Z'
+		};
+
+		writeCorrectionDraft(draft, storage);
+		expect(readCorrectionDraft(first, storage)).toEqual(draft);
+	});
+
+	it('normalizes single-draft read and write failures', () => {
+		const writeFailure = new MemoryStorage();
+		writeFailure.setItem = () => {
+			throw new DOMException('quota internals', 'QuotaExceededError');
+		};
+		expect(() =>
+			writeCorrectionDraft(
+				{ pageId: first, text: 'Texto', updatedAt: '2026-08-02T03:00:00.000Z' },
+				writeFailure
+			)
+		).toThrow('Não foi possível acessar os rascunhos locais.');
+
+		const readFailure = new MemoryStorage();
+		readFailure.getItem = () => {
+			throw new DOMException('storage internals', 'SecurityError');
+		};
+		expect(() => readCorrectionDraft(first, readFailure)).toThrow(
+			'Não foi possível acessar os rascunhos locais.'
+		);
 	});
 
 	it('normalizes storage access failures without leaking browser details', () => {
