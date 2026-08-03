@@ -1,6 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, parseAppOrigin } from '../_shared/cors.ts';
-import { claimStateHttpStatus } from '../_shared/ocr-contract.ts';
+import { claimStateHttpStatus, parseOcrClaimState } from '../_shared/ocr-contract.ts';
 import { parseOcrAttemptCount, planOcrFailure } from '../_shared/ocr-failure.ts';
 import { requestGeminiOcr } from '../_shared/gemini-ocr-client.ts';
 
@@ -165,10 +165,13 @@ Deno.serve(async (request) => {
 	if (claimError || !claim || typeof claim !== 'object') {
 		return respond(503, { code: 'ocr_claim_failed' });
 	}
-	const claimState = (claim as { state?: unknown }).state;
+	const claimState = parseOcrClaimState((claim as { state?: unknown }).state);
+	if (claimState === null) {
+		return respond(503, { code: 'ocr_claim_failed' });
+	}
 	if (claimState !== 'claimed') {
 		return respond(claimStateHttpStatus(claimState), {
-			state: claimState ?? 'claim_rejected'
+			state: claimState
 		});
 	}
 	const attemptCount = parseOcrAttemptCount((claim as { attemptCount?: unknown }).attemptCount);
