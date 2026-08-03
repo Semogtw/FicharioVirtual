@@ -5,6 +5,7 @@ import {
 	type PdfUploadDependencies
 } from '../../../src/lib/pdf/upload';
 import type { PdfInspection } from '../../../src/lib/pdf/types';
+import { OcrProcessingError } from '../../../src/lib/services/ocr';
 
 const userId = '11111111-1111-4111-8111-111111111111';
 
@@ -153,6 +154,38 @@ describe('uploadPdfWithGateway', () => {
 		expect(result.ocrCompleted).toBe(0);
 		expect(result.ocrNeedsReview).toBe(1);
 		expect(result.ocrPending).toBe(0);
+	});
+
+	it('separates permanent OCR failures from retryable pending work', async () => {
+		const permanentFixture = gatewayFixture();
+		const permanentDeps = dependencies();
+		permanentDeps.values.processPageOcr = async () => {
+			throw new OcrProcessingError('ocr_not_retryable', false);
+		};
+
+		const permanent = await uploadPdfWithGateway(
+			pdf(),
+			{ consentGranted: true },
+			permanentFixture.gateway,
+			permanentDeps.values
+		);
+		expect(permanent.ocrPending).toBe(0);
+		expect(permanent.ocrFailed).toBe(1);
+
+		const retryableFixture = gatewayFixture();
+		const retryableDeps = dependencies();
+		retryableDeps.values.processPageOcr = async () => {
+			throw new OcrProcessingError('ocr_transport_failed', true);
+		};
+
+		const retryable = await uploadPdfWithGateway(
+			pdf(),
+			{ consentGranted: true },
+			retryableFixture.gateway,
+			retryableDeps.values
+		);
+		expect(retryable.ocrPending).toBe(1);
+		expect(retryable.ocrFailed).toBe(0);
 	});
 
 	it('does not require OCR consent for a text-only PDF', async () => {
