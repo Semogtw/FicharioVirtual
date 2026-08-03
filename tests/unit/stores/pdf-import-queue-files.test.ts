@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const upload = vi.hoisted(() => ({
-	uploadPdf: vi.fn(async (_file: File) => ({
+	uploadPdf: vi.fn(async () => ({
 		documentId: crypto.randomUUID(),
 		pageCount: 1,
 		ocrPageCount: 0,
