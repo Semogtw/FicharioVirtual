@@ -6,11 +6,11 @@ Os percentuais abaixo são uma estimativa de engenharia, não uma métrica autom
 
 ## Estimativa atual
 
-| Dimensão                           | Progresso estimado | Interpretação                                                                                                                                  |
-| ---------------------------------- | -----------------: | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dimensão                           | Progresso estimado | Interpretação                                                                                                                                    |
+| ---------------------------------- | -----------------: | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | MVP implementado em código         |            **98%** | As funções centrais e os gates remotos de host, RLS e Storage estão implementados; o restante codificável se concentra em OCR remoto e operação. |
-| Prontidão operacional para release |            **85%** | CI local, banco, navegador, Edge Functions, PWA e recuperação estão validados; faltam evidências no ambiente remoto e em dispositivos físicos. |
-| Progresso total ponderado do MVP   |            **94%** | Estimativa combinada, atribuindo maior peso à implementação e mantendo peso relevante para segurança e operação reais.                         |
+| Prontidão operacional para release |            **85%** | CI local, banco, navegador, Edge Functions, PWA e recuperação estão validados; faltam evidências no ambiente remoto e em dispositivos físicos.   |
+| Progresso total ponderado do MVP   |            **94%** | Estimativa combinada, atribuindo maior peso à implementação e mantendo peso relevante para segurança e operação reais.                           |
 
 A estimativa total usa aproximadamente 70% de peso para implementação e 30% para prontidão operacional. Ela deve cair se o staging revelar um defeito arquitetural e subir somente quando novas evidências forem executadas, não apenas documentadas.
 
