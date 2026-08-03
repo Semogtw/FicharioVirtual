@@ -62,7 +62,10 @@
 	}
 
 	function canOpen(item: PdfQueueItem) {
-		return ['complete', 'needs_review', 'waiting'].includes(item.status) && item.result !== null;
+		return (
+			['complete', 'needs_review', 'waiting', 'failed'].includes(item.status) &&
+			item.result !== null
+		);
 	}
 
 	onMount(() => {
@@ -163,6 +166,9 @@
 							{#if item.result}
 								<small>
 									{item.result.pageCount} páginas · {item.result.ocrPageCount} encaminhadas para OCR
+									{#if item.result.ocrFailed > 0}
+										· {item.result.ocrFailed} falharam
+									{/if}
 								</small>
 							{/if}
 							{#if item.error}<p>{item.error}</p>{/if}
