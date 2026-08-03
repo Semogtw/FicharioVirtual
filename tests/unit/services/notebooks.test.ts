@@ -52,6 +52,9 @@ describe('notebook response contract', () => {
 		expect(() => parseNotebookRecords([summary({ document_count: -1 })])).toThrow(
 			'Invalid notebook response'
 		);
+		expect(() =>
+			parseNotebookRecords([summary({ created_at: '2026-02-30T00:00:00.000Z' })])
+		).toThrow('Invalid notebook response');
 		expect(() => parseNotebookRecords([summary({ private_content: 'no' })])).toThrow(
 			'Invalid notebook response'
 		);
