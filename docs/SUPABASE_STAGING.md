@@ -1,6 +1,6 @@
 # Validação do Supabase em staging
 
-O workflow `Verify Supabase staging` verifica autenticação, allowlist e isolamento RLS em um projeto remoto sem usar service-role key e sem depender de dados reais.
+O workflow `Verify Supabase staging` verifica autenticação, allowlist, isolamento RLS e Storage privado em um projeto remoto sem usar service-role key e sem depender de dados reais.
 
 ## Preparar o projeto
 
@@ -9,7 +9,8 @@ O workflow `Verify Supabase staging` verifica autenticação, allowlist e isolam
 3. Crie duas contas Auth exclusivas para testes automatizados.
 4. Adicione somente a primeira conta em `public.app_users` com `is_active = true`.
 5. Confirme que a segunda conta autentica normalmente, mas não possui linha ativa na allowlist.
-6. Não copie documentos pessoais ou secrets de produção para o projeto.
+6. Confirme que o bucket privado `documents` foi criado pelas migrations.
+7. Não copie documentos pessoais ou secrets de produção para o projeto.
 
 As contas precisam ser diferentes e devem permanecer reservadas ao gate. Não reutilize a conta pessoal administradora.
 
@@ -65,16 +66,21 @@ O gate:
 - cria um caderno-sentinela temporário pertencente à conta permitida;
 - confirma que a conta proprietária encontra exatamente a sentinela;
 - confirma que a segunda conta recebe zero linhas ao consultar o mesmo UUID;
-- remove a sentinela em um bloco `finally`;
-- encerra as duas sessões.
+- envia um PNG sintético de 1 × 1 para `documents/<uuid>/__staging_probe_<uuid>/probe.png`;
+- exige que somente a conta proprietária liste e baixe o objeto;
+- compara os bytes baixados com o payload original, sem coerção para texto;
+- cria uma URL assinada de curta duração e confirma origem, caminho, token e bytes retornados;
+- exige que a segunda conta não consiga baixar nem assinar o objeto da proprietária;
+- remove objeto e caderno antes de encerrar as sessões;
+- preserva simultaneamente falhas da verificação e da limpeza, sem mascarar a causa original.
 
-A sentinela possui prefixo `__staging_probe_` e não contém conteúdo do usuário.
+As sentinelas possuem prefixo `__staging_probe_`, usam somente dados sintéticos e não contêm conteúdo do usuário. Tokens de URLs assinadas não são escritos nos logs.
 
 ## O que este gate não cobre
 
 A verificação não substitui:
 
-- teste de upload e URL assinada no Storage;
+- expiração observada da URL assinada após o tempo limite;
 - execução real das Edge Functions;
 - OCR com Gemini;
 - injeção de 429, 503, timeout ou payload inválido;
@@ -86,6 +92,10 @@ Esses gates permanecem etapas separadas da preparação de release.
 
 ## Recuperação
 
-Se o job for interrompido depois de criar a sentinela, procure na tabela `notebooks` da conta autorizada por nomes iniciados com `__staging_probe_` e remova somente esses registros.
+Se o job for interrompido depois de criar sentinelas:
 
-Nunca automatize essa limpeza com service-role key dentro do workflow. Uma sentinela residual é preferível a conceder privilégios administrativos ao gate.
+1. procure na tabela `notebooks` da conta autorizada por nomes iniciados com `__staging_probe_`;
+2. procure no bucket `documents`, dentro do prefixo do UUID dessa conta, por pastas `__staging_probe_`;
+3. remova somente os registros e objetos sintéticos correspondentes.
+
+Nunca automatize essa recuperação com service-role key dentro do workflow. Uma sentinela residual é preferível a conceder privilégios administrativos ao gate.
