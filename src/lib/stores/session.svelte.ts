@@ -16,6 +16,8 @@ export const sessionState = $state<SessionState>({
 	error: null
 });
 
+let operationVersion = 0;
+
 function message(error: unknown): string {
 	return error instanceof AuthServiceError
 		? error.message
@@ -28,47 +30,65 @@ function applySession(session: Session | null) {
 	sessionState.error = null;
 }
 
-export async function initializeSession(): Promise<Session | null> {
+function beginOperation() {
+	operationVersion += 1;
 	sessionState.loading = true;
+	return operationVersion;
+}
+
+function isCurrentOperation(version: number) {
+	return version === operationVersion;
+}
+
+function invalidateOperations() {
+	operationVersion += 1;
+}
+
+export async function initializeSession(): Promise<Session | null> {
+	const version = beginOperation();
 	try {
 		const session = await loadAuthorizedSession();
-		applySession(session);
+		if (isCurrentOperation(version)) applySession(session);
 		return session;
 	} catch (error) {
-		applySession(null);
-		sessionState.error = message(error);
+		if (isCurrentOperation(version)) {
+			applySession(null);
+			sessionState.error = message(error);
+		}
 		return null;
 	} finally {
-		sessionState.loading = false;
+		if (isCurrentOperation(version)) sessionState.loading = false;
 	}
 }
 
 export async function authenticate(email: string, password: string): Promise<Session> {
-	sessionState.loading = true;
-	sessionState.error = null;
+	const version = beginOperation();
+	if (isCurrentOperation(version)) sessionState.error = null;
 	try {
 		const session = await signIn(email, password);
-		applySession(session);
+		if (isCurrentOperation(version)) applySession(session);
 		return session;
 	} catch (error) {
-		applySession(null);
-		sessionState.error = message(error);
+		if (isCurrentOperation(version)) {
+			applySession(null);
+			sessionState.error = message(error);
+		}
 		throw error;
 	} finally {
-		sessionState.loading = false;
+		if (isCurrentOperation(version)) sessionState.loading = false;
 	}
 }
 
 export async function endSession(): Promise<void> {
-	sessionState.loading = true;
+	const version = beginOperation();
 	try {
 		await signOut();
-		applySession(null);
+		if (isCurrentOperation(version)) applySession(null);
 	} catch (error) {
-		sessionState.error = message(error);
+		if (isCurrentOperation(version)) sessionState.error = message(error);
 		throw error;
 	} finally {
-		sessionState.loading = false;
+		if (isCurrentOperation(version)) sessionState.loading = false;
 	}
 }
 
@@ -79,6 +99,7 @@ export function startSessionTracking(): () => void {
 	} = client.auth.onAuthStateChange((_event, session) => {
 		queueMicrotask(() => {
 			if (session === null) {
+				invalidateOperations();
 				applySession(null);
 				sessionState.loading = false;
 				return;
