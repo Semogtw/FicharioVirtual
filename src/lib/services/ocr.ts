@@ -46,22 +46,27 @@ function hasExactKeys(record: Record<string, unknown>, expected: readonly string
 
 const CLAIM_REJECTION_ERRORS = Object.freeze({
 	consent_required: Object.freeze({
+		status: 403,
 		code: 'ocr_consent_required',
 		message: 'É necessário confirmar o consentimento de leitura automática.'
 	}),
 	not_authorized: Object.freeze({
+		status: 403,
 		code: 'ocr_not_authorized',
 		message: 'Esta conta não está autorizada a usar a leitura automática.'
 	}),
 	not_found: Object.freeze({
+		status: 404,
 		code: 'ocr_page_not_found',
 		message: 'A página não foi encontrada para leitura automática.'
 	}),
 	invalid_configuration: Object.freeze({
+		status: 409,
 		code: 'ocr_not_configured',
 		message: 'A leitura automática ainda não foi configurada.'
 	}),
 	not_retryable: Object.freeze({
+		status: 409,
 		code: 'ocr_not_retryable',
 		message: 'Esta página não pode mais ser processada automaticamente.'
 	})
@@ -100,7 +105,7 @@ async function mappedError(error: { context?: unknown; message?: string }) {
 
 	if (hasExactKeys(body, ['state']) && typeof body.state === 'string') {
 		const rejection = CLAIM_REJECTION_ERRORS[body.state as keyof typeof CLAIM_REJECTION_ERRORS];
-		if (rejection) {
+		if (rejection?.status === status) {
 			return new OcrProcessingError(rejection.code, false, rejection.message);
 		}
 	}
