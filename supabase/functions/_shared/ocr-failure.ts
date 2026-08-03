@@ -30,12 +30,16 @@ export type OcrFailureOptions = {
 	jitterMs?: number;
 };
 
+export function parseOcrAttemptCount(value: unknown): number | null {
+	return typeof value === 'number' && Number.isInteger(value) && value >= 1 ? value : null;
+}
+
 function randomJitterMs(): number {
 	return crypto.getRandomValues(new Uint16Array(1))[0] % 1000;
 }
 
 function validateOptions(options: OcrFailureOptions): number {
-	if (!Number.isInteger(options.attemptCount) || options.attemptCount < 1) {
+	if (parseOcrAttemptCount(options.attemptCount) === null) {
 		throw new TypeError('OCR attempt count must be a positive integer');
 	}
 	if (!(options.failedAt instanceof Date) || Number.isNaN(options.failedAt.getTime())) {
