@@ -10,6 +10,8 @@ import {
 	resolveStagingFailure,
 	assertSignedStorageUrl,
 	assertStorageListIsolation,
+	assertSuccessfulSignOut,
+	runStagingCleanup,
 	assertUnauthorizedAccount
 } from './supabase-staging-contract.mjs';
 
@@ -207,6 +209,15 @@ async function deleteStorageProbe(client, objectPath) {
 	if (result.error) throw new Error(`Storage probe cleanup failed: ${result.error.message}`);
 }
 
+/**
+ * @param {ReturnType<typeof createStagingClient>} client
+ * @param {string} label
+ */
+async function signOutClient(client, label) {
+	const result = await client.auth.signOut();
+	assertSuccessfulSignOut({ label, error: result.error });
+}
+
 async function main() {
 	const url = requireEnv('STAGING_SUPABASE_URL');
 	const publishableKey = requireEnv('STAGING_SUPABASE_PUBLISHABLE_KEY');
@@ -321,11 +332,18 @@ async function main() {
 		operationError = error;
 	}
 
-	const cleanup = [];
-	if (storageObjectPath) cleanup.push(deleteStorageProbe(authorizedClient, storageObjectPath));
-	if (probeId) cleanup.push(deleteProbeNotebook(authorizedClient, probeId));
-	cleanup.push(authorizedClient.auth.signOut(), unauthorizedClient.auth.signOut());
-	const cleanupResults = await Promise.allSettled(cleanup);
+	const dataCleanup = [];
+	if (storageObjectPath) {
+		dataCleanup.push(() => deleteStorageProbe(authorizedClient, storageObjectPath));
+	}
+	if (probeId) dataCleanup.push(() => deleteProbeNotebook(authorizedClient, probeId));
+	const cleanupResults = await runStagingCleanup({
+		dataCleanup,
+		sessionCleanup: [
+			() => signOutClient(authorizedClient, 'authorized account'),
+			() => signOutClient(unauthorizedClient, 'second account')
+		]
+	});
 	const stagingFailure = resolveStagingFailure({ operationError, cleanupResults });
 	if (stagingFailure) throw stagingFailure;
 }
