@@ -1,10 +1,55 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { z } from 'zod';
 import { mapPageRecord, type PageDetail, type PageRecord } from '$lib/domain/page';
 import type { Database, DocumentKind, DocumentStatus, ProcessingStatus } from '$lib/types/database';
 import { getSupabaseClient } from './supabase';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_CORRECTION_LENGTH = 1_000_000;
+const timestamp = z.string().refine((value) => !Number.isNaN(Date.parse(value)));
+const warningSchema = z
+	.object({
+		code: z.string().regex(/^[a-z][a-z0-9_]{1,63}$/),
+		message: z.string().max(300).refine((value) => value.trim().length > 0)
+	})
+	.strict();
+const pageRecordSchema = z
+	.object({
+		id: z.string().regex(UUID),
+		page_number: z.number().int().min(1).max(10_000),
+		native_text: z.string().max(MAX_CORRECTION_LENGTH).nullable(),
+		ocr_raw_text: z.string().max(MAX_CORRECTION_LENGTH).nullable(),
+		corrected_text: z.string().max(MAX_CORRECTION_LENGTH).nullable(),
+		extraction_source: z.enum(['native_pdf', 'ocr', 'manual']).nullable(),
+		warnings: z.array(warningSchema).max(100),
+		status: z.enum([
+			'pending',
+			'processing',
+			'ready',
+			'retryable',
+			'blocked_quota',
+			'needs_review',
+			'failed'
+		]),
+		was_manually_reviewed: z.boolean(),
+		updated_at: timestamp
+	})
+	.strict();
+const pageRecordsSchema = z.array(pageRecordSchema).max(10_000);
+const documentRecordSchema = z
+	.object({
+		id: z.string().regex(UUID),
+		title: z.string().trim().min(1).max(240),
+		kind: z.enum(['image', 'pdf']),
+		status: z.enum(['processing', 'partially_ready', 'ready', 'needs_review', 'failed']),
+		page_count: z.number().int().min(0).max(10_000),
+		notebook_id: z.string().regex(UUID).nullable(),
+		original_filename: z.string().min(1).max(512),
+		storage_path: z.string().min(1).max(1_024),
+		created_at: timestamp,
+		updated_at: timestamp
+	})
+	.strict();
 
 export type DocumentDetailRecord = {
 	id: string;
@@ -63,32 +108,64 @@ function validId(value: string, label: string) {
 	return value;
 }
 
+function signedUrl(value: string) {
+	const parsed = new URL(value);
+	if (!['http:', 'https:'].includes(parsed.protocol)) throw new TypeError('Invalid signed URL');
+	return value;
+}
+
+function preserveNotFound(error: unknown): never {
+	if (error instanceof DocumentDetailError && error.code === 'not_found') throw error;
+	throw new DocumentDetailError('unavailable');
+}
+
 export async function loadDocumentDetailWithGateway(
 	documentId: string,
 	gateway: DocumentDetailGateway
 ): Promise<DocumentDetail> {
-	validId(documentId, 'document');
-	const document = await gateway.loadDocument(documentId);
-	if (document === null) throw new DocumentDetailError('not_found');
-	const [pages, originalUrl] = await Promise.all([
-		gateway.listPages(documentId),
-		gateway.createSignedUrl(document.storage_path)
-	]);
-	return Object.freeze({
-		id: document.id,
-		title: document.title,
-		kind: document.kind,
-		status: document.status,
-		pageCount: document.page_count,
-		notebookId: document.notebook_id,
-		originalFilename: document.original_filename,
-		originalUrl,
-		pages: Object.freeze(
-			[...pages].map(mapPageRecord).sort((left, right) => left.pageNumber - right.pageNumber)
-		),
-		createdAt: document.created_at,
-		updatedAt: document.updated_at
-	});
+	const validatedDocumentId = validId(documentId, 'document');
+	try {
+		const rawDocument = await gateway.loadDocument(validatedDocumentId);
+		if (rawDocument === null) throw new DocumentDetailError('not_found');
+		const document = documentRecordSchema.parse(rawDocument);
+		if (document.id !== validatedDocumentId) throw new DocumentDetailError('unavailable');
+		const [rawPages, originalUrl] = await Promise.all([
+			gateway.listPages(validatedDocumentId),
+			gateway.createSignedUrl(document.storage_path)
+		]);
+		const pages = pageRecordsSchema.parse(rawPages);
+		if (pages.length !== document.page_count) throw new DocumentDetailError('unavailable');
+		const pageIds = new Set<string>();
+		const pageNumbers = new Set<number>();
+		for (const page of pages) {
+			if (
+				page.page_number > document.page_count ||
+				pageIds.has(page.id) ||
+				pageNumbers.has(page.page_number)
+			) {
+				throw new DocumentDetailError('unavailable');
+			}
+			pageIds.add(page.id);
+			pageNumbers.add(page.page_number);
+		}
+		return Object.freeze({
+			id: document.id,
+			title: document.title,
+			kind: document.kind,
+			status: document.status,
+			pageCount: document.page_count,
+			notebookId: document.notebook_id,
+			originalFilename: document.original_filename,
+			originalUrl: signedUrl(originalUrl),
+			pages: Object.freeze(
+				pages.map((page) => mapPageRecord(page)).sort((left, right) => left.pageNumber - right.pageNumber)
+			),
+			createdAt: document.created_at,
+			updatedAt: document.updated_at
+		});
+	} catch (error) {
+		preserveNotFound(error);
+	}
 }
 
 export async function savePageCorrectionWithGateway(
@@ -96,15 +173,29 @@ export async function savePageCorrectionWithGateway(
 	text: string,
 	gateway: DocumentDetailGateway
 ): Promise<PageDetail> {
-	validId(pageId, 'page');
+	const validatedPageId = validId(pageId, 'page');
 	if (typeof text !== 'string' || text.length > MAX_CORRECTION_LENGTH) {
 		throw new DocumentDetailError('invalid_correction');
 	}
 	const correctedText = text.trim().length > 0 ? text : null;
 	const status: ProcessingStatus = correctedText === null ? 'needs_review' : 'ready';
-	const page = await gateway.saveCorrection(pageId, { correctedText, status });
-	if (page === null) throw new DocumentDetailError('not_found');
-	return mapPageRecord(page);
+	try {
+		const rawPage = await gateway.saveCorrection(validatedPageId, { correctedText, status });
+		if (rawPage === null) throw new DocumentDetailError('not_found');
+		const page = pageRecordSchema.parse(rawPage);
+		if (
+			page.id !== validatedPageId ||
+			page.corrected_text !== correctedText ||
+			page.extraction_source !== 'manual' ||
+			page.status !== status ||
+			page.was_manually_reviewed !== true
+		) {
+			throw new DocumentDetailError('unavailable');
+		}
+		return mapPageRecord(page);
+	} catch (error) {
+		preserveNotFound(error);
+	}
 }
 
 class SupabaseDocumentGateway implements DocumentDetailGateway {
