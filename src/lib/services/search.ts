@@ -1,6 +1,27 @@
+import { z } from 'zod';
 import { getSupabaseClient } from './supabase';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const searchRowSchema = z
+	.object({
+		page_id: z.string().regex(UUID),
+		document_id: z.string().regex(UUID),
+		document_title: z.string().trim().min(1).max(240),
+		notebook_id: z.string().regex(UUID).nullable(),
+		notebook_name: z.string().trim().min(1).max(120).nullable(),
+		page_number: z.number().int().min(1).max(10_000),
+		excerpt: z.string().max(2_000),
+		rank: z.number().finite().nonnegative()
+	})
+	.strict()
+	.superRefine((row, context) => {
+		if ((row.notebook_id === null) !== (row.notebook_name === null)) {
+			context.addIssue({ code: 'custom', message: 'Invalid notebook search result' });
+		}
+	});
+const searchRowsSchema = z.array(searchRowSchema).max(100);
+
+type SearchRow = z.infer<typeof searchRowSchema>;
 
 export type SearchResult = {
 	pageId: string;
@@ -9,17 +30,6 @@ export type SearchResult = {
 	notebookId: string | null;
 	notebookName: string | null;
 	pageNumber: number;
-	excerpt: string;
-	rank: number;
-};
-
-type SearchRow = {
-	page_id: string;
-	document_id: string;
-	document_title: string;
-	notebook_id: string | null;
-	notebook_name: string | null;
-	page_number: number;
 	excerpt: string;
 	rank: number;
 };
@@ -97,15 +107,20 @@ export async function searchPages(
 	}
 	if (options.signal?.aborted) throw new DOMException('Search cancelled', 'AbortError');
 
-	const gateway = client ?? defaultClient();
-	let request = gateway.rpc('search_pages', {
-		search_query: normalized,
-		notebook_filter: notebookId,
-		result_limit: limit,
-		result_offset: offset
-	});
-	if (options.signal) request = request.abortSignal(options.signal);
-	const { data, error } = await request;
-	if (error || !Array.isArray(data)) throw new SearchServiceError();
-	return Object.freeze((data as SearchRow[]).map(mapRow));
+	try {
+		const gateway = client ?? defaultClient();
+		let request = gateway.rpc('search_pages', {
+			search_query: normalized,
+			notebook_filter: notebookId,
+			result_limit: limit,
+			result_offset: offset
+		});
+		if (options.signal) request = request.abortSignal(options.signal);
+		const { data, error } = await request;
+		if (error) throw new SearchServiceError();
+		return Object.freeze(searchRowsSchema.parse(data).map(mapRow));
+	} catch (error) {
+		if (error instanceof DOMException && error.name === 'AbortError') throw error;
+		throw new SearchServiceError();
+	}
 }
