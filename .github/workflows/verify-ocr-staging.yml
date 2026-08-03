@@ -21,12 +21,21 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment: staging
+    env:
+      OCR_STAGING_REPORT_PATH: /tmp/ocr-staging-report.json
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
           persist-credentials: false
+
+      - name: Initialize sanitized OCR report
+        run: |
+          cat > "$OCR_STAGING_REPORT_PATH" <<'JSON'
+          {"schemaVersion":1,"status":"not_run","failureStage":"confirmation","stages":{"authenticated":false,"authorized":false,"consentRecorded":false,"importCreated":false,"functionCompleted":false,"persistenceVerified":false},"outcome":{"documentStatus":null,"pageStatus":null,"jobStatus":null,"needsReview":null,"warningCount":null,"attemptCount":null,"tokens":{"fichario":null,"ocr":null,"numericProbe":null}},"cleanup":{"document":"not_required","session":"not_required"}}
+          JSON
+          chmod 600 "$OCR_STAGING_REPORT_PATH"
 
       - name: Require explicit OCR confirmation
         env:
@@ -55,3 +64,12 @@ jobs:
           STAGING_AUTHORIZED_EMAIL: ${{ secrets.STAGING_AUTHORIZED_EMAIL }}
           STAGING_AUTHORIZED_PASSWORD: ${{ secrets.STAGING_AUTHORIZED_PASSWORD }}
         run: pnpm test:staging:ocr
+
+      - name: Upload sanitized OCR report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ocr-staging-report-${{ github.run_id }}
+          path: /tmp/ocr-staging-report.json
+          if-no-files-found: error
+          retention-days: 7
