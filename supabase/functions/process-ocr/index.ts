@@ -172,6 +172,9 @@ Deno.serve(async (request) => {
 		});
 	}
 	const attemptCount = Number((claim as { attemptCount?: unknown }).attemptCount ?? 1);
+	if (!Number.isInteger(attemptCount) || attemptCount < 1) {
+		return respond(503, { code: 'ocr_claim_failed' });
+	}
 
 	const { data: document, error: documentError } = await supabase
 		.from('documents')
