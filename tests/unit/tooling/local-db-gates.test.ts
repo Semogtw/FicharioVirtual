@@ -48,6 +48,7 @@ describe('local database gate runner', () => {
 			'supabase/functions/_shared/cors.ts',
 			'supabase/functions/_shared/ocr-contract.ts',
 			'supabase/functions/_shared/gemini-ocr-client.ts',
+			'supabase/functions/_shared/ocr-failure.ts',
 			'supabase/functions/process-ocr/index.ts',
 			'supabase/functions/delete-document/index.ts'
 		]) {
