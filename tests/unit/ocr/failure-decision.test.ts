@@ -4,7 +4,23 @@ import {
 	GeminiResponseError,
 	GeminiTransportError
 } from '../../../supabase/functions/_shared/gemini-ocr-client';
-import { planOcrFailure } from '../../../supabase/functions/_shared/ocr-failure';
+import {
+	parseOcrAttemptCount,
+	planOcrFailure
+} from '../../../supabase/functions/_shared/ocr-failure';
+
+describe('parseOcrAttemptCount', () => {
+	it.each([1, 2, 99])('accepts positive integer %s', (value) => {
+		expect(parseOcrAttemptCount(value)).toBe(value);
+	});
+
+	it.each([undefined, null, '1', '', 0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+		'rejects non-contract value %s',
+		(value) => {
+			expect(parseOcrAttemptCount(value)).toBeNull();
+		}
+	);
+});
 
 const failedAt = new Date('2026-08-03T00:00:00.000Z');
 
