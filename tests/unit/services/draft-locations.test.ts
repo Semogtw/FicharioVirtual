@@ -88,6 +88,12 @@ describe('draft location response contract', () => {
 		await expect(
 			resolveDraftLocations([pageId], client([{ ...valid, private_text: 'no' }]))
 		).rejects.toMatchObject({ name: 'DraftLocationError' });
+		await expect(
+			resolveDraftLocations(
+				[pageId],
+				client([{ ...valid, page_updated_at: '2026-02-30T00:00:00.000Z' }])
+			)
+		).rejects.toMatchObject({ name: 'DraftLocationError' });
 	});
 
 	it('normalizes transport failures without leaking details', async () => {
