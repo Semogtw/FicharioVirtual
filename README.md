@@ -19,7 +19,7 @@ O MVP está implementado na branch `main`, sem deployment ou release público. O
 - PWA com cache limitado ao shell e ativos públicos;
 - testes unitários, E2E, pgTAP, gates de segurança e verificações locais de concorrência/idempotência OCR.
 
-O último checkpoint local completo está documentado em [`docs/reports/2026-08-02-local-validation-checkpoint.md`](docs/reports/2026-08-02-local-validation-checkpoint.md). Commits posteriores adicionaram organização em lote e novos gates OCR; execute `pnpm verify:full` no commit exato antes de declarar uma nova evidência verde.
+O estado canônico, o último SHA integralmente validado e as evidências de CI ficam em [`docs/CURRENT_STATUS.md`](docs/CURRENT_STATUS.md). Atribua `PASS` somente ao commit exato em que os gates foram executados.
 
 ## Princípios
 
@@ -64,6 +64,9 @@ Comandos segmentados:
 pnpm test:source:offline
 pnpm test:functions:check
 pnpm test:db:local
+pnpm test:deployment -- https://host.example
+pnpm test:staging:supabase
+pnpm test:staging:ocr
 ```
 
 `test:db:local` inicia/reutiliza a stack Supabase, recria o banco, executa pgTAP e roda os testes reais de concorrência, idempotência e virada UTC do OCR.
@@ -74,6 +77,9 @@ pnpm test:db:local
 - [Especificação do produto e arquitetura](docs/PROJECT_SPEC.md)
 - [Plano detalhado de implementação](docs/IMPLEMENTATION_PLAN.md)
 - [Estratégia de testes e evidência](docs/TESTING.md)
+- [Prontidão e percentual de progresso](docs/READINESS.md)
+- [Validação Supabase remota](docs/SUPABASE_STAGING.md)
+- [Validação de OCR real em staging](docs/OCR_STAGING.md)
 - [Deployment e rollback](docs/DEPLOYMENT.md)
 - [Operação sem custos e limites](docs/FREE_TIER_OPERATIONS.md)
 - [Privacidade](docs/PRIVACY.md)
@@ -83,8 +89,8 @@ pnpm test:db:local
 
 Ainda é necessário validar em staging e dispositivo real:
 
-- Auth, RLS, Storage e URLs assinadas em projeto Supabase remoto;
-- chamadas reais ao modelo configurado, incluindo 429/503/resposta inválida;
+- executar os gates preparados de Auth, RLS, Storage e expiração de URLs assinadas no projeto Supabase remoto;
+- executar o smoke OCR sintético e validar 429/503/resposta inválida no ambiente configurado;
 - PDFs textuais, digitalizados e mistos em tablet/celular;
 - instalação/atualização do PWA e headers no host final;
 - limites gratuitos e ausência de billing habilitado.
