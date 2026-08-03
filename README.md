@@ -80,6 +80,7 @@ pnpm test:staging:ocr
 - [Prontidão e percentual de progresso](docs/READINESS.md)
 - [Validação Supabase remota](docs/SUPABASE_STAGING.md)
 - [Validação de OCR real em staging](docs/OCR_STAGING.md)
+- [Matriz segura de falhas OCR](docs/OCR_FAILURE_MATRIX.md)
 - [Deployment e rollback](docs/DEPLOYMENT.md)
 - [Operação sem custos e limites](docs/FREE_TIER_OPERATIONS.md)
 - [Privacidade](docs/PRIVACY.md)
