@@ -15,7 +15,7 @@ vi.mock('../../../src/lib/import/hash', () => ({
 	calculateSha256: modules.calculateSha256
 }));
 
-import { ImageUploadError, uploadPreparedImage } from '../../../src/lib/import/upload';
+import { uploadPreparedImage } from '../../../src/lib/import/upload';
 import type { PreparedImage } from '../../../src/lib/import/image-types';
 
 const userId = '11111111-1111-4111-8111-111111111111';
@@ -50,8 +50,12 @@ function clientFixture() {
 	const eq = vi.fn(() => ({ maybeSingle }));
 	const select = vi.fn(() => ({ eq }));
 	const from = vi.fn(() => ({ select }));
-	const upload = vi.fn(async (_path: string, _blob: Blob, _options: unknown) => ({ error: null }));
-	const remove = vi.fn(async (_paths: string[]) => ({ error: null }));
+	const upload = vi.fn<(path: string, blob: Blob, options: unknown) => Promise<{ error: null }>>(
+		async () => ({ error: null })
+	);
+	const remove = vi.fn<(paths: string[]) => Promise<{ error: null }>>(async () => ({
+		error: null
+	}));
 	const storageFrom = vi.fn(() => ({ upload, remove }));
 	const rpc = vi.fn(async (_name: string, args: Record<string, unknown>) => ({
 		data: [
