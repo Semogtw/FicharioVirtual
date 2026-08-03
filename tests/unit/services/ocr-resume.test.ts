@@ -59,6 +59,24 @@ describe('resumeDocumentOcrWithGateway', () => {
 		expect(result).toEqual({ completed: 4, needsReview: 0, pending: 0, failed: 0 });
 	});
 
+	it('preserves review state for pages completed by another worker', async () => {
+		const pages = [
+			{ id: '00000000-0000-4000-8000-000000000001', pageNumber: 1 },
+			{ id: '00000000-0000-4000-8000-000000000002', pageNumber: 2 }
+		];
+
+		const result = await resumeDocumentOcrWithGateway(
+			documentId,
+			gateway(pages),
+			async (pageId) => ({
+				state: 'already_complete',
+				needsReview: pageId.endsWith('1')
+			})
+		);
+
+		expect(result).toEqual({ completed: 1, needsReview: 1, pending: 0, failed: 0 });
+	});
+
 	it('keeps retryable and busy results pending without treating them as complete', async () => {
 		const pages = [
 			{ id: '00000000-0000-4000-8000-000000000001', pageNumber: 1 },
