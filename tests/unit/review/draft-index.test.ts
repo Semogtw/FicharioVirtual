@@ -68,4 +68,24 @@ describe('correction draft index', () => {
 		expect(storage.getItem(correctionDraftKey(first))).toBeNull();
 		expect(storage.getItem('unrelated')).toBe('value');
 	});
+
+	it('normalizes storage access failures without leaking browser details', () => {
+		const readingFailure = new MemoryStorage();
+		Object.defineProperty(readingFailure, 'length', {
+			get() {
+				throw new DOMException('storage blocked by policy', 'SecurityError');
+			}
+		});
+		expect(() => listCorrectionDrafts(readingFailure)).toThrow(
+			'Não foi possível acessar os rascunhos locais.'
+		);
+
+		const removalFailure = new MemoryStorage();
+		removalFailure.removeItem = () => {
+			throw new DOMException('storage removal denied', 'SecurityError');
+		};
+		expect(() => discardCorrectionDraft(first, removalFailure)).toThrow(
+			'Não foi possível acessar os rascunhos locais.'
+		);
+	});
 });
