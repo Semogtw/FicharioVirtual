@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
 	loadAuthorizedSession,
 	signIn,
@@ -94,6 +94,24 @@ describe('auth service failure boundary', () => {
 		await expect(
 			loadAuthorizedSession(client({}, { is_active: true, role: 'owner' }))
 		).rejects.toEqual(unavailable());
+	});
+
+	it('closes authenticated SDK sessions when allowlist validation fails', async () => {
+		const malformedSignOut = vi.fn(async () => ({ error: null }));
+		await expect(
+			loadAuthorizedSession(client({ signOut: malformedSignOut }, { is_active: 'yes' }))
+		).rejects.toEqual(unavailable());
+		expect(malformedSignOut).toHaveBeenCalledOnce();
+
+		const transportSignOut = vi.fn(async () => ({ error: null }));
+		const transport = client({ signOut: transportSignOut });
+		transport.from = () => {
+			throw new Error('allowlist connection reset');
+		};
+		await expect(signIn('owner@example.test', 'password', transport)).rejects.toEqual(
+			unavailable()
+		);
+		expect(transportSignOut).toHaveBeenCalledOnce();
 	});
 
 	it('normalizes allowlist and unauthorized-session sign-out transport failures', async () => {
