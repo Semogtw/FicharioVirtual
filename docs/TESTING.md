@@ -52,6 +52,7 @@ Os blocos também podem ser executados isoladamente:
 pnpm test:source:offline
 pnpm test:functions:check
 pnpm test:db:local
+pnpm test:ocr:faults:local
 ```
 
 ## Artifact de deployment e host publicado
@@ -93,6 +94,26 @@ pnpm test:e2e
 
 Nenhum desses gates comprova RLS, Storage ou Edge Functions implantadas.
 
+## Falhas OCR locais
+
+```bash
+pnpm test:ocr:faults:local
+```
+
+O gate sobe um servidor HTTP efêmero em `127.0.0.1`, envia ao cliente Gemini real do projeto um payload estruturado e prova sete cenários:
+
+1. 429 transitório;
+2. quota diária do provedor;
+3. 503;
+4. payload inválido antes da terceira tentativa;
+5. payload inválido na terceira tentativa;
+6. requisição HTTP realmente abortada antes da terceira tentativa;
+7. requisição HTTP realmente abortada na terceira tentativa.
+
+A prova inclui transporte, chave somente no header, bytes da imagem, exigência de JSON estruturado, classificação, resposta pública, retry, backoff e transição terminal. O servidor escuta apenas loopback e não usa rede externa.
+
+Esse gate não implanta uma função, não altera o banco e não prova que `fail_ocr_job` ou `block_ocr_job_quota` persistiram o resultado em staging. A Edge Function não aceita endpoint alternativo, secret de simulação, query, body ou header de fault injection; o gate de fonte rejeita superfícies como `GEMINI_API_URL`, `OCR_PROVIDER_URL` e `X-FICHARIO-FAULT` no código implantado.
+
 ## Gates offline de fonte
 
 ```bash
@@ -106,7 +127,8 @@ Esse runner não depende do Supabase ou do navegador. Ele verifica, entre outros
 - cache do PWA limitado a ativos públicos;
 - migrations com `search_path`, grants e padrões de segurança esperados;
 - presença do lockfile raiz e cobertura de todas as dependências do manifesto;
-- uso do lockfile versionado pelo cache e pela instalação congelada do workflow.
+- uso do lockfile versionado pelo cache e pela instalação congelada do workflow;
+- ausência de endpoint alternativo ou controles de fault injection no OCR implantado.
 
 ## Edge Functions
 
@@ -116,8 +138,10 @@ pnpm test:functions:check
 
 Executa `deno check` explicitamente em:
 
+- `supabase/functions/_shared/cors.ts`;
 - `supabase/functions/_shared/ocr-contract.ts`;
 - `supabase/functions/_shared/gemini-ocr-client.ts`;
+- `supabase/functions/_shared/ocr-failure.ts`;
 - `supabase/functions/process-ocr/index.ts`;
 - `supabase/functions/delete-document/index.ts`.
 
@@ -155,7 +179,7 @@ Validar no banco local:
 
 ## Testes da Edge Function OCR
 
-Use um servidor HTTP falso para o endpoint Gemini e cubra:
+O gate loopback cobre classificação e backoff sem infraestrutura externa. Em staging, ainda é necessário observar a função implantada e a persistência real para:
 
 1. sucesso estruturado;
 2. corpo 200 inválido;
