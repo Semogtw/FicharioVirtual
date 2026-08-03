@@ -222,6 +222,7 @@ async function processOcrPages(
 	signal?: AbortSignal
 ) {
 	const queue = pages.filter((page) => page.needsOcr);
+	if (queue.length > 0) onProgress?.({ phase: 'reading', completed: 0, total: queue.length });
 	let index = 0;
 	let complete = 0;
 	let needsReview = 0;
