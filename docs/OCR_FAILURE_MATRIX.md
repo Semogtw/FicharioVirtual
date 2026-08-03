@@ -11,20 +11,20 @@ A fonte de verdade executável continua sendo:
 
 ## Estados persistidos
 
-| Condição | Código persistido | Página/job | Retry | Resposta da função |
-| --- | --- | --- | --- | --- |
-| limite diário local antes da rede | `daily_hard_limit` | `blocked_quota` | próximo dia UTC | `202 quota_exhausted` |
-| 429 identificado como quota diária do provedor | `gemini_daily_quota` | `blocked_quota` | próximo dia UTC | `202 quota_exhausted` |
-| 429 transitório | `gemini_rate_limited` | `retryable` | base 60 s, exponencial com jitter | `202 retry_later` |
-| 408, 425 ou 5xx | `gemini_service_unavailable` | `retryable` | base 30 s, exponencial com jitter | `202 retry_later` |
-| 401 ou 403 do provedor | `gemini_authentication_failed` | `failed` | não | HTTP do provedor |
-| 404 do modelo | `gemini_model_unavailable` | `failed` | não | `404` |
-| 400 ou 422 do provedor | `gemini_invalid_request` | `failed` | não | HTTP do provedor |
-| resposta JSON inválida | `ocr_response_invalid` | `retryable` até a terceira tentativa; depois `failed` | base 45 s enquanto retryable | `202 retry_later` ou `422` |
-| transporte, timeout ou abort | `ocr_request_failed` | `retryable` até a terceira tentativa; depois `failed` | base 45 s enquanto retryable | `202 retry_later` ou `503` |
-| arquivo/documento ausente | `ocr_source_missing` | `failed` | não | `409` |
-| objeto temporariamente indisponível no Storage | `ocr_source_unavailable` | `retryable` | base 30 s | `202 retry_later` |
-| imagem acima de 14 MiB inline | `ocr_source_too_large` | `failed` | não | `413` |
+| Condição                                       | Código persistido              | Página/job                                            | Retry                             | Resposta da função         |
+| ---------------------------------------------- | ------------------------------ | ----------------------------------------------------- | --------------------------------- | -------------------------- |
+| limite diário local antes da rede              | `daily_hard_limit`             | `blocked_quota`                                       | próximo dia UTC                   | `202 quota_exhausted`      |
+| 429 identificado como quota diária do provedor | `gemini_daily_quota`           | `blocked_quota`                                       | próximo dia UTC                   | `202 quota_exhausted`      |
+| 429 transitório                                | `gemini_rate_limited`          | `retryable`                                           | base 60 s, exponencial com jitter | `202 retry_later`          |
+| 408, 425 ou 5xx                                | `gemini_service_unavailable`   | `retryable`                                           | base 30 s, exponencial com jitter | `202 retry_later`          |
+| 401 ou 403 do provedor                         | `gemini_authentication_failed` | `failed`                                              | não                               | HTTP do provedor           |
+| 404 do modelo                                  | `gemini_model_unavailable`     | `failed`                                              | não                               | `404`                      |
+| 400 ou 422 do provedor                         | `gemini_invalid_request`       | `failed`                                              | não                               | HTTP do provedor           |
+| resposta JSON inválida                         | `ocr_response_invalid`         | `retryable` até a terceira tentativa; depois `failed` | base 45 s enquanto retryable      | `202 retry_later` ou `422` |
+| transporte, timeout ou abort                   | `ocr_request_failed`           | `retryable` até a terceira tentativa; depois `failed` | base 45 s enquanto retryable      | `202 retry_later` ou `503` |
+| arquivo/documento ausente                      | `ocr_source_missing`           | `failed`                                              | não                               | `409`                      |
+| objeto temporariamente indisponível no Storage | `ocr_source_unavailable`       | `retryable`                                           | base 30 s                         | `202 retry_later`          |
+| imagem acima de 14 MiB inline                  | `ocr_source_too_large`         | `failed`                                              | não                               | `413`                      |
 
 O atraso efetivo inclui backoff exponencial por `attempt_count`, jitter abaixo de um segundo e teto de uma hora.
 
