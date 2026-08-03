@@ -37,6 +37,14 @@ async function encode(canvas: HTMLCanvasElement, quality: number) {
 	return jpeg;
 }
 
+function safely(operation: (() => unknown) | undefined) {
+	try {
+		operation?.();
+	} catch {
+		// Cleanup is best-effort and must not replace the primary result.
+	}
+}
+
 export async function renderPdfPage(
 	file: File,
 	pageNumber: number,
@@ -58,28 +66,48 @@ export async function renderPdfPage(
 		import('pdfjs-dist'),
 		import('pdfjs-dist/build/pdf.worker.min.mjs?url')
 	]);
+	if (options.signal?.aborted) throw abortError();
 	GlobalWorkerOptions.workerSrc = workerModule.default;
 
 	const bytes = new Uint8Array(await file.arrayBuffer());
+	if (options.signal?.aborted) {
+		bytes.fill(0);
+		throw abortError();
+	}
 	const loadingTask = getDocument({ data: bytes, useSystemFonts: true });
 	let pdfDocument: PDFDocumentProxy | null = null;
 	let pdfPage: PDFPageProxy | null = null;
 	let canvas: HTMLCanvasElement | null = null;
 	let renderTask: RenderTask | null = null;
-	const cancel = () => renderTask?.cancel();
+	let destroyPromise: Promise<void> | null = null;
+	const destroyLoadingTask = () => {
+		destroyPromise ??= Promise.resolve(loadingTask.destroy()).catch(() => undefined);
+		return destroyPromise;
+	};
+	const cancel = () => {
+		safely(() => renderTask?.cancel());
+		void destroyLoadingTask();
+	};
 	options.signal?.addEventListener('abort', cancel, { once: true });
 
 	try {
 		try {
 			pdfDocument = await loadingTask.promise;
 		} catch (error) {
+			if (options.signal?.aborted) throw abortError();
 			const detail = error instanceof Error ? error.message : String(error);
 			throw new PdfRenderError(/password/i.test(detail) ? 'encrypted_pdf' : 'render_failed');
 		}
 		if (pageNumber > pdfDocument.numPages) throw new PdfRenderError('invalid_page');
 		if (options.signal?.aborted) throw abortError();
 
-		pdfPage = await pdfDocument.getPage(pageNumber);
+		try {
+			pdfPage = await pdfDocument.getPage(pageNumber);
+		} catch {
+			if (options.signal?.aborted) throw abortError();
+			throw new PdfRenderError('render_failed');
+		}
+		if (options.signal?.aborted) throw abortError();
 		const baseViewport = pdfPage.getViewport({ scale: 1 });
 		const scale = maxDimension / Math.max(baseViewport.width, baseViewport.height);
 		const viewport = pdfPage.getViewport({ scale });
@@ -102,13 +130,15 @@ export async function renderPdfPage(
 			throw new PdfRenderError('render_failed');
 		}
 		if (options.signal?.aborted) throw abortError();
-		return await encode(canvas, quality);
+		const encoded = await encode(canvas, quality);
+		if (options.signal?.aborted) throw abortError();
+		return encoded;
 	} finally {
 		options.signal?.removeEventListener('abort', cancel);
-		renderTask?.cancel();
-		pdfPage?.cleanup();
-		pdfDocument?.cleanup();
-		await loadingTask.destroy();
+		safely(() => renderTask?.cancel());
+		safely(() => pdfPage?.cleanup());
+		safely(() => pdfDocument?.cleanup());
+		await destroyLoadingTask();
 		if (canvas) {
 			canvas.width = 0;
 			canvas.height = 0;
