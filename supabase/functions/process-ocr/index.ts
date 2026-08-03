@@ -171,7 +171,7 @@ Deno.serve(async (request) => {
 			state: claimState ?? 'claim_rejected'
 		});
 	}
-	const attemptCount = Number((claim as { attemptCount?: unknown }).attemptCount ?? 1);
+	const attemptCount = Number((claim as { attemptCount?: unknown }).attemptCount);
 	if (!Number.isInteger(attemptCount) || attemptCount < 1) {
 		return respond(503, { code: 'ocr_claim_failed' });
 	}
