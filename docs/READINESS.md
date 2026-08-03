@@ -28,11 +28,14 @@ A estimativa total usa aproximadamente 70% de peso para implementação e 30% pa
 - PWA com cache restrito ao shell público;
 - 27 migrations aplicáveis em banco limpo;
 - 54 contratos pgTAP;
-- 183 testes unitários em 55 arquivos;
+- 232 testes unitários em 56 arquivos;
 - 3 cenários E2E no Chromium;
 - gate HTTP loopback com 7 cenários de falha OCR;
 - classificação e backoff locais para 429 diário/transitório, 503, payload inválido e timeout;
-- gate anti-backdoor contra endpoint alternativo ou fault control no OCR implantado;
+- parser fail-closed do resultado completo de `claim_ocr_job`;
+- validação exata de estados, chaves, UUIDs, timestamps e contadores de claim;
+- provas PostgreSQL das formas simples, concorrentes, agendadas, completas e não-retryable;
+- gate anti-backdoor contra endpoint alternativo, transporte injetado ou fault control no OCR implantado;
 - gates de fonte, tipos, lint, build, PWA, Deno e banco;
 - verificador automático do host HTTPS e dos headers;
 - verificador remoto com duas contas, sentinela RLS e Storage privado;
