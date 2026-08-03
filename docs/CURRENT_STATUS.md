@@ -115,7 +115,7 @@ Nenhum desses gates externos foi executado ainda porque o host e o projeto Supab
 
 O repositório `Semogtw/Offline-Toolchains` fabrica um workspace Linux x64 com Node, pnpm/store, Chromium, Deno/cache e Supabase CLI.
 
-A fabricação portátil atual usa o commit de toolchain `269606b9f669461a03b0aa64221e69d17e03c1af`, run `30784063129`, fixado no source `2723e8ecd13ad8f41d7e5f51966f0ca9c29f15d7`. O smoke instalou 521 pacotes somente pelo store local, passou lint, tipos, 163 unitários, build/PWA, cinco gates de fonte, três E2E, cinco módulos Edge com o registry bloqueado e `doctor: PASS`. O manifest e as duas partes do archive foram publicados com hashes portáteis.
+A fabricação portátil atual usa o commit de toolchain `1eb6bbfba6ea5ae291f48917a8509413da20845d`, run `30785368504`, fixado no source `ddfb122f5190ade9e44e534e2c192ab116ed2a06`. O smoke instalou 521 pacotes exclusivamente pelo store local, passou lint, tipos, 167 unitários em 52 arquivos, build/PWA, cinco gates de fonte, três E2E e cinco módulos Edge com o registry bloqueado; o `doctor` terminou em `PASS`. O manifest schema 2, os snapshots de package/lockfile e as duas partes do archive foram auditados: hashes dos snapshots conferem, checksums das partes estão publicados e o archive final possui SHA-256 `3fc4ff14b1cd62fbd124a7b92ecaeb12695fa8f37605ac82938ac82ca2eaae25`.
 
 Docker e as imagens Supabase continuam externos ao bundle.
 
