@@ -51,9 +51,7 @@ describe('processPageOcr', () => {
 	it('rejects an already-complete response without its review state', async () => {
 		await expect(
 			processPageOcr(pageId, client({ data: { state: 'already_complete' }, error: null }))
-		).rejects.toEqual(
-			expect.objectContaining({ code: 'ocr_response_invalid', retryable: true })
-		);
+		).rejects.toEqual(expect.objectContaining({ code: 'ocr_response_invalid', retryable: true }));
 	});
 
 	it('returns deferred retry and quota states without treating them as failures', async () => {
@@ -79,20 +77,13 @@ describe('processPageOcr', () => {
 					error: null
 				})
 			)
-		).rejects.toEqual(
-			expect.objectContaining({ code: 'ocr_response_invalid', retryable: true })
-		);
+		).rejects.toEqual(expect.objectContaining({ code: 'ocr_response_invalid', retryable: true }));
 	});
 
 	it('rejects deferred states with undeclared fields', async () => {
 		await expect(
-			processPageOcr(
-				pageId,
-				client({ data: { state: 'busy', jobId: pageId }, error: null })
-			)
-		).rejects.toEqual(
-			expect.objectContaining({ code: 'ocr_response_invalid', retryable: true })
-		);
+			processPageOcr(pageId, client({ data: { state: 'busy', jobId: pageId }, error: null }))
+		).rejects.toEqual(expect.objectContaining({ code: 'ocr_response_invalid', retryable: true }));
 	});
 
 	it('rejects warning counts beyond the provider response contract', async () => {
@@ -104,20 +95,13 @@ describe('processPageOcr', () => {
 					error: null
 				})
 			)
-		).rejects.toEqual(
-			expect.objectContaining({ code: 'ocr_response_invalid', retryable: true })
-		);
+		).rejects.toEqual(expect.objectContaining({ code: 'ocr_response_invalid', retryable: true }));
 	});
 
 	it('treats transport failures without an HTTP response as retryable', async () => {
 		await expect(
-			processPageOcr(
-				pageId,
-				client({ data: null, error: { message: 'Failed to fetch' } })
-			)
-		).rejects.toEqual(
-			expect.objectContaining({ code: 'ocr_transport_failed', retryable: true })
-		);
+			processPageOcr(pageId, client({ data: null, error: { message: 'Failed to fetch' } }))
+		).rejects.toEqual(expect.objectContaining({ code: 'ocr_transport_failed', retryable: true }));
 	});
 
 	it.each([
@@ -126,17 +110,14 @@ describe('processPageOcr', () => {
 		[404, 'not_found', 'ocr_page_not_found'],
 		[409, 'invalid_configuration', 'ocr_not_configured'],
 		[409, 'not_retryable', 'ocr_not_retryable']
-	] as const)(
-		'maps claim state %s/%s to the safe domain error %s',
-		async (status, state, code) => {
-			await expect(
-				processPageOcr(
-					pageId,
-					client({ data: null, error: { context: errorResponse(status, { state }) } })
-				)
-			).rejects.toEqual(expect.objectContaining({ code, retryable: false }));
-		}
-	);
+	] as const)('maps claim state %s/%s to the safe domain error %s', async (status, state, code) => {
+		await expect(
+			processPageOcr(
+				pageId,
+				client({ data: null, error: { context: errorResponse(status, { state }) } })
+			)
+		).rejects.toEqual(expect.objectContaining({ code, retryable: false }));
+	});
 
 	it('does not trust a claim state response with undeclared fields', async () => {
 		await expect(
