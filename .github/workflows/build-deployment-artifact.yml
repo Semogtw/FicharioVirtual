@@ -112,6 +112,9 @@ jobs:
             sha256sum -c SHA256SUMS
           )
 
+      - name: Verify packaged deployment artifact
+        run: pnpm test:deployment:artifact -- fichario-deploy
+
       - name: Upload deployable static artifact
         uses: actions/upload-artifact@v4
         with:
