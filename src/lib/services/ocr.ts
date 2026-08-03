@@ -34,6 +34,38 @@ function defaultClient(): OcrFunctionClient {
 	return getSupabaseClient() as unknown as OcrFunctionClient;
 }
 
+function hasExactKeys(record: Record<string, unknown>, expected: readonly string[]): boolean {
+	const actual = Object.keys(record).sort();
+	const sortedExpected = [...expected].sort();
+	return (
+		actual.length === sortedExpected.length &&
+		actual.every((key, index) => key === sortedExpected[index])
+	);
+}
+
+const CLAIM_REJECTION_ERRORS = Object.freeze({
+	consent_required: Object.freeze({
+		code: 'ocr_consent_required',
+		message: 'É necessário confirmar o consentimento de leitura automática.'
+	}),
+	not_authorized: Object.freeze({
+		code: 'ocr_not_authorized',
+		message: 'Esta conta não está autorizada a usar a leitura automática.'
+	}),
+	not_found: Object.freeze({
+		code: 'ocr_page_not_found',
+		message: 'A página não foi encontrada para leitura automática.'
+	}),
+	invalid_configuration: Object.freeze({
+		code: 'ocr_not_configured',
+		message: 'A leitura automática ainda não foi configurada.'
+	}),
+	not_retryable: Object.freeze({
+		code: 'ocr_not_retryable',
+		message: 'Esta página não pode mais ser processada automaticamente.'
+	})
+});
+
 async function mappedError(error: { context?: unknown; message?: string }) {
 	if (!(error.context instanceof Response)) {
 		return new OcrProcessingError(
@@ -53,6 +85,14 @@ async function mappedError(error: { context?: unknown; message?: string }) {
 	} catch {
 		// Keep only the safe generic classification below.
 	}
+
+	if (hasExactKeys(body, ['state']) && typeof body.state === 'string') {
+		const rejection = CLAIM_REJECTION_ERRORS[body.state as keyof typeof CLAIM_REJECTION_ERRORS];
+		if (rejection) {
+			return new OcrProcessingError(rejection.code, false, rejection.message);
+		}
+	}
+
 	const code = typeof body.code === 'string' ? body.code : `ocr_http_${status}`;
 	const retryable = body.retryable === true || status === 408 || status === 425 || status >= 500;
 	const messages: Record<string, string> = {
@@ -62,15 +102,6 @@ async function mappedError(error: { context?: unknown; message?: string }) {
 		ocr_not_configured: 'A leitura automática ainda não foi configurada.'
 	};
 	return new OcrProcessingError(code, retryable, messages[code]);
-}
-
-function hasExactKeys(record: Record<string, unknown>, expected: readonly string[]): boolean {
-	const actual = Object.keys(record).sort();
-	const sortedExpected = [...expected].sort();
-	return (
-		actual.length === sortedExpected.length &&
-		actual.every((key, index) => key === sortedExpected[index])
-	);
 }
 
 function parseResult(data: unknown): OcrRunResult {
