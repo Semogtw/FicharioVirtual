@@ -97,6 +97,38 @@ pnpm verify
 
 O output estático fica em `build/`.
 
+### Artifact implantável reproduzível
+
+O workflow manual `Build deployable Fichário artifact` fabrica o mesmo output usando a configuração pública armazenada em um environment protegido do GitHub.
+
+Escolha `staging` ou `production`. O environment selecionado precisa fornecer:
+
+```text
+PUBLIC_SUPABASE_URL
+PUBLIC_SUPABASE_PUBLISHABLE_KEY
+```
+
+A Action:
+
+- aceita somente uma origem Supabase HTTPS sem credentials, caminho, query ou fragmento;
+- aceita somente chave com prefixo `sb_publishable_`;
+- executa `pnpm verify` antes de empacotar;
+- confirma que URL e chave escolhidas foram incorporadas ao build;
+- rejeita os placeholders locais usados pelos E2E;
+- publica `fichario-static-<commit>-<environment>` por sete dias;
+- inclui `DEPLOYMENT-MANIFEST.txt` e `SHA256SUMS` portáteis;
+- não aplica migrations, não implanta Edge Functions e não publica em um host.
+
+Depois de baixar e extrair o artifact:
+
+```bash
+cd fichario-deploy
+sha256sum -c SHA256SUMS
+cat DEPLOYMENT-MANIFEST.txt
+```
+
+Sirva o conteúdo da pasta extraída como raiz do site. O manifest fixa commit, environment, runtime e hashes de `package.json`/`pnpm-lock.yaml`, mas não substitui o gate pós-deployment.
+
 ## 7. Hospedar
 
 O host precisa:
