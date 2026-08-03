@@ -55,9 +55,7 @@ describe('notebook response contract', () => {
 		expect(() => parseNotebookRecords([summary({ private_content: 'no' })])).toThrow(
 			'Invalid notebook response'
 		);
-		expect(() => parseNotebookRecords([summary(), summary()])).toThrow(
-			'Invalid notebook response'
-		);
+		expect(() => parseNotebookRecords([summary(), summary()])).toThrow('Invalid notebook response');
 	});
 });
 
