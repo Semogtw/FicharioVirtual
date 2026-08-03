@@ -119,13 +119,21 @@ A Action:
 - inclui `DEPLOYMENT-MANIFEST.txt` e `SHA256SUMS` portáteis;
 - não aplica migrations, não implanta Edge Functions e não publica em um host.
 
-Depois de baixar e extrair o artifact:
+Depois de baixar e extrair o artifact, valide primeiro os hashes portáteis:
 
 ```bash
 cd fichario-deploy
 sha256sum -c SHA256SUMS
 cat DEPLOYMENT-MANIFEST.txt
 ```
+
+A partir de um checkout da mesma versão do repositório, execute também o contrato pós-download:
+
+```bash
+pnpm test:deployment:artifact -- /caminho/para/fichario-deploy
+```
+
+Esse comando valida o schema e os campos do manifest, a cobertura exata dos checksums, os arquivos públicos obrigatórios, a ausência de links simbólicos ou paths inseguros e a separação entre `site/` e os metadados de release.
 
 Sirva somente `fichario-deploy/site/` como raiz do site. `DEPLOYMENT-MANIFEST.txt` e `SHA256SUMS` ficam um nível acima, fora da raiz pública. O manifest fixa commit, environment, runtime e hashes de `package.json`/`pnpm-lock.yaml`, mas não substitui o gate pós-deployment.
 
