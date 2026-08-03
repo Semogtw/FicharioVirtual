@@ -1,10 +1,31 @@
 import { describe, expect, it } from 'vitest';
-import { searchPages, type SearchClientLike } from '../../../src/lib/services/search';
+import {
+	searchPages,
+	SearchServiceError,
+	type SearchClientLike
+} from '../../../src/lib/services/search';
 
 type SearchResponse = { data: unknown; error: unknown };
 type SearchRequest = ReturnType<SearchClientLike['rpc']>;
 
-function client(rows: unknown[] = []) {
+const pageId = '11111111-1111-4111-8111-111111111111';
+const documentId = '22222222-2222-4222-8222-222222222222';
+
+function row(overrides: Record<string, unknown> = {}) {
+	return {
+		page_id: pageId,
+		document_id: documentId,
+		document_title: 'Fotossíntese',
+		notebook_id: null,
+		notebook_name: null,
+		page_number: 3,
+		excerpt: 'A fotossíntese ocorre no cloroplasto.',
+		rank: 1.4,
+		...overrides
+	};
+}
+
+function client(rows: unknown[] = [], rejection?: unknown) {
 	let args: Record<string, unknown> | null = null;
 	let signal: AbortSignal | null = null;
 	const value: SearchClientLike = {
@@ -19,10 +40,10 @@ function client(rows: unknown[] = []) {
 					onfulfilled?: ((value: SearchResponse) => TResult1 | PromiseLike<TResult1>) | null,
 					onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
 				): PromiseLike<TResult1 | TResult2> {
-					return Promise.resolve<SearchResponse>({ data: rows, error: null }).then(
-						onfulfilled,
-						onrejected
-					);
+					const pending = rejection
+						? Promise.reject(rejection)
+						: Promise.resolve<SearchResponse>({ data: rows, error: null });
+					return pending.then(onfulfilled, onrejected);
 				}
 			};
 			return request;
@@ -47,18 +68,7 @@ describe('searchPages', () => {
 	});
 
 	it('sends bounded pagination and maps database fields', async () => {
-		const fixture = client([
-			{
-				page_id: 'page-1',
-				document_id: 'document-1',
-				document_title: 'Fotossíntese',
-				notebook_id: null,
-				notebook_name: null,
-				page_number: 3,
-				excerpt: 'A fotossíntese ocorre no cloroplasto.',
-				rank: 1.4
-			}
-		]);
+		const fixture = client([row()]);
 		const controller = new AbortController();
 
 		await expect(
@@ -69,8 +79,8 @@ describe('searchPages', () => {
 			)
 		).resolves.toEqual([
 			{
-				pageId: 'page-1',
-				documentId: 'document-1',
+				pageId,
+				documentId,
 				documentTitle: 'Fotossíntese',
 				notebookId: null,
 				notebookName: null,
@@ -91,5 +101,32 @@ describe('searchPages', () => {
 	it('rejects query and pagination values outside the public contract', async () => {
 		await expect(searchPages('x'.repeat(201))).rejects.toThrow('Invalid search query');
 		await expect(searchPages('texto', { limit: 101 })).rejects.toThrow('Invalid search limit');
+	});
+
+	it('rejects malformed or extra RPC result fields', async () => {
+		const { page_id: _pageId, ...missingPageId } = row();
+		await expect(searchPages('texto', {}, client([missingPageId]).value)).rejects.toBeInstanceOf(
+			SearchServiceError
+		);
+		await expect(
+			searchPages('texto', {}, client([row({ page_id: 'bad-id' })]).value)
+		).rejects.toBeInstanceOf(SearchServiceError);
+		await expect(
+			searchPages('texto', {}, client([row({ private_content: 'no' })]).value)
+		).rejects.toBeInstanceOf(SearchServiceError);
+	});
+
+	it('normalizes transport failures but preserves cancellation', async () => {
+		await expect(
+			searchPages('texto', {}, client([], new Error('internal search host')).value)
+		).rejects.toEqual(
+			expect.objectContaining({
+				name: 'SearchServiceError',
+				message: 'Não foi possível pesquisar o fichário agora.'
+			})
+		);
+
+		const aborted = new DOMException('cancelled by caller', 'AbortError');
+		await expect(searchPages('texto', {}, client([], aborted).value)).rejects.toBe(aborted);
 	});
 });
