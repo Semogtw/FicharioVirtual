@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isIsoTimestamp } from '$lib/validation/iso-timestamp';
 import { getSupabaseClient } from './supabase';
 
 const counter = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -11,7 +12,7 @@ const day = z
 	.strict();
 const usageOverviewSchema = z
 	.object({
-		generatedAt: z.string().refine((value) => !Number.isNaN(Date.parse(value))),
+		generatedAt: z.string().refine(isIsoTimestamp),
 		today: day,
 		totals: z
 			.object({
