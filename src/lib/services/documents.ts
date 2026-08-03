@@ -58,6 +58,14 @@ export function parseDocumentRecords(
 	return Object.freeze(rows);
 }
 
+export function parseDocumentRecord(data: unknown, expectedId?: string): DocumentRecord {
+	const row = parseDocumentRecords([data], 1)[0];
+	if (!row || (expectedId !== undefined && row.id !== expectedId)) {
+		throw new TypeError('Invalid document response');
+	}
+	return row;
+}
+
 export class DocumentServiceError extends Error {
 	constructor() {
 		super('Não foi possível atualizar a biblioteca agora.');
@@ -89,9 +97,15 @@ function pageSize(value: number): number {
 }
 
 async function currentUserId(client: SupabaseClient<Database>): Promise<string> {
-	const { data, error } = await client.auth.getSession();
-	if (error || data.session === null) throw new DocumentServiceError();
-	return data.session.user.id;
+	try {
+		const { data, error } = await client.auth.getSession();
+		if (error || data.session === null || !UUID.test(data.session.user.id)) {
+			throw new DocumentServiceError();
+		}
+		return data.session.user.id;
+	} catch {
+		throw new DocumentServiceError();
+	}
 }
 
 export type DocumentPageLoader = (cursor: DocumentCursor | null) => Promise<DocumentPage>;
@@ -195,24 +209,28 @@ export async function createDocument(
 ): Promise<DocumentSummary> {
 	const resolvedClient = clientOrDefault(client);
 	const userId = await currentUserId(resolvedClient);
-	const { data, error } = await resolvedClient
-		.from('documents')
-		.insert({
-			user_id: userId,
-			notebook_id: input.notebookId ?? null,
-			title: input.title.trim(),
-			kind: input.kind,
-			original_filename: input.originalFilename,
-			storage_path: input.storagePath,
-			thumbnail_path: input.thumbnailPath ?? null,
-			sha256: input.sha256 ?? null,
-			source_created_at: input.sourceCreatedAt ?? null
-		})
-		.select('id,title,kind,status,page_count,thumbnail_path,notebook_id,created_at,updated_at')
-		.single();
+	try {
+		const { data, error } = await resolvedClient
+			.from('documents')
+			.insert({
+				user_id: userId,
+				notebook_id: input.notebookId ?? null,
+				title: input.title.trim(),
+				kind: input.kind,
+				original_filename: input.originalFilename,
+				storage_path: input.storagePath,
+				thumbnail_path: input.thumbnailPath ?? null,
+				sha256: input.sha256 ?? null,
+				source_created_at: input.sourceCreatedAt ?? null
+			})
+			.select('id,title,kind,status,page_count,thumbnail_path,notebook_id,created_at,updated_at')
+			.single();
 
-	if (error || data === null) throw new DocumentServiceError();
-	return mapDocumentRecord(data as unknown as DocumentRecord);
+		if (error || data === null) throw new DocumentServiceError();
+		return mapDocumentRecord(parseDocumentRecord(data));
+	} catch {
+		throw new DocumentServiceError();
+	}
 }
 
 export async function updateDocument(
@@ -227,23 +245,33 @@ export async function updateDocument(
 	if (input.thumbnailPath !== undefined) changes.thumbnail_path = input.thumbnailPath;
 	if (input.pageCount !== undefined) changes.page_count = input.pageCount;
 
-	const { data, error } = await clientOrDefault(client)
-		.from('documents')
-		.update(changes)
-		.eq('id', validId(documentId))
-		.select('id,title,kind,status,page_count,thumbnail_path,notebook_id,created_at,updated_at')
-		.single();
+	const validatedDocumentId = validId(documentId);
+	try {
+		const { data, error } = await clientOrDefault(client)
+			.from('documents')
+			.update(changes)
+			.eq('id', validatedDocumentId)
+			.select('id,title,kind,status,page_count,thumbnail_path,notebook_id,created_at,updated_at')
+			.single();
 
-	if (error || data === null) throw new DocumentServiceError();
-	return mapDocumentRecord(data as unknown as DocumentRecord);
+		if (error || data === null) throw new DocumentServiceError();
+		return mapDocumentRecord(parseDocumentRecord(data, validatedDocumentId));
+	} catch {
+		throw new DocumentServiceError();
+	}
 }
 
 export async function deleteDocument(
 	documentId: string,
 	client?: SupabaseClient<Database>
 ): Promise<void> {
-	const { error } = await clientOrDefault(client).functions.invoke('delete-document', {
-		body: { documentId: validId(documentId) }
-	});
-	if (error) throw new DocumentServiceError();
+	const validatedDocumentId = validId(documentId);
+	try {
+		const { error } = await clientOrDefault(client).functions.invoke('delete-document', {
+			body: { documentId: validatedDocumentId }
+		});
+		if (error) throw new DocumentServiceError();
+	} catch {
+		throw new DocumentServiceError();
+	}
 }
