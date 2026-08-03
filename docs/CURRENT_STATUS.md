@@ -18,7 +18,7 @@ Os percentuais e critérios estão detalhados em `docs/READINESS.md`. Eles não 
 
 ## Checkpoint funcional verde
 
-O commit funcional `2723e8ecd13ad8f41d7e5f51966f0ca9c29f15d7` recebeu `SUCCESS` no workflow `Validate current head`, run `30783735304`.
+O commit funcional `ddfb122f5190ade9e44e534e2c192ab116ed2a06` recebeu `SUCCESS` no workflow `Validate current head`, run `30784989610`.
 
 A execução comprovou:
 
@@ -26,7 +26,7 @@ A execução comprovou:
 pnpm install --frozen-lockfile
 Prettier + ESLint
 svelte-check: 0 erros, 0 warnings
-163 testes unitários em 52 arquivos
+167 testes unitários em 52 arquivos
 build estático + validação PWA
 5 gates offline de fonte
 3 testes E2E no Chromium
@@ -79,7 +79,7 @@ Commits posteriores que alteram somente Markdown não modificam esse checkpoint 
 
 ### Artifact estático e host HTTPS
 
-`Build deployable Fichário artifact` fabrica um pacote separado em `site/`, acompanhado de manifest e checksums fora da raiz pública. `pnpm test:deployment:artifact -- <diretório>` valida schema, commit, environment, arquivos obrigatórios, cobertura exata dos hashes, paths portáteis e ausência de links simbólicos antes do upload.
+`Build deployable Fichário artifact` fabrica um pacote schema 2 com `site/` separado da proveniência. O pacote inclui manifest, checksums e snapshots de `package.json`/`pnpm-lock.yaml` fora da raiz pública. `pnpm test:deployment:artifact -- <diretório>` valida commit, environment, identidade do projeto, lockfile pnpm v9, hashes declarados, arquivos obrigatórios, cobertura exata, paths portáteis e ausência de links simbólicos antes do upload.
 
 `pnpm test:deployment -- https://host.example` e `Verify deployed Fichário` verificam redirect, headers, CSP, HSTS, fallback SPA, manifesto, service worker e ausência de cache privado depois da publicação.
 
