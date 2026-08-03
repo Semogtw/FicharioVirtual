@@ -7,6 +7,9 @@ import { pathToFileURL } from 'node:url';
 
 const CHECKSUM_FILE = 'SHA256SUMS';
 const MANIFEST_FILE = 'DEPLOYMENT-MANIFEST.txt';
+const SOURCE_PACKAGE_FILE = 'source/package.json';
+const SOURCE_LOCK_FILE = 'source/pnpm-lock.yaml';
+const REQUIRED_SOURCE_FILES = Object.freeze([SOURCE_PACKAGE_FILE, SOURCE_LOCK_FILE]);
 const REQUIRED_SITE_FILES = Object.freeze([
 	'200.html',
 	'_headers',
@@ -72,7 +75,7 @@ async function listFiles(root) {
 
 /**
  * @param {string} source
- * @returns {{ schemaVersion: 1; sourceCommit: string; targetEnvironment: 'staging' | 'production' }}
+ * @returns {{ schemaVersion: 1; sourceCommit: string; targetEnvironment: 'staging' | 'production'; packageSha256: string; lockSha256: string }}
  */
 function parseManifest(source) {
 	/** @type {Map<string, string>} */
@@ -132,11 +135,18 @@ function parseManifest(source) {
 			throw contractFailure(`deployment manifest ${key} is invalid`);
 		}
 	}
+	const packageSha256 = values.get('package_sha256');
+	const lockSha256 = values.get('lock_sha256');
+	if (!packageSha256 || !lockSha256) {
+		throw contractFailure('deployment manifest source hashes are missing');
+	}
 
 	return {
 		schemaVersion: 1,
 		sourceCommit,
-		targetEnvironment
+		targetEnvironment,
+		packageSha256,
+		lockSha256
 	};
 }
 
@@ -200,6 +210,7 @@ export async function verifyDeploymentArtifact(inputPath) {
 	for (const required of [
 		MANIFEST_FILE,
 		CHECKSUM_FILE,
+		...REQUIRED_SOURCE_FILES,
 		...REQUIRED_SITE_FILES.map((file) => `site/${file}`)
 	]) {
 		if (!files.includes(required))
@@ -211,12 +222,22 @@ export async function verifyDeploymentArtifact(inputPath) {
 				`deployment metadata must remain outside the public site root: ${file}`
 			);
 		}
-		if (!file.startsWith('site/') && file !== MANIFEST_FILE && file !== CHECKSUM_FILE) {
+		const allowedOutsideSite =
+			file === MANIFEST_FILE || file === CHECKSUM_FILE || REQUIRED_SOURCE_FILES.includes(file);
+		if (!file.startsWith('site/') && !allowedOutsideSite) {
 			throw contractFailure(`unexpected file outside the public site root: ${file}`);
 		}
 	}
 
 	const manifest = parseManifest(await readFile(join(root, MANIFEST_FILE), 'utf8'));
+	const packageDigest = await sha256File(join(root, SOURCE_PACKAGE_FILE));
+	if (packageDigest !== manifest.packageSha256) {
+		throw contractFailure('source/package.json hash does not match deployment manifest');
+	}
+	const lockDigest = await sha256File(join(root, SOURCE_LOCK_FILE));
+	if (lockDigest !== manifest.lockSha256) {
+		throw contractFailure('source/pnpm-lock.yaml hash does not match deployment manifest');
+	}
 	const checksums = parseChecksums(await readFile(join(root, CHECKSUM_FILE), 'utf8'));
 	const expectedCoverage = files.filter((file) => file !== CHECKSUM_FILE).sort();
 	const checksumCoverage = [...checksums.keys()].sort();
@@ -239,7 +260,9 @@ export async function verifyDeploymentArtifact(inputPath) {
 	}
 
 	return {
-		...manifest,
+		schemaVersion: manifest.schemaVersion,
+		sourceCommit: manifest.sourceCommit,
+		targetEnvironment: manifest.targetEnvironment,
 		verifiedFiles: checksums.size
 	};
 }
