@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ExportManifest } from '../../../src/lib/export/manifest';
 import {
 	createPortableExport,
+	ExportServiceError,
 	serializePortableExport,
 	type ExportClientLike
 } from '../../../src/lib/services/export';
@@ -35,6 +36,21 @@ describe('portable export service', () => {
 				return { data: { schemaVersion: 2 }, error: null };
 			}
 		};
-		await expect(createPortableExport(client)).rejects.toThrow('Invalid export manifest');
+		await expect(createPortableExport(client)).rejects.toBeInstanceOf(ExportServiceError);
+	});
+
+	it('normalizes transport failures without leaking backend details', async () => {
+		const client: ExportClientLike = {
+			async rpc() {
+				throw new Error('socket reset by peer');
+			}
+		};
+
+		await expect(createPortableExport(client)).rejects.toEqual(
+			expect.objectContaining({
+				name: 'ExportServiceError',
+				message: 'Não foi possível gerar a exportação agora.'
+			})
+		);
 	});
 });
