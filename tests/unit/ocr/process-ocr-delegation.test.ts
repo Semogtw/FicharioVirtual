@@ -31,9 +31,15 @@ describe('process-ocr provider delegation', () => {
 		expect(source).toContain("return respond(503, { code: 'ocr_claim_failed' })");
 	});
 
-	it('cleans the temporary page image when a concurrent completion wins the claim race', () => {
+	it('preserves review state when the page was already complete before the claim', () => {
 		expect(source).toMatch(
-			/if \(claimResult\.state === 'already_complete'\) \{\s*await cleanupTemporaryImage\(page\.temporary_image_path\);\s*\}/
+			/return respond\(200, \{\s*state: 'already_complete',\s*needsReview: page\.status === 'needs_review'\s*\}\)/
+		);
+	});
+
+	it('reloads review state and cleans the temporary image after a claim race', () => {
+		expect(source).toMatch(
+			/if \(claimResult\.state === 'already_complete'\) \{[\s\S]*\.select\('status'\)[\s\S]*await cleanupTemporaryImage\(page\.temporary_image_path\);[\s\S]*needsReview: completedPage\.status === 'needs_review'[\s\S]*\}/
 		);
 	});
 
