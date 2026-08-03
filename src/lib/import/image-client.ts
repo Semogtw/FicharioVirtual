@@ -118,15 +118,10 @@ export function parseImageWorkerResponse(
 		}
 		return Object.freeze({ type: 'failure', id: expectedId, code });
 	}
-	if (value.type !== 'success' || !hasExactKeys(value, [
-		'type',
-		'id',
-		'image',
-		'thumbnail',
-		'width',
-		'height',
-		'format'
-	])) {
+	if (
+		value.type !== 'success' ||
+		!hasExactKeys(value, ['type', 'id', 'image', 'thumbnail', 'width', 'height', 'format'])
+	) {
 		invalidWorkerResponse();
 	}
 	const image = value.image;
