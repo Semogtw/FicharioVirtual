@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
 	uploadPdfWithGateway,
 	type PdfImportGateway,
@@ -188,31 +188,82 @@ describe('uploadPdfWithGateway', () => {
 		expect(retryable.ocrFailed).toBe(0);
 	});
 
-	it('does not require OCR consent for a text-only PDF', async () => {
+	it('stops starting new OCR pages after post-publication cancellation', async () => {
 		const fixture = gatewayFixture();
 		const deps = dependencies();
 		deps.values.inspectPdf = async () => ({
-			...mixedInspection(),
-			type: 'TextBased',
-			pagesNeedingOcr: [],
-			ocrReasonsByPage: []
+			type: 'Scanned',
+			pageCount: 3,
+			nativePages: [],
+			pagesNeedingOcr: [1, 2, 3],
+			ocrReasonsByPage: [],
+			markdown: null,
+			title: 'Digitalizado',
+			confidence: 0.9,
+			processingTimeMs: 10,
+			layout: { isComplex: false, pagesWithTables: [], pagesWithColumns: [] },
+			hasEncodingIssues: false
 		});
+		const releases: Array<() => void> = [];
+		let calls = 0;
+		deps.values.processPageOcr = async () => {
+			calls += 1;
+			await new Promise<void>((resolve) => releases.push(resolve));
+			return { state: 'complete', neeYФ™]љY]О€[ЩKШ\›љ[™РЫЭ[ќ€NВ‚B_NВ‚BXЫЫњЭЫЫќ›Ы\€H™]ИX›ЬќЫЫќ›Ы\Љ
+NВ‚‚BXЫЫњЭ[™[™ИH\ШY•Ъ]Ш]]Ш^J‚BB\Љ
+K‚BB^ИЫЫњЩ[ќЬ[ќY€ќYKЪYЫ[€ЫЫќ›Ы\‹њЪYЫ[K‚BBYљ^\™K™Ш]]Ш^K‚BBY\Лќ[Y\В‚BJNВ‚BX]ШZ]љKќШZ]›ЬЉ
 
-		await uploadPdfWithGateway(pdf(), { consentGranted: false }, fixture.gateway, deps.values);
+HO€^XЭ
+™[X\Щ\КKќТ]™S[™Э
+ЉJNВ‚BXЫЫќ›Ы\‹X›Ьќ
 
-		expect(deps.rendered).toEqual([]);
-		expect(deps.consentCalls).toBe(0);
-		expect(deps.processed).toEqual([]);
-	});
+NВ‚B\™[X\Щ\ЛњЬXЩJ
+K™›Ь‘XXЪ
 
-	it('removes every uploaded object when metadata publication fails', async () => {
-		const fixture = gatewayFixture({ failMetadata: true });
-		const deps = dependencies();
+™[X\ЩJHO€™[X\ЩJ
+JNВ‚BX]ШZ]›ЫZ\ЩKњ™\ЫЫ™J
+NВ‚BX]ШZ]›ЫZ\ЩKњ™\ЫЫ™J
+NВ‚B\™[X\Щ\ЛњЬXЩJ
+K™›Ь‘XXЪ
 
-		await expect(
-			uploadPdfWithGateway(pdf(), { consentGranted: true }, fixture.gateway, deps.values)
-		).rejects.toThrow('metadata failed');
-		expect(fixture.removed).toHaveLength(1);
-		expect(fixture.removed[0]).toEqual(fixture.uploads.map((item) => item.path));
-	});
-});
+™[X\ЩJHO€™[X\ЩJ
+JNВ‚‚BXЫЫњЭ™\Э[H]ШZ][™[™ОВ‚BY^XЭ
+Ш[КKќР™JЉNВ‚BY^XЭ
+™\Э[›ШЬђЫЫ\]Y
+KќР™JЉNВ‚BY^XЭ
+™\Э[›ШЬ”[™[™КKќР™JJNВ‚BY^XЭ
+™\Э[›ШЬ‘Z[Y
+KќР™J
+NВ‚_JNВ‚‚Z]
+	ЩЩ\И›Э™\]Z\™HРФ€ЫЫњЩ[ќ›Ь€H^[Ы›H‰Л\Ю[И
+
+HO€В‚BXЫЫњЭљ^\™HHШ]]Ш^Qљ^\™J
+NВ‚BXЫЫњЭ\ИH\[™[ЪY\К
+NВ‚BY\Лќ[Y\Лљ[њЬXЭ€H\Ю[И
+
+HO€
+В‚BBK‹‹›Z^Y[њЬXЭ[ЫЉ
+K‚BB]\N€	Х^\ЩY	Л‚BB\YЩ\У™YY[™УШЬЋ€ЧK‚BB[ШЬ”™X\ЫЫњРћTYЩN€ЧB‚B_JNВ‚‚BX]ШZ]\ШY•Ъ]Ш]]Ш^JЉ
+KИЫЫњЩ[ќЬ[ќY€[ЩHKљ^\™K™Ш]]Ш^K\Лќ[Y\КNВ‚‚BY^XЭ
+\Лњ™[™\™Y
+KќС\]X[
+ЧJNВ‚BY^XЭ
+\ЛЫЫњЩ[ќШ[КKќР™J
+NВ‚BY^XЭ
+\Лњ›ШЩ\ЬЩY
+KќС\]X[
+ЧJNВ‚_JNВ‚‚Z]
+	Ь™[[Э™\И]™\ћH\ШYYШљ™XЭЪ[€Y]Y]HX›XШ][Ы€Z[ЙЛ\Ю[И
+
+HO€В‚BXЫЫњЭљ^\™HHШ]]Ш^Qљ^\™JИZ[Y]Y]N€ќYHJNВ‚BXЫЫњЭ\ИH\[™[ЪY\К
+NВ‚‚BX]ШZ]^XЭ
+‚BB]\ШY•Ъ]Ш]]Ш^JЉ
+KИЫЫњЩ[ќЬ[ќY€ќYHKљ^\™K™Ш]]Ш^K\Лќ[Y\КB‚BJKњ™Z™XЭЛќХ›ЭК	ЫY]Y]HZ[Y	КNВ‚BY^XЭ
+љ^\™Kњ™[[Э™Y
+KќТ]™S[™Э
+JNВ‚BY^XЭ
+љ^\™Kњ™[[Э™YМJKќС\]X[
+љ^\™Kќ\ШYЛ›X\
+
+][JHO€][Kњ]
+JNВ‚_JNВџJNВ
