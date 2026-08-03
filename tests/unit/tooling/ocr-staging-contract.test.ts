@@ -4,6 +4,7 @@ import {
 	assertOcrInvocation,
 	assertOcrPersistence,
 	createOcrProbePng,
+	createOcrStagingReport,
 	normalizeOcrProbeText
 } from '../../../tools/checks/ocr-staging-contract.mjs';
 
@@ -18,6 +19,69 @@ describe('OCR staging contract', () => {
 		expect(first.byteLength).toBeGreaterThan(500);
 		expect(digest(first)).toBe(digest(repeated));
 		expect(digest(first)).not.toBe(digest(second));
+	});
+
+	it('creates a machine-readable report from allowlisted fields only', () => {
+		const report = createOcrStagingReport({
+			status: 'pass',
+			failureStage: null,
+			stages: {
+				authenticated: true,
+				authorized: true,
+				consentRecorded: true,
+				importCreated: true,
+				functionCompleted: true,
+				persistenceVerified: true
+			},
+			outcome: {
+				documentStatus: 'ready',
+				pageStatus: 'ready',
+				jobStatus: 'ready',
+				needsReview: false,
+				warningCount: 0,
+				attemptCount: 1,
+				tokens: { fichario: true, ocr: true, numericProbe: true }
+			},
+			cleanup: { document: 'success', session: 'success' }
+		});
+
+		expect(report).toEqual({
+			schemaVersion: 1,
+			status: 'pass',
+			failureStage: null,
+			stages: {
+				authenticated: true,
+				authorized: true,
+				consentRecorded: true,
+				importCreated: true,
+				functionCompleted: true,
+				persistenceVerified: true
+			},
+			outcome: {
+				documentStatus: 'ready',
+				pageStatus: 'ready',
+				jobStatus: 'ready',
+				needsReview: false,
+				warningCount: 0,
+				attemptCount: 1,
+				tokens: { fichario: true, ocr: true, numericProbe: true }
+			},
+			cleanup: { document: 'success', session: 'success' }
+		});
+		const serialized = JSON.stringify(report);
+		for (const forbidden of [
+			'email',
+			'userId',
+			'documentId',
+			'pageId',
+			'jobId',
+			'url',
+			'path',
+			'transcript',
+			'errorMessage'
+		]) {
+			expect(serialized).not.toContain(forbidden);
+		}
 	});
 
 	it('normalizes accents and punctuation before token checks', () => {
