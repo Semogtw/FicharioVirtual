@@ -9,6 +9,7 @@ const source = readFileSync(
 describe('process-ocr provider delegation', () => {
 	it('delegates the Gemini request and structured response parsing to the shared client', () => {
 		expect(source).toContain('requestGeminiOcr');
+		expect(source).toContain('parseOcrClaimState');
 		expect(source).toContain('planOcrFailure');
 		expect(source).toContain('parseOcrAttemptCount');
 	});
@@ -22,7 +23,8 @@ describe('process-ocr provider delegation', () => {
 		expect(source).not.toContain('fetchImpl');
 	});
 
-	it('rejects malformed attempt counts before provider execution', () => {
+	it('rejects unknown claim states and malformed attempt counts before provider execution', () => {
+		expect(source).toContain('const claimState = parseOcrClaimState');
 		expect(source).toContain('parseOcrAttemptCount');
 		expect(source).not.toContain('.attemptCount ?? 1');
 		expect(source).not.toContain('Number((claim as');
