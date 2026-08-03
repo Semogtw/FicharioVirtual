@@ -10,6 +10,7 @@ describe('process-ocr provider delegation', () => {
 	it('delegates the Gemini request and structured response parsing to the shared client', () => {
 		expect(source).toContain('requestGeminiOcr');
 		expect(source).toContain('planOcrFailure');
+		expect(source).toContain('parseOcrAttemptCount');
 	});
 
 	it('does not duplicate the provider endpoint, prompt schema or payload parser', () => {
@@ -18,11 +19,13 @@ describe('process-ocr provider delegation', () => {
 		expect(source).not.toContain('function base64');
 		expect(source).not.toContain('function responseText');
 		expect(source).not.toContain('parseOcrPayload');
+		expect(source).not.toContain('fetchImpl');
 	});
 
-	it('rejects missing or malformed attempt counts before provider execution', () => {
-		expect(source).toContain('if (!Number.isInteger(attemptCount) || attemptCount < 1)');
+	it('rejects malformed attempt counts before provider execution', () => {
+		expect(source).toContain('parseOcrAttemptCount');
 		expect(source).not.toContain('.attemptCount ?? 1');
+		expect(source).not.toContain('Number((claim as');
 		expect(source).toContain("return respond(503, { code: 'ocr_claim_failed' })");
 	});
 
