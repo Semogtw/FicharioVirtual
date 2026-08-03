@@ -40,7 +40,10 @@ const documentRecordSchema = z
 	})
 	.strict();
 
-export function parseDocumentRecords(data: unknown, maximumRows: number): readonly DocumentRecord[] {
+export function parseDocumentRecords(
+	data: unknown,
+	maximumRows: number
+): readonly DocumentRecord[] {
 	if (!Number.isInteger(maximumRows) || maximumRows < 0 || maximumRows > MAX_PAGE_SIZE + 1) {
 		throw new TypeError('Invalid document response');
 	}
