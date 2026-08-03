@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '$lib/types/database';
-import { processPageOcr, type OcrRunResult } from './ocr';
+import { OcrProcessingError, processPageOcr, type OcrRunResult } from './ocr';
 import { getSupabaseClient } from './supabase';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -48,8 +48,9 @@ export async function resumeDocumentOcrWithGateway(
 					else completed += 1;
 				} else if (result.state === 'already_complete') completed += 1;
 				else pending += 1;
-			} catch {
-				failed += 1;
+			} catch (error) {
+				if (error instanceof OcrProcessingError && error.retryable) pending += 1;
+				else failed += 1;
 			}
 		}
 	}
