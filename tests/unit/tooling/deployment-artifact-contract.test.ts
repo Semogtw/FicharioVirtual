@@ -1,7 +1,9 @@
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { verifyDeploymentArtifact } from '../../../tools/checks/check-deployment-artifact.mjs';
 
@@ -58,6 +60,17 @@ describe('deployable artifact verification', () => {
 			targetEnvironment: 'staging',
 			verifiedFiles: 6
 		});
+	});
+
+	it('accepts the package-manager argument separator in CLI usage', () => {
+		const fixture = createFixture();
+		const script = fileURLToPath(
+			new URL('../../../tools/checks/check-deployment-artifact.mjs', import.meta.url)
+		);
+		const result = spawnSync(process.execPath, [script, '--', fixture], { encoding: 'utf8' });
+
+		expect(result.status).toBe(0);
+		expect(result.stdout).toContain('Deployment artifact contract: PASS');
 	});
 
 	it('rejects metadata inside the public site and unsafe checksum paths', async () => {
