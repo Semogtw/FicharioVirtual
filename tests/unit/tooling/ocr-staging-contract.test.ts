@@ -84,6 +84,34 @@ describe('OCR staging contract', () => {
 		}
 	});
 
+	it('drops an unrecognized failure stage instead of serializing arbitrary text', () => {
+		const report = createOcrStagingReport({
+			status: 'fail',
+			failureStage: 'https://secret.example/raw-provider-error' as never,
+			stages: {
+				authenticated: false,
+				authorized: false,
+				consentRecorded: false,
+				importCreated: false,
+				functionCompleted: false,
+				persistenceVerified: false
+			},
+			outcome: {
+				documentStatus: null,
+				pageStatus: null,
+				jobStatus: null,
+				needsReview: null,
+				warningCount: null,
+				attemptCount: null,
+				tokens: { fichario: null, ocr: null, numericProbe: null }
+			},
+			cleanup: { document: 'not_required', session: 'not_required' }
+		});
+
+		expect(report.failureStage).toBeNull();
+		expect(JSON.stringify(report)).not.toContain('secret.example');
+	});
+
 	it('normalizes accents and punctuation before token checks', () => {
 		expect(normalizeOcrProbeText('FICHÁRIO — OCR: 2718')).toBe('fichario ocr 2718');
 		expect(normalizeOcrProbeText(null)).toBe('');
