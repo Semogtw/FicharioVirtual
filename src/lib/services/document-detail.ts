@@ -10,7 +10,10 @@ const timestamp = z.string().refine((value) => !Number.isNaN(Date.parse(value)))
 const warningSchema = z
 	.object({
 		code: z.string().regex(/^[a-z][a-z0-9_]{1,63}$/),
-		message: z.string().max(300).refine((value) => value.trim().length > 0)
+		message: z
+			.string()
+			.max(300)
+			.refine((value) => value.trim().length > 0)
 	})
 	.strict();
 const pageRecordSchema = z
@@ -158,7 +161,9 @@ export async function loadDocumentDetailWithGateway(
 			originalFilename: document.original_filename,
 			originalUrl: signedUrl(originalUrl),
 			pages: Object.freeze(
-				pages.map((page) => mapPageRecord(page)).sort((left, right) => left.pageNumber - right.pageNumber)
+				pages
+					.map((page) => mapPageRecord(page))
+					.sort((left, right) => left.pageNumber - right.pageNumber)
 			),
 			createdAt: document.created_at,
 			updatedAt: document.updated_at
