@@ -20,6 +20,11 @@ describe('process-ocr provider delegation', () => {
 		expect(source).not.toContain('parseOcrPayload');
 	});
 
+	it('rejects malformed attempt counts before provider execution', () => {
+		expect(source).toContain('if (!Number.isInteger(attemptCount) || attemptCount < 1)');
+		expect(source).toContain("return respond(503, { code: 'ocr_claim_failed' })");
+	});
+
 	it('delegates persistence and HTTP decisions to the shared failure planner', () => {
 		expect(source).toContain("from '../_shared/ocr-failure.ts'");
 		expect(source).toContain('planOcrFailure');
