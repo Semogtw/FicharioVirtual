@@ -11,6 +11,59 @@ import type { Database } from '$lib/types/database';
 import { getSupabaseClient } from './supabase';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/u;
+
+function normalizedText(maximum: number) {
+	return z
+		.string()
+		.transform((value) => value.trim())
+		.refine(
+			(value) => value.length > 0 && value.length <= maximum && !CONTROL_CHARACTERS.test(value)
+		);
+}
+
+const optionalDescription = z
+	.union([z.string(), z.null()])
+	.transform((value) => {
+		if (value === null) return null;
+		const normalized = value.trim();
+		return normalized.length === 0 ? null : normalized;
+	})
+	.refine(
+		(value) => value === null || (value.length <= 2_000 && !CONTROL_CHARACTERS.test(value))
+	);
+const newNotebookInputSchema = z
+	.object({
+		name: normalizedText(120),
+		description: optionalDescription.optional(),
+		coverStyle: normalizedText(64).optional()
+	})
+	.strict();
+const notebookUpdateSchema = z
+	.object({
+		name: normalizedText(120).optional(),
+		description: optionalDescription.optional(),
+		coverStyle: normalizedText(64).optional()
+	})
+	.strict()
+	.refine(
+		(value) =>
+			value.name !== undefined ||
+			value.description !== undefined ||
+			value.coverStyle !== undefined
+	);
+
+export function parseNewNotebookInput(data: unknown): NewNotebookInput {
+	const result = newNotebookInputSchema.safeParse(data);
+	if (!result.success) throw new TypeError('Invalid notebook input');
+	return Object.freeze(result.data);
+}
+
+export function parseNotebookUpdate(data: unknown): UpdateNotebookInput {
+	const result = notebookUpdateSchema.safeParse(data);
+	if (!result.success) throw new TypeError('Invalid notebook input');
+	return Object.freeze(result.data);
+}
 
 const timestamp = z.string().refine((value) => !Number.isNaN(Date.parse(value)));
 const notebookRecordSchema = z
@@ -103,6 +156,7 @@ export async function createNotebook(
 	input: NewNotebookInput,
 	client?: SupabaseClient<Database>
 ): Promise<NotebookSummary> {
+	const validatedInput = parseNewNotebookInput(input);
 	const resolvedClient = clientOrDefault(client);
 	const userId = await currentUserId(resolvedClient);
 	try {
@@ -110,9 +164,9 @@ export async function createNotebook(
 			.from('notebooks')
 			.insert({
 				user_id: userId,
-				name: input.name.trim(),
-				description: input.description?.trim() || null,
-				cover_style: input.coverStyle ?? 'linen'
+				name: validatedInput.name,
+				description: validatedInput.description ?? null,
+				cover_style: validatedInput.coverStyle ?? 'linen'
 			})
 			.select('id,name,description,cover_style,created_at,updated_at')
 			.single();
@@ -129,13 +183,13 @@ export async function updateNotebook(
 	input: UpdateNotebookInput,
 	client?: SupabaseClient<Database>
 ): Promise<NotebookSummary> {
+	const validatedNotebookId = validId(notebookId);
+	const validatedInput = parseNotebookUpdate(input);
 	const resolvedClient = clientOrDefault(client);
 	const changes: Database['public']['Tables']['notebooks']['Update'] = {};
-	if (input.name !== undefined) changes.name = input.name.trim();
-	if (input.description !== undefined) changes.description = input.description?.trim() || null;
-	if (input.coverStyle !== undefined) changes.cover_style = input.coverStyle;
-
-	const validatedNotebookId = validId(notebookId);
+	if (validatedInput.name !== undefined) changes.name = validatedInput.name;
+	if (validatedInput.description !== undefined) changes.description = validatedInput.description;
+	if (validatedInput.coverStyle !== undefined) changes.cover_style = validatedInput.coverStyle;
 	try {
 		const { error } = await resolvedClient
 			.from('notebooks')
