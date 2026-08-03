@@ -184,7 +184,7 @@ export function parseImageImportResult(
 		!UUID.test(documentId) ||
 		documentId !== expected.documentId ||
 		typeof pageId !== 'string' ||
-		!UID.test(pageId) ||
+		!UUID.test(pageId) ||
 		pageId !== expected.pageId ||
 		typeof ocrJobId !== 'string' ||
 		!UUID.test(ocrJobId) ||
