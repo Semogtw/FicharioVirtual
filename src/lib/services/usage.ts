@@ -1,11 +1,11 @@
 import { z } from 'zod';
-import { isIsoTimestamp } from '$lib/validation/iso-timestamp';
+import { isIsoDate, isIsoTimestamp } from '$lib/validation/iso-timestamp';
 import { getSupabaseClient } from './supabase';
 
 const counter = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const day = z
 	.object({
-		date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+		date: z.string().refine(isIsoDate),
 		ocrPages: counter,
 		quotaErrors: counter
 	})
