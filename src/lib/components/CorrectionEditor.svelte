@@ -2,10 +2,10 @@
 	import { onDestroy, onMount, untrack } from 'svelte';
 	import type { PageDetail } from '$lib/domain/page';
 	import {
-		correctionDraftKey,
-		parseCorrectionDraft,
-		serializeCorrectionDraft
-	} from '$lib/review/drafts';
+		discardCorrectionDraft,
+		readCorrectionDraft,
+		writeCorrectionDraft
+	} from '$lib/review/draft-index';
 	import { savePageCorrection } from '$lib/services/document-detail';
 
 	interface CorrectionEditorProps {
@@ -20,30 +20,43 @@
 	let timer: ReturnType<typeof setTimeout> | null = null;
 	let editVersion = 0;
 
-	function storeDraft() {
-		localStorage.setItem(
-			correctionDraftKey(page.id),
-			serializeCorrectionDraft({ pageId: page.id, text, updatedAt: new Date().toISOString() })
-		);
-		saveState = 'draft';
+	function storeDraft(): boolean {
+		try {
+			writeCorrectionDraft({ pageId: page.id, text, updatedAt: new Date().toISOString() });
+			saveState = 'draft';
+			error = null;
+			return true;
+		} catch {
+			saveState = 'error';
+			error = 'Não foi possível criar um rascunho local. O salvamento remoto ainda será tentado.';
+			return false;
+		}
 	}
 
 	async function save(version = editVersion) {
 		if (timer) clearTimeout(timer);
 		timer = null;
-		storeDraft();
+		const backedUp = storeDraft();
 		saveState = 'saving';
-		error = null;
+		if (backedUp) error = null;
+
 		try {
 			const saved = await savePageCorrection(page.id, text);
 			if (version !== editVersion) return;
-			localStorage.removeItem(correctionDraftKey(page.id));
+			try {
+				discardCorrectionDraft(page.id);
+				error = null;
+			} catch {
+				error = 'A correção foi salva no servidor, mas o rascunho local não pôde ser removido.';
+			}
 			saveState = 'saved';
 			onSaved?.(saved);
 		} catch {
 			if (version !== editVersion) return;
 			saveState = 'error';
-			error = 'A correção ficou salva neste dispositivo e será reenviada na próxima tentativa.';
+			error = backedUp
+				? 'A correção ficou salva neste dispositivo e será reenviada na próxima tentativa.'
+				: 'Não foi possível salvar no servidor e o navegador não permitiu criar um rascunho local.';
 		}
 	}
 
@@ -56,10 +69,16 @@
 	}
 
 	onMount(() => {
-		const draft = parseCorrectionDraft(localStorage.getItem(correctionDraftKey(page.id)), page.id);
-		if (draft && Date.parse(draft.updatedAt) > Date.parse(page.updatedAt)) {
-			text = draft.text;
-			saveState = 'draft';
+		try {
+			const draft = readCorrectionDraft(page.id);
+			if (draft && Date.parse(draft.updatedAt) > Date.parse(page.updatedAt)) {
+				text = draft.text;
+				saveState = 'draft';
+			}
+		} catch {
+			saveState = 'error';
+			error =
+				'Não foi possível recuperar o rascunho local. O editor e o salvamento remoto continuam disponíveis.';
 		}
 	});
 
