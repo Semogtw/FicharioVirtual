@@ -135,6 +135,26 @@ describe('uploadPdfWithGateway', () => {
 		expect(result.ocrCompleted).toBe(1);
 	});
 
+	it('counts an already-complete page that needs review correctly', async () => {
+		const fixture = gatewayFixture();
+		const deps = dependencies();
+		deps.values.processPageOcr = async () => ({
+			state: 'already_complete',
+			needsReview: true
+		});
+
+		const result = await uploadPdfWithGateway(
+			pdf(),
+			{ consentGranted: true },
+			fixture.gateway,
+			deps.values
+		);
+
+		expect(result.ocrCompleted).toBe(0);
+		expect(result.ocrNeedsReview).toBe(1);
+		expect(result.ocrPending).toBe(0);
+	});
+
 	it('does not require OCR consent for a text-only PDF', async () => {
 		const fixture = gatewayFixture();
 		const deps = dependencies();
