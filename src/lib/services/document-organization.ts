@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import type { Database } from '$lib/types/database';
+import { isIsoTimestamp } from '$lib/validation/iso-timestamp';
 import { getSupabaseClient } from './supabase';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -9,7 +10,7 @@ const organizationRowSchema = z
 		id: z.string().regex(UUID),
 		title: z.string().min(1).max(240),
 		notebook_id: z.string().regex(UUID).nullable(),
-		updated_at: z.string().refine((value) => !Number.isNaN(Date.parse(value)))
+		updated_at: z.string().refine(isIsoTimestamp)
 	})
 	.strict();
 
