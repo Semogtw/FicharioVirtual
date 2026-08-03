@@ -145,6 +145,19 @@ describe('document organization response contract', () => {
 				})
 			)
 		).rejects.toMatchObject({ name: 'DocumentOrganizationError' });
+
+		await expect(
+			updateDocumentOrganization(
+				documentId,
+				{ title: 'Mitose', notebookId },
+				responseClient({
+					id: documentId,
+					title: 'Mitose',
+					notebook_id: notebookId,
+					updated_at: '2026-02-30T00:00:00.000Z'
+				})
+			)
+		).rejects.toMatchObject({ name: 'DocumentOrganizationError' });
 	});
 
 	it('normalizes transport failures without leaking details', async () => {
