@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { calculateSha256 } from '$lib/import/hash';
 import { parseDuplicateDocumentId } from '$lib/import/duplicate-result';
 import { recordOcrConsent } from '$lib/services/ocr-consent';
-import { processPageOcr, type OcrRunResult } from '$lib/services/ocr';
+import { OcrProcessingError, processPageOcr, type OcrRunResult } from '$lib/services/ocr';
 import { getSupabaseClient } from '$lib/services/supabase';
 import type { Database, DocumentStatus } from '$lib/types/database';
 import { buildPdfImportPlan, type PdfImportPagePlan } from './import-plan';
@@ -76,6 +76,7 @@ export type UploadedPdf = PdfImportPublication & {
 	ocrCompleted: number;
 	ocrNeedsReview: number;
 	ocrPending: number;
+	ocrFailed: number;
 };
 
 export class DuplicatePdfError extends Error {
@@ -224,6 +225,7 @@ async function processOcrPages(
 	let complete = 0;
 	let needsReview = 0;
 	let pending = 0;
+	let failed = 0;
 	let progress = 0;
 
 	async function worker() {
@@ -238,8 +240,9 @@ async function processOcrPages(
 				} else {
 					pending += 1;
 				}
-			} catch {
-				pending += 1;
+			} catch (error) {
+				if (error instanceof OcrProcessingError && !error.retryable) failed += 1;
+				else pending += 1;
 			} finally {
 				progress += 1;
 				onProgress?.({
@@ -253,7 +256,7 @@ async function processOcrPages(
 	}
 
 	await Promise.all(Array.from({ length: Math.min(2, queue.length) }, () => worker()));
-	return { complete, needsReview, pending };
+	return { complete, needsReview, pending, failed };
 }
 
 const defaultDependencies: PdfUploadDependencies = {
@@ -356,7 +359,8 @@ export async function uploadPdfWithGateway(
 			storagePath: originalStoragePath,
 			ocrCompleted: ocr.complete,
 			ocrNeedsReview: ocr.needsReview,
-			ocrPending: ocr.pending
+			ocrPending: ocr.pending,
+			ocrFailed: ocr.failed
 		});
 	} catch (error) {
 		if (!metadataPublished && uploadedPaths.length > 0) {
