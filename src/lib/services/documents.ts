@@ -39,6 +39,40 @@ const documentRecordSchema = z
 		updated_at: timestamp
 	})
 	.strict();
+const documentFiltersSchema = z
+	.object({
+		notebookId: z.string().regex(UUID).optional(),
+		kind: z.enum(['image', 'pdf']).optional(),
+		status: z
+			.enum([
+				'uploading',
+				'pending',
+				'processing',
+				'ready',
+				'partially_ready',
+				'needs_review',
+				'failed'
+			])
+			.optional(),
+		createdFrom: timestamp.optional(),
+		createdTo: timestamp.optional()
+	})
+	.strict()
+	.superRefine((filters, context) => {
+		if (
+			filters.createdFrom !== undefined &&
+			filters.createdTo !== undefined &&
+			Date.parse(filters.createdFrom) > Date.parse(filters.createdTo)
+		) {
+			context.addIssue({ code: 'custom', message: 'Invalid document date range' });
+		}
+	});
+
+export function parseDocumentFilters(data: unknown): DocumentFilters {
+	const result = documentFiltersSchema.safeParse(data);
+	if (!result.success) throw new TypeError('Invalid document filters');
+	return Object.freeze(result.data);
+}
 
 export function parseDocumentRecords(
 	data: unknown,
@@ -143,8 +177,9 @@ export async function listDocuments({
 	limit?: number;
 	client?: SupabaseClient<Database>;
 } = {}): Promise<DocumentPage> {
-	const resolvedClient = clientOrDefault(client);
 	const resolvedLimit = pageSize(limit);
+	const resolvedFilters = parseDocumentFilters(filters);
+	const resolvedClient = clientOrDefault(client);
 	let query = resolvedClient
 		.from('documents')
 		.select('id,title,kind,status,page_count,thumbnail_path,notebook_id,created_at,updated_at')
@@ -152,11 +187,11 @@ export async function listDocuments({
 		.order('id', { ascending: false })
 		.limit(resolvedLimit + 1);
 
-	if (filters.notebookId) query = query.eq('notebook_id', validId(filters.notebookId));
-	if (filters.kind) query = query.eq('kind', filters.kind);
-	if (filters.status) query = query.eq('status', filters.status);
-	if (filters.createdFrom) query = query.gte('created_at', filters.createdFrom);
-	if (filters.createdTo) query = query.lte('created_at', filters.createdTo);
+	if (resolvedFilters.notebookId) query = query.eq('notebook_id', resolvedFilters.notebookId);
+	if (resolvedFilters.kind) query = query.eq('kind', resolvedFilters.kind);
+	if (resolvedFilters.status) query = query.eq('status', resolvedFilters.status);
+	if (resolvedFilters.createdFrom) query = query.gte('created_at', resolvedFilters.createdFrom);
+	if (resolvedFilters.createdTo) query = query.lte('created_at', resolvedFilters.createdTo);
 	if (cursor) {
 		const value = validCursor(cursor);
 		query = query.or(
