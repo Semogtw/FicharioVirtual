@@ -184,7 +184,7 @@ export function parseImageImportResult(
 		!UUID.test(documentId) ||
 		documentId !== expected.documentId ||
 		typeof pageId !== 'string' ||
-		!UUID.test(pageId) ||
+		!UID.test(pageId) ||
 		pageId !== expected.pageId ||
 		typeof ocrJobId !== 'string' ||
 		!UUID.test(ocrJobId) ||
@@ -208,18 +208,26 @@ async function removeUploaded(
 
 export async function uploadPreparedImage(
 	input: UploadPreparedImageInput,
-	client: SupabaseClient<Database> = getSupabaseClient()
+	client?: SupabaseClient<Database>
 ): Promise<UploadedPage> {
-	return uploadSlots.run(async () => {
-		const signal = input.signal;
-		if (signal?.aborted) throw abortError();
-		const notebookId = requireUuid(input.notebookId, 'notebook identifier');
-		const promptVersion = input.promptVersion ?? 1;
-		if (!Number.isInteger(promptVersion) || promptVersion < 1 || promptVersion > 10_000) {
-			throw new TypeError('Invalid OCR prompt version');
-		}
+	const signal = input.signal;
+	if (signal?.aborted) throw abortError();
+	const notebookId = requireUuid(input.notebookId, 'notebook identifier');
+	const promptVersion = input.promptVersion ?? 1;
+	if (!Number.isInteger(promptVersion) || promptVersion < 1 || promptVersion > 10_000) {
+		throw new TypeError('Invalid OCR prompt version');
+	}
+	const gateway = client ?? getSupabaseClient();
 
-		const { data: sessionData, error: sessionError } = await client.auth.getSession();
+	return uploadSlots.run(async () => {
+		if (signal?.aborted) throw abortError();
+		let sessionResult: Awaited<ReturnType<typeof gateway.auth.getSession>>;
+		try {
+			sessionResult = await gateway.auth.getSession();
+		} catch {
+			throw new ImageUploadError('not_authenticated');
+		}
+		const { data: sessionData, error: sessionError } = sessionResult;
 		if (sessionError || sessionData.session === null) {
 			throw new ImageUploadError('not_authenticated');
 		}
@@ -227,19 +235,25 @@ export async function uploadPreparedImage(
 		const sha256 = await calculateSha256(input.prepared.image);
 		if (signal?.aborted) throw abortError();
 
-		const { data: duplicate, error: duplicateError } = await client
-			.from('documents')
-			.select('id')
-			.eq('sha256', sha256)
-			.maybeSingle();
-		if (duplicateError) throw new ImageUploadError('duplicate_check_failed');
+		let duplicateResult: { data: unknown; error: unknown };
+		try {
+			duplicateResult = await gateway
+				.from('documents')
+				.select('id')
+				.eq('sha256', sha256)
+				.maybeSingle();
+		} catch {
+			throw new ImageUploadError('duplicate_check_failed');
+		}
+		if (duplicateResult.error) throw new ImageUploadError('duplicate_check_failed');
 		let duplicateId: string | null;
 		try {
-			duplicateId = parseDuplicateDocumentId(duplicate);
+			duplicateId = parseDuplicateDocumentId(duplicateResult.data);
 		} catch {
 			throw new ImageUploadError('duplicate_check_failed');
 		}
 		if (duplicateId) throw new DuplicateImageError(duplicateId);
+		if (signal?.aborted) throw abortError();
 
 		const documentId = uuid();
 		const pageId = uuid();
@@ -247,26 +261,32 @@ export async function uploadPreparedImage(
 		const root = `${userId}/${documentId}`;
 		const storagePath = `${root}/original.${extension(input.prepared.image)}`;
 		const thumbnailPath = `${root}/thumbnail.${extension(input.prepared.thumbnail)}`;
-		const bucket = client.storage.from('documents');
-
-		const [originalUpload, thumbnailUpload] = await Promise.all([
-			bucket.upload(storagePath, input.prepared.image, {
-				contentType: input.prepared.image.type,
-				cacheControl: '3600',
-				upsert: false
-			}),
-			bucket.upload(thumbnailPath, input.prepared.thumbnail, {
-				contentType: input.prepared.thumbnail.type,
-				cacheControl: '86400',
-				upsert: false
-			})
-		]);
+		const bucket = gateway.storage.from('documents');
+		let originalUpload: { error: unknown };
+		let thumbnailUpload: { error: unknown };
+		try {
+			[originalUpload, thumbnailUpload] = await Promise.all([
+				bucket.upload(storagePath, input.prepared.image, {
+					contentType: input.prepared.image.type,
+					cacheControl: '3600',
+					upsert: false
+				}),
+				bucket.upload(thumbnailPath, input.prepared.thumbnail, {
+					contentType: input.prepared.thumbnail.type,
+					cacheControl: '86400',
+					upsert: false
+				})
+			]);
+		} catch {
+			await removeUploaded(gateway, [storagePath, thumbnailPath]);
+			throw new ImageUploadError('upload_failed');
+		}
 		if (originalUpload.error || thumbnailUpload.error) {
-			await removeUploaded(client, [storagePath, thumbnailPath]);
+			await removeUploaded(gateway, [storagePath, thumbnailPath]);
 			throw new ImageUploadError('upload_failed');
 		}
 		if (signal?.aborted) {
-			await removeUploaded(client, [storagePath, thumbnailPath]);
+			await removeUploaded(gateway, [storagePath, thumbnailPath]);
 			throw abortError();
 		}
 
@@ -276,25 +296,31 @@ export async function uploadPreparedImage(
 				args: Record<string, unknown>
 			): Promise<{ data: unknown; error: unknown }>;
 		};
-		const { data, error } = await (client as unknown as RpcClient).rpc('create_image_import', {
-			target_document_id: documentId,
-			target_page_id: pageId,
-			target_job_id: ocrJobId,
-			target_notebook_id: notebookId,
-			document_title: input.title?.trim() || defaultTitle(input.prepared.originalName),
-			original_filename: input.prepared.originalName,
-			original_storage_path: storagePath,
-			thumbnail_storage_path: thumbnailPath,
-			prepared_sha256: sha256,
-			source_created_at: input.sourceCreatedAt ?? null,
-			prompt_version: promptVersion
-		});
+		let metadataResult: { data: unknown; error: unknown };
+		try {
+			metadataResult = await (gateway as unknown as RpcClient).rpc('create_image_import', {
+				target_document_id: documentId,
+				target_page_id: pageId,
+				target_job_id: ocrJobId,
+				target_notebook_id: notebookId,
+				document_title: input.title?.trim() || defaultTitle(input.prepared.originalName),
+				original_filename: input.prepared.originalName,
+				original_storage_path: storagePath,
+				thumbnail_storage_path: thumbnailPath,
+				prepared_sha256: sha256,
+				source_created_at: input.sourceCreatedAt ?? null,
+				prompt_version: promptVersion
+			});
+		} catch {
+			await removeUploaded(gateway, [storagePath, thumbnailPath]);
+			throw new ImageUploadError('metadata_failed');
+		}
 		let imported: Readonly<ImageImportIdentifiers>;
 		try {
-			if (error) invalidImageImportResult();
-			imported = parseImageImportResult(data, { documentId, pageId, ocrJobId });
+			if (metadataResult.error) invalidImageImportResult();
+			imported = parseImageImportResult(metadataResult.data, { documentId, pageId, ocrJobId });
 		} catch {
-			await removeUploaded(client, [storagePath, thumbnailPath]);
+			await removeUploaded(gateway, [storagePath, thumbnailPath]);
 			throw new ImageUploadError('metadata_failed');
 		}
 
@@ -304,5 +330,5 @@ export async function uploadPreparedImage(
 			storagePath,
 			thumbnailPath
 		});
-	}, input.signal);
+	}, signal);
 }
