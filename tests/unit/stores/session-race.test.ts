@@ -97,7 +97,7 @@ describe('session operation ordering', () => {
 		expect(sessionState.user).toBeNull();
 
 		signingIn.resolve(authenticatedSession);
-		await authentication;
+		await expect(authentication).rejects.toMatchObject({ name: 'AbortError' });
 
 		expect(sessionState.authorized).toBe(false);
 		expect(sessionState.user).toBeNull();
