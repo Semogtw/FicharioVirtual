@@ -3,6 +3,7 @@ import {
 	claimStateHttpStatus,
 	classifyGeminiFailure,
 	geminiFailureResponse,
+	parseOcrClaimState,
 	parseOcrPayload
 } from '../../../supabase/functions/_shared/ocr-contract';
 
@@ -35,6 +36,30 @@ describe('OCR response contract', () => {
 });
 
 describe('OCR claim HTTP mapping', () => {
+	describe('claim state parser', () => {
+		it.each([
+			'claimed',
+			'already_complete',
+			'busy',
+			'retry_later',
+			'quota_exhausted',
+			'consent_required',
+			'not_authorized',
+			'not_found',
+			'invalid_configuration',
+			'not_retryable'
+		])('accepts known claim state %s', (state) => {
+			expect(parseOcrClaimState(state)).toBe(state);
+		});
+
+		it.each([undefined, null, 1, '', 'unknown', 'CLAIMED'])(
+			'rejects malformed claim state %s',
+			(state) => {
+				expect(parseOcrClaimState(state)).toBeNull();
+			}
+		);
+	});
+
 	it('keeps expected deferred states in successful function responses', () => {
 		expect(claimStateHttpStatus('already_complete')).toBe(200);
 		expect(claimStateHttpStatus('busy')).toBe(202);
