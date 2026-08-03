@@ -168,3 +168,28 @@ export function resolveStagingFailure({ operationError, cleanupResults }) {
 			: 'Supabase staging verification and cleanup failed'
 	);
 }
+
+/**
+ * @param {{ label: string; error: unknown }} input
+ */
+export function assertSuccessfulSignOut({ label, error }) {
+	if (error == null) return;
+	const detail = error instanceof Error ? error.message : String(error);
+	fail(`${label} sign-out failed: ${detail}`);
+}
+
+/**
+ * @param {{
+ *   dataCleanup: Array<() => unknown | Promise<unknown>>;
+ *   sessionCleanup: Array<() => unknown | Promise<unknown>>;
+ * }} input
+ * @returns {Promise<Array<PromiseSettledResult<unknown>>>}
+ */
+export async function runStagingCleanup({ dataCleanup, sessionCleanup }) {
+	/** @param {Array<() => unknown | Promise<unknown>>} operations */
+	const runPhase = (operations) =>
+		Promise.allSettled(operations.map((operation) => Promise.resolve().then(operation)));
+	const dataResults = await runPhase(dataCleanup);
+	const sessionResults = await runPhase(sessionCleanup);
+	return [...dataResults, ...sessionResults];
+}
