@@ -12,6 +12,7 @@ O MVP está implementado na branch `main`, sem deployment ou release público. O
 - biblioteca privada, cadernos, tags e organização em lote;
 - importação cancelável e retomável de imagens e PDFs;
 - OCR seletivo por página, com quota e backoff explícitos;
+- injeção local segura de 429, 503, payload inválido e timeout por servidor HTTP loopback;
 - busca textual ranqueada e tolerante a acentos/erros pequenos;
 - leitor lado a lado, revisão manual e recuperação de rascunhos locais;
 - painel operacional de uso;
@@ -64,13 +65,14 @@ Comandos segmentados:
 pnpm test:source:offline
 pnpm test:functions:check
 pnpm test:db:local
+pnpm test:ocr:faults:local
 pnpm test:deployment:artifact -- /caminho/para/fichario-deploy
 pnpm test:deployment -- https://host.example
 pnpm test:staging:supabase
 pnpm test:staging:ocr
 ```
 
-`test:db:local` inicia/reutiliza a stack Supabase, recria o banco, executa pgTAP e roda os testes reais de concorrência, idempotência e virada UTC do OCR.
+`test:db:local` inicia/reutiliza a stack Supabase, recria o banco, executa pgTAP e roda os testes reais de concorrência, idempotência e virada UTC do OCR. `test:ocr:faults:local` usa somente um servidor HTTP em `127.0.0.1`; ele prova transporte, classificação e backoff sem adicionar controles de falha à Edge Function implantada.
 
 ## Documentação
 
@@ -92,7 +94,7 @@ pnpm test:staging:ocr
 Ainda é necessário validar em staging e dispositivo real:
 
 - executar os gates preparados de Auth, RLS, Storage e expiração de URLs assinadas no projeto Supabase remoto;
-- executar o smoke OCR sintético e validar 429/503/resposta inválida no ambiente configurado;
+- executar o smoke OCR sintético e observar no ambiente implantado a persistência e a retomada das falhas já classificadas localmente;
 - PDFs textuais, digitalizados e mistos em tablet/celular;
 - instalação/atualização do PWA e headers no host final;
 - limites gratuitos e ausência de billing habilitado.
