@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isIsoTimestamp } from '../../../src/lib/validation/iso-timestamp';
+import { isIsoDate, isIsoTimestamp } from '../../../src/lib/validation/iso-timestamp';
 
 describe('isIsoTimestamp', () => {
 	it.each([
@@ -25,4 +25,17 @@ describe('isIsoTimestamp', () => {
 	])('rejects an ambiguous or impossible timestamp: %s', (value) => {
 		expect(isIsoTimestamp(value)).toBe(false);
 	});
+});
+
+describe('isIsoDate', () => {
+	it.each(['2026-08-03', '2024-02-29'])('accepts an exact ISO calendar date: %s', (value) => {
+		expect(isIsoDate(value)).toBe(true);
+	});
+
+	it.each(['2026-02-30', '2026-13-01', '2026-00-01', '2026-01-00', '01/02/2026', '2026-1-01'])(
+		'rejects an ambiguous or impossible ISO date: %s',
+		(value) => {
+			expect(isIsoDate(value)).toBe(false);
+		}
+	);
 });
