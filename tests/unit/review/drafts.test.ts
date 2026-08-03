@@ -45,5 +45,23 @@ describe('correction drafts', () => {
 				updatedAt: new Date().toISOString()
 			})
 		).toThrow('Invalid correction draft');
+		expect(() =>
+			serializeCorrectionDraft({
+				pageId,
+				text: 'texto',
+				updatedAt: '2026-02-30T00:00:00.000Z'
+			})
+		).toThrow('Invalid correction draft');
+		expect(
+			parseCorrectionDraft(
+				JSON.stringify({
+					version: 1,
+					pageId,
+					text: 'texto',
+					updatedAt: '2026-02-30T00:00:00.000Z'
+				}),
+				pageId
+			)
+		).toBeNull();
 	});
 });
