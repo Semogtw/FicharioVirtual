@@ -44,6 +44,15 @@ describe('usage overview', () => {
 		expect(() =>
 			parseUsageOverview({ ...payload, generatedAt: '2026-02-30T00:00:00.000Z' })
 		).toThrow('Invalid usage overview');
+		expect(() =>
+			parseUsageOverview({ ...payload, today: { ...payload.today, date: '2026-02-30' } })
+		).toThrow('Invalid usage overview');
+		expect(() =>
+			parseUsageOverview({
+				...payload,
+				daily: [{ date: '2026-02-30', ocrPages: 1, quotaErrors: 0 }]
+			})
+		).toThrow('Invalid usage overview');
 	});
 
 	it('validates the RPC response before exposing it', async () => {
