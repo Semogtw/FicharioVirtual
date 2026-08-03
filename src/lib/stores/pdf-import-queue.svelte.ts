@@ -36,17 +36,13 @@ export type PdfQueueItem = {
 export const pdfImportQueue = $state<{ items: PdfQueueItem[] }>({ items: [] });
 
 const controllers = new Map<string, AbortController>();
-const fingerprints = new Set<string>();
+const queuedFiles = new WeakSet<File>();
 let running = false;
 
 function id() {
 	return (
 		globalThis.crypto?.randomUUID?.() ?? `pdf_${Date.now()}_${Math.random().toString(36).slice(2)}`
 	);
-}
-
-function fingerprint(file: File) {
-	return `${file.name}:${file.size}:${file.lastModified}`;
 }
 
 function message(error: unknown) {
@@ -145,9 +141,8 @@ export function addPdfs(
 	options: { notebookId?: string | null; consentGranted: boolean }
 ) {
 	for (const file of files) {
-		const key = fingerprint(file);
-		if (fingerprints.has(key)) continue;
-		fingerprints.add(key);
+		if (queuedFiles.has(file)) continue;
+		queuedFiles.add(file);
 		pdfImportQueue.items.push({
 			id: id(),
 			file,
@@ -197,7 +192,7 @@ export function removePdfImport(itemId: string) {
 	const index = pdfImportQueue.items.findIndex((item) => item.id === itemId);
 	if (index < 0) return;
 	const [item] = pdfImportQueue.items.splice(index, 1);
-	if (item) fingerprints.delete(fingerprint(item.file));
+	if (item) queuedFiles.delete(item.file);
 }
 
 export function clearFinishedPdfImports() {
