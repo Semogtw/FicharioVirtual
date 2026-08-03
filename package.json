@@ -23,6 +23,7 @@
 		"test:db:local": "bash tools/checks/run-local-db-gates.sh",
 		"test:deployment": "node tools/checks/check-deployed-site.mjs",
 		"test:staging:supabase": "node tools/checks/check-supabase-staging.mjs",
+		"test:staging:ocr": "node tools/checks/check-ocr-staging.mjs",
 		"verify": "pnpm lint && pnpm check && pnpm test && pnpm build",
 		"verify:full": "pnpm verify && pnpm test:e2e && pnpm test:source:offline && pnpm test:functions:check && pnpm test:db:local"
 	},
