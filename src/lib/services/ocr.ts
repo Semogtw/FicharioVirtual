@@ -1,6 +1,7 @@
 import { getSupabaseClient } from './supabase';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const ERROR_CODE = /^[a-z][a-z0-9_]{1,63}$/;
 
 export type OcrRunResult =
 	| { state: 'complete'; needsReview: boolean; warningCount: number }
@@ -66,6 +67,17 @@ const CLAIM_REJECTION_ERRORS = Object.freeze({
 	})
 });
 
+function parseErrorCode(body: Record<string, unknown>): string | null {
+	const exactCode = hasExactKeys(body, ['code']);
+	const exactCodeAndRetryability =
+		hasExactKeys(body, ['code', 'retryable']) && typeof body.retryable === 'boolean';
+	return (exactCode || exactCodeAndRetryability) &&
+		typeof body.code === 'string' &&
+		ERROR_CODE.test(body.code)
+		? body.code
+		: null;
+}
+
 async function mappedError(error: { context?: unknown; message?: string }) {
 	if (!(error.context instanceof Response)) {
 		return new OcrProcessingError(
@@ -93,8 +105,8 @@ async function mappedError(error: { context?: unknown; message?: string }) {
 		}
 	}
 
-	const code = typeof body.code === 'string' ? body.code : `ocr_http_${status}`;
-	const retryable = body.retryable === true || status === 408 || status === 425 || status >= 500;
+	const code = parseErrorCode(body) ?? `ocr_http_${status}`;
+	const retryable = status === 408 || status === 425 || status >= 500;
 	const messages: Record<string, string> = {
 		gemini_daily_quota: 'A cota diária de leitura foi atingida. As páginas continuarão pendentes.',
 		gemini_rate_limited: 'O provedor limitou temporariamente as leituras.',
