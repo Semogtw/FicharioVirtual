@@ -114,6 +114,24 @@ describe('tag service', () => {
 		};
 		await expect(listTags(malformedTags)).rejects.toBeInstanceOf(TagServiceError);
 
+		const impossibleTimestamp: TagsClientLike = {
+			async rpc() {
+				return {
+					data: [
+						{
+							tag_id: tagId,
+							name: 'Citologia',
+							document_count: 3,
+							created_at: '2026-02-30T00:00:00.000Z',
+							updated_at: '2026-08-02T08:00:00.000Z'
+						}
+					],
+					error: null
+				};
+			}
+		};
+		await expect(listTags(impossibleTimestamp)).rejects.toBeInstanceOf(TagServiceError);
+
 		const malformedMemberships: TagsClientLike = {
 			async rpc() {
 				return { data: [{ document_id: 'bad-id' }], error: null };
