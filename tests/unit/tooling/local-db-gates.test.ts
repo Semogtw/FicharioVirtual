@@ -28,16 +28,22 @@ describe('local database gate runner', () => {
 	it('runs every local database contract after rebuilding the schema', () => {
 		const runner = read('tools/checks/run-local-db-gates.sh');
 		const fixture = read('tools/checks/fixtures/ocr-concurrency-fixture.sql');
+		const claimContractGate = read('tools/checks/test-ocr-claim-contracts.sh');
 		const concurrencyGate = read('tools/checks/test-ocr-claim-concurrency.sh');
 		const idempotencyGate = read('tools/checks/test-ocr-idempotency.sh');
 
 		expect(runner).toContain('supabase start');
 		expect(runner).toContain('supabase db reset');
 		expect(runner).toContain('supabase test db');
+		expect(runner).toContain('tools/checks/test-ocr-claim-contracts.sh');
 		expect(runner).toContain('tools/checks/test-ocr-claim-concurrency.sh');
 		expect(runner).toContain('tools/checks/test-ocr-idempotency.sh');
 		expect(fixture).toContain('insert into public.ocr_jobs');
 		expect(fixture).toContain('ocr_consent_version');
+		expect(claimContractGate).toContain('not-authorized claim contract drifted');
+		expect(claimContractGate).toContain('consent-required claim contract drifted');
+		expect(claimContractGate).toContain('busy claim contract drifted');
+		expect(claimContractGate).toContain('not-retryable claim contract drifted');
 		expect(concurrencyGate).toContain('validate_claim_shape');
 		expect(concurrencyGate).toContain('Concurrent claim A contract drifted');
 		expect(concurrencyGate).toContain("keys !== 'jobId,nextRetryAt,state'");
