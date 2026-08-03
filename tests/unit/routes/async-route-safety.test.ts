@@ -34,6 +34,19 @@ describe('async route safety', () => {
 		expect(documentRoute).not.toContain('onMount(() =>');
 	});
 
+	it('reloads notebook details when the route parameter changes and ignores stale responses', () => {
+		const notebookRoute = read('src/routes/notebooks/[id]/+page.svelte');
+
+		expect(notebookRoute).toContain(
+			"import { RequestVersion } from '$lib/services/request-version';"
+		);
+		expect(notebookRoute).toContain('$effect(() => {');
+		expect(notebookRoute).toContain('const notebookId = page.params.id;');
+		expect(notebookRoute).toContain('initializeRequests.next()');
+		expect(notebookRoute).toContain('initializeRequests.isCurrent(version)');
+		expect(notebookRoute).not.toContain('onMount(() =>');
+	});
+
 	it('remounts the correction editor when the selected page changes', () => {
 		const documentRoute = read('src/routes/documents/[id]/+page.svelte');
 
