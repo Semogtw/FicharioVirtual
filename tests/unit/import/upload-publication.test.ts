@@ -35,14 +35,12 @@ describe('parseImageImportResult', () => {
 		[row({ page_id: '44444444-4444-4444-8444-444444444444' })],
 		[row({ ocr_job_id: '44444444-4444-4444-8444-444444444444' })]
 	])('rejects malformed or inconsistent result %#', (value) => {
-		expect(() => parseImageImportResult(value, expected)).toThrow(
-			'Invalid image import result'
-		);
+		expect(() => parseImageImportResult(value, expected)).toThrow('Invalid image import result');
 	});
 
 	it('rejects invalid expected identifiers', () => {
-		expect(() =>
-			parseImageImportResult([row()], { ...expected, documentId: 'bad-id' })
-		).toThrow('Invalid image import result');
+		expect(() => parseImageImportResult([row()], { ...expected, documentId: 'bad-id' })).toThrow(
+			'Invalid image import result'
+		);
 	});
 });
