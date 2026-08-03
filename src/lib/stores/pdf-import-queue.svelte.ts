@@ -169,9 +169,13 @@ export async function retryPdfImport(itemId: string) {
 	if (!item || !['failed', 'cancelled', 'waiting'].includes(item.status)) return;
 	item.error = null;
 	if (item.result) {
+		const controller = new AbortController();
+		controllers.set(item.id, controller);
 		item.status = 'reading';
 		try {
-			const summary = await resumeDocumentOcr(item.result.documentId);
+			const summary = await resumeDocumentOcr(item.result.documentId, {
+				signal: controller.signal
+			});
 			item.result = mergePdfOcrResumeSummary(item.result, summary);
 			item.status = pdfQueueStatusFromResult(item.result);
 			if (item.result.ocrFailed > 0) {
@@ -180,6 +184,8 @@ export async function retryPdfImport(itemId: string) {
 		} catch (error) {
 			item.status = 'waiting';
 			item.error = message(error);
+		} finally {
+			if (controllers.get(item.id) === controller) controllers.delete(item.id);
 		}
 		return;
 	}
