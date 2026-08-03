@@ -54,7 +54,11 @@ export function parseUsageOverview(value: unknown): UsageOverview {
 export async function loadUsageOverview(
 	client: UsageClientLike = defaultClient()
 ): Promise<UsageOverview> {
-	const { data, error } = await client.rpc('get_usage_overview');
-	if (error || data === null) throw new UsageServiceError();
-	return parseUsageOverview(data);
+	try {
+		const { data, error } = await client.rpc('get_usage_overview');
+		if (error || data === null) throw new UsageServiceError();
+		return parseUsageOverview(data);
+	} catch {
+		throw new UsageServiceError();
+	}
 }
