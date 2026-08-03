@@ -18,9 +18,10 @@ function success(overrides: Record<string, unknown> = {}) {
 
 describe('parseImageWorkerResponse', () => {
 	it('accepts an exact successful worker response', () => {
-		const result = parseImageWorkerResponse(success(), id, 2560);
+		const input = success();
+		const result = parseImageWorkerResponse(input, id, 2560);
 
-		expect(result).toEqual(success());
+		expect(result).toEqual(input);
 		expect(Object.isFrozen(result)).toBe(true);
 	});
 
