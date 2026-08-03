@@ -27,7 +27,7 @@ describe('parsePdfImportPublication', () => {
 		{ documentId: 'bad-id', pageCount: 1, ocrPageCount: 0, reviewPageCount: 0, status: 'ready' },
 		{ documentId, pageCount: 0, ocrPageCount: 0, reviewPageCount: 0, status: 'ready' },
 		{ documentId, pageCount: 2, ocrPageCount: 3, reviewPageCount: 0, status: 'processing' },
-		{ documentId, pageCount: 2, ocrPageCount: 1, reviewPageCount: 1, status: 'partially_ready' },
+		{ documentId, pageCount: 2, ocrPageCount: 1, reviewPageCount: 2, status: 'partially_ready' },
 		{ documentId, pageCount: 2, ocrPageCount: 0, reviewPageCount: 0, status: 'failed' },
 		{ documentId, pageCount: 2, ocrPageCount: 2, reviewPageCount: 0, status: 'partially_ready' },
 		{
