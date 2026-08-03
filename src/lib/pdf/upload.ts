@@ -173,7 +173,9 @@ export function parsePdfImportPublication(
 		throw new TypeError('Invalid PDF import publication');
 	}
 	const value = data as Record<string, unknown>;
-	if (!hasExactKeys(value, ['documentId', 'pageCount', 'ocrPageCount', 'reviewPageCount', 'status'])) {
+	if (
+		!hasExactKeys(value, ['documentId', 'pageCount', 'ocrPageCount', 'reviewPageCount', 'status'])
+	) {
 		throw new TypeError('Invalid PDF import publication');
 	}
 	const { documentId, pageCount, ocrPageCount, reviewPageCount, status } = value;
