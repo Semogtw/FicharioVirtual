@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -60,6 +60,25 @@ describe('deployable artifact verification', () => {
 			targetEnvironment: 'staging',
 			verifiedFiles: 6
 		});
+	});
+
+	it('rejects impossible UTC calendar timestamps', async () => {
+		const root = createFixture();
+		const manifestPath = join(root, 'DEPLOYMENT-MANIFEST.txt');
+		const invalidManifest = readFileSync(manifestPath, 'utf8').replace(
+			'created_utc=2026-08-03T02:30:00Z',
+			'created_utc=2026-02-31T02:30:00Z'
+		);
+		writeFileSync(manifestPath, invalidManifest);
+
+		const checksumPath = join(root, 'SHA256SUMS');
+		const checksums = readFileSync(checksumPath, 'utf8').replace(
+			/^[0-9a-f]{64} {2}\.\/DEPLOYMENT-MANIFEST\.txt$/m,
+			`${sha256(invalidManifest)}  ./DEPLOYMENT-MANIFEST.txt`
+		);
+		writeFileSync(checksumPath, checksums);
+
+		await expect(verifyDeploymentArtifact(root)).rejects.toThrow(/creation timestamp/);
 	});
 
 	it('accepts the package-manager argument separator in CLI usage', () => {
