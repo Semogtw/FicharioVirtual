@@ -9,7 +9,10 @@ describe('CorrectionEditor local draft safety', () => {
 		expect(source).toContain('writeCorrectionDraft');
 		expect(source).toContain('readCorrectionDraft');
 		expect(source).toContain('discardCorrectionDraft');
-		expect(source).toContain('const saved = await savePageCorrection(page.id, text)');
+		expect(source).toContain('createLatestSerialExecutor');
+		expect(source).toContain(
+			'const saved = await savePageCorrection(page.id, request.text)'
+		);
 	});
 
 	it('distinguishes remote success from local draft cleanup failure', () => {
