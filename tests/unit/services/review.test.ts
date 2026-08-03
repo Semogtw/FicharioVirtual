@@ -64,9 +64,9 @@ describe('listReviewItems', () => {
 		await expect(listReviewItems({}, client([missingPageId]))).rejects.toBeInstanceOf(
 			ReviewServiceError
 		);
-		await expect(
-			listReviewItems({}, client([row({ page_id: 'bad-id' })]))
-		).rejects.toBeInstanceOf(ReviewServiceError);
+		await expect(listReviewItems({}, client([row({ page_id: 'bad-id' })]))).rejects.toBeInstanceOf(
+			ReviewServiceError
+		);
 		await expect(
 			listReviewItems({}, client([row({ private_content: 'no' })]))
 		).rejects.toBeInstanceOf(ReviewServiceError);
