@@ -76,10 +76,13 @@ export type UploadPreparedImageInput = {
 	signal?: AbortSignal;
 };
 
-export type UploadedPage = {
+export type ImageImportIdentifiers = {
 	documentId: string;
 	pageId: string;
 	ocrJobId: string;
+};
+
+export type UploadedPage = ImageImportIdentifiers & {
 	sha256: string;
 	storagePath: string;
 	thumbnailPath: string;
@@ -136,6 +139,59 @@ function extension(blob: Blob) {
 function defaultTitle(filename: string) {
 	const value = filename.replace(/\.[^.]+$/, '').trim();
 	return value.slice(0, 240) || 'Imagem sem título';
+}
+
+function hasExactKeys(record: Record<string, unknown>, expected: readonly string[]) {
+	const actual = Object.keys(record).sort();
+	const sortedExpected = [...expected].sort();
+	return (
+		actual.length === sortedExpected.length &&
+		actual.every((key, index) => key === sortedExpected[index])
+	);
+}
+
+function invalidImageImportResult(): never {
+	throw new TypeError('Invalid image import result');
+}
+
+export function parseImageImportResult(
+	data: unknown,
+	expected: ImageImportIdentifiers
+): Readonly<ImageImportIdentifiers> {
+	if (
+		!UUID.test(expected.documentId) ||
+		!UUID.test(expected.pageId) ||
+		!UUID.test(expected.ocrJobId) ||
+		!Array.isArray(data) ||
+		data.length !== 1
+	) {
+		invalidImageImportResult();
+	}
+	const row = data[0];
+	if (row === null || typeof row !== 'object' || Array.isArray(row)) {
+		invalidImageImportResult();
+	}
+	const value = row as Record<string, unknown>;
+	if (!hasExactKeys(value, ['document_id', 'page_id', 'ocr_job_id'])) {
+		invalidImageImportResult();
+	}
+	const documentId = value.document_id;
+	const pageId = value.page_id;
+	const ocrJobId = value.ocr_job_id;
+	if (
+		typeof documentId !== 'string' ||
+		!UUID.test(documentId) ||
+		documentId !== expected.documentId ||
+		typeof pageId !== 'string' ||
+		!UUID.test(pageId) ||
+		pageId !== expected.pageId ||
+		typeof ocrJobId !== 'string' ||
+		!UUID.test(ocrJobId) ||
+		ocrJobId !== expected.ocrJobId
+	) {
+		invalidImageImportResult();
+	}
+	return Object.freeze({ documentId, pageId, ocrJobId });
 }
 
 async function removeUploaded(
@@ -211,10 +267,7 @@ export async function uploadPreparedImage(
 			rpc(
 				name: 'create_image_import',
 				args: Record<string, unknown>
-			): Promise<{
-				data: Array<{ document_id: string; page_id: string; ocr_job_id: string }> | null;
-				error: unknown;
-			}>;
+			): Promise<{ data: unknown; error: unknown }>;
 		};
 		const { data, error } = await (client as unknown as RpcClient).rpc('create_image_import', {
 			target_document_id: documentId,
@@ -229,16 +282,17 @@ export async function uploadPreparedImage(
 			source_created_at: input.sourceCreatedAt ?? null,
 			prompt_version: promptVersion
 		});
-		const terminal = data?.[0];
-		if (error || !terminal) {
+		let imported: Readonly<ImageImportIdentifiers>;
+		try {
+			if (error) invalidImageImportResult();
+			imported = parseImageImportResult(data, { documentId, pageId, ocrJobId });
+		} catch {
 			await removeUploaded(client, [storagePath, thumbnailPath]);
 			throw new ImageUploadError('metadata_failed');
 		}
 
 		return Object.freeze({
-			documentId: terminal.document_id,
-			pageId: terminal.page_id,
-			ocrJobId: terminal.ocr_job_id,
+			...imported,
 			sha256,
 			storagePath,
 			thumbnailPath
