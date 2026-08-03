@@ -7,7 +7,9 @@ const repositoryRoot = new URL('../../../', import.meta.url);
 
 describe('local OCR fault injection runner', () => {
 	it('is exposed as a canonical package command', () => {
-		const packageJson = JSON.parse(readFileSync(new URL('package.json', repositoryRoot), 'utf8')) as {
+		const packageJson = JSON.parse(
+			readFileSync(new URL('package.json', repositoryRoot), 'utf8')
+		) as {
 			scripts?: Record<string, string>;
 		};
 
