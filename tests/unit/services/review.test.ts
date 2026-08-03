@@ -60,7 +60,8 @@ describe('listReviewItems', () => {
 	});
 
 	it('rejects malformed or extra RPC row fields', async () => {
-		const { page_id: _pageId, ...missingPageId } = row();
+		const missingPageId = { ...row() } as Record<string, unknown>;
+		delete missingPageId.page_id;
 		await expect(listReviewItems({}, client([missingPageId]))).rejects.toBeInstanceOf(
 			ReviewServiceError
 		);
