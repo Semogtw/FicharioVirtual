@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { PreparedImage } from './image-types';
 import { calculateSha256 } from './hash';
+import { parseDuplicateDocumentId } from './duplicate-result';
 import type { Database } from '$lib/types/database';
 import { getSupabaseClient } from '$lib/services/supabase';
 
@@ -232,7 +233,13 @@ export async function uploadPreparedImage(
 			.eq('sha256', sha256)
 			.maybeSingle();
 		if (duplicateError) throw new ImageUploadError('duplicate_check_failed');
-		if (duplicate) throw new DuplicateImageError(duplicate.id);
+		let duplicateId: string | null;
+		try {
+			duplicateId = parseDuplicateDocumentId(duplicate);
+		} catch {
+			throw new ImageUploadError('duplicate_check_failed');
+		}
+		if (duplicateId) throw new DuplicateImageError(duplicateId);
 
 		const documentId = uuid();
 		const pageId = uuid();
