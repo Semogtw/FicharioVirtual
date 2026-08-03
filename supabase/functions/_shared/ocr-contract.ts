@@ -9,6 +9,37 @@ export type OcrPayload = {
 	needsReview: boolean;
 };
 
+export type OcrClaimState =
+	| 'claimed'
+	| 'already_complete'
+	| 'busy'
+	| 'retry_later'
+	| 'quota_exhausted'
+	| 'consent_required'
+	| 'not_authorized'
+	| 'not_found'
+	| 'invalid_configuration'
+	| 'not_retryable';
+
+const OCR_CLAIM_STATES = Object.freeze<OcrClaimState[]>([
+	'claimed',
+	'already_complete',
+	'busy',
+	'retry_later',
+	'quota_exhausted',
+	'consent_required',
+	'not_authorized',
+	'not_found',
+	'invalid_configuration',
+	'not_retryable'
+]);
+
+export function parseOcrClaimState(value: unknown): OcrClaimState | null {
+	return typeof value === 'string' && OCR_CLAIM_STATES.includes(value as OcrClaimState)
+		? (value as OcrClaimState)
+		: null;
+}
+
 export type GeminiFailure = {
 	code:
 		| 'gemini_daily_quota'
