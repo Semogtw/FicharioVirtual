@@ -65,6 +65,8 @@ describe('local database gate runner', () => {
 		expect(sourceGate).toContain('edge-cors');
 		expect(sourceGate).toContain('provider-duplication');
 		expect(sourceGate).toContain('provider-test-surface');
+		expect(sourceGate).toContain('provider-transport-injection');
+		expect(sourceGate).toContain('fetchImpl');
 		expect(sourceGate).toContain('GEMINI_API_URL');
 		expect(sourceGate).toContain('OCR_PROVIDER_URL');
 		expect(sourceGate).toContain('X-FICHARIO-FAULT');
