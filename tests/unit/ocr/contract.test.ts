@@ -95,4 +95,57 @@ describe('Gemini failure classification', () => {
 			body: { code: 'gemini_authentication_failed', retryable: false }
 		});
 	});
+
+	it('pins every provider status to its persisted retry and quota policy', () => {
+		expect(classifyGeminiFailure(429, 'daily quota requests per day')).toEqual(
+			expect.objectContaining({
+				code: 'gemini_daily_quota',
+				retryable: false,
+				quotaExhausted: true,
+				delaySeconds: null
+			})
+		);
+		expect(classifyGeminiFailure(429, 'burst rate limit')).toEqual(
+			expect.objectContaining({
+				code: 'gemini_rate_limited',
+				retryable: true,
+				quotaExhausted: false,
+				delaySeconds: 60
+			})
+		);
+		for (const [status, code] of [
+			[401, 'gemini_authentication_failed'],
+			[403, 'gemini_authentication_failed'],
+			[404, 'gemini_model_unavailable'],
+			[400, 'gemini_invalid_request'],
+			[422, 'gemini_invalid_request']
+		] as const) {
+			expect(classifyGeminiFailure(status, '')).toEqual(
+				expect.objectContaining({
+					code,
+					retryable: false,
+					quotaExhausted: false,
+					delaySeconds: null
+				})
+			);
+		}
+		for (const status of [408, 425, 500, 503]) {
+			expect(classifyGeminiFailure(status, '')).toEqual(
+				expect.objectContaining({
+					code: 'gemini_service_unavailable',
+					retryable: true,
+					quotaExhausted: false,
+					delaySeconds: 30
+				})
+			);
+		}
+		expect(classifyGeminiFailure(418, '')).toEqual(
+			expect.objectContaining({
+				code: 'gemini_service_unavailable',
+				retryable: false,
+				quotaExhausted: false,
+				delaySeconds: null
+			})
+		);
+	});
 });
