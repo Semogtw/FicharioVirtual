@@ -10,6 +10,7 @@ import { renderPdfPage } from './renderer';
 import type { PdfInspection } from './types';
 
 const MAX_PDF_BYTES = 20 * 1024 * 1024;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export type PdfImportPublication = {
 	documentId: string;
@@ -136,6 +137,58 @@ function titleFromFile(file: File) {
 
 function imageExtension(blob: Blob) {
 	return blob.type === 'image/webp' ? 'webp' : 'jpg';
+}
+
+function hasExactKeys(record: Record<string, unknown>, expected: readonly string[]) {
+	const actual = Object.keys(record).sort();
+	const sortedExpected = [...expected].sort();
+	return (
+		actual.length === sortedExpected.length &&
+		actual.every((key, index) => key === sortedExpected[index])
+	);
+}
+
+function expectedPublicationStatus(
+	pageCount: number,
+	ocrPageCount: number,
+	reviewPageCount: number
+): DocumentStatus {
+	if (ocrPageCount === pageCount) return 'processing';
+	if (ocrPageCount > 0) return 'partially_ready';
+	if (reviewPageCount > 0) return 'needs_review';
+	return 'ready';
+}
+
+export function parsePdfImportPublication(data: unknown): PdfImportPublication {
+	if (data === null || typeof data !== 'object' || Array.isArray(data)) {
+		throw new TypeError('Invalid PDF import publication');
+	}
+	const value = data as Record<string, unknown>;
+	if (!hasExactKeys(value, ['documentId', 'pageCount', 'ocrPageCount', 'reviewPageCount', 'status'])) {
+		throw new TypeError('Invalid PDF import publication');
+	}
+	const { documentId, pageCount, ocrPageCount, reviewPageCount, status } = value;
+	if (
+		typeof documentId !== 'string' ||
+		!UUID.test(documentId) ||
+		typeof pageCount !== 'number' ||
+		!Number.isInteger(pageCount) ||
+		pageCount < 1 ||
+		pageCount > 10_000 ||
+		typeof ocrPageCount !== 'number' ||
+		!Number.isInteger(ocrPageCount) ||
+		ocrPageCount < 0 ||
+		ocrPageCount > pageCount ||
+		typeof reviewPageCount !== 'number' ||
+		!Number.isInteger(reviewPageCount) ||
+		reviewPageCount < 0 ||
+		reviewPageCount + ocrPageCount > pageCount ||
+		typeof status !== 'string' ||
+		status !== expectedPublicationStatus(pageCount, ocrPageCount, reviewPageCount)
+	) {
+		throw new TypeError('Invalid PDF import publication');
+	}
+	return Object.freeze({ documentId, pageCount, ocrPageCount, reviewPageCount, status });
 }
 
 function validate(file: File, options: PdfUploadOptions) {
@@ -356,23 +409,12 @@ class SupabasePdfGateway implements PdfImportGateway {
 			page_descriptors: input.pages,
 			prompt_version: input.promptVersion
 		});
-		if (error || !data) throw new PdfUploadError('metadata_failed');
-		if (
-			typeof data.documentId !== 'string' ||
-			!Number.isInteger(data.pageCount) ||
-			!Number.isInteger(data.ocrPageCount) ||
-			!Number.isInteger(data.reviewPageCount) ||
-			typeof data.status !== 'string'
-		) {
+		if (error) throw new PdfUploadError('metadata_failed');
+		try {
+			return parsePdfImportPublication(data);
+		} catch {
 			throw new PdfUploadError('metadata_failed');
 		}
-		return Object.freeze({
-			documentId: data.documentId,
-			pageCount: data.pageCount as number,
-			ocrPageCount: data.ocrPageCount as number,
-			reviewPageCount: data.reviewPageCount as number,
-			status: data.status as DocumentStatus
-		});
 	}
 }
 
