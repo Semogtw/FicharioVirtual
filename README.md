@@ -77,6 +77,7 @@ pnpm test:staging:ocr
 ## Documentação
 
 - [Estado atual canônico](docs/CURRENT_STATUS.md)
+- [Checkpoint de hardening de contratos em 2026-08-03](docs/checkpoints/2026-08-03-contract-hardening.md)
 - [Especificação do produto e arquitetura](docs/PROJECT_SPEC.md)
 - [Plano detalhado de implementação](docs/IMPLEMENTATION_PLAN.md)
 - [Estratégia de testes e evidência](docs/TESTING.md)
