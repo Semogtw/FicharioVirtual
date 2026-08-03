@@ -4,6 +4,7 @@ import {
 	assertDeniedStorageOperation,
 	assertProbeBytes,
 	assertProbeIsolation,
+	resolveStagingFailure,
 	assertSignedStorageUrl,
 	assertStorageListIsolation,
 	assertUnauthorizedAccount
@@ -110,6 +111,28 @@ describe('Supabase staging contract', () => {
 				error: null
 			})
 		).toThrow(/unexpectedly succeeded/);
+	});
+
+	it('preserves verification and cleanup failures without masking either cause', () => {
+		const verificationError = new Error('verification failed');
+		const cleanupError = new Error('cleanup failed');
+
+		expect(resolveStagingFailure({ operationError: verificationError, cleanupResults: [] })).toBe(
+			verificationError
+		);
+		expect(
+			resolveStagingFailure({
+				operationError: null,
+				cleanupResults: [{ status: 'rejected', reason: cleanupError }]
+			})
+		).toBe(cleanupError);
+
+		const combined = resolveStagingFailure({
+			operationError: verificationError,
+			cleanupResults: [{ status: 'rejected', reason: cleanupError }]
+		});
+		expect(combined).toBeInstanceOf(AggregateError);
+		expect((combined as AggregateError).errors).toEqual([verificationError, cleanupError]);
 	});
 
 	it('accepts only a same-origin signed URL for the exact sentinel object', () => {
