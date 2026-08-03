@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { OcrProcessingError } from '../../../src/lib/services/ocr';
 import {
+	parsePendingOcrPages,
 	resumeDocumentOcrWithGateway,
 	type OcrResumeGateway
 } from '../../../src/lib/services/ocr-resume';
@@ -81,5 +82,46 @@ describe('resumeDocumentOcrWithGateway', () => {
 		});
 
 		expect(result).toEqual({ completed: 0, needsReview: 0, pending: 1, failed: 0 });
+	});
+});
+
+describe('parsePendingOcrPages', () => {
+	it('accepts and freezes exact resumable page rows', () => {
+		const result = parsePendingOcrPages([
+			{ page_id: '00000000-0000-4000-8000-000000000001', page_number: 1 },
+			{ page_id: '00000000-0000-4000-8000-000000000002', page_number: 2 }
+		]);
+
+		expect(result).toEqual([
+			{ id: '00000000-0000-4000-8000-000000000001', pageNumber: 1 },
+			{ id: '00000000-0000-4000-8000-000000000002', pageNumber: 2 }
+		]);
+		expect(Object.isFrozen(result)).toBe(true);
+		expect(result.every(Object.isFrozen)).toBe(true);
+	});
+
+	it('rejects malformed, extra or duplicate resumable page rows', () => {
+		expect(() => parsePendingOcrPages(null)).toThrow('Invalid resumable OCR page response');
+		expect(() =>
+			parsePendingOcrPages([
+				{ page_id: 'bad-id', page_number: 1 },
+				{ page_id: '00000000-0000-4000-8000-000000000002', page_number: 2 }
+			])
+		).toThrow('Invalid resumable OCR page response');
+		expect(() =>
+			parsePendingOcrPages([
+				{
+					page_id: '00000000-0000-4000-8000-000000000001',
+					page_number: 1,
+					status: 'pending'
+				}
+			])
+		).toThrow('Invalid resumable OCR page response');
+		expect(() =>
+			parsePendingOcrPages([
+				{ page_id: '00000000-0000-4000-8000-000000000001', page_number: 1 },
+				{ page_id: '00000000-0000-4000-8000-000000000001', page_number: 2 }
+			])
+		).toThrow('Invalid resumable OCR page response');
 	});
 });
