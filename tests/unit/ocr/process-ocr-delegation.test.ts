@@ -31,6 +31,12 @@ describe('process-ocr provider delegation', () => {
 		expect(source).toContain("return respond(503, { code: 'ocr_claim_failed' })");
 	});
 
+	it('cleans the temporary page image when a concurrent completion wins the claim race', () => {
+		expect(source).toMatch(
+			/if \(claimResult\.state === 'already_complete'\) \{\s*await cleanupTemporaryImage\(page\.temporary_image_path\);\s*\}/
+		);
+	});
+
 	it('delegates persistence and HTTP decisions to the shared failure planner', () => {
 		expect(source).toContain("from '../_shared/ocr-failure.ts'");
 		expect(source).toContain('planOcrFailure');
