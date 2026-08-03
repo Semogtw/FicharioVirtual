@@ -1,8 +1,17 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { z } from 'zod';
 import type { Database } from '$lib/types/database';
 import { getSupabaseClient } from './supabase';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const organizationRowSchema = z
+	.object({
+		id: z.string().regex(UUID),
+		title: z.string().min(1).max(240),
+		notebook_id: z.string().regex(UUID).nullable(),
+		updated_at: z.string().refine((value) => !Number.isNaN(Date.parse(value)))
+	})
+	.strict();
 
 export type DocumentOrganization = {
 	id: string;
@@ -55,26 +64,38 @@ export async function updateDocumentOrganization(
 	input: { title: string; notebookId: string | null },
 	client?: DocumentOrganizationClientLike
 ): Promise<DocumentOrganization> {
-	validId(documentId, 'document');
+	const validatedDocumentId = validId(documentId, 'document');
 	const title = input.title.trim();
 	if (title.length < 1 || title.length > 240 || /[\u0000-\u001f\u007f]/u.test(title)) {
 		throw new TypeError('Invalid document title');
 	}
 	const notebookId = input.notebookId === null ? null : validId(input.notebookId, 'notebook');
-	const gateway = client ?? defaultClient();
-	const { data, error } = await gateway
-		.from('documents')
-		.update({ title, notebook_id: notebookId })
-		.eq('id', documentId)
-		.select('id,title,notebook_id,updated_at')
-		.maybeSingle();
-	if (error || data === null) throw new DocumentOrganizationError();
-	return Object.freeze({
-		id: data.id,
-		title: data.title,
-		notebookId: data.notebook_id,
-		updatedAt: data.updated_at
-	});
+	try {
+		const gateway = client ?? defaultClient();
+		const { data, error } = await gateway
+			.from('documents')
+			.update({ title, notebook_id: notebookId })
+			.eq('id', validatedDocumentId)
+			.select('id,title,notebook_id,updated_at')
+			.maybeSingle();
+		if (error || data === null) throw new DocumentOrganizationError();
+		const row = organizationRowSchema.parse(data);
+		if (
+			row.id !== validatedDocumentId ||
+			row.title !== title ||
+			row.notebook_id !== notebookId
+		) {
+			throw new DocumentOrganizationError();
+		}
+		return Object.freeze({
+			id: row.id,
+			title: row.title,
+			notebookId: row.notebook_id,
+			updatedAt: row.updated_at
+		});
+	} catch {
+		throw new DocumentOrganizationError();
+	}
 }
 
 export function typedDocumentOrganizationClient(
