@@ -39,6 +39,8 @@ describe('deployable static artifact workflow', () => {
 	it('packages only the static output with portable checksums and a commit manifest', () => {
 		const workflow = read('.github/workflows/build-deployment-artifact.yml');
 
+		expect(workflow).toContain('mkdir -p fichario-deploy/site');
+		expect(workflow).toContain('cp -a build/. fichario-deploy/site/');
 		expect(workflow).toContain(
 			'find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum'
 		);
