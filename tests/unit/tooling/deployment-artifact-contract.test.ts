@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,7 +14,11 @@ function sha256(content: string | Buffer) {
 function createFixture() {
 	const root = mkdtempSync(join(tmpdir(), 'fichario-deployment-artifact-'));
 	const site = join(root, 'site');
+	const source = join(root, 'source');
 	mkdirSync(site);
+	mkdirSync(source);
+	const packageSource = '{"name":"fichario-virtual"}\n';
+	const lockSource = "lockfileVersion: '9.0'\n";
 	const files = new Map<string, string | Buffer>([
 		[
 			'DEPLOYMENT-MANIFEST.txt',
@@ -26,11 +30,13 @@ function createFixture() {
 				'created_utc=2026-08-03T02:30:00Z',
 				'node_version=v22.16.0',
 				'pnpm_version=10.34.5',
-				`package_sha256=${'a'.repeat(64)}`,
-				`lock_sha256=${'b'.repeat(64)}`,
+				`package_sha256=${sha256(packageSource)}`,
+				`lock_sha256=${sha256(lockSource)}`,
 				''
 			].join('\n')
 		],
+		['source/package.json', packageSource],
+		['source/pnpm-lock.yaml', lockSource],
 		['site/200.html', '<!doctype html><title>Fichário</title>'],
 		['site/_headers', '/*\n  X-Content-Type-Options: nosniff\n'],
 		['site/manifest.webmanifest', '{"name":"Fichário"}'],
@@ -58,8 +64,15 @@ describe('deployable artifact verification', () => {
 			schemaVersion: 1,
 			sourceCommit: '0123456789abcdef0123456789abcdef01234567',
 			targetEnvironment: 'staging',
-			verifiedFiles: 6
+			verifiedFiles: 8
 		});
+	});
+
+	it('requires source package metadata matching the manifest hashes', async () => {
+		const root = createFixture();
+		rmSync(join(root, 'source', 'pnpm-lock.yaml'));
+
+		await expect(verifyDeploymentArtifact(root)).rejects.toThrow(/source\/pnpm-lock/);
 	});
 
 	it('rejects impossible UTC calendar timestamps', async () => {
