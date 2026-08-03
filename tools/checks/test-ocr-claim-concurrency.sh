@@ -24,7 +24,7 @@ SQL
 }
 trap cleanup EXIT
 
-parse_claim_state() {
+parse_claim_value() {
   awk '
     NF && $0 != "BEGIN" && $0 != "COMMIT" && $0 != "SET" && $0 !~ /^aaaaaaaa-/ {
       value = $0
@@ -34,6 +34,35 @@ parse_claim_state() {
       print value
     }
   ' "$@"
+}
+
+validate_claim_shape() {
+  node - "$1" <<'NODE'
+const claim = JSON.parse(process.argv[2]);
+const keys = Object.keys(claim).sort().join(',');
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+if (claim.state === 'claimed') {
+  if (
+    keys !== 'attemptCount,jobId,state,usageToday' ||
+    !uuid.test(claim.jobId) ||
+    !Number.isInteger(claim.attemptCount) ||
+    claim.attemptCount < 1 ||
+    !Number.isInteger(claim.usageToday) ||
+    claim.usageToday < 1
+  ) process.exit(1);
+  process.exit(0);
+}
+if (claim.state === 'quota_exhausted') {
+  if (
+    keys !== 'jobId,nextRetryAt,state' ||
+    !uuid.test(claim.jobId) ||
+    typeof claim.nextRetryAt !== 'string' ||
+    !Number.isFinite(Date.parse(claim.nextRetryAt))
+  ) process.exit(1);
+  process.exit(0);
+}
+process.exit(1);
+NODE
 }
 
 psql "$db_url" -v ON_ERROR_STOP=1 \
@@ -51,7 +80,7 @@ select public.claim_ocr_job(
   'gemini-test',
   now(),
   1
-)->>'state';
+)::text;
 commit;
 SQL
 }
@@ -63,8 +92,19 @@ pid_b=$!
 wait "$pid_a"
 wait "$pid_b"
 
-state_a="$(parse_claim_state "$temporary_directory/claim-a.out")"
-state_b="$(parse_claim_state "$temporary_directory/claim-b.out")"
+claim_a="$(parse_claim_value "$temporary_directory/claim-a.out")"
+claim_b="$(parse_claim_value "$temporary_directory/claim-b.out")"
+state_a="$(node -e 'const claim=JSON.parse(process.argv[1]); process.stdout.write(String(claim.state ?? ""));' "$claim_a")"
+state_b="$(node -e 'const claim=JSON.parse(process.argv[1]); process.stdout.write(String(claim.state ?? ""));' "$claim_b")"
+
+validate_claim_shape "$claim_a" || {
+  echo "Concurrent claim A contract drifted: $claim_a" >&2
+  exit 1
+}
+validate_claim_shape "$claim_b" || {
+  echo "Concurrent claim B contract drifted: $claim_b" >&2
+  exit 1
+}
 if ! {
   [[ "$state_a" == "claimed" && "$state_b" == "quota_exhausted" ]] ||
     [[ "$state_a" == "quota_exhausted" && "$state_b" == "claimed" ]]
@@ -119,7 +159,7 @@ if [[ "$scheduled_count" != "1" ]]; then
 fi
 
 same_day_state="$(
-  psql "$db_url" -Atq -v ON_ERROR_STOP=1 <<SQL | parse_claim_state
+  psql "$db_url" -Atq -v ON_ERROR_STOP=1 <<SQL | parse_claim_value
 begin;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '$user_id', true);
