@@ -18,7 +18,7 @@ Os percentuais e critérios estão detalhados em `docs/READINESS.md`. Eles não 
 
 ## Checkpoint funcional verde
 
-O commit funcional `ddfb122f5190ade9e44e534e2c192ab116ed2a06` recebeu `SUCCESS` no workflow `Validate current head`, run `30784989610`.
+O commit funcional `17f510396740ff78da9b76ce7a9c5d515b382015` recebeu `SUCCESS` no workflow `Validate current head`, run `30788491641`.
 
 A execução comprovou:
 
@@ -26,11 +26,12 @@ A execução comprovou:
 pnpm install --frozen-lockfile
 Prettier + ESLint
 svelte-check: 0 erros, 0 warnings
-167 testes unitários em 52 arquivos
+183 testes unitários em 55 arquivos
+7 cenários de falha OCR por HTTP loopback
 build estático + validação PWA
 5 gates offline de fonte
 3 testes E2E no Chromium
-5 módulos Edge verificados com Deno
+6 módulos Edge verificados com Deno
 27 migrations aplicadas em banco limpo
 54 testes pgTAP
 concorrência e replay OCR idempotente
@@ -62,7 +63,23 @@ Commits posteriores que alteram somente Markdown não modificam esse checkpoint 
 - consentimento persistido, claim concorrente, idempotência e limite diário;
 - estados explícitos de retry, quota, revisão e falha;
 - contrato JSON estrito e classificação de erros do provedor;
+- planejador compartilhado de persistência, resposta pública e backoff;
+- `attemptCount` ausente, fracionário ou menor que 1 recusado antes do provedor;
 - retomada sem reupload e rollup automático do estado do documento.
+
+### Falhas OCR seguras
+
+`pnpm test:ocr:faults:local` usa somente um servidor HTTP efêmero em `127.0.0.1` e o cliente Gemini compartilhado. O gate comprova:
+
+- 429 transitório separado de quota diária;
+- 503 retryable;
+- payload inválido retryable e terminal;
+- timeout/abort real retryable e terminal;
+- chave enviada somente no header;
+- payload de imagem e resposta estruturada;
+- bases de backoff e respostas públicas.
+
+O código implantado não aceita endpoint alternativo, secret, query, body ou header de fault injection. O gate de fonte rejeita superfícies como `GEMINI_API_URL`, `OCR_PROVIDER_URL` e `X-FICHARIO-FAULT`.
 
 ### Dados e segurança
 
@@ -115,7 +132,23 @@ Nenhum desses gates externos foi executado ainda porque o host e o projeto Supab
 
 O repositório `Semogtw/Offline-Toolchains` fabrica um workspace Linux x64 com Node, pnpm/store, Chromium, Deno/cache e Supabase CLI.
 
-A fabricação portátil atual usa o commit de toolchain `1eb6bbfba6ea5ae291f48917a8509413da20845d`, run `30785368504`, fixado no source `ddfb122f5190ade9e44e534e2c192ab116ed2a06`. O smoke instalou 521 pacotes exclusivamente pelo store local, passou lint, tipos, 167 unitários em 52 arquivos, build/PWA, cinco gates de fonte, três E2E e cinco módulos Edge com o registry bloqueado; o `doctor` terminou em `PASS`. O manifest schema 2, os snapshots de package/lockfile e as duas partes do archive foram auditados: hashes dos snapshots conferem, checksums das partes estão publicados e o archive final possui SHA-256 `3fc4ff14b1cd62fbd124a7b92ecaeb12695fa8f37605ac82938ac82ca2eaae25`.
+A fabricação portátil atual usa o commit de toolchain `fa810d8f9c9b6979e0c53ee9c6d839174ef65524`, run `30788834267`, fixado no source `17f510396740ff78da9b76ce7a9c5d515b382015`. O smoke:
+
+- instalou 521 pacotes exclusivamente pelo store local;
+- passou Prettier, ESLint e `svelte-check` com 0 erros/0 warnings;
+- passou 183 unitários em 55 arquivos, incluindo os 7 cenários loopback;
+- passou build/PWA, cinco gates de fonte e três E2E;
+- verificou seis módulos Edge com o registry bloqueado;
+- terminou com `doctor: PASS`.
+
+O manifest schema 2 e os snapshots de package/lockfile foram conferidos. O archive foi publicado em duas partes e possui SHA-256 final `8b955ceb349d450f2724593b1bbcd64e0277506104d68278cbfdde3f13e12a09`.
+
+Checksums das partes:
+
+```text
+part-00 ce77a0ac133108bf79522d90b7729f1c1621b78f79db54ee49e5c892df834e9a
+part-01 e3bf659273a19ad844523e553a586c1e37865a7428893d7b779f668d6990d4a5
+```
 
 Docker e as imagens Supabase continuam externos ao bundle.
 
@@ -124,11 +157,13 @@ Docker e as imagens Supabase continuam externos ao bundle.
 - migrations, Auth, RLS e Storage no projeto remoto;
 - expiração da URL assinada no serviço real;
 - modelo Gemini e quota reais;
-- injeção de 429, 503, timeout e payload inválido;
+- persistência, retomada e cleanup implantados após 429, 503, timeout e payload inválido;
 - PDFs extensos e mistos em dispositivo físico;
 - instalação e atualização do PWA no navegador-alvo;
 - headers do host final;
 - limites gratuitos, billing desativado, backup e rollback operacionais.
+
+A classificação, a resposta pública e o cálculo de backoff das falhas OCR já possuem evidência local por HTTP loopback. O item externo pendente é observar a função implantada e os estados reais no Supabase.
 
 ## Próximas prioridades
 
@@ -136,7 +171,7 @@ Docker e as imagens Supabase continuam externos ao bundle.
 2. aplicar migrations e cadastrar duas contas exclusivas de teste;
 3. configurar o environment `staging` e executar `Verify Supabase staging`;
 4. implantar `process-ocr` e `delete-document`, configurar secrets no Supabase e executar `Verify OCR staging`;
-5. injetar as falhas externas previstas sem habilitar fallback pago;
+5. observar persistência, retomada e cleanup das falhas OCR no ambiente implantado;
 6. publicar um host HTTPS e executar `Verify deployed Fichário`;
 7. testar PDFs e retomada em tablet/celular;
 8. confirmar billing desativado, backup e rollback;
@@ -149,5 +184,6 @@ Docker e as imagens Supabase continuam externos ao bundle.
 - não enviar páginas de PDF com texto para OCR;
 - não cachear respostas autenticadas;
 - não habilitar billing ou fallback pago silencioso;
+- não adicionar endpoint ou controle de fault injection à função implantada;
 - manter commits pequenos e documentação alinhada;
 - atribuir `PASS` somente ao SHA em que o gate foi realmente executado.
