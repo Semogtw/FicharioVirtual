@@ -6,11 +6,11 @@ Os percentuais abaixo são uma estimativa de engenharia, não uma métrica autom
 
 ## Estimativa atual
 
-| Dimensão                           | Progresso estimado | Interpretação                                                                                                                                    |
-| ---------------------------------- | -----------------: | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| MVP implementado em código         |            **98%** | As funções centrais e os gates remotos de host, RLS e Storage estão implementados; o restante codificável se concentra em OCR remoto e operação. |
-| Prontidão operacional para release |            **85%** | CI local, banco, navegador, Edge Functions, PWA e recuperação estão validados; faltam evidências no ambiente remoto e em dispositivos físicos.   |
-| Progresso total ponderado do MVP   |            **94%** | Estimativa combinada, atribuindo maior peso à implementação e mantendo peso relevante para segurança e operação reais.                           |
+| Dimensão                           | Progresso estimado | Interpretação                                                                                                                                      |
+| ---------------------------------- | -----------------: | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MVP implementado em código         |            **99%** | Produto, segurança e gates externos principais estão implementados; o restante codificável está concentrado em falhas remotas e operação assistida. |
+| Prontidão operacional para release |            **85%** | CI local, banco, navegador, Edge Functions, PWA e recuperação estão validados; faltam evidências no ambiente remoto e em dispositivos físicos.     |
+| Progresso total ponderado do MVP   |            **95%** | Estimativa combinada, atribuindo maior peso à implementação e mantendo peso relevante para segurança e operação reais.                             |
 
 A estimativa total usa aproximadamente 70% de peso para implementação e 30% para prontidão operacional. Ela deve cair se o staging revelar um defeito arquitetural e subir somente quando novas evidências forem executadas, não apenas documentadas.
 
@@ -28,11 +28,15 @@ A estimativa total usa aproximadamente 70% de peso para implementação e 30% pa
 - PWA com cache restrito ao shell público;
 - 27 migrations aplicáveis em banco limpo;
 - 54 contratos pgTAP;
-- 139 testes unitários;
+- 151 testes unitários em 49 arquivos;
 - 3 cenários E2E no Chromium;
 - gates de fonte, tipos, lint, build, PWA, Deno e banco;
 - verificador automático do host HTTPS e dos headers;
-- verificador remoto de staging com duas contas, sentinela RLS, objeto Storage privado, download exato e URL assinada;
+- verificador remoto com duas contas, sentinela RLS e Storage privado;
+- verificação de URL assinada antes e depois da expiração;
+- verificador de OCR real com imagem sintética e cleanup por Edge Function;
+- workflows manuais protegidos para host, Supabase e OCR;
+- workflow leve para formatação de documentação;
 - workspace offline com Node, pnpm/store, Chromium, Deno/cache e Supabase CLI;
 - proteção do repositório de toolchains contra material de chave privada rastreado.
 
@@ -44,22 +48,21 @@ A estimativa total usa aproximadamente 70% de peso para implementação e 30% pa
 - aplicar migrations remotamente;
 - cadastrar duas contas exclusivas de teste;
 - executar `Verify Supabase staging`;
-- observar a expiração da URL assinada no projeto remoto;
-- implantar as Edge Functions com secrets exclusivos de staging.
+- implantar as Edge Functions com secrets exclusivos de staging;
+- executar `Verify OCR staging` com confirmação explícita;
+- publicar um host HTTPS e executar `Verify deployed Fichário`.
 
-### OCR real
+### Falhas OCR reais
 
-- confirmar o modelo Gemini e credencial reais;
-- executar OCR com imagens sintéticas e PDFs representativos;
-- provocar 429 diário, rate limit transitório, 503, timeout e payload inválido;
+- provocar 429 diário e rate limit transitório;
+- provocar 503, timeout e payload inválido;
+- confirmar a classificação persistida, o backoff e a retomada;
 - verificar que nenhuma falha habilita cobrança ou fallback silencioso.
 
-### Host e dispositivos
+### Dispositivos
 
-- publicar o build em uma origem HTTPS;
-- executar `Verify deployed Fichário` contra a URL final;
 - instalar, atualizar e remover o PWA no navegador-alvo;
-- testar tablet e celular com PDFs extensos e mistos;
+- testar tablet e celular com PDFs extensos, digitalizados e mistos;
 - medir memória, retomada após encerramento e comportamento com rede instável.
 
 ### Operação
