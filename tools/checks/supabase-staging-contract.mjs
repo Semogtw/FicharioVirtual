@@ -132,3 +132,39 @@ export function assertSignedStorageUrl({ signedUrl, supabaseUrl, objectPath }) {
 	if (decodedPath !== expectedPath) fail('signed URL does not target the exact Storage object');
 	if (!signed.searchParams.get('token')) fail('signed Storage URL has no token');
 }
+
+/**
+ * @param {unknown} value
+ * @param {string} label
+ * @returns {Error}
+ */
+function normalizeFailure(value, label) {
+	return value instanceof Error ? value : new Error(`${label}: ${String(value)}`);
+}
+
+/**
+ * @param {{
+ *   operationError: unknown;
+ *   cleanupResults: Array<PromiseSettledResult<unknown>>;
+ * }} input
+ * @returns {Error | null}
+ */
+export function resolveStagingFailure({ operationError, cleanupResults }) {
+	const failures = [];
+	if (operationError != null) {
+		failures.push(normalizeFailure(operationError, 'staging verification failed'));
+	}
+	for (const result of cleanupResults) {
+		if (result.status === 'rejected') {
+			failures.push(normalizeFailure(result.reason, 'staging cleanup failed'));
+		}
+	}
+	if (failures.length === 0) return null;
+	if (failures.length === 1) return failures[0];
+	return new AggregateError(
+		failures,
+		operationError == null
+			? 'Supabase staging cleanup failed'
+			: 'Supabase staging verification and cleanup failed'
+	);
+}
