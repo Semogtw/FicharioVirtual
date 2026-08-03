@@ -6,6 +6,7 @@ import {
 	listTags,
 	renameTag,
 	setTagMembership,
+	TagServiceError,
 	type TagsClientLike
 } from '../../../src/lib/services/tags';
 
@@ -92,6 +93,51 @@ describe('tag service', () => {
 		);
 		await expect(setTagMembership(tagId, documentId, 'yes' as never)).rejects.toThrow(
 			'Invalid tag assignment'
+		);
+	});
+
+	it('rejects malformed tag and membership rows instead of dropping them', async () => {
+		const malformedTags: TagsClientLike = {
+			async rpc() {
+				return {
+					data: [
+						{
+							name: 'Citologia',
+							document_count: 3,
+							created_at: '2026-08-02T08:00:00.000Z',
+							updated_at: '2026-08-02T08:00:00.000Z'
+						}
+					],
+					error: null
+				};
+			}
+		};
+		await expect(listTags(malformedTags)).rejects.toBeInstanceOf(TagServiceError);
+
+		const malformedMemberships: TagsClientLike = {
+			async rpc() {
+				return { data: [{ document_id: 'bad-id' }], error: null };
+			}
+		};
+		await expect(listTagDocumentIds(tagId, malformedMemberships)).rejects.toBeInstanceOf(
+			TagServiceError
+		);
+	});
+
+	it('normalizes transport failures for every RPC entry point', async () => {
+		const transport: TagsClientLike = {
+			async rpc() {
+				throw new Error('internal tags database host');
+			}
+		};
+
+		await expect(listTags(transport)).rejects.toBeInstanceOf(TagServiceError);
+		await expect(createTag('Citologia', transport)).rejects.toBeInstanceOf(TagServiceError);
+		await expect(renameTag(tagId, 'Células', transport)).rejects.toBeInstanceOf(TagServiceError);
+		await expect(deleteTag(tagId, transport)).rejects.toBeInstanceOf(TagServiceError);
+		await expect(listTagDocumentIds(tagId, transport)).rejects.toBeInstanceOf(TagServiceError);
+		await expect(setTagMembership(tagId, documentId, true, transport)).rejects.toBeInstanceOf(
+			TagServiceError
 		);
 	});
 });
