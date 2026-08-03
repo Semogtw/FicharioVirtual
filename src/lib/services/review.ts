@@ -1,6 +1,39 @@
+import { z } from 'zod';
 import type { PageWarning } from '$lib/domain/page';
-import type { DocumentKind, Json, ProcessingStatus } from '$lib/types/database';
+import type { DocumentKind, ProcessingStatus } from '$lib/types/database';
 import { getSupabaseClient } from './supabase';
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const warningSchema = z
+	.object({
+		code: z.string().trim().min(1).max(100),
+		message: z.string().trim().min(1).max(500)
+	})
+	.strict();
+const reviewRowSchema = z
+	.object({
+		page_id: z.string().regex(UUID),
+		document_id: z.string().regex(UUID),
+		document_title: z.string().trim().min(1).max(240),
+		document_kind: z.enum(['image', 'pdf']),
+		page_number: z.number().int().min(1).max(10_000),
+		page_status: z.enum([
+			'pending',
+			'processing',
+			'ready',
+			'retryable',
+			'blocked_quota',
+			'needs_review',
+			'failed'
+		]),
+		excerpt: z.string().max(2_000),
+		warnings: z.array(warningSchema).max(100),
+		updated_at: z.string().refine((value) => !Number.isNaN(Date.parse(value)))
+	})
+	.strict();
+const reviewRowsSchema = z.array(reviewRowSchema).max(100);
+
+type ReviewRow = z.infer<typeof reviewRowSchema>;
 
 export type ReviewItem = {
 	pageId: string;
@@ -12,18 +45,6 @@ export type ReviewItem = {
 	excerpt: string;
 	warnings: readonly PageWarning[];
 	updatedAt: string;
-};
-
-type ReviewRow = {
-	page_id: string;
-	document_id: string;
-	document_title: string;
-	document_kind: DocumentKind;
-	page_number: number;
-	page_status: ProcessingStatus;
-	excerpt: string;
-	warnings: Json;
-	updated_at: string;
 };
 
 export type ReviewClientLike = {
@@ -45,16 +66,18 @@ export class ReviewServiceError extends Error {
 	}
 }
 
-function warnings(value: Json): readonly PageWarning[] {
-	if (!Array.isArray(value)) return Object.freeze([]);
-	return Object.freeze(
-		value.flatMap((candidate) => {
-			if (candidate === null || typeof candidate !== 'object' || Array.isArray(candidate))
-				return [];
-			if (typeof candidate.code !== 'string' || typeof candidate.message !== 'string') return [];
-			return [Object.freeze({ code: candidate.code, message: candidate.message })];
-		})
-	);
+function mapRow(row: ReviewRow): ReviewItem {
+	return Object.freeze({
+		pageId: row.page_id,
+		documentId: row.document_id,
+		documentTitle: row.document_title,
+		documentKind: row.document_kind,
+		pageNumber: row.page_number,
+		pageStatus: row.page_status,
+		excerpt: row.excerpt,
+		warnings: Object.freeze(row.warnings.map((warning) => Object.freeze({ ...warning }))),
+		updatedAt: row.updated_at
+	});
 }
 
 function defaultClient(): ReviewClientLike {
@@ -73,25 +96,16 @@ export async function listReviewItems(
 	if (!Number.isInteger(offset) || offset < 0 || offset > 10_000) {
 		throw new TypeError('Invalid review offset');
 	}
-	const gateway = client ?? defaultClient();
-	const { data, error } = await gateway.rpc('list_review_pages', {
-		result_limit: limit,
-		result_offset: offset
-	});
-	if (error || !Array.isArray(data)) throw new ReviewServiceError();
-	return Object.freeze(
-		(data as ReviewRow[]).map((row) =>
-			Object.freeze({
-				pageId: row.page_id,
-				documentId: row.document_id,
-				documentTitle: row.document_title,
-				documentKind: row.document_kind,
-				pageNumber: row.page_number,
-				pageStatus: row.page_status,
-				excerpt: row.excerpt,
-				warnings: warnings(row.warnings),
-				updatedAt: row.updated_at
-			})
-		)
-	);
+	try {
+		const gateway = client ?? defaultClient();
+		const { data, error } = await gateway.rpc('list_review_pages', {
+			result_limit: limit,
+			result_offset: offset
+		});
+		if (error) throw new ReviewServiceError();
+		const rows = reviewRowsSchema.parse(data);
+		return Object.freeze(rows.map(mapRow));
+	} catch {
+		throw new ReviewServiceError();
+	}
 }
