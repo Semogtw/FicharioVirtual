@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { pdfQueueStatusFromResult } from '../../../src/lib/stores/pdf-import-queue.svelte';
+import {
+	mergePdfOcrResumeSummary,
+	pdfQueueStatusFromResult
+} from '../../../src/lib/stores/pdf-import-queue.svelte';
 import type { UploadedPdf } from '../../../src/lib/pdf/upload';
 
 function result(overrides: Partial<UploadedPdf> = {}): UploadedPdf {
@@ -27,6 +30,7 @@ function result(overrides: Partial<UploadedPdf> = {}): UploadedPdf {
 		ocrCompleted: 1,
 		ocrNeedsReview: 0,
 		ocrPending: 0,
+		ocrFailed: 0,
 		...overrides
 	};
 }
@@ -36,6 +40,11 @@ describe('pdfQueueStatusFromResult', () => {
 		expect(pdfQueueStatusFromResult(result({ ocrPending: 1 }))).toBe('waiting');
 	});
 
+	it('surfaces terminal OCR failures after pending work is exhausted', () => {
+		expect(pdfQueueStatusFromResult(result({ ocrFailed: 1 }))).toBe('failed');
+		expect(pdfQueueStatusFromResult(result({ ocrPending: 1, ocrFailed: 1 }))).toBe('waiting');
+	});
+
 	it('surfaces native or OCR review requirements', () => {
 		expect(pdfQueueStatusFromResult(result({ reviewPageCount: 1 }))).toBe('needs_review');
 		expect(pdfQueueStatusFromResult(result({ ocrNeedsReview: 1 }))).toBe('needs_review');
@@ -43,5 +52,36 @@ describe('pdfQueueStatusFromResult', () => {
 
 	it('marks the PDF complete only after every page reaches a terminal state', () => {
 		expect(pdfQueueStatusFromResult(result())).toBe('complete');
+	});
+});
+
+describe('mergePdfOcrResumeSummary', () => {
+	it('preserves pending pages that were not eligible for this resume pass', () => {
+		const merged = mergePdfOcrResumeSummary(result({ ocrCompleted: 0, ocrPending: 3 }), {
+			completed: 1,
+			needsReview: 0,
+			pending: 1,
+			failed: 0
+		});
+		expect(merged).toEqual(expect.objectContaining({
+			ocrCompleted: 1,
+			ocrNeedsReview: 0,
+			ocrPending: 2,
+			ocrFailed: 0
+		}));
+	});
+
+	it('moves terminal failures out of pending without losing other blocked pages', () => {
+		const merged = mergePdfOcrResumeSummary(result({ ocrCompleted: 0, ocrPending: 2 }), {
+			completed: 0,
+			needsReview: 0,
+			pending: 0,
+			failed: 1
+		});
+		expect(merged).toEqual(expect.objectContaining({
+			ocrCompleted: 0,
+			ocrPending: 1,
+			ocrFailed: 1
+		}));
 	});
 });
