@@ -10,7 +10,7 @@ describe('OCR staging runner evidence', () => {
 	it('writes a sanitized report when configuration fails before authentication', () => {
 		const directory = mkdtempSync(join(tmpdir(), 'fichario-ocr-report-'));
 		const reportPath = join(directory, 'report.json');
-		const env = { ...process.env, OCR_STAGING_REPORT_PATH: reportPath };
+		const env: NodeJS.ProcessEnv = { ...process.env, OCR_STAGING_REPORT_PATH: reportPath };
 		for (const name of [
 			'STAGING_SUPABASE_URL',
 			'STAGING_SUPABASE_PUBLISHABLE_KEY',
