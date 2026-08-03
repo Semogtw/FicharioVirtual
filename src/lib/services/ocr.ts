@@ -5,7 +5,7 @@ const ERROR_CODE = /^[a-z][a-z0-9_]{1,63}$/;
 
 export type OcrRunResult =
 	| { state: 'complete'; needsReview: boolean; warningCount: number }
-	| { state: 'already_complete' }
+	| { state: 'already_complete'; needsReview: boolean }
 	| { state: 'busy' }
 	| { state: 'retry_later' }
 	| { state: 'quota_exhausted' };
@@ -137,8 +137,13 @@ function parseResult(data: unknown): OcrRunResult {
 			warningCount: value.warningCount as number
 		});
 	}
+	if (value.state === 'already_complete') {
+		if (!hasExactKeys(value, ['state', 'needsReview']) || typeof value.needsReview !== 'boolean') {
+			throw new OcrProcessingError('ocr_response_invalid', true);
+		}
+		return Object.freeze({ state: 'already_complete', needsReview: value.needsReview });
+	}
 	if (
-		value.state === 'already_complete' ||
 		value.state === 'busy' ||
 		value.state === 'retry_later' ||
 		value.state === 'quota_exhausted'
