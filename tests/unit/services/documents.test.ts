@@ -8,6 +8,7 @@ import { mapNotebookRecord } from '../../../src/lib/domain/notebook';
 import {
 	collectAllDocumentPages,
 	DocumentServiceError,
+	parseDocumentFilters,
 	parseDocumentRecord,
 	parseDocumentRecords
 } from '../../../src/lib/services/documents';
@@ -179,6 +180,47 @@ describe('document record response contract', () => {
 	it('rejects result sets larger than the requested query bound', () => {
 		expect(() => parseDocumentRecords([row(), row({ id: notebookId })], 1)).toThrow(
 			'Invalid document response'
+		);
+	});
+});
+
+describe('document filter contract', () => {
+	it('accepts and freezes exact filters', () => {
+		const filters = parseDocumentFilters({
+			notebookId: '11111111-1111-4111-8111-111111111111',
+			kind: 'pdf',
+			status: 'needs_review',
+			createdFrom: '2026-08-01T00:00:00.000Z',
+			createdTo: '2026-08-03T00:00:00.000Z'
+		});
+
+		expect(filters).toEqual({
+			notebookId: '11111111-1111-4111-8111-111111111111',
+			kind: 'pdf',
+			status: 'needs_review',
+			createdFrom: '2026-08-01T00:00:00.000Z',
+			createdTo: '2026-08-03T00:00:00.000Z'
+		});
+		expect(Object.isFrozen(filters)).toBe(true);
+	});
+
+	it('rejects invalid, extra or inverted filters', () => {
+		expect(() => parseDocumentFilters({ notebookId: 'bad-id' })).toThrow(
+			'Invalid document filters'
+		);
+		expect(() => parseDocumentFilters({ kind: 'text' })).toThrow('Invalid document filters');
+		expect(() => parseDocumentFilters({ status: 'deleted' })).toThrow('Invalid document filters');
+		expect(() => parseDocumentFilters({ createdFrom: 'not-a-date' })).toThrow(
+			'Invalid document filters'
+		);
+		expect(() =>
+			parseDocumentFilters({
+				createdFrom: '2026-08-04T00:00:00.000Z',
+				createdTo: '2026-08-03T00:00:00.000Z'
+			})
+		).toThrow('Invalid document filters');
+		expect(() => parseDocumentFilters({ private_content: 'no' })).toThrow(
+			'Invalid document filters'
 		);
 	});
 });
