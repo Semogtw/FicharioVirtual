@@ -1,3 +1,5 @@
+import { isIsoTimestamp } from '$lib/validation/iso-timestamp';
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_TEXT_LENGTH = 1_000_000;
 
@@ -15,7 +17,7 @@ function validDraft(draft: CorrectionDraft) {
 		typeof draft.text === 'string' &&
 		draft.text.length <= MAX_TEXT_LENGTH &&
 		typeof draft.updatedAt === 'string' &&
-		!Number.isNaN(Date.parse(draft.updatedAt))
+		isIsoTimestamp(draft.updatedAt)
 	);
 }
 
