@@ -1,6 +1,6 @@
 # Prontidão do Fichário Virtual
 
-_Atualizado em 2 de agosto de 2026._
+_Atualizado em 3 de agosto de 2026._
 
 Os percentuais abaixo são uma estimativa de engenharia, não uma métrica automática. Eles separam implementação do produto de validação operacional para evitar que um MVP funcional seja confundido com uma release já pronta para dados reais.
 
@@ -8,9 +8,9 @@ Os percentuais abaixo são uma estimativa de engenharia, não uma métrica autom
 
 | Dimensão                           | Progresso estimado | Interpretação                                                                                                                                  |
 | ---------------------------------- | -----------------: | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| MVP implementado em código         |            **97%** | As funções centrais estão presentes; o restante codificável está concentrado em ampliar gates externos e ajustes revelados pelo staging.       |
+| MVP implementado em código         |            **98%** | As funções centrais e os gates remotos de host, RLS e Storage estão implementados; o restante codificável se concentra em OCR remoto e operação. |
 | Prontidão operacional para release |            **85%** | CI local, banco, navegador, Edge Functions, PWA e recuperação estão validados; faltam evidências no ambiente remoto e em dispositivos físicos. |
-| Progresso total ponderado do MVP   |            **93%** | Estimativa combinada, atribuindo maior peso à implementação e mantendo peso relevante para segurança e operação reais.                         |
+| Progresso total ponderado do MVP   |            **94%** | Estimativa combinada, atribuindo maior peso à implementação e mantendo peso relevante para segurança e operação reais.                         |
 
 A estimativa total usa aproximadamente 70% de peso para implementação e 30% para prontidão operacional. Ela deve cair se o staging revelar um defeito arquitetural e subir somente quando novas evidências forem executadas, não apenas documentadas.
 
@@ -28,11 +28,11 @@ A estimativa total usa aproximadamente 70% de peso para implementação e 30% pa
 - PWA com cache restrito ao shell público;
 - 27 migrations aplicáveis em banco limpo;
 - 54 contratos pgTAP;
-- 134 testes unitários;
+- 139 testes unitários;
 - 3 cenários E2E no Chromium;
 - gates de fonte, tipos, lint, build, PWA, Deno e banco;
 - verificador automático do host HTTPS e dos headers;
-- verificador remoto de staging com duas contas e sentinela RLS;
+- verificador remoto de staging com duas contas, sentinela RLS, objeto Storage privado, download exato e URL assinada;
 - workspace offline com Node, pnpm/store, Chromium, Deno/cache e Supabase CLI;
 - proteção do repositório de toolchains contra material de chave privada rastreado.
 
@@ -44,7 +44,7 @@ A estimativa total usa aproximadamente 70% de peso para implementação e 30% pa
 - aplicar migrations remotamente;
 - cadastrar duas contas exclusivas de teste;
 - executar `Verify Supabase staging`;
-- testar Storage privado e expiração de URL assinada no projeto remoto;
+- observar a expiração da URL assinada no projeto remoto;
 - implantar as Edge Functions com secrets exclusivos de staging.
 
 ### OCR real
