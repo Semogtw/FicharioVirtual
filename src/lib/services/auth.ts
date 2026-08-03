@@ -87,23 +87,38 @@ async function closeUnauthorizedSession(client: AuthClientLike) {
 	}
 }
 
+async function closeFailedAuthorization(client: AuthClientLike, error: unknown): Promise<never> {
+	await closeUnauthorizedSession(client);
+	unavailable(error);
+}
+
 async function authorizeSession(session: Session, client: AuthClientLike): Promise<Session | null> {
+	let data: unknown;
 	try {
-		const { data, error } = await client
+		const response = await client
 			.from('app_users')
 			.select('is_active')
 			.eq('user_id', session.user.id)
 			.eq('is_active', true)
 			.maybeSingle();
-
-		if (error) throw new AuthServiceError('auth_unavailable');
-		if (parseAllowlistRow(data) === true) return session;
-
-		await closeUnauthorizedSession(client);
-		return null;
+		if (response.error) {
+			return closeFailedAuthorization(client, new AuthServiceError('auth_unavailable'));
+		}
+		data = response.data;
 	} catch (error) {
-		unavailable(error);
+		return closeFailedAuthorization(client, error);
 	}
+
+	let active: boolean | null;
+	try {
+		active = parseAllowlistRow(data);
+	} catch (error) {
+		return closeFailedAuthorization(client, error);
+	}
+	if (active === true) return session;
+
+	await closeUnauthorizedSession(client);
+	return null;
 }
 
 export async function loadAuthorizedSession(
