@@ -2,11 +2,12 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { mapPageRecord, type PageDetail, type PageRecord } from '$lib/domain/page';
 import type { Database, DocumentKind, DocumentStatus, ProcessingStatus } from '$lib/types/database';
+import { isIsoTimestamp } from '$lib/validation/iso-timestamp';
 import { getSupabaseClient } from './supabase';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_CORRECTION_LENGTH = 1_000_000;
-const timestamp = z.string().refine((value) => !Number.isNaN(Date.parse(value)));
+const timestamp = z.string().refine(isIsoTimestamp);
 const warningSchema = z
 	.object({
 		code: z.string().regex(/^[a-z][a-z0-9_]{1,63}$/),
