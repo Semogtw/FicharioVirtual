@@ -1,0 +1,60 @@
+import { createHash } from 'node:crypto';
+import { describe, expect, it } from 'vitest';
+import {
+	assertOcrInvocation,
+	assertOcrPersistence,
+	createOcrProbePng,
+	normalizeOcrProbeText
+} from '../../../tools/checks/ocr-staging-contract.mjs';
+
+describe('OCR staging contract', () => {
+	it('generates deterministic readable PNG bytes with nonce-specific identity', () => {
+		const first = createOcrProbePng('probe-aaaaaaaa');
+		const repeated = createOcrProbePng('probe-aaaaaaaa');
+		const second = createOcrProbePng('probe-bbbbbbbb');
+		const digest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+
+		expect(Array.from(first.slice(0, 8))).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
+		expect(first.byteLength).toBeGreaterThan(500);
+		expect(digest(first)).toBe(digest(repeated));
+		expect(digest(first)).not.toBe(digest(second));
+	});
+
+	it('normalizes accents and punctuation before token checks', () => {
+		expect(normalizeOcrProbeText('FICHÁRIO — OCR: 2718')).toBe('fichario ocr 2718');
+		expect(normalizeOcrProbeText(null)).toBe('');
+	});
+
+	it('requires a completed Edge Function response', () => {
+		expect(() =>
+			assertOcrInvocation({ data: { state: 'complete', needsReview: false, warningCount: 0 } })
+		).not.toThrow();
+		expect(() =>
+			assertOcrInvocation({ data: { state: 'retry_later', needsReview: false, warningCount: 0 } })
+		).toThrow(/unexpected function state/);
+	});
+
+	it('requires aligned terminal rows and the synthetic transcript tokens', () => {
+		const document = { status: 'ready' };
+		const page = {
+			status: 'ready',
+			extraction_source: 'ocr',
+			ocr_raw_text: 'Fichário OCR 2718',
+			warnings: []
+		};
+		const job = {
+			status: 'ready',
+			attempt_count: 1,
+			last_error_code: null,
+			finished_at: '2026-08-03T01:00:00.000Z'
+		};
+
+		expect(() => assertOcrPersistence({ document, page, job })).not.toThrow();
+		expect(() =>
+			assertOcrPersistence({ document, page: { ...page, ocr_raw_text: 'unrelated text' }, job })
+		).toThrow(/missing token/);
+		expect(() =>
+			assertOcrPersistence({ document, page, job: { ...job, status: 'processing' } })
+		).toThrow(/states diverged/);
+	});
+});
