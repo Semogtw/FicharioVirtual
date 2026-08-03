@@ -5,7 +5,11 @@ import {
 	type DocumentSummary
 } from '../../../src/lib/domain/document';
 import { mapNotebookRecord } from '../../../src/lib/domain/notebook';
-import { collectAllDocumentPages, DocumentServiceError } from '../../../src/lib/services/documents';
+import {
+	collectAllDocumentPages,
+	DocumentServiceError,
+	parseDocumentRecords
+} from '../../../src/lib/services/documents';
 
 function document(id: string, createdAt: string): DocumentSummary {
 	return Object.freeze({
@@ -117,5 +121,56 @@ describe('notebook mapping', () => {
 			createdAt: '2026-08-02T01:00:00.000Z',
 			updatedAt: '2026-08-02T02:00:00.000Z'
 		});
+	});
+});
+
+describe('document record response contract', () => {
+	const documentId = '11111111-1111-4111-8111-111111111111';
+	const notebookId = '22222222-2222-4222-8222-222222222222';
+
+	function row(overrides: Record<string, unknown> = {}) {
+		return {
+			id: documentId,
+			title: 'Fotossíntese',
+			kind: 'pdf',
+			status: 'ready',
+			page_count: 12,
+			thumbnail_path: 'user/document/thumb.webp',
+			notebook_id: notebookId,
+			created_at: '2026-08-02T01:00:00.000Z',
+			updated_at: '2026-08-02T02:00:00.000Z',
+			...overrides
+		};
+	}
+
+	it('accepts and freezes exact document rows', () => {
+		const result = parseDocumentRecords([row()], 61);
+
+		expect(result).toEqual([row()]);
+		expect(Object.isFrozen(result)).toBe(true);
+		expect(result.every(Object.isFrozen)).toBe(true);
+	});
+
+	it('rejects malformed, extra or duplicate document rows', () => {
+		const missingId = { ...row() } as Record<string, unknown>;
+		delete missingId.id;
+
+		expect(() => parseDocumentRecords([missingId], 61)).toThrow('Invalid document response');
+		expect(() => parseDocumentRecords([row({ kind: 'text' })], 61)).toThrow(
+			'Invalid document response'
+		);
+		expect(() => parseDocumentRecords([row({ created_at: 'invalid-date' })], 61)).toThrow(
+			'Invalid document response'
+		);
+		expect(() => parseDocumentRecords([row({ private_content: 'no' })], 61)).toThrow(
+			'Invalid document response'
+		);
+		expect(() => parseDocumentRecords([row(), row()], 61)).toThrow('Invalid document response');
+	});
+
+	it('rejects result sets larger than the requested query bound', () => {
+		expect(() => parseDocumentRecords([row(), row({ id: notebookId })], 1)).toThrow(
+			'Invalid document response'
+		);
 	});
 });
