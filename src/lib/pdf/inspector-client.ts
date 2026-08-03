@@ -52,6 +52,190 @@ function validate(file: File) {
 	}
 }
 
+function hasExactKeys(record: Record<string, unknown>, expected: readonly string[]) {
+	const actual = Object.keys(record).sort();
+	const sortedExpected = [...expected].sort();
+	return (
+		actual.length === sortedExpected.length &&
+		actual.every((key, index) => key === sortedExpected[index])
+	);
+}
+
+function invalidWorkerResponse(): never {
+	throw new TypeError('Invalid PDF worker response');
+}
+
+function validPage(value: unknown, pageCount: number): value is number {
+	return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= pageCount;
+}
+
+function parsePageNumbers(data: unknown, pageCount: number): readonly number[] {
+	if (!Array.isArray(data)) invalidWorkerResponse();
+	const seen = new Set<number>();
+	const values = data.map((value) => {
+		if (!validPage(value, pageCount) || seen.has(value)) invalidWorkerResponse();
+		seen.add(value);
+		return value;
+	});
+	return Object.freeze(values);
+}
+
+function parseInspection(data: unknown): PdfInspection {
+	if (data === null || typeof data !== 'object' || Array.isArray(data)) {
+		invalidWorkerResponse();
+	}
+	const value = data as Record<string, unknown>;
+	if (
+		!hasExactKeys(value, [
+			'type',
+			'pageCount',
+			'nativePages',
+			'pagesNeedingOcr',
+			'ocrReasonsByPage',
+			'markdown',
+			'title',
+			'confidence',
+			'processingTimeMs',
+			'layout',
+			'hasEncodingIssues'
+		]) ||
+		(value.type !== 'TextBased' &&
+			value.type !== 'Scanned' &&
+			value.type !== 'ImageBased' &&
+			value.type !== 'Mixed') ||
+		typeof value.pageCount !== 'number' ||
+		!Number.isInteger(value.pageCount) ||
+		value.pageCount < 1 ||
+		value.pageCount > 10_000 ||
+		!Array.isArray(value.nativePages) ||
+		!Array.isArray(value.ocrReasonsByPage) ||
+		(value.markdown !== null &&
+			(typeof value.markdown !== 'string' || value.markdown.trim() !== value.markdown || value.markdown.length < 1)) ||
+		(value.title !== null &&
+			(typeof value.title !== 'string' || value.title.trim() !== value.title || value.title.length < 1)) ||
+		typeof value.confidence !== 'number' ||
+		!Number.isFinite(value.confidence) ||
+		value.confidence < 0 ||
+		value.confidence > 1 ||
+		typeof value.processingTimeMs !== 'number' ||
+		!Number.isFinite(value.processingTimeMs) ||
+		value.processingTimeMs < 0 ||
+		typeof value.hasEncodingIssues !== 'boolean' ||
+		value.layout === null ||
+		typeof value.layout !== 'object' ||
+		Array.isArray(value.layout)
+	) {
+		invalidWorkerResponse();
+	}
+	const pageCount = value.pageCount;
+	const pagesNeedingOcr = parsePageNumbers(value.pagesNeedingOcr, pageCount);
+	const ocrPages = new Set(pagesNeedingOcr);
+	const nativePagesSeen = new Set<number>();
+	const nativePages = Object.freeze(
+		value.nativePages.map((entry) => {
+			if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+				invalidWorkerResponse();
+			}
+			const record = entry as Record<string, unknown>;
+			if (
+				!hasExactKeys(record, ['pageNumber', 'text']) ||
+				!validPage(record.pageNumber, pageCount) ||
+				nativePagesSeen.has(record.pageNumber) ||
+				ocrPages.has(record.pageNumber) ||
+				typeof record.text !== 'string' ||
+				record.text.length < 1
+			) {
+				invalidWorkerResponse();
+			}
+			nativePagesSeen.add(record.pageNumber);
+			return Object.freeze({ pageNumber: record.pageNumber, text: record.text });
+		})
+	);
+	const reasonPages = new Set<number>();
+	const ocrReasonsByPage = Object.freeze(
+		value.ocrReasonsByPage.map((entry) => {
+			if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+				invalidWorkerResponse();
+			}
+			const record = entry as Record<string, unknown>;
+			if (
+				!hasExactKeys(record, ['pageNumber', 'reasons']) ||
+				!validPage(record.pageNumber, pageCount) ||
+				!ocrPages.has(record.pageNumber) ||
+				reasonPages.has(record.pageNumber) ||
+				!Array.isArray(record.reasons) ||
+				record.reasons.some((reason) => typeof reason !== 'string')
+			) {
+				invalidWorkerResponse();
+			}
+			reasonPages.add(record.pageNumber);
+			return Object.freeze({
+				pageNumber: record.pageNumber,
+				reasons: Object.freeze([...record.reasons] as string[])
+			});
+		})
+	);
+	const layout = value.layout as Record<string, unknown>;
+	if (
+		!hasExactKeys(layout, ['isComplex', 'pagesWithTables', 'pagesWithColumns']) ||
+		typeof layout.isComplex !== 'boolean'
+	) {
+		invalidWorkerResponse();
+	}
+	return Object.freeze({
+		type: value.type,
+		pageCount,
+		nativePages,
+		pagesNeedingOcr,
+		ocrReasonsByPage,
+		markdown: value.markdown,
+		title: value.title,
+		confidence: value.confidence,
+		processingTimeMs: value.processingTimeMs,
+		layout: Object.freeze({
+			isComplex: layout.isComplex,
+			pagesWithTables: parsePageNumbers(layout.pagesWithTables, pageCount),
+			pagesWithColumns: parsePageNumbers(layout.pagesWithColumns, pageCount)
+		}),
+		hasEncodingIssues: value.hasEncodingIssues
+	});
+}
+
+export function parsePdfWorkerResponse(data: unknown, expectedId: string): PdfWorkerResponse {
+	if (
+		typeof expectedId !== 'string' ||
+		expectedId.length < 1 ||
+		data === null ||
+		typeof data !== 'object' ||
+		Array.isArray(data)
+	) {
+		invalidWorkerResponse();
+	}
+	const value = data as Record<string, unknown>;
+	if (value.type === 'failure') {
+		if (!hasExactKeys(value, ['type', 'id', 'code']) || value.id !== expectedId) {
+			invalidWorkerResponse();
+		}
+		const code = value.code;
+		if (code !== 'invalid_pdf' && code !== 'encrypted_pdf' && code !== 'inspection_failed') {
+			invalidWorkerResponse();
+		}
+		return Object.freeze({ type: 'failure', id: expectedId, code });
+	}
+	if (
+		value.type !== 'success' ||
+		!hasExactKeys(value, ['type', 'id', 'inspection']) ||
+		value.id !== expectedId
+	) {
+		invalidWorkerResponse();
+	}
+	return Object.freeze({
+		type: 'success',
+		id: expectedId,
+		inspection: parseInspection(value.inspection)
+	});
+}
+
 export class PdfInspectionClient {
 	readonly #queue: Task[] = [];
 	readonly #factory: () => PdfWorkerLike;
@@ -109,12 +293,19 @@ export class PdfInspectionClient {
 			return;
 		}
 		task.worker.onmessage = (event) => {
-			if (event.data.id !== task.id || task.settled) return;
-			if (event.data.type === 'failure') {
-				this.#finish(task, new PdfInspectionError(event.data.code));
+			if (task.settled) return;
+			let response: PdfWorkerResponse;
+			try {
+				response = parsePdfWorkerResponse(event.data, task.id);
+			} catch {
+				this.#finish(task, new PdfInspectionError('inspection_failed'));
 				return;
 			}
-			this.#finish(task, null, event.data.inspection);
+			if (response.type === 'failure') {
+				this.#finish(task, new PdfInspectionError(response.code));
+				return;
+			}
+			this.#finish(task, null, response.inspection);
 		};
 		task.worker.onerror = () => this.#finish(task, new PdfInspectionError('inspection_failed'));
 		task.worker.postMessage({ type: 'inspect', id: task.id, file: task.file });
