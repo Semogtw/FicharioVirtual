@@ -110,4 +110,30 @@ describe('ImagePreparationClient', () => {
 		await active;
 		expect(workers).toHaveLength(1);
 	});
+
+	it('releases the worker slot when posting the preparation request throws', async () => {
+		const workers: FakeWorker[] = [];
+		let call = 0;
+		const client = new ImagePreparationClient(() => {
+			call += 1;
+			const worker = new FakeWorker();
+			if (call === 1) {
+				worker.postMessage = () => {
+					throw new Error('structured clone failed');
+				};
+			}
+			workers.push(worker);
+			return worker;
+		}, 1);
+
+		await expect(client.prepare(image('broken.jpg'))).rejects.toEqual(
+			expect.objectContaining({ name: 'ImagePreparationError', code: 'worker_failed' })
+		);
+		expect(workers[0]?.terminated).toBe(true);
+
+		const next = client.prepare(image('next.jpg'));
+		expect(workers).toHaveLength(2);
+		workers[1]?.succeed();
+		await expect(next).resolves.toEqual(expect.objectContaining({ originalName: 'next.jpg' }));
+	});
 });
