@@ -64,6 +64,7 @@ Comandos segmentados:
 pnpm test:source:offline
 pnpm test:functions:check
 pnpm test:db:local
+pnpm test:deployment:artifact -- /caminho/para/fichario-deploy
 pnpm test:deployment -- https://host.example
 pnpm test:staging:supabase
 pnpm test:staging:ocr
