@@ -116,7 +116,7 @@ A Action:
 - confirma que URL e chave escolhidas foram incorporadas ao build;
 - rejeita os placeholders locais usados pelos E2E;
 - publica `fichario-static-<commit>-<environment>` por sete dias;
-- inclui `DEPLOYMENT-MANIFEST.txt` e `SHA256SUMS` portáteis;
+- inclui `DEPLOYMENT-MANIFEST.txt`, `SHA256SUMS` e snapshots de `package.json`/`pnpm-lock.yaml`;
 - não aplica migrations, não implanta Edge Functions e não publica em um host.
 
 Depois de baixar e extrair o artifact, valide primeiro os hashes portáteis:
@@ -133,9 +133,9 @@ A partir de um checkout da mesma versão do repositório, execute também o cont
 pnpm test:deployment:artifact -- /caminho/para/fichario-deploy
 ```
 
-Esse comando valida o schema e os campos do manifest, a cobertura exata dos checksums, os arquivos públicos obrigatórios, a ausência de links simbólicos ou paths inseguros e a separação entre `site/` e os metadados de release.
+Esse comando valida o schema 2 e os campos do manifest, a cobertura exata dos checksums, os arquivos públicos obrigatórios, a ausência de links simbólicos ou paths inseguros e a separação entre `site/` e os metadados de release. Também confirma que `source/package.json` identifica o Fichário Virtual, que `source/pnpm-lock.yaml` usa pnpm lockfile v9 com importador raiz e que ambos correspondem aos hashes declarados.
 
-Sirva somente `fichario-deploy/site/` como raiz do site. `DEPLOYMENT-MANIFEST.txt` e `SHA256SUMS` ficam um nível acima, fora da raiz pública. O manifest fixa commit, environment, runtime e hashes de `package.json`/`pnpm-lock.yaml`, mas não substitui o gate pós-deployment.
+Sirva somente `fichario-deploy/site/` como raiz do site. `DEPLOYMENT-MANIFEST.txt`, `SHA256SUMS` e `source/` ficam um nível acima, fora da raiz pública. O manifest fixa commit, environment, runtime e hashes de `package.json`/`pnpm-lock.yaml`, mas não substitui o gate pós-deployment.
 
 ## 7. Hospedar
 
