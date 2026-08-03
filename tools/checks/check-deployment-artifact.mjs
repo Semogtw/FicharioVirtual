@@ -75,7 +75,7 @@ async function listFiles(root) {
 
 /**
  * @param {string} source
- * @returns {{ schemaVersion: 1; sourceCommit: string; targetEnvironment: 'staging' | 'production'; packageSha256: string; lockSha256: string }}
+ * @returns {{ schemaVersion: 2; sourceCommit: string; targetEnvironment: 'staging' | 'production'; packageSha256: string; lockSha256: string }}
  */
 function parseManifest(source) {
 	/** @type {Map<string, string>} */
@@ -99,7 +99,7 @@ function parseManifest(source) {
 	if (values.size !== MANIFEST_KEYS.length) {
 		throw contractFailure('deployment manifest field coverage is invalid');
 	}
-	if (values.get('schema_version') !== '1') {
+	if (values.get('schema_version') !== '2') {
 		throw contractFailure('unsupported deployment manifest schema');
 	}
 	if (values.get('source_repository') !== 'Semogtw/FicharioVirtual') {
@@ -142,7 +142,7 @@ function parseManifest(source) {
 	}
 
 	return {
-		schemaVersion: 1,
+		schemaVersion: 2,
 		sourceCommit,
 		targetEnvironment,
 		packageSha256,
@@ -195,9 +195,41 @@ async function sha256File(path) {
 	return createHash('sha256').update(bytes).digest('hex');
 }
 
+/** @param {string} source */
+function assertPackageSnapshot(source) {
+	let manifest;
+	try {
+		manifest = JSON.parse(source);
+	} catch {
+		throw contractFailure('source package snapshot is not valid JSON');
+	}
+	if (
+		manifest === null ||
+		typeof manifest !== 'object' ||
+		Array.isArray(manifest) ||
+		manifest.name !== 'fichario-virtual' ||
+		manifest.private !== true ||
+		typeof manifest.version !== 'string' ||
+		!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(manifest.version)
+	) {
+		throw contractFailure('source package snapshot does not identify Fichário Virtual');
+	}
+}
+
+/** @param {string} source */
+function assertLockfileSnapshot(source) {
+	if (
+		!/^lockfileVersion:\s*['"]?9(?:\.0)?['"]?\s*$/m.test(source) ||
+		!/^importers:\s*$/m.test(source) ||
+		!source.includes('\n  .:')
+	) {
+		throw contractFailure('source lockfile snapshot is not a pnpm v9 root workspace');
+	}
+}
+
 /**
  * @param {string} inputPath
- * @returns {Promise<{ schemaVersion: 1; sourceCommit: string; targetEnvironment: 'staging' | 'production'; verifiedFiles: number }>}
+ * @returns {Promise<{ schemaVersion: 2; sourceCommit: string; targetEnvironment: 'staging' | 'production'; verifiedFiles: number }>}
  */
 export async function verifyDeploymentArtifact(inputPath) {
 	const root = resolve(inputPath);
@@ -230,11 +262,15 @@ export async function verifyDeploymentArtifact(inputPath) {
 	}
 
 	const manifest = parseManifest(await readFile(join(root, MANIFEST_FILE), 'utf8'));
-	const packageDigest = await sha256File(join(root, SOURCE_PACKAGE_FILE));
+	const packageSource = await readFile(join(root, SOURCE_PACKAGE_FILE), 'utf8');
+	assertPackageSnapshot(packageSource);
+	const packageDigest = createHash('sha256').update(packageSource).digest('hex');
 	if (packageDigest !== manifest.packageSha256) {
 		throw contractFailure('source/package.json hash does not match deployment manifest');
 	}
-	const lockDigest = await sha256File(join(root, SOURCE_LOCK_FILE));
+	const lockSource = await readFile(join(root, SOURCE_LOCK_FILE), 'utf8');
+	assertLockfileSnapshot(lockSource);
+	const lockDigest = createHash('sha256').update(lockSource).digest('hex');
 	if (lockDigest !== manifest.lockSha256) {
 		throw contractFailure('source/pnpm-lock.yaml hash does not match deployment manifest');
 	}
