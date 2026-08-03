@@ -14,6 +14,11 @@ const auth = vi.hoisted(() => ({
 	signOut: vi.fn()
 }));
 
+const tracking = vi.hoisted(() => ({
+	callback: null as null | ((event: string, session: unknown) => void),
+	unsubscribe: vi.fn()
+}));
+
 vi.mock('$lib/services/auth', async (importOriginal) => {
 	const original = await importOriginal<typeof import('$lib/services/auth')>();
 	return {
@@ -27,9 +32,10 @@ vi.mock('$lib/services/auth', async (importOriginal) => {
 vi.mock('$lib/services/supabase', () => ({
 	getSupabaseClient: vi.fn(() => ({
 		auth: {
-			onAuthStateChange: vi.fn(() => ({
-				data: { subscription: { unsubscribe: vi.fn() } }
-			}))
+			onAuthStateChange: vi.fn((callback) => {
+				tracking.callback = callback;
+				return { data: { subscription: { unsubscribe: tracking.unsubscribe } } };
+			})
 		}
 	}))
 }));
@@ -37,7 +43,8 @@ vi.mock('$lib/services/supabase', () => ({
 import {
 	authenticate,
 	initializeSession,
-	sessionState
+	sessionState,
+	startSessionTracking
 } from '../../../src/lib/stores/session.svelte';
 
 const authenticatedSession = {
@@ -53,6 +60,8 @@ describe('session operation ordering', () => {
 		auth.loadAuthorizedSession.mockReset();
 		auth.signIn.mockReset();
 		auth.signOut.mockReset();
+		tracking.callback = null;
+		tracking.unsubscribe.mockReset();
 	});
 
 	it('does not let a stale initialization erase a newer authenticated session', async () => {
@@ -73,5 +82,28 @@ describe('session operation ordering', () => {
 		expect(sessionState.authorized).toBe(true);
 		expect(sessionState.user?.id).toBe('11111111-1111-4111-8111-111111111111');
 		expect(sessionState.loading).toBe(false);
+	});
+
+	it('does not let a pending sign-in revive a session after a signed-out event', async () => {
+		const signingIn = deferred<typeof authenticatedSession>();
+		auth.signIn.mockReturnValueOnce(signingIn.promise);
+		const stopTracking = startSessionTracking();
+
+		const authentication = authenticate('owner@example.test', 'password');
+		tracking.callback?.('SIGNED_OUT', null);
+		await Promise.resolve();
+
+		expect(sessionState.authorized).toBe(false);
+		expect(sessionState.user).toBeNull();
+
+		signingIn.resolve(authenticatedSession);
+		await authentication;
+
+		expect(sessionState.authorized).toBe(false);
+		expect(sessionState.user).toBeNull();
+		expect(sessionState.loading).toBe(false);
+
+		stopTracking();
+		expect(tracking.unsubscribe).toHaveBeenCalledOnce();
 	});
 });
