@@ -57,8 +57,15 @@ describe('deployable static artifact workflow', () => {
 		expect(workflow).toContain('cp -a build/. fichario-deploy/site/');
 		expect(workflow).toContain('cp package.json pnpm-lock.yaml fichario-deploy/source/');
 		expect(workflow).toContain(
+			"package_sha256=$(sha256sum fichario-deploy/source/package.json | cut -d' ' -f1)"
+		);
+		expect(workflow).toContain(
+			"lock_sha256=$(sha256sum fichario-deploy/source/pnpm-lock.yaml | cut -d' ' -f1)"
+		);
+		expect(workflow).toContain(
 			'find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum'
 		);
+		expect(workflow).toContain("echo 'schema_version=2'");
 		expect(workflow).toContain('source_commit=${GITHUB_SHA}');
 		expect(workflow).toContain('target_environment=${TARGET_ENVIRONMENT}');
 		expect(workflow).toContain(
