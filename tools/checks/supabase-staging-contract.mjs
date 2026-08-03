@@ -104,6 +104,16 @@ export function assertDeniedStorageOperation({ label, data, error }) {
 }
 
 /**
+ * @param {{ ok: boolean; status: number }} input
+ */
+export function assertExpiredSignedUrlResponse({ ok, status }) {
+	if (ok) fail('signed Storage URL unexpectedly remained valid after expiry');
+	if (!Number.isInteger(status) || status < 400 || status >= 500) {
+		fail(`expired signed Storage URL returned unexpected HTTP status ${status}`);
+	}
+}
+
+/**
  * @param {{ signedUrl: unknown; supabaseUrl: string; objectPath: string }} input
  */
 export function assertSignedStorageUrl({ signedUrl, supabaseUrl, objectPath }) {
