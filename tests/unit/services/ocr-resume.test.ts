@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { OcrProcessingError } from '../../../src/lib/services/ocr';
 import {
 	parsePendingOcrPages,
@@ -57,6 +57,39 @@ describe('resumeDocumentOcrWithGateway', () => {
 		expect(maximum).toBeLessThanOrEqual(2);
 		expect(processed.sort()).toEqual([1, 2, 3, 4]);
 		expect(result).toEqual({ completed: 4, needsReview: 0, pending: 0, failed: 0 });
+	});
+
+	it('stops starting new pages after cancellation and keeps the rest pending', async () => {
+		const pages = [1, 2, 3].map((pageNumber) => ({
+			id: `00000000-0000-4000-8000-00000000000${pageNumber}`,
+			pageNumber
+		}));
+		const controller = new AbortController();
+		const releases: Array<() => void> = [];
+		let calls = 0;
+
+		const pending = resumeDocumentOcrWithGateway(
+			documentId,
+			gateway(pages),
+			async () => {
+				calls += 1;
+				if (calls <= 2) await new Promise<void>((resolve) => releases.push(resolve));
+				return { state: 'complete', needsReview: false, warningCount: 0 };
+			},
+			{ signal: controller.signal }
+		);
+
+		await vi.waitFor(() => expect(calls).toBe(2));
+		controller.abort();
+		releases.forEach((release) => release());
+
+		await expect(pending).resolves.toEqual({
+			completed: 2,
+			needsReview: 0,
+			pending: 1,
+			failed: 0
+		});
+		expect(calls).toBe(2);
 	});
 
 	it('preserves review state for pages completed by another worker', async () => {
