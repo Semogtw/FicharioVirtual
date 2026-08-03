@@ -209,61 +209,55 @@ describe('uploadPdfWithGateway', () => {
 		deps.values.processPageOcr = async () => {
 			calls += 1;
 			await new Promise<void>((resolve) => releases.push(resolve));
-			return { state: 'complete', neeYÔ™]šY]Îˆ˜[ÙKØ\›š[™ÐÛÝ[ˆNÂ‚B_NÂ‚BXÛÛœÝÛÛ›Û\ˆH™]ÈX›ÜÛÛ›Û\Š
-NÂ‚‚BXÛÛœÝ[™[™ÈH\ØY•Ú]Ø]]Ø^J‚BB\Š
-K‚BB^ÈÛÛœÙ[Ü˜[YˆYKÚYÛ˜[ˆÛÛ›Û\‹œÚYÛ˜[K‚BBYš^\™K™Ø]]Ø^K‚BBY\Ë˜[Y\Â‚BJNÂ‚BX]ØZ]šKØZ]›ÜŠ
+			return { state: 'complete', needsReview: false, warningCount: 0 };
+		};
+		const controller = new AbortController();
 
-HOˆ^XÝ
-™[X\Ù\ÊKÒ]™S[™Ý
-ŠJNÂ‚BXÛÛ›Û\‹˜X›Ü
+		const pending = uploadPdfWithGateway(
+			pdf(),
+			{ consentGranted: true, signal: controller.signal },
+			fixture.gateway,
+			deps.values
+		);
+		await vi.waitFor(() => expect(releases).toHaveLength(2));
+		controller.abort();
+		releases.splice(0).forEach((release) => release());
+		await Promise.resolve();
+		await Promise.resolve();
+		releases.splice(0).forEach((release) => release());
 
-NÂ‚B\™[X\Ù\ËœÜXÙJ
-K™›Ü‘XXÚ
+		const result = await pending;
+		expect(calls).toBe(2);
+		expect(result.ocrCompleted).toBe(2);
+		expect(result.ocrPending).toBe(1);
+		expect(result.ocrFailed).toBe(0);
+	});
 
-™[X\ÙJHOˆ™[X\ÙJ
-JNÂ‚BX]ØZ]›ÛZ\ÙKœ™\ÛÛ™J
-NÂ‚BX]ØZ]›ÛZ\ÙKœ™\ÛÛ™J
-NÂ‚B\™[X\Ù\ËœÜXÙJ
-K™›Ü‘XXÚ
+	it('does not require OCR consent for a text-only PDF', async () => {
+		const fixture = gatewayFixture();
+		const deps = dependencies();
+		deps.values.inspectPdf = async () => ({
+			...mixedInspection(),
+			type: 'TextBased',
+			pagesNeedingOcr: [],
+			ocrReasonsByPage: []
+		});
 
-™[X\ÙJHOˆ™[X\ÙJ
-JNÂ‚‚BXÛÛœÝ™\Ý[H]ØZ][™[™ÎÂ‚BY^XÝ
-Ø[ÊKÐ™JŠNÂ‚BY^XÝ
-™\Ý[›ØÜÛÛ\]Y
-KÐ™JŠNÂ‚BY^XÝ
-™\Ý[›ØÜ”[™[™ÊKÐ™JJNÂ‚BY^XÝ
-™\Ý[›ØÜ‘˜Z[Y
-KÐ™J
-NÂ‚_JNÂ‚‚Z]
-	ÙÙ\È›Ý™\]Z\™HÐÔˆÛÛœÙ[›ÜˆH^[Û›H‰Ë\Þ[˜È
+		await uploadPdfWithGateway(pdf(), { consentGranted: false }, fixture.gateway, deps.values);
 
-HOˆÂ‚BXÛÛœÝš^\™HHØ]]Ø^Qš^\™J
-NÂ‚BXÛÛœÝ\ÈH\[™[˜ÚY\Ê
-NÂ‚BY\Ë˜[Y\Ëš[œÜXÝˆH\Þ[˜È
+		expect(deps.rendered).toEqual([]);
+		expect(deps.consentCalls).toBe(0);
+		expect(deps.processed).toEqual([]);
+	});
 
-HOˆ
-Â‚BBK‹‹›Z^Y[œÜXÝ[ÛŠ
-K‚BB]\Nˆ	Õ^˜\ÙY	Ë‚BB\YÙ\Ó™YY[™ÓØÜŽˆ×K‚BB[ØÜ”™X\ÛÛœÐžTYÙNˆ×B‚B_JNÂ‚‚BX]ØZ]\ØY•Ú]Ø]]Ø^JŠ
-KÈÛÛœÙ[Ü˜[Yˆ˜[ÙHKš^\™K™Ø]]Ø^K\Ë˜[Y\ÊNÂ‚‚BY^XÝ
-\Ëœ™[™\™Y
-KÑ\]X[
-×JNÂ‚BY^XÝ
-\Ë˜ÛÛœÙ[Ø[ÊKÐ™J
-NÂ‚BY^XÝ
-\Ëœ›ØÙ\ÜÙY
-KÑ\]X[
-×JNÂ‚_JNÂ‚‚Z]
-	Ü™[[Ý™\È]™\žH\ØYYØš™XÝÚ[ˆY]Y]HX›XØ][Ûˆ˜Z[ÉË\Þ[˜È
+	it('removes every uploaded object when metadata publication fails', async () => {
+		const fixture = gatewayFixture({ failMetadata: true });
+		const deps = dependencies();
 
-HOˆÂ‚BXÛÛœÝš^\™HHØ]]Ø^Qš^\™JÈ˜Z[Y]Y]NˆYHJNÂ‚BXÛÛœÝ\ÈH\[™[˜ÚY\Ê
-NÂ‚‚BX]ØZ]^XÝ
-‚BB]\ØY•Ú]Ø]]Ø^JŠ
-KÈÛÛœÙ[Ü˜[YˆYHKš^\™K™Ø]]Ø^K\Ë˜[Y\ÊB‚BJKœ™Z™XÝËÕ›ÝÊ	ÛY]Y]H˜Z[Y	ÊNÂ‚BY^XÝ
-š^\™Kœ™[[Ý™Y
-KÒ]™S[™Ý
-JNÂ‚BY^XÝ
-š^\™Kœ™[[Ý™YÌJKÑ\]X[
-š^\™K\ØYË›X\
-
-][JHOˆ][Kœ]
-JNÂ‚_JNÂŸJNÂ
+		await expect(
+			uploadPdfWithGateway(pdf(), { consentGranted: true }, fixture.gateway, deps.values)
+		).rejects.toThrow('metadata failed');
+		expect(fixture.removed).toHaveLength(1);
+		expect(fixture.removed[0]).toEqual(fixture.uploads.map((item) => item.path));
+	});
+});
