@@ -111,9 +111,13 @@ function parseManifest(source) {
 		throw contractFailure('deployment manifest target environment is invalid');
 	}
 	const createdUtc = values.get('created_utc') ?? '';
+	const parsedCreatedUtc = new Date(createdUtc);
+	const canonicalCreatedUtc = Number.isNaN(parsedCreatedUtc.getTime())
+		? null
+		: parsedCreatedUtc.toISOString().replace('.000Z', 'Z');
 	if (
 		!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(createdUtc) ||
-		Number.isNaN(Date.parse(createdUtc))
+		canonicalCreatedUtc !== createdUtc
 	) {
 		throw contractFailure('deployment manifest creation timestamp is invalid');
 	}
