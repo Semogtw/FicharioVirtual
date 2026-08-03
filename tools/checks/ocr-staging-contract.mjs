@@ -88,6 +88,80 @@ export function createOcrProbePng(nonce) {
 	);
 }
 
+/**
+ * @typedef {'pass' | 'fail' | 'not_run'} OcrReportStatus
+ * @typedef {'configuration' | 'authentication' | 'authorization' | 'consent' | 'import' | 'invocation' | 'persistence' | 'cleanup' | 'confirmation' | null} OcrFailureStage
+ * @typedef {'success' | 'failure' | 'not_required'} CleanupStatus
+ */
+
+/**
+ * @param {{
+ *   status: OcrReportStatus;
+ *   failureStage: OcrFailureStage;
+ *   stages: {
+ *     authenticated: unknown;
+ *     authorized: unknown;
+ *     consentRecorded: unknown;
+ *     importCreated: unknown;
+ *     functionCompleted: unknown;
+ *     persistenceVerified: unknown;
+ *   };
+ *   outcome: {
+ *     documentStatus: unknown;
+ *     pageStatus: unknown;
+ *     jobStatus: unknown;
+ *     needsReview: unknown;
+ *     warningCount: unknown;
+ *     attemptCount: unknown;
+ *     tokens: { fichario: unknown; ocr: unknown; numericProbe: unknown };
+ *   };
+ *   cleanup: { document: CleanupStatus; session: CleanupStatus };
+ * }} input
+ */
+export function createOcrStagingReport({ status, failureStage, stages, outcome, cleanup }) {
+	/** @param {unknown} value */
+	const terminalStatus = (value) => (value === 'ready' || value === 'needs_review' ? value : null);
+	/** @param {unknown} value */
+	const nullableBoolean = (value) => (typeof value === 'boolean' ? value : null);
+	/** @param {unknown} value */
+	const nullableCount = (value) =>
+		Number.isInteger(value) && Number(value) >= 0 ? Number(value) : null;
+	/** @param {unknown} value */
+	const cleanupStatus = (value) =>
+		value === 'success' || value === 'failure' || value === 'not_required' ? value : 'failure';
+
+	return {
+		schemaVersion: 1,
+		status: status === 'pass' || status === 'not_run' ? status : 'fail',
+		failureStage,
+		stages: {
+			authenticated: stages.authenticated === true,
+			authorized: stages.authorized === true,
+			consentRecorded: stages.consentRecorded === true,
+			importCreated: stages.importCreated === true,
+			functionCompleted: stages.functionCompleted === true,
+			persistenceVerified: stages.persistenceVerified === true
+		},
+		outcome: {
+			documentStatus: terminalStatus(outcome.documentStatus),
+			pageStatus: terminalStatus(outcome.pageStatus),
+			jobStatus: terminalStatus(outcome.jobStatus),
+			needsReview: nullableBoolean(outcome.needsReview),
+			warningCount: nullableCount(outcome.warningCount),
+			attemptCount: nullableCount(outcome.attemptCount),
+			tokens: {
+				fichario: nullableBoolean(outcome.tokens.fichario),
+				ocr: nullableBoolean(outcome.tokens.ocr),
+				numericProbe: nullableBoolean(outcome.tokens.numericProbe)
+			}
+		},
+		cleanup: {
+			document: cleanupStatus(cleanup.document),
+			session: cleanupStatus(cleanup.session)
+		}
+	};
+}
+
 /** @param {unknown} text */
 export function normalizeOcrProbeText(text) {
 	if (typeof text !== 'string') return '';
