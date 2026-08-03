@@ -7,7 +7,12 @@ export function parseDuplicateDocumentId(data: unknown): string | null {
 	}
 	const value = data as Record<string, unknown>;
 	const keys = Object.keys(value);
-	if (keys.length !== 1 || keys[0] !== 'id' || typeof value.id !== 'string' || !UUID.test(value.id)) {
+	if (
+		keys.length !== 1 ||
+		keys[0] !== 'id' ||
+		typeof value.id !== 'string' ||
+		!UUID.test(value.id)
+	) {
 		throw new TypeError('Invalid duplicate document response');
 	}
 	return value.id;
