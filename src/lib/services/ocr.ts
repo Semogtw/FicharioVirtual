@@ -35,20 +35,25 @@ function defaultClient(): OcrFunctionClient {
 }
 
 async function mappedError(error: { context?: unknown; message?: string }) {
-	let status = 0;
-	let body: Record<string, unknown> = {};
-	if (error.context instanceof Response) {
-		status = error.context.status;
-		try {
-			const value = await error.context.clone().json();
-			if (value && typeof value === 'object' && !Array.isArray(value)) {
-				body = value as Record<string, unknown>;
-			}
-		} catch {
-			// Keep only the safe generic classification below.
-		}
+	if (!(error.context instanceof Response)) {
+		return new OcrProcessingError(
+			'ocr_transport_failed',
+			true,
+			'Não foi possível alcançar o serviço de leitura. A página continuará pendente.'
+		);
 	}
-	const code = typeof body.code === 'string' ? body.code : `ocr_http_${status || 'unknown'}`;
+
+	const status = error.context.status;
+	let body: Record<string, unknown> = {};
+	try {
+		const value = await error.context.clone().json();
+		if (value && typeof value === 'object' && !Array.isArray(value)) {
+			body = value as Record<string, unknown>;
+		}
+	} catch {
+		// Keep only the safe generic classification below.
+	}
+	const code = typeof body.code === 'string' ? body.code : `ocr_http_${status}`;
 	const retryable = body.retryable === true || status === 408 || status === 425 || status >= 500;
 	const messages: Record<string, string> = {
 		gemini_daily_quota: 'A cota diária de leitura foi atingida. As páginas continuarão pendentes.',
