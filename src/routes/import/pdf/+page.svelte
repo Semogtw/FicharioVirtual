@@ -54,7 +54,7 @@
 	}
 
 	function canCancel(item: PdfQueueItem) {
-		return ['queued', 'inspecting', 'uploading', 'rendering'].includes(item.status);
+		return ['queued', 'inspecting', 'uploading', 'rendering', 'reading'].includes(item.status);
 	}
 
 	function canRetry(item: PdfQueueItem) {
