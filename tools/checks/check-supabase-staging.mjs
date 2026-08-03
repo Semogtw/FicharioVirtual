@@ -5,6 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 import {
 	assertAuthorizedAccount,
 	assertDeniedStorageOperation,
+	assertExpiredSignedUrlResponse,
 	assertProbeBytes,
 	assertProbeIsolation,
 	resolveStagingFailure,
@@ -16,6 +17,8 @@ import {
 } from './supabase-staging-contract.mjs';
 
 const STORAGE_BUCKET = 'documents';
+const SIGNED_URL_EXPIRY_SECONDS = 2;
+const SIGNED_URL_EXPIRY_GRACE_MS = 2_000;
 const STORAGE_PROBE_BYTES = Uint8Array.from(
 	Buffer.from(
 		'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
@@ -187,17 +190,34 @@ async function downloadStorageProbe(client, objectPath, label) {
 /**
  * @param {string} signedUrl
  */
-async function downloadSignedProbe(signedUrl) {
-	let response;
+async function requestSignedProbe(signedUrl) {
 	try {
-		response = await fetch(signedUrl, { signal: AbortSignal.timeout(15_000) });
+		return await fetch(signedUrl, {
+			cache: 'no-store',
+			headers: { 'cache-control': 'no-cache' },
+			signal: AbortSignal.timeout(15_000)
+		});
 	} catch (error) {
 		throw new Error(
 			`signed Storage URL request failed: ${error instanceof Error ? error.message : String(error)}`
 		);
 	}
+}
+
+/**
+ * @param {string} signedUrl
+ */
+async function downloadSignedProbe(signedUrl) {
+	const response = await requestSignedProbe(signedUrl);
 	if (!response.ok) throw new Error(`signed Storage URL returned HTTP ${response.status}`);
 	return new Uint8Array(await response.arrayBuffer());
+}
+
+/**
+ * @param {number} milliseconds
+ */
+async function delay(milliseconds) {
+	await new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 /**
@@ -316,6 +336,24 @@ async function main() {
 		const signedDownload = await downloadSignedProbe(ownerSigned.data.signedUrl);
 		assertProbeBytes({ expected: STORAGE_PROBE_BYTES, actual: signedDownload });
 		console.log('PASS authorized signed URL returns the exact private Storage bytes');
+
+		const expiringSigned = await authorizedClient.storage
+			.from(STORAGE_BUCKET)
+			.createSignedUrl(storageProbe.objectPath, SIGNED_URL_EXPIRY_SECONDS);
+		if (expiringSigned.error) {
+			throw new Error(`expiring signed URL creation failed: ${expiringSigned.error.message}`);
+		}
+		assertSignedStorageUrl({
+			signedUrl: expiringSigned.data?.signedUrl,
+			supabaseUrl: url,
+			objectPath: storageProbe.objectPath
+		});
+		const beforeExpiry = await downloadSignedProbe(expiringSigned.data.signedUrl);
+		assertProbeBytes({ expected: STORAGE_PROBE_BYTES, actual: beforeExpiry });
+		await delay(SIGNED_URL_EXPIRY_SECONDS * 1_000 + SIGNED_URL_EXPIRY_GRACE_MS);
+		const expiredResponse = await requestSignedProbe(expiringSigned.data.signedUrl);
+		assertExpiredSignedUrlResponse({ ok: expiredResponse.ok, status: expiredResponse.status });
+		console.log('PASS signed Storage URL expires and is denied after its validity window');
 
 		const outsiderSigned = await unauthorizedClient.storage
 			.from(STORAGE_BUCKET)
