@@ -1,4 +1,9 @@
-import { correctionDraftKey, parseCorrectionDraft, type CorrectionDraft } from './drafts';
+import {
+	correctionDraftKey,
+	parseCorrectionDraft,
+	serializeCorrectionDraft,
+	type CorrectionDraft
+} from './drafts';
 
 const PREFIX = 'fichario:correction-draft:v1:';
 
@@ -6,6 +11,28 @@ export class CorrectionDraftStorageError extends Error {
 	constructor() {
 		super('Não foi possível acessar os rascunhos locais.');
 		this.name = 'CorrectionDraftStorageError';
+	}
+}
+
+export function readCorrectionDraft(
+	pageId: string,
+	storage: Storage = localStorage
+): CorrectionDraft | null {
+	const key = correctionDraftKey(pageId);
+	try {
+		return parseCorrectionDraft(storage.getItem(key), pageId);
+	} catch {
+		throw new CorrectionDraftStorageError();
+	}
+}
+
+export function writeCorrectionDraft(draft: CorrectionDraft, storage: Storage = localStorage) {
+	const key = correctionDraftKey(draft.pageId);
+	const serialized = serializeCorrectionDraft(draft);
+	try {
+		storage.setItem(key, serialized);
+	} catch {
+		throw new CorrectionDraftStorageError();
 	}
 }
 
