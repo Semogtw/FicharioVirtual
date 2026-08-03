@@ -55,6 +55,13 @@ begin
   if first_claim->>'state' <> 'claimed' then
     raise exception 'expected first claim, got %', first_claim;
   end if;
+  if (select array_agg(key order by key) from jsonb_object_keys(first_claim) as keys(key))
+    is distinct from array['attemptCount', 'jobId', 'state', 'usageToday']
+    or jsonb_typeof(first_claim->'attemptCount') <> 'number'
+    or jsonb_typeof(first_claim->'usageToday') <> 'number'
+  then
+    raise exception 'first claim contract drifted: %', first_claim;
+  end if;
 
   completed := public.complete_ocr_job(
     '22222222-2222-4222-8222-222222222222'::uuid,
@@ -105,6 +112,11 @@ begin
   if replay_claim->>'state' <> 'already_complete' then
     raise exception 'response-loss reconciliation failed: %', replay_claim;
   end if;
+  if (select array_agg(key order by key) from jsonb_object_keys(replay_claim) as keys(key))
+    is distinct from array['jobId', 'state']
+  then
+    raise exception 'already-complete claim contract drifted: %', replay_claim;
+  end if;
 
   quota_claim := public.claim_ocr_job(
     '55555555-5555-4555-8555-555555555555'::uuid,
@@ -114,6 +126,11 @@ begin
   );
   if quota_claim->>'state' <> 'claimed' then
     raise exception 'expected provider-quota setup claim, got %', quota_claim;
+  end if;
+  if (select array_agg(key order by key) from jsonb_object_keys(quota_claim) as keys(key))
+    is distinct from array['attemptCount', 'jobId', 'state', 'usageToday']
+  then
+    raise exception 'provider-quota setup claim contract drifted: %', quota_claim;
   end if;
 
   blocked := public.block_ocr_job_quota(
@@ -140,6 +157,13 @@ begin
   );
   if same_day_claim->>'state' <> 'retry_later' then
     raise exception 'provider quota retried before UTC rollover: %', same_day_claim;
+  end if;
+  if (select array_agg(key order by key) from jsonb_object_keys(same_day_claim) as keys(key))
+    is distinct from array['jobId', 'nextRetryAt', 'state']
+    or (same_day_claim->>'nextRetryAt')::timestamptz
+      is distinct from '2026-08-02T00:00:00Z'::timestamptz
+  then
+    raise exception 'retry-later claim contract drifted: %', same_day_claim;
   end if;
 
   select count(*) into same_day_resumable_count
@@ -168,6 +192,13 @@ begin
   );
   if next_day_claim->>'state' <> 'claimed' then
     raise exception 'UTC day rollover did not release provider quota: %', next_day_claim;
+  end if;
+  if (select array_agg(key order by key) from jsonb_object_keys(next_day_claim) as keys(key))
+    is distinct from array['attemptCount', 'jobId', 'state', 'usageToday']
+    or (next_day_claim->>'attemptCount')::integer < 1
+    or (next_day_claim->>'usageToday')::integer <> 1
+  then
+    raise exception 'next-day claim contract drifted: %', next_day_claim;
   end if;
 
   select ocr_pages into day_one_count
