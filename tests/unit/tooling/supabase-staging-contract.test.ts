@@ -7,6 +7,8 @@ import {
 	resolveStagingFailure,
 	assertSignedStorageUrl,
 	assertStorageListIsolation,
+	assertSuccessfulSignOut,
+	runStagingCleanup,
 	assertUnauthorizedAccount
 } from '../../../tools/checks/supabase-staging-contract.mjs';
 
@@ -133,6 +135,33 @@ describe('Supabase staging contract', () => {
 		});
 		expect(combined).toBeInstanceOf(AggregateError);
 		expect((combined as AggregateError).errors).toEqual([verificationError, cleanupError]);
+	});
+
+	it('rejects a resolved sign-out response that still contains an auth error', () => {
+		expect(() =>
+			assertSuccessfulSignOut({ label: 'authorized account', error: null })
+		).not.toThrow();
+		expect(() =>
+			assertSuccessfulSignOut({ label: 'second account', error: new Error('session unavailable') })
+		).toThrow(/second account sign-out failed/);
+	});
+
+	it('finishes authenticated cleanup before invalidating sessions', async () => {
+		const events: string[] = [];
+		const cleanupResults = await runStagingCleanup({
+			dataCleanup: [
+				async () => {
+					events.push('data:start');
+					await Promise.resolve();
+					events.push('data:end');
+				}
+			],
+			sessionCleanup: [async () => events.push('session')]
+		});
+
+		expect(events).toEqual(['data:start', 'data:end', 'session']);
+		expect(cleanupResults).toHaveLength(2);
+		expect(cleanupResults.every((result) => result.status === 'fulfilled')).toBe(true);
 	});
 
 	it('accepts only a same-origin signed URL for the exact sentinel object', () => {
