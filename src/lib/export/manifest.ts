@@ -1,6 +1,7 @@
 import { z } from 'zod';
+import { isIsoTimestamp } from '$lib/validation/iso-timestamp';
 
-const timestamp = z.string().refine((value) => !Number.isNaN(Date.parse(value)));
+const timestamp = z.string().refine(isIsoTimestamp);
 const warning = z
 	.object({ code: z.string().min(1).max(64), message: z.string().min(1).max(300) })
 	.strict();
@@ -83,8 +84,8 @@ export function parseExportManifest(value: unknown): ExportManifest {
 }
 
 export function exportFilename(exportedAt: string) {
+	if (!isIsoTimestamp(exportedAt)) throw new TypeError('Invalid export timestamp');
 	const date = new Date(exportedAt);
-	if (Number.isNaN(date.getTime())) throw new TypeError('Invalid export timestamp');
 	const stable = date
 		.toISOString()
 		.replace(/\.\d{3}Z$/, 'Z')
