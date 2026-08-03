@@ -28,7 +28,7 @@ A estimativa total usa aproximadamente 70% de peso para implementação e 30% pa
 - PWA com cache restrito ao shell público;
 - 27 migrations aplicáveis em banco limpo;
 - 54 contratos pgTAP;
-- 151 testes unitários em 49 arquivos;
+- 167 testes unitários em 52 arquivos;
 - 3 cenários E2E no Chromium;
 - gates de fonte, tipos, lint, build, PWA, Deno e banco;
 - verificador automático do host HTTPS e dos headers;
