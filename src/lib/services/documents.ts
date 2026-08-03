@@ -11,13 +11,14 @@ import {
 	type UpdateDocumentInput
 } from '$lib/domain/document';
 import type { Database } from '$lib/types/database';
+import { isIsoTimestamp } from '$lib/validation/iso-timestamp';
 import { getSupabaseClient } from './supabase';
 
 const DEFAULT_PAGE_SIZE = 30;
 const MAX_PAGE_SIZE = 60;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-const timestamp = z.string().refine((value) => !Number.isNaN(Date.parse(value)));
+const timestamp = z.string().refine(isIsoTimestamp);
 const documentRecordSchema = z
 	.object({
 		id: z.string().regex(UUID),
@@ -117,7 +118,7 @@ function validId(value: string): string {
 }
 
 function validCursor(cursor: DocumentCursor): DocumentCursor {
-	if (!UUID.test(cursor.id) || Number.isNaN(Date.parse(cursor.createdAt))) {
+	if (!UUID.test(cursor.id) || !isIsoTimestamp(cursor.createdAt)) {
 		throw new TypeError('Invalid document cursor');
 	}
 	return cursor;
