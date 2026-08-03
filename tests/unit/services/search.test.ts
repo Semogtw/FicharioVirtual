@@ -104,7 +104,8 @@ describe('searchPages', () => {
 	});
 
 	it('rejects malformed or extra RPC result fields', async () => {
-		const { page_id: _pageId, ...missingPageId } = row();
+		const missingPageId = { ...row() } as Record<string, unknown>;
+		delete missingPageId.page_id;
 		await expect(searchPages('texto', {}, client([missingPageId]).value)).rejects.toBeInstanceOf(
 			SearchServiceError
 		);
