@@ -8,6 +8,7 @@ import { mapNotebookRecord } from '../../../src/lib/domain/notebook';
 import {
 	collectAllDocumentPages,
 	DocumentServiceError,
+	parseDocumentRecord,
 	parseDocumentRecords
 } from '../../../src/lib/services/documents';
 
@@ -149,6 +150,13 @@ describe('document record response contract', () => {
 		expect(result).toEqual([row()]);
 		expect(Object.isFrozen(result)).toBe(true);
 		expect(result.every(Object.isFrozen)).toBe(true);
+	});
+
+	it('requires an updated record to preserve the requested identity', () => {
+		expect(parseDocumentRecord(row(), documentId)).toEqual(row());
+		expect(() => parseDocumentRecord(row({ id: notebookId }), documentId)).toThrow(
+			'Invalid document response'
+		);
 	});
 
 	it('rejects malformed, extra or duplicate document rows', () => {
