@@ -7,6 +7,7 @@ import {
 	assertDeniedStorageOperation,
 	assertProbeBytes,
 	assertProbeIsolation,
+	resolveStagingFailure,
 	assertSignedStorageUrl,
 	assertStorageListIsolation,
 	assertUnauthorizedAccount
@@ -134,7 +135,9 @@ async function createStorageProbe(client, ownerUserId) {
 	});
 	if (result.error) throw new Error(`Storage probe upload failed: ${result.error.message}`);
 	if (result.data?.path !== objectPath) {
-		throw new Error(`Storage probe upload returned an unexpected path: ${result.data?.path ?? '(missing)'}`);
+		throw new Error(
+			`Storage probe upload returned an unexpected path: ${result.data?.path ?? '(missing)'}`
+		);
 	}
 	return { folder, fileName, objectPath };
 }
@@ -217,6 +220,7 @@ async function main() {
 	let probeId = null;
 	let storageObjectPath = null;
 
+	let operationError = null;
 	try {
 		const authorizedUser = await signIn(
 			authorizedClient,
@@ -313,15 +317,17 @@ async function main() {
 		console.log('PASS second account cannot sign the authorized Storage object');
 
 		console.log('Supabase staging contract: PASS');
-	} finally {
-		const cleanup = [];
-		if (storageObjectPath) cleanup.push(deleteStorageProbe(authorizedClient, storageObjectPath));
-		if (probeId) cleanup.push(deleteProbeNotebook(authorizedClient, probeId));
-		const cleanupResults = await Promise.allSettled(cleanup);
-		const cleanupFailure = cleanupResults.find((result) => result.status === 'rejected');
-		await Promise.allSettled([authorizedClient.auth.signOut(), unauthorizedClient.auth.signOut()]);
-		if (cleanupFailure?.status === 'rejected') throw cleanupFailure.reason;
+	} catch (error) {
+		operationError = error;
 	}
+
+	const cleanup = [];
+	if (storageObjectPath) cleanup.push(deleteStorageProbe(authorizedClient, storageObjectPath));
+	if (probeId) cleanup.push(deleteProbeNotebook(authorizedClient, probeId));
+	cleanup.push(authorizedClient.auth.signOut(), unauthorizedClient.auth.signOut());
+	const cleanupResults = await Promise.allSettled(cleanup);
+	const stagingFailure = resolveStagingFailure({ operationError, cleanupResults });
+	if (stagingFailure) throw stagingFailure;
 }
 
 main().catch((error) => {
