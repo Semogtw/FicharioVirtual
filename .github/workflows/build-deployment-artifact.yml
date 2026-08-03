@@ -93,8 +93,8 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf fichario-deploy
-          mkdir fichario-deploy
-          cp -a build/. fichario-deploy/
+          mkdir -p fichario-deploy/site
+          cp -a build/. fichario-deploy/site/
           {
             echo 'schema_version=1'
             echo 'source_repository=Semogtw/FicharioVirtual'
