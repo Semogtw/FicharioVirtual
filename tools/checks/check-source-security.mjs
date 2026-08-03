@@ -86,6 +86,24 @@ if (!/generativelanguage\.googleapis\.com/i.test(geminiClient)) {
 	);
 }
 
+const forbiddenProviderTestSurfaces = [
+	['GEMINI_API_URL', /\bGEMINI_(?:API_)?(?:URL|ENDPOINT)\b/i],
+	['OCR_PROVIDER_URL', /\bOCR_(?:PROVIDER_)?(?:URL|ENDPOINT)\b/i],
+	['X-FICHARIO-FAULT', /\bX-FICHARIO-(?:FAULT|TEST)\b/i]
+];
+for (const path of [processOcrPath, geminiClientPath]) {
+	const content = path === processOcrPath ? processOcr : geminiClient;
+	for (const [name, pattern] of forbiddenProviderTestSurfaces) {
+		if (pattern.test(content)) {
+			fail(
+				path,
+				'provider-test-surface',
+				`deployed provider code must not expose ${name} overrides or fault controls`
+			);
+		}
+	}
+}
+
 const viteConfigPath = join(root, 'vite.config.ts');
 const appHtmlPath = join(root, 'src/app.html');
 const pwaConfig = await readFile(viteConfigPath, 'utf8');
