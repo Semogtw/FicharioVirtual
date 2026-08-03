@@ -32,6 +32,7 @@ describe('Supabase staging verification workflow', () => {
 		expect(workflow).toContain('node-version: 22.16.0');
 		expect(workflow).toContain('cache-dependency-path: pnpm-lock.yaml');
 		expect(workflow).toContain('pnpm install --frozen-lockfile');
+		expect(workflow).toContain('name: Verify Auth, RLS, and private Storage');
 		expect(workflow).toContain('pnpm test:staging:supabase');
 	});
 });
