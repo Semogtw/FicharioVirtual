@@ -17,13 +17,13 @@ function createFixture() {
 	const source = join(root, 'source');
 	mkdirSync(site);
 	mkdirSync(source);
-	const packageSource = '{"name":"fichario-virtual"}\n';
-	const lockSource = "lockfileVersion: '9.0'\n";
+	const packageSource = '{"name":"fichario-virtual","version":"0.1.0","private":true}\n';
+	const lockSource = "lockfileVersion: '9.0'\nimporters:\n  .: {}\n";
 	const files = new Map<string, string | Buffer>([
 		[
 			'DEPLOYMENT-MANIFEST.txt',
 			[
-				'schema_version=1',
+				'schema_version=2',
 				'source_repository=Semogtw/FicharioVirtual',
 				'source_commit=0123456789abcdef0123456789abcdef01234567',
 				'target_environment=staging',
@@ -56,16 +56,62 @@ function createFixture() {
 	return root;
 }
 
+function replaceSnapshot(
+	root: string,
+	relativePath: string,
+	manifestField: string,
+	content: string
+) {
+	const snapshotPath = join(root, relativePath);
+	writeFileSync(snapshotPath, content);
+	const manifestPath = join(root, 'DEPLOYMENT-MANIFEST.txt');
+	const manifest = readFileSync(manifestPath, 'utf8').replace(
+		new RegExp(`^${manifestField}=[0-9a-f]{64}$`, 'm'),
+		`${manifestField}=${sha256(content)}`
+	);
+	writeFileSync(manifestPath, manifest);
+	const checksumPath = join(root, 'SHA256SUMS');
+	const escapedPath = relativePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+	const checksums = readFileSync(checksumPath, 'utf8')
+		.replace(
+			new RegExp(`^[0-9a-f]{64} {2}\\./${escapedPath}$`, 'm'),
+			`${sha256(content)}  ./${relativePath}`
+		)
+		.replace(
+			/^[0-9a-f]{64} {2}\.\/DEPLOYMENT-MANIFEST\.txt$/m,
+			`${sha256(manifest)}  ./DEPLOYMENT-MANIFEST.txt`
+		);
+	writeFileSync(checksumPath, checksums);
+}
+
 describe('deployable artifact verification', () => {
 	it('accepts a complete package with exact portable checksums', async () => {
 		const result = await verifyDeploymentArtifact(createFixture());
 
 		expect(result).toEqual({
-			schemaVersion: 1,
+			schemaVersion: 2,
 			sourceCommit: '0123456789abcdef0123456789abcdef01234567',
 			targetEnvironment: 'staging',
 			verifiedFiles: 8
 		});
+	});
+
+	it('rejects an obsolete manifest schema after source snapshots became mandatory', async () => {
+		const root = createFixture();
+		const manifestPath = join(root, 'DEPLOYMENT-MANIFEST.txt');
+		const legacyManifest = readFileSync(manifestPath, 'utf8').replace(
+			'schema_version=2',
+			'schema_version=1'
+		);
+		writeFileSync(manifestPath, legacyManifest);
+		const checksumPath = join(root, 'SHA256SUMS');
+		const checksums = readFileSync(checksumPath, 'utf8').replace(
+			/^[0-9a-f]{64} {2}\.\/DEPLOYMENT-MANIFEST\.txt$/m,
+			`${sha256(legacyManifest)}  ./DEPLOYMENT-MANIFEST.txt`
+		);
+		writeFileSync(checksumPath, checksums);
+
+		await expect(verifyDeploymentArtifact(root)).rejects.toThrow(/manifest schema/);
 	});
 
 	it('requires source package metadata matching the manifest hashes', async () => {
@@ -73,6 +119,26 @@ describe('deployable artifact verification', () => {
 		rmSync(join(root, 'source', 'pnpm-lock.yaml'));
 
 		await expect(verifyDeploymentArtifact(root)).rejects.toThrow(/source\/pnpm-lock/);
+	});
+
+	it('rejects source snapshots from another package or incompatible lockfile', async () => {
+		const packageRoot = createFixture();
+		replaceSnapshot(
+			packageRoot,
+			'source/package.json',
+			'package_sha256',
+			'{"name":"other-project","version":"0.1.0","private":true}\n'
+		);
+		await expect(verifyDeploymentArtifact(packageRoot)).rejects.toThrow(/package snapshot/);
+
+		const lockRoot = createFixture();
+		replaceSnapshot(
+			lockRoot,
+			'source/pnpm-lock.yaml',
+			'lock_sha256',
+			"lockfileVersion: '8.0'\nimporters:\n  .: {}\n"
+		);
+		await expect(verifyDeploymentArtifact(lockRoot)).rejects.toThrow(/lockfile snapshot/);
 	});
 
 	it('rejects impossible UTC calendar timestamps', async () => {
