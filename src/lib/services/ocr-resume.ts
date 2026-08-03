@@ -84,11 +84,10 @@ export async function resumeDocumentOcrWithGateway(
 			if (!page) return;
 			try {
 				const result = await processor(page.id);
-				if (result.state === 'complete') {
+				if (result.state === 'complete' || result.state === 'already_complete') {
 					if (result.needsReview) needsReview += 1;
 					else completed += 1;
-				} else if (result.state === 'already_complete') completed += 1;
-				else pending += 1;
+				} else pending += 1;
 			} catch (error) {
 				if (error instanceof OcrProcessingError && error.retryable) pending += 1;
 				else failed += 1;
