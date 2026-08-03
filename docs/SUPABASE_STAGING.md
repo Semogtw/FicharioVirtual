@@ -69,7 +69,8 @@ O gate:
 - envia um PNG sintético de 1 × 1 para `documents/<uuid>/__staging_probe_<uuid>/probe.png`;
 - exige que somente a conta proprietária liste e baixe o objeto;
 - compara os bytes baixados com o payload original, sem coerção para texto;
-- cria uma URL assinada de curta duração e confirma origem, caminho, token e bytes retornados;
+- cria uma URL assinada de 60 segundos e confirma origem, caminho, token e bytes retornados;
+- cria uma segunda URL de 2 segundos, confirma os bytes antes do prazo e exige negação 4xx após a expiração, com cache desabilitado;
 - exige que a segunda conta não consiga baixar nem assinar o objeto da proprietária;
 - remove objeto e caderno antes de encerrar as sessões;
 - preserva simultaneamente falhas da verificação e da limpeza, sem mascarar a causa original.
@@ -80,9 +81,8 @@ As sentinelas possuem prefixo `__staging_probe_`, usam somente dados sintéticos
 
 A verificação não substitui:
 
-- expiração observada da URL assinada após o tempo limite;
 - execução real das Edge Functions;
-- OCR com Gemini;
+- OCR com Gemini, coberto separadamente por `Verify OCR staging`;
 - injeção de 429, 503, timeout ou payload inválido;
 - instalação PWA e headers do host final;
 - teste em tablet/celular;
