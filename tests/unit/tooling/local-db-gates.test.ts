@@ -29,6 +29,7 @@ describe('local database gate runner', () => {
 		const runner = read('tools/checks/run-local-db-gates.sh');
 		const fixture = read('tools/checks/fixtures/ocr-concurrency-fixture.sql');
 		const concurrencyGate = read('tools/checks/test-ocr-claim-concurrency.sh');
+		const idempotencyGate = read('tools/checks/test-ocr-idempotency.sh');
 
 		expect(runner).toContain('supabase start');
 		expect(runner).toContain('supabase db reset');
@@ -39,6 +40,10 @@ describe('local database gate runner', () => {
 		expect(fixture).toContain('ocr_consent_version');
 		expect(concurrencyGate).toContain('parse_claim_state');
 		expect(concurrencyGate).not.toMatch(/\bpython(?:3)?\b/);
+		expect(idempotencyGate).toContain('first claim contract drifted');
+		expect(idempotencyGate).toContain('already-complete claim contract drifted');
+		expect(idempotencyGate).toContain('retry-later claim contract drifted');
+		expect(idempotencyGate).toContain("array['attemptCount', 'jobId', 'state', 'usageToday']");
 	});
 
 	it('checks every deployed Edge Function and shared OCR module with isolated Deno config', () => {
