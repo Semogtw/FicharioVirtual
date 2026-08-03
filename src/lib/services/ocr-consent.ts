@@ -11,7 +11,7 @@ export class OcrConsentError extends Error {
 
 export async function recordOcrConsent(
 	version = 1,
-	client: SupabaseClient<Database> = getSupabaseClient()
+	client?: SupabaseClient<Database>
 ): Promise<void> {
 	if (!Number.isInteger(version) || version < 1 || version > 1000) {
 		throw new TypeError('Invalid OCR consent version');
@@ -22,8 +22,12 @@ export async function recordOcrConsent(
 			args: { consent_version: number }
 		): Promise<{ data: boolean | null; error: unknown }>;
 	};
-	const { data, error } = await (client as unknown as ConsentClient).rpc('record_ocr_consent', {
-		consent_version: version
-	});
-	if (error || data !== true) throw new OcrConsentError();
+	const gateway = (client ?? getSupabaseClient()) as unknown as ConsentClient;
+	let result: { data: boolean | null; error: unknown };
+	try {
+		result = await gateway.rpc('record_ocr_consent', { consent_version: version });
+	} catch {
+		throw new OcrConsentError();
+	}
+	if (result.error || result.data !== true) throw new OcrConsentError();
 }
