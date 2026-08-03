@@ -167,11 +167,9 @@ async function processOcrPages(
 			if (!page) return;
 			try {
 				const result = await dependencies.processPageOcr(page.id);
-				if (result.state === 'complete') {
+				if (result.state === 'complete' || result.state === 'already_complete') {
 					if (result.needsReview) needsReview += 1;
 					else complete += 1;
-				} else if (result.state === 'already_complete') {
-					complete += 1;
 				} else {
 					pending += 1;
 				}
