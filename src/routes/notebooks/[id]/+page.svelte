@@ -1,38 +1,48 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { onMount } from 'svelte';
 	import DocumentCard from '$lib/components/DocumentCard.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import type { DocumentSummary } from '$lib/domain/document';
 	import type { NotebookSummary } from '$lib/domain/notebook';
 	import { listAllDocuments } from '$lib/services/documents';
 	import { listNotebooks } from '$lib/services/notebooks';
+	import { RequestVersion } from '$lib/services/request-version';
 
 	let notebook = $state<NotebookSummary | null>(null);
 	let documents = $state<readonly DocumentSummary[]>([]);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
+	const initializeRequests = new RequestVersion();
 
-	async function initialize() {
+	async function initialize(notebookId = page.params.id) {
+		const version = initializeRequests.next();
 		loading = true;
 		error = null;
 		try {
 			const [notebooks, loadedDocuments] = await Promise.all([
 				listNotebooks(),
-				listAllDocuments({ filters: { notebookId: page.params.id } })
+				listAllDocuments({ filters: { notebookId } })
 			]);
-			notebook = notebooks.find((item) => item.id === page.params.id) ?? null;
-			documents = loadedDocuments;
-			if (!notebook) error = 'Este caderno não existe ou não está disponível.';
+			if (!initializeRequests.isCurrent(version)) return;
+			const loadedNotebook = notebooks.find((item) => item.id === notebookId) ?? null;
+			notebook = loadedNotebook;
+			documents = loadedNotebook ? loadedDocuments : Object.freeze([]);
+			if (!loadedNotebook) error = 'Este caderno não existe ou não está disponível.';
 		} catch {
+			if (!initializeRequests.isCurrent(version)) return;
+			notebook = null;
+			documents = Object.freeze([]);
 			error = 'Não foi possível abrir este caderno agora.';
 		} finally {
-			loading = false;
+			if (initializeRequests.isCurrent(version)) loading = false;
 		}
 	}
 
-	onMount(() => {
-		void initialize();
+	$effect(() => {
+		const notebookId = page.params.id;
+		notebook = null;
+		documents = Object.freeze([]);
+		void initialize(notebookId);
 	});
 </script>
 
