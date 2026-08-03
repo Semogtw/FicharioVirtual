@@ -18,7 +18,7 @@ Os percentuais e critérios estão detalhados em `docs/READINESS.md`. Eles não 
 
 ## Checkpoint funcional verde
 
-O commit funcional `9f9a02a84f42544ceadefddeea09e1cb817841d6` recebeu `SUCCESS` no workflow `Validate current head`, run `30777218303`.
+O commit funcional `2723e8ecd13ad8f41d7e5f51966f0ca9c29f15d7` recebeu `SUCCESS` no workflow `Validate current head`, run `30783735304`.
 
 A execução comprovou:
 
@@ -26,7 +26,7 @@ A execução comprovou:
 pnpm install --frozen-lockfile
 Prettier + ESLint
 svelte-check: 0 erros, 0 warnings
-151 testes unitários em 49 arquivos
+163 testes unitários em 52 arquivos
 build estático + validação PWA
 5 gates offline de fonte
 3 testes E2E no Chromium
@@ -77,9 +77,11 @@ Commits posteriores que alteram somente Markdown não modificam esse checkpoint 
 
 ## Gates externos preparados
 
-### Host HTTPS
+### Artifact estático e host HTTPS
 
-`pnpm test:deployment -- https://host.example` e `Verify deployed Fichário` verificam redirect, headers, CSP, HSTS, fallback SPA, manifesto, service worker e ausência de cache privado.
+`Build deployable Fichário artifact` fabrica um pacote separado em `site/`, acompanhado de manifest e checksums fora da raiz pública. `pnpm test:deployment:artifact -- <diretório>` valida schema, commit, environment, arquivos obrigatórios, cobertura exata dos hashes, paths portáteis e ausência de links simbólicos antes do upload.
+
+`pnpm test:deployment -- https://host.example` e `Verify deployed Fichário` verificam redirect, headers, CSP, HSTS, fallback SPA, manifesto, service worker e ausência de cache privado depois da publicação.
 
 ### Supabase remoto
 
