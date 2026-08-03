@@ -152,7 +152,10 @@ Deno.serve(async (request) => {
 		(typeof page.corrected_text === 'string' || typeof page.ocr_raw_text === 'string')
 	) {
 		await cleanupTemporaryImage(page.temporary_image_path);
-		return respond(200, { state: 'already_complete' });
+		return respond(200, {
+			state: 'already_complete',
+			needsReview: page.status === 'needs_review'
+		});
 	}
 
 	const claimedAt = new Date().toISOString();
@@ -170,7 +173,23 @@ Deno.serve(async (request) => {
 		return respond(503, { code: 'ocr_claim_failed' });
 	}
 	if (claimResult.state === 'already_complete') {
+		const { data: completedPage, error: completedPageError } = await supabase
+			.from('pages')
+			.select('status')
+			.eq('id', pageId)
+			.maybeSingle();
+		if (
+			completedPageError ||
+			!completedPage ||
+			!['ready', 'needs_review'].includes(completedPage.status)
+		) {
+			return respond(503, { code: 'ocr_claim_failed' });
+		}
 		await cleanupTemporaryImage(page.temporary_image_path);
+		return respond(200, {
+			state: 'already_complete',
+			needsReview: completedPage.status === 'needs_review'
+		});
 	}
 	if (claimResult.state !== 'claimed') {
 		return respond(claimStateHttpStatus(claimResult.state), {
