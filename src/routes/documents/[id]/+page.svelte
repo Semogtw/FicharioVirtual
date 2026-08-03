@@ -1,20 +1,21 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { onMount } from 'svelte';
 	import CorrectionEditor from '$lib/components/CorrectionEditor.svelte';
 	import type { PageDetail } from '$lib/domain/page';
 	import { deleteDocument } from '$lib/services/documents';
 	import { loadDocumentDetail, type DocumentDetail } from '$lib/services/document-detail';
 	import { resumeDocumentOcr } from '$lib/services/ocr-resume';
+	import { RequestVersion } from '$lib/services/request-version';
 
 	let detail = $state<DocumentDetail | null>(null);
-	let selectedPageNumber = $state(Number(page.url.searchParams.get('page') ?? '1'));
+	let selectedPageNumber = $state(1);
 	let loading = $state(true);
 	let retrying = $state(false);
 	let deleting = $state(false);
 	let error = $state<string | null>(null);
-	const highlightedQuery = page.url.searchParams.get('highlight')?.slice(0, 200) ?? '';
+	let highlightedQuery = $derived(page.url.searchParams.get('highlight')?.slice(0, 200) ?? '');
+	const refreshRequests = new RequestVersion();
 
 	let selectedPage = $derived(
 		detail?.pages.find((candidate) => candidate.pageNumber === selectedPageNumber) ??
@@ -22,18 +23,25 @@
 			null
 	);
 
-	async function refresh() {
+	async function refresh(documentId = page.params.id, requestedPageNumber = selectedPageNumber) {
+		const version = refreshRequests.next();
 		loading = true;
 		error = null;
 		try {
-			detail = await loadDocumentDetail(page.params.id);
-			if (!detail.pages.some((candidate) => candidate.pageNumber === selectedPageNumber)) {
-				selectedPageNumber = detail.pages[0]?.pageNumber ?? 1;
-			}
+			const loaded = await loadDocumentDetail(documentId);
+			if (!refreshRequests.isCurrent(version)) return;
+			detail = loaded;
+			selectedPageNumber = loaded.pages.some(
+				(candidate) => candidate.pageNumber === requestedPageNumber
+			)
+				? requestedPageNumber
+				: (loaded.pages[0]?.pageNumber ?? 1);
 		} catch (caught) {
+			if (!refreshRequests.isCurrent(version)) return;
+			detail = null;
 			error = caught instanceof Error ? caught.message : 'Não foi possível abrir este documento.';
 		} finally {
-			loading = false;
+			if (refreshRequests.isCurrent(version)) loading = false;
 		}
 	}
 
@@ -49,34 +57,48 @@
 
 	async function retryOcr() {
 		if (!detail || retrying) return;
+		const documentId = detail.id;
 		retrying = true;
 		error = null;
 		try {
-			await resumeDocumentOcr(detail.id);
-			await refresh();
+			await resumeDocumentOcr(documentId);
+			if (page.params.id !== documentId) return;
+			await refresh(documentId, selectedPageNumber);
 		} catch {
-			error = 'Algumas páginas ainda não puderam ser retomadas.';
+			if (page.params.id === documentId) {
+				error = 'Algumas páginas ainda não puderam ser retomadas.';
+			}
 		} finally {
-			retrying = false;
+			if (page.params.id === documentId) retrying = false;
 		}
 	}
 
 	async function removeDocument() {
 		if (!detail || deleting) return;
+		const documentId = detail.id;
 		if (!window.confirm(`Excluir “${detail.title}” e todos os arquivos associados?`)) return;
 		deleting = true;
 		error = null;
 		try {
-			await deleteDocument(detail.id);
-			await goto('/library/');
+			await deleteDocument(documentId);
+			if (page.params.id === documentId) await goto('/library/');
 		} catch {
-			error = 'Não foi possível excluir o documento agora.';
-			deleting = false;
+			if (page.params.id === documentId) {
+				error = 'Não foi possível excluir o documento agora.';
+				deleting = false;
+			}
 		}
 	}
 
-	onMount(() => {
-		void refresh();
+	$effect(() => {
+		const documentId = page.params.id;
+		const requestedPage = Number(page.url.searchParams.get('page') ?? '1');
+		const pageNumber = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+		detail = null;
+		selectedPageNumber = pageNumber;
+		retrying = false;
+		deleting = false;
+		void refresh(documentId, pageNumber);
 	});
 </script>
 
