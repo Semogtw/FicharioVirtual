@@ -63,12 +63,14 @@ describe('mergePdfOcrResumeSummary', () => {
 			pending: 1,
 			failed: 0
 		});
-		expect(merged).toEqual(expect.objectContaining({
-			ocrCompleted: 1,
-			ocrNeedsReview: 0,
-			ocrPending: 2,
-			ocrFailed: 0
-		}));
+		expect(merged).toEqual(
+			expect.objectContaining({
+				ocrCompleted: 1,
+				ocrNeedsReview: 0,
+				ocrPending: 2,
+				ocrFailed: 0
+			})
+		);
 	});
 
 	it('moves terminal failures out of pending without losing other blocked pages', () => {
@@ -78,10 +80,12 @@ describe('mergePdfOcrResumeSummary', () => {
 			pending: 0,
 			failed: 1
 		});
-		expect(merged).toEqual(expect.objectContaining({
-			ocrCompleted: 0,
-			ocrPending: 1,
-			ocrFailed: 1
-		}));
+		expect(merged).toEqual(
+			expect.objectContaining({
+				ocrCompleted: 0,
+				ocrPending: 1,
+				ocrFailed: 1
+			})
+		);
 	});
 });
