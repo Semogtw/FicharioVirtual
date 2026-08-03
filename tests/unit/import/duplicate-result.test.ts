@@ -20,8 +20,6 @@ describe('parseDuplicateDocumentId', () => {
 		{ id: documentId, title: 'unexpected' },
 		[{ id: documentId }]
 	])('rejects malformed duplicate response %#', (value) => {
-		expect(() => parseDuplicateDocumentId(value)).toThrow(
-			'Invalid duplicate document response'
-		);
+		expect(() => parseDuplicateDocumentId(value)).toThrow('Invalid duplicate document response');
 	});
 });
