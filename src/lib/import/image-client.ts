@@ -264,14 +264,18 @@ export class ImagePreparationClient {
 			this.#finish(task, new ImagePreparationError('worker_failed'));
 		};
 
-		worker.postMessage({
-			type: 'prepare',
-			id: task.id,
-			file: task.file,
-			maxDimension: selected.maxDimension,
-			thumbnailDimension: 480,
-			quality: selected.quality
-		});
+		try {
+			worker.postMessage({
+				type: 'prepare',
+				id: task.id,
+				file: task.file,
+				maxDimension: selected.maxDimension,
+				thumbnailDimension: 480,
+				quality: selected.quality
+			});
+		} catch {
+			this.#finish(task, new ImagePreparationError('worker_failed'));
+		}
 	}
 
 	#abort(task: QueuedTask) {
