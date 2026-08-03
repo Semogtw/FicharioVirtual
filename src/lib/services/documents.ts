@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { z } from 'zod';
 import {
 	mapDocumentRecord,
 	type DocumentCursor,
@@ -15,6 +16,44 @@ import { getSupabaseClient } from './supabase';
 const DEFAULT_PAGE_SIZE = 30;
 const MAX_PAGE_SIZE = 60;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const timestamp = z.string().refine((value) => !Number.isNaN(Date.parse(value)));
+const documentRecordSchema = z
+	.object({
+		id: z.string().regex(UUID),
+		title: z.string().trim().min(1).max(240),
+		kind: z.enum(['image', 'pdf']),
+		status: z.enum([
+			'uploading',
+			'pending',
+			'processing',
+			'ready',
+			'partially_ready',
+			'needs_review',
+			'failed'
+		]),
+		page_count: z.number().int().min(0).max(10_000),
+		thumbnail_path: z.string().min(1).max(1_024).nullable(),
+		notebook_id: z.string().regex(UUID).nullable(),
+		created_at: timestamp,
+		updated_at: timestamp
+	})
+	.strict();
+
+export function parseDocumentRecords(data: unknown, maximumRows: number): readonly DocumentRecord[] {
+	if (!Number.isInteger(maximumRows) || maximumRows < 0 || maximumRows > MAX_PAGE_SIZE + 1) {
+		throw new TypeError('Invalid document response');
+	}
+	const result = z.array(documentRecordSchema).max(maximumRows).safeParse(data);
+	if (!result.success) throw new TypeError('Invalid document response');
+	const ids = new Set<string>();
+	const rows = result.data.map((row) => {
+		if (ids.has(row.id)) throw new TypeError('Invalid document response');
+		ids.add(row.id);
+		return Object.freeze(row);
+	});
+	return Object.freeze(rows);
+}
 
 export class DocumentServiceError extends Error {
 	constructor() {
@@ -108,10 +147,21 @@ export async function listDocuments({
 		);
 	}
 
-	const { data, error } = await query;
-	if (error || !Array.isArray(data)) throw new DocumentServiceError();
+	let data: unknown;
+	try {
+		const response = await query;
+		if (response.error) throw new DocumentServiceError();
+		data = response.data;
+	} catch {
+		throw new DocumentServiceError();
+	}
 
-	const rows = data as unknown as DocumentRecord[];
+	let rows: readonly DocumentRecord[];
+	try {
+		rows = parseDocumentRecords(data, resolvedLimit + 1);
+	} catch {
+		throw new DocumentServiceError();
+	}
 	const hasNextPage = rows.length > resolvedLimit;
 	const visibleRows = hasNextPage ? rows.slice(0, resolvedLimit) : rows;
 	const items = Object.freeze(visibleRows.map(mapDocumentRecord));
