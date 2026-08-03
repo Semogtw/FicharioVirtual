@@ -109,6 +109,7 @@ export function startSessionTracking(): () => void {
 				sessionState.loading = false;
 				return;
 			}
+			if (sessionState.loading) return;
 			void initializeSession();
 		});
 	});
