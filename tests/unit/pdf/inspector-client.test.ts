@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-	PdfInspectionClient,
-	type PdfWorkerLike
-} from '../../../src/lib/pdf/inspector-client';
+import { PdfInspectionClient, type PdfWorkerLike } from '../../../src/lib/pdf/inspector-client';
 import type { PdfWorkerRequest, PdfWorkerResponse } from '../../../src/lib/pdf/types';
 
 class FakePdfWorker implements PdfWorkerLike {
