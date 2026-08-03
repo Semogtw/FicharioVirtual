@@ -21,4 +21,14 @@ describe('process-ocr provider delegation', () => {
 		expect(source).not.toContain('function responseText');
 		expect(source).not.toContain('parseOcrPayload');
 	});
+
+	it('delegates persistence and HTTP decisions to the shared failure planner', () => {
+		expect(source).toContain("from '../_shared/ocr-failure.ts'");
+		expect(source).toContain('planOcrFailure');
+		expect(source).not.toContain('classifyGeminiFailure');
+		expect(source).not.toContain('geminiFailureResponse');
+		expect(source).not.toContain(
+			"const code = responseInvalid ? 'ocr_response_invalid' : 'ocr_request_failed'"
+		);
+	});
 });
