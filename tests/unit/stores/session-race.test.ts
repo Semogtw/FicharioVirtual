@@ -106,4 +106,24 @@ describe('session operation ordering', () => {
 		stopTracking();
 		expect(tracking.unsubscribe).toHaveBeenCalledOnce();
 	});
+
+	it('does not start duplicate authorization while an explicit sign-in is active', async () => {
+		const signingIn = deferred<typeof authenticatedSession>();
+		auth.signIn.mockReturnValueOnce(signingIn.promise);
+		auth.loadAuthorizedSession.mockResolvedValueOnce(authenticatedSession);
+		const stopTracking = startSessionTracking();
+
+		const authentication = authenticate('owner@example.test', 'password');
+		tracking.callback?.('SIGNED_IN', authenticatedSession);
+		await Promise.resolve();
+
+		expect(auth.loadAuthorizedSession).not.toHaveBeenCalled();
+
+		signingIn.resolve(authenticatedSession);
+		await expect(authentication).resolves.toBe(authenticatedSession);
+		expect(sessionState.authorized).toBe(true);
+		expect(sessionState.user?.id).toBe('11111111-1111-4111-8111-111111111111');
+
+		stopTracking();
+	});
 });
