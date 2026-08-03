@@ -23,6 +23,47 @@ function validId(value: string) {
 	return value;
 }
 
+function invalidPendingPages(): never {
+	throw new TypeError('Invalid resumable OCR page response');
+}
+
+function hasExactKeys(record: Record<string, unknown>, expected: readonly string[]): boolean {
+	const actual = Object.keys(record).sort();
+	const sortedExpected = [...expected].sort();
+	return (
+		actual.length === sortedExpected.length &&
+		actual.every((key, index) => key === sortedExpected[index])
+	);
+}
+
+export function parsePendingOcrPages(data: unknown): readonly PendingOcrPage[] {
+	if (!Array.isArray(data)) invalidPendingPages();
+	const seenIds = new Set<string>();
+	const seenPageNumbers = new Set<number>();
+	const pages = data.map((row) => {
+		if (row === null || typeof row !== 'object' || Array.isArray(row)) invalidPendingPages();
+		const record = row as Record<string, unknown>;
+		if (!hasExactKeys(record, ['page_id', 'page_number'])) invalidPendingPages();
+		const pageId = record.page_id;
+		const pageNumber = record.page_number;
+		if (
+			typeof pageId !== 'string' ||
+			!UUID.test(pageId) ||
+			typeof pageNumber !== 'number' ||
+			!Number.isInteger(pageNumber) ||
+			pageNumber < 1 ||
+			seenIds.has(pageId) ||
+			seenPageNumbers.has(pageNumber)
+		) {
+			invalidPendingPages();
+		}
+		seenIds.add(pageId);
+		seenPageNumbers.add(pageNumber);
+		return Object.freeze({ id: pageId, pageNumber });
+	});
+	return Object.freeze(pages);
+}
+
 export async function resumeDocumentOcrWithGateway(
 	documentId: string,
 	gateway: OcrResumeGateway,
@@ -72,12 +113,14 @@ class SupabaseGateway implements OcrResumeGateway {
 			target_document_id: validId(documentId),
 			selection_at: new Date().toISOString()
 		});
-		if (error || !Array.isArray(data)) {
+		if (error) {
 			throw new Error('Não foi possível localizar as páginas pendentes.');
 		}
-		return Object.freeze(
-			data.map((page) => Object.freeze({ id: page.page_id, pageNumber: page.page_number }))
-		);
+		try {
+			return parsePendingOcrPages(data);
+		} catch {
+			throw new Error('Não foi possível localizar as páginas pendentes.');
+		}
 	}
 }
 
