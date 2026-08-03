@@ -51,6 +51,10 @@ if (workflow.includes('restore-pnpm-lockfile') || workflow.includes('pnpm-lock.y
 	fail('workflow must use the versioned root lockfile without a restoration layer');
 }
 
+if (!/uses:\s*actions\/checkout@[^\n]+[\s\S]*?persist-credentials:\s*false/.test(workflow)) {
+	fail('workflow checkout must disable persisted Git credentials');
+}
+
 const supabaseSetup = workflow.match(
 	/uses:\s*supabase\/setup-cli@(v\d+)\s*\n\s*with:\s*\n\s*version:\s*([^\s#]+)/
 );
