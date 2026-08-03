@@ -8,6 +8,7 @@ import {
 	type UpdateNotebookInput
 } from '$lib/domain/notebook';
 import type { Database } from '$lib/types/database';
+import { isIsoTimestamp } from '$lib/validation/iso-timestamp';
 import { getSupabaseClient } from './supabase';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -65,7 +66,7 @@ export function parseNotebookUpdate(data: unknown): UpdateNotebookInput {
 	return Object.freeze(result.data);
 }
 
-const timestamp = z.string().refine((value) => !Number.isNaN(Date.parse(value)));
+const timestamp = z.string().refine(isIsoTimestamp);
 const notebookRecordSchema = z
 	.object({
 		id: z.string().regex(UUID),
