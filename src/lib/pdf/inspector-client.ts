@@ -110,9 +110,13 @@ function parseInspection(data: unknown): PdfInspection {
 		!Array.isArray(value.nativePages) ||
 		!Array.isArray(value.ocrReasonsByPage) ||
 		(value.markdown !== null &&
-			(typeof value.markdown !== 'string' || value.markdown.trim() !== value.markdown || value.markdown.length < 1)) ||
+			(typeof value.markdown !== 'string' ||
+				value.markdown.trim() !== value.markdown ||
+				value.markdown.length < 1)) ||
 		(value.title !== null &&
-			(typeof value.title !== 'string' || value.title.trim() !== value.title || value.title.length < 1)) ||
+			(typeof value.title !== 'string' ||
+				value.title.trim() !== value.title ||
+				value.title.length < 1)) ||
 		typeof value.confidence !== 'number' ||
 		!Number.isFinite(value.confidence) ||
 		value.confidence < 0 ||
