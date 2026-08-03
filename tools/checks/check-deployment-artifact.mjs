@@ -241,8 +241,10 @@ export async function verifyDeploymentArtifact(inputPath) {
 }
 
 async function runCli() {
-	const artifactPath = process.argv[2];
-	if (!artifactPath || process.argv.length !== 3) {
+	const rawArguments = process.argv.slice(2);
+	const argumentsAfterSeparator = rawArguments[0] === '--' ? rawArguments.slice(1) : rawArguments;
+	const [artifactPath] = argumentsAfterSeparator;
+	if (!artifactPath || argumentsAfterSeparator.length !== 1) {
 		throw new TypeError(
 			'Usage: node tools/checks/check-deployment-artifact.mjs <artifact-directory>'
 		);
