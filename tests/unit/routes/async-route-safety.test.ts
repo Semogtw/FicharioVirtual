@@ -21,6 +21,19 @@ describe('async route safety', () => {
 		);
 	});
 
+	it('reloads document details when the route parameter changes and ignores stale responses', () => {
+		const documentRoute = read('src/routes/documents/[id]/+page.svelte');
+
+		expect(documentRoute).toContain(
+			"import { RequestVersion } from '$lib/services/request-version';"
+		);
+		expect(documentRoute).toContain('$effect(() => {');
+		expect(documentRoute).toContain('const documentId = page.params.id;');
+		expect(documentRoute).toContain('refreshRequests.next()');
+		expect(documentRoute).toContain('refreshRequests.isCurrent(version)');
+		expect(documentRoute).not.toContain('onMount(() =>');
+	});
+
 	it('remounts the correction editor when the selected page changes', () => {
 		const documentRoute = read('src/routes/documents/[id]/+page.svelte');
 
