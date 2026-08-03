@@ -218,7 +218,8 @@ function validate(file: File, options: PdfUploadOptions) {
 async function processOcrPages(
 	pages: readonly PdfImportPagePlan[],
 	dependencies: PdfUploadDependencies,
-	onProgress?: PdfUploadOptions['onProgress']
+	onProgress?: PdfUploadOptions['onProgress'],
+	signal?: AbortSignal
 ) {
 	const queue = pages.filter((page) => page.needsOcr);
 	let index = 0;
@@ -230,6 +231,7 @@ async function processOcrPages(
 
 	async function worker() {
 		while (index < queue.length) {
+			if (signal?.aborted) return;
 			const page = queue[index++];
 			if (!page) return;
 			try {
@@ -256,6 +258,7 @@ async function processOcrPages(
 	}
 
 	await Promise.all(Array.from({ length: Math.min(2, queue.length) }, () => worker()));
+	pending += queue.length - progress;
 	return { complete, needsReview, pending, failed };
 }
 
@@ -351,7 +354,7 @@ export async function uploadPdfWithGateway(
 		metadataPublished = true;
 		options.onProgress?.({ phase: 'publishing', completed: 1, total: 1 });
 
-		const ocr = await processOcrPages(pages, dependencies, options.onProgress);
+		const ocr = await processOcrPages(pages, dependencies, options.onProgress, options.signal);
 		return Object.freeze({
 			...publication,
 			inspection,
