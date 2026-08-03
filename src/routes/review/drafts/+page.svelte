@@ -34,8 +34,13 @@
 	function discard(pageId: string) {
 		if (!window.confirm('Descartar somente este rascunho local? O texto remoto não será alterado.'))
 			return;
-		discardCorrectionDraft(pageId);
-		rows = rows.filter((row) => row.draft.pageId !== pageId);
+		try {
+			discardCorrectionDraft(pageId);
+			rows = rows.filter((row) => row.draft.pageId !== pageId);
+		} catch (caught) {
+			error =
+				caught instanceof Error ? caught.message : 'Não foi possível descartar o rascunho local.';
+		}
 	}
 
 	onMount(() => {
