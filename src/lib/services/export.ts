@@ -19,9 +19,13 @@ function defaultClient(): ExportClientLike {
 export async function createPortableExport(
 	client: ExportClientLike = defaultClient()
 ): Promise<ExportManifest> {
-	const { data, error } = await client.rpc('export_portable_manifest');
-	if (error || data === null) throw new ExportServiceError();
-	return parseExportManifest(data);
+	try {
+		const { data, error } = await client.rpc('export_portable_manifest');
+		if (error || data === null) throw new ExportServiceError();
+		return parseExportManifest(data);
+	} catch {
+		throw new ExportServiceError();
+	}
 }
 
 export function serializePortableExport(manifest: ExportManifest): string {
