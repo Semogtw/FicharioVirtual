@@ -1,0 +1,68 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const upload = vi.hoisted(() => ({
+	uploadPdf: vi.fn(async (_file: File) => ({
+		documentId: crypto.randomUUID(),
+		pageCount: 1,
+		ocrPageCount: 0,
+		reviewPageCount: 0,
+		status: 'ready' as const,
+		inspection: {
+			type: 'TextBased' as const,
+			pageCount: 1,
+			nativePages: [{ pageNumber: 1, text: 'Texto' }],
+			pagesNeedingOcr: [],
+			ocrReasonsByPage: [],
+			markdown: 'Texto',
+			title: null,
+			confidence: 1,
+			processingTimeMs: 1,
+			layout: { isComplex: false, pagesWithTables: [], pagesWithColumns: [] },
+			hasEncodingIssues: false
+		},
+		sha256: 'a'.repeat(64),
+		storagePath: 'user/document/original.pdf',
+		ocrCompleted: 0,
+		ocrNeedsReview: 0,
+		ocrPending: 0,
+		ocrFailed: 0
+	}))
+}));
+
+vi.mock('$lib/pdf/upload', async (importOriginal) => {
+	const original = await importOriginal<typeof import('$lib/pdf/upload')>();
+	return { ...original, uploadPdf: upload.uploadPdf };
+});
+
+vi.mock('$lib/services/ocr-resume', () => ({
+	resumeDocumentOcr: vi.fn()
+}));
+
+import {
+	addPdfs,
+	pdfImportQueue,
+	removePdfImport
+} from '../../../src/lib/stores/pdf-import-queue.svelte';
+
+describe('PDF import queue file identity', () => {
+	beforeEach(() => {
+		for (const item of [...pdfImportQueue.items]) removePdfImport(item.id);
+		upload.uploadPdf.mockClear();
+	});
+
+	it('does not discard distinct PDFs that share file metadata', async () => {
+		const first = new File(['aa'], 'scan.pdf', {
+			type: 'application/pdf',
+			lastModified: 1_700_000_000_000
+		});
+		const second = new File(['bb'], 'scan.pdf', {
+			type: 'application/pdf',
+			lastModified: 1_700_000_000_000
+		});
+
+		addPdfs([first, second], { consentGranted: false });
+
+		expect(pdfImportQueue.items).toHaveLength(2);
+		await vi.waitFor(() => expect(upload.uploadPdf).toHaveBeenCalledTimes(2));
+	});
+});
