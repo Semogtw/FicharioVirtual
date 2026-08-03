@@ -20,8 +20,9 @@ describe('process-ocr provider delegation', () => {
 		expect(source).not.toContain('parseOcrPayload');
 	});
 
-	it('rejects malformed attempt counts before provider execution', () => {
+	it('rejects missing or malformed attempt counts before provider execution', () => {
 		expect(source).toContain('if (!Number.isInteger(attemptCount) || attemptCount < 1)');
+		expect(source).not.toContain('.attemptCount ?? 1');
 		expect(source).toContain("return respond(503, { code: 'ocr_claim_failed' })");
 	});
 
