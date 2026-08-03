@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isIsoTimestamp } from '$lib/validation/iso-timestamp';
 import { getSupabaseClient } from './supabase';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -7,7 +8,7 @@ const safeName = z
 	.min(1)
 	.max(120)
 	.refine((value) => value.trim() === value && !/[\u0000-\u001f\u007f]/u.test(value));
-const timestamp = z.string().refine((value) => !Number.isNaN(Date.parse(value)));
+const timestamp = z.string().refine(isIsoTimestamp);
 const tagRowSchema = z
 	.object({
 		tag_id: z.string().regex(UUID),
