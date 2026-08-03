@@ -6,6 +6,7 @@
 		readCorrectionDraft,
 		writeCorrectionDraft
 	} from '$lib/review/draft-index';
+	import { createLatestSerialExecutor } from '$lib/review/latest-serial-executor';
 	import { savePageCorrection } from '$lib/services/document-detail';
 
 	interface CorrectionEditorProps {
@@ -20,9 +21,21 @@
 	let timer: ReturnType<typeof setTimeout> | null = null;
 	let editVersion = 0;
 
-	function storeDraft(): boolean {
+	type SaveRequest = {
+		version: number;
+		text: string;
+		backedUp: boolean;
+	};
+
+	const remoteSaves = createLatestSerialExecutor<SaveRequest>(performRemoteSave);
+
+	function storeDraft(draftText = text): boolean {
 		try {
-			writeCorrectionDraft({ pageId: page.id, text, updatedAt: new Date().toISOString() });
+			writeCorrectionDraft({
+				pageId: page.id,
+				text: draftText,
+				updatedAt: new Date().toISOString()
+			});
 			saveState = 'draft';
 			error = null;
 			return true;
@@ -33,16 +46,10 @@
 		}
 	}
 
-	async function save(version = editVersion) {
-		if (timer) clearTimeout(timer);
-		timer = null;
-		const backedUp = storeDraft();
-		saveState = 'saving';
-		if (backedUp) error = null;
-
+	async function performRemoteSave(request: SaveRequest) {
 		try {
-			const saved = await savePageCorrection(page.id, text);
-			if (version !== editVersion) return;
+			const saved = await savePageCorrection(page.id, request.text);
+			if (request.version !== editVersion) return;
 			try {
 				discardCorrectionDraft(page.id);
 				error = null;
@@ -52,12 +59,22 @@
 			saveState = 'saved';
 			onSaved?.(saved);
 		} catch {
-			if (version !== editVersion) return;
+			if (request.version !== editVersion) return;
 			saveState = 'error';
-			error = backedUp
+			error = request.backedUp
 				? 'A correção ficou salva neste dispositivo e será reenviada na próxima tentativa.'
 				: 'Não foi possível salvar no servidor e o navegador não permitiu criar um rascunho local.';
 		}
+	}
+
+	async function save(version = editVersion) {
+		if (timer) clearTimeout(timer);
+		timer = null;
+		const snapshot = text;
+		const backedUp = storeDraft(snapshot);
+		saveState = 'saving';
+		if (backedUp) error = null;
+		await remoteSaves.enqueue({ version, text: snapshot, backedUp });
 	}
 
 	function changed() {
