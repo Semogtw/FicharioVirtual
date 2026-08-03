@@ -52,10 +52,18 @@ function releasePreview(item: ImportQueueItem) {
 }
 
 function ensureConsent() {
-	consentPromise ??= recordOcrConsent().catch((error) => {
-		consentPromise = null;
-		throw error;
-	});
+	if (consentPromise === null) {
+		const pending = recordOcrConsent();
+		consentPromise = pending;
+		void pending.then(
+			() => {
+				if (consentPromise === pending) consentPromise = null;
+			},
+			() => {
+				if (consentPromise === pending) consentPromise = null;
+			}
+		);
+	}
 	return consentPromise;
 }
 
