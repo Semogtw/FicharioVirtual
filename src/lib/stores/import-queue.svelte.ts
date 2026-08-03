@@ -69,12 +69,8 @@ async function processOcr(item: ImportQueueItem) {
 	item.error = null;
 	try {
 		const result = await processPageOcr(item.result.pageId);
-		if (result.state === 'complete') {
+		if (result.state === 'complete' || result.state === 'already_complete') {
 			item.status = result.needsReview ? 'needs_review' : 'complete';
-			return;
-		}
-		if (result.state === 'already_complete') {
-			item.status = 'complete';
 			return;
 		}
 		item.status = 'waiting';
