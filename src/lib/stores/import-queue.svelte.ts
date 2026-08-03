@@ -32,7 +32,7 @@ export type ImportQueueItem = {
 export const importQueue = $state<{ items: ImportQueueItem[] }>({ items: [] });
 
 const controllers = new Map<string, AbortController>();
-const localFingerprints = new Set<string>();
+const queuedFiles = new WeakSet<File>();
 let consentPromise: Promise<void> | null = null;
 
 function id() {
@@ -40,10 +40,6 @@ function id() {
 		globalThis.crypto?.randomUUID?.() ??
 		`import_${Date.now()}_${Math.random().toString(36).slice(2)}`
 	);
-}
-
-function fingerprint(file: File) {
-	return `${file.name}:${file.size}:${file.lastModified}:${file.type}`;
 }
 
 function message(error: unknown) {
@@ -138,9 +134,8 @@ export function addImages(
 ) {
 	const mode = options.mode ?? 'standard';
 	for (const file of files) {
-		const key = fingerprint(file);
-		if (localFingerprints.has(key)) continue;
-		localFingerprints.add(key);
+		if (queuedFiles.has(file)) continue;
+		queuedFiles.add(file);
 		const item: ImportQueueItem = {
 			id: id(),
 			file,
@@ -178,7 +173,7 @@ export function removeImport(itemId: string) {
 	const [item] = importQueue.items.splice(index, 1);
 	if (!item) return;
 	releasePreview(item);
-	localFingerprints.delete(fingerprint(item.file));
+	queuedFiles.delete(item.file);
 }
 
 export function clearFinishedImports() {
