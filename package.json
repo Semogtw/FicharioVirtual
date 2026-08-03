@@ -21,6 +21,7 @@
 		"test:source:offline": "bash tools/checks/run-offline-source-gates.sh",
 		"test:functions:check": "bash tools/checks/check-edge-functions.sh",
 		"test:db:local": "bash tools/checks/run-local-db-gates.sh",
+		"test:ocr:faults:local": "node tools/checks/check-ocr-fault-injection.mjs",
 		"test:deployment": "node tools/checks/check-deployed-site.mjs",
 		"test:deployment:artifact": "node tools/checks/check-deployment-artifact.mjs",
 		"test:staging:supabase": "node tools/checks/check-supabase-staging.mjs",
