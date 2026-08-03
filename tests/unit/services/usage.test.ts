@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	loadUsageOverview,
 	parseUsageOverview,
+	UsageServiceError,
 	type UsageClientLike
 } from '../../../src/lib/services/usage';
 
@@ -49,5 +50,30 @@ describe('usage overview', () => {
 			}
 		};
 		await expect(loadUsageOverview(client)).resolves.toEqual(payload);
+	});
+
+	it('normalizes malformed payloads as service failures', async () => {
+		const client: UsageClientLike = {
+			async rpc() {
+				return { data: { generatedAt: 'invalid' }, error: null };
+			}
+		};
+
+		await expect(loadUsageOverview(client)).rejects.toBeInstanceOf(UsageServiceError);
+	});
+
+	it('normalizes transport failures without leaking backend details', async () => {
+		const client: UsageClientLike = {
+			async rpc() {
+				throw new Error('connection refused by internal host');
+			}
+		};
+
+		await expect(loadUsageOverview(client)).rejects.toEqual(
+			expect.objectContaining({
+				name: 'UsageServiceError',
+				message: 'Não foi possível carregar o uso operacional agora.'
+			})
+		);
 	});
 });
