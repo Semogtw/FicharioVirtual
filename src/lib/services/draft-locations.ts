@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isIsoTimestamp } from '$lib/validation/iso-timestamp';
 import { getSupabaseClient } from './supabase';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -8,7 +9,7 @@ const draftLocationRowSchema = z
 		document_id: z.string().regex(UUID),
 		document_title: z.string().trim().min(1).max(240),
 		page_number: z.number().int().min(1).max(10_000),
-		page_updated_at: z.string().refine((value) => !Number.isNaN(Date.parse(value)))
+		page_updated_at: z.string().refine(isIsoTimestamp)
 	})
 	.strict();
 const draftLocationRowsSchema = z.array(draftLocationRowSchema).max(100);
