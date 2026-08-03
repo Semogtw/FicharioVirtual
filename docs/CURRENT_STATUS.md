@@ -2,7 +2,7 @@
 
 _Atualizado: 2026-08-03_  
 _Branch ativa: `main`_  
-_Estado: MVP implementado e validado localmente; gates externos prontos, sem deployment ou release_
+_Estado: MVP implementado; hardening OCR adicional no HEAD, ainda sem validação integral desse novo checkpoint ou release_
 
 ## Resumo executivo
 
@@ -41,7 +41,48 @@ cota e retomada na virada do dia UTC
 
 Recibo persistente: issue `#1`, `[CI] Fichário current HEAD validation`.
 
-Commits posteriores que alteram somente Markdown não modificam esse checkpoint executável. O workflow leve `Validate documentation` verifica README e `docs/**` sem repetir banco e Chromium.
+Esse checkpoint não cobre as alterações de código posteriores descritas abaixo. `PASS` continua atribuído somente a `17f5103` até que os gates sejam executados novamente em um SHA novo.
+
+## Hardening OCR posterior ao checkpoint verde
+
+A continuação de 2026-08-03 avançou diretamente na `main`, com testes e implementação separados em commits pequenos. O HEAD anterior a esta atualização documental é `236853e6511d06a07d8a45765f61c39f79f67dbc`.
+
+Foram corrigidos:
+
+- limpeza da imagem temporária quando outra execução conclui a página entre a leitura inicial e o claim;
+- parser cliente fail-closed para respostas OCR, com formas exatas e limite de `warningCount`;
+- falhas de transporte sem resposta HTTP mantidas como retryable;
+- erros OCR retryable preservados como pendentes durante retomada;
+- validação estrita das linhas retornadas por `list_resumable_ocr_pages`;
+- mapeamento seguro dos estados de rejeição do claim para erros de domínio;
+- envelopes de erro HTTP com campos extras ou códigos inválidos ignorados;
+- validação de correspondência entre estado de rejeição e status HTTP;
+- propagação de `needsReview` em `already_complete` desde a Edge Function até cliente, fila de imagem, importador de PDF e retomada;
+- releitura do status terminal após uma corrida de claim, sem assumir que toda conclusão concorrente ficou `ready`.
+
+Evidência criada no mesmo conjunto:
+
+- testes unitários de serviço para formas de resposta, transporte, erros e status HTTP;
+- testes de retomada para retryable e revisão concorrente;
+- teste do importador de PDF para página já concluída com revisão;
+- testes de fonte da Edge Function para cleanup e releitura do status;
+- teste de fonte da fila de importação para preservação de `needs_review`.
+
+### Validação do novo HEAD
+
+O workspace desta sessão tinha Node.js 22 e TypeScript 5.8, mas não conseguiu resolver `github.com` nem `registry.npmjs.org`. Por isso, clone, instalação congelada e gates dependentes do repositório completo ficaram bloqueados por DNS.
+
+Estado honesto dos gates no HEAD novo:
+
+```text
+pnpm verify: NOT RUN — pnpm/store do projeto indisponível e registry sem resolução DNS
+pnpm test:e2e: NOT RUN — workspace completo e dependências indisponíveis
+pnpm test:functions:check: NOT RUN — Deno indisponível no workspace
+pnpm test:db:local: NOT RUN — Supabase CLI/Docker e checkout completo indisponíveis
+GitHub commit status: nenhum status publicado para o HEAD consultado
+```
+
+As inspeções de contrato e buscas de consumidores foram concluídas pelo conteúdo versionado no GitHub, mas não substituem execução. O próximo agente deve priorizar `pnpm verify:full` em um workspace funcional antes de atribuir um novo checkpoint verde.
 
 ## Produto implementado
 
@@ -163,19 +204,21 @@ Docker e as imagens Supabase continuam externos ao bundle.
 - headers do host final;
 - limites gratuitos, billing desativado, backup e rollback operacionais.
 
-A classificação, a resposta pública e o cálculo de backoff das falhas OCR já possuem evidência local por HTTP loopback. O item externo pendente é observar a função implantada e os estados reais no Supabase.
+A classificação, a resposta pública e o cálculo de backoff das falhas OCR já possuem evidência local no checkpoint verde por HTTP loopback. O item externo pendente é observar a função implantada e os estados reais no Supabase. O hardening posterior precisa de uma nova execução integral local antes de herdar essa evidência.
 
 ## Próximas prioridades
 
-1. criar um projeto Supabase de staging sem dados reais;
-2. aplicar migrations e cadastrar duas contas exclusivas de teste;
-3. configurar o environment `staging` e executar `Verify Supabase staging`;
-4. implantar `process-ocr` e `delete-document`, configurar secrets no Supabase e executar `Verify OCR staging`;
-5. observar persistência, retomada e cleanup das falhas OCR no ambiente implantado;
-6. publicar um host HTTPS e executar `Verify deployed Fichário`;
-7. testar PDFs e retomada em tablet/celular;
-8. confirmar billing desativado, backup e rollback;
-9. somente então decidir entre staging prolongado e release privada.
+1. executar `pnpm verify:full` no HEAD atual em workspace com toolchain disponível;
+2. corrigir qualquer regressão de tipo, formato ou contrato encontrada pelo gate integral;
+3. criar um projeto Supabase de staging sem dados reais;
+4. aplicar migrations e cadastrar duas contas exclusivas de teste;
+5. configurar o environment `staging` e executar `Verify Supabase staging`;
+6. implantar `process-ocr` e `delete-document`, configurar secrets no Supabase e executar `Verify OCR staging`;
+7. observar persistência, retomada e cleanup das falhas OCR no ambiente implantado;
+8. publicar um host HTTPS e executar `Verify deployed Fichário`;
+9. testar PDFs e retomada em tablet/celular;
+10. confirmar billing desativado, backup e rollback;
+11. somente então decidir entre staging prolongado e release privada.
 
 ## Regras de continuidade
 
