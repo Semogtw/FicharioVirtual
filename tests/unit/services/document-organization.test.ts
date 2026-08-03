@@ -91,3 +91,74 @@ describe('updateDocumentOrganization', () => {
 		).rejects.toThrow('Invalid document identifier');
 	});
 });
+
+describe('document organization response contract', () => {
+	function responseClient(data: unknown, rejection?: unknown): DocumentOrganizationClientLike {
+		return {
+			from() {
+				return {
+					update() {
+						return {
+							eq() {
+								return {
+									select() {
+										return {
+											async maybeSingle() {
+												if (rejection) throw rejection;
+												return { data, error: null } as never;
+											}
+										};
+									}
+								};
+							}
+						};
+					}
+				};
+			}
+		};
+	}
+
+	it('rejects mismatched or malformed updated records', async () => {
+		await expect(
+			updateDocumentOrganization(
+				documentId,
+				{ title: 'Mitose', notebookId },
+				responseClient({
+					id: '33333333-3333-4333-8333-333333333333',
+					title: 'Mitose',
+					notebook_id: notebookId,
+					updated_at: '2026-08-02T10:00:00.000Z'
+				})
+			)
+		).rejects.toMatchObject({ name: 'DocumentOrganizationError' });
+
+		await expect(
+			updateDocumentOrganization(
+				documentId,
+				{ title: 'Mitose', notebookId },
+				responseClient({
+					id: documentId,
+					title: 'Mitose',
+					notebook_id: notebookId,
+					updated_at: 'invalid-date',
+					private_content: 'no'
+				})
+			)
+		).rejects.toMatchObject({ name: 'DocumentOrganizationError' });
+	});
+
+	it('normalizes transport failures without leaking details', async () => {
+		await expect(
+			updateDocumentOrganization(
+				documentId,
+				{ title: 'Mitose', notebookId },
+				responseClient(null, new Error('internal postgrest host'))
+			)
+		).rejects.toEqual(
+			expect.objectContaining({
+				name: 'DocumentOrganizationError',
+				message: 'Não foi possível atualizar a organização do documento.'
+			})
+		);
+	});
+});
