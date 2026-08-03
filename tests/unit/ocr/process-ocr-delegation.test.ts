@@ -9,9 +9,7 @@ const source = readFileSync(
 describe('process-ocr provider delegation', () => {
 	it('delegates the Gemini request and structured response parsing to the shared client', () => {
 		expect(source).toContain('requestGeminiOcr');
-		expect(source).toContain('GeminiHttpError');
-		expect(source).toContain('GeminiResponseError');
-		expect(source).toContain('GeminiTransportError');
+		expect(source).toContain('planOcrFailure');
 	});
 
 	it('does not duplicate the provider endpoint, prompt schema or payload parser', () => {
