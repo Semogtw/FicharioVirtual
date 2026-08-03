@@ -77,6 +77,20 @@ A execução:
 
 O job não imprime transcript, tokens, URLs assinadas ou credenciais. O conteúdo enviado é totalmente sintético.
 
+## Relatório sanitizado
+
+Toda execução publica por sete dias o artifact `ocr-staging-report-<run-id>`. O arquivo JSON é inicializado antes da confirmação manual, portanto uma execução recusada ainda registra `status = not_run` sem instalar dependências nem chamar o OCR.
+
+Quando o verificador executa, ele substitui o arquivo com um relatório schema 1 contendo somente:
+
+- `status`: `pass`, `fail` ou `not_run`;
+- `failureStage`: etapa enumerada, sem mensagem de erro bruta;
+- flags de autenticação, autorização, consentimento, importação, função e persistência;
+- estados terminais, contagens e presença booleana dos tokens sintéticos;
+- resultado da remoção do documento e do encerramento da sessão.
+
+O relatório não contém e-mail, UUID de usuário, IDs de documento/página/job, caminhos de Storage, URL, transcript, mensagem do provedor ou secrets. O upload usa `if: always()`, permitindo comparar falhas de configuração, execução e cleanup sem consultar dados privados.
+
 ## Interpretação de falhas
 
 Falhas antes de `process-ocr` normalmente indicam Auth, allowlist, migrations, Storage ou configuração do environment GitHub.
