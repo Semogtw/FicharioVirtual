@@ -17,6 +17,7 @@ export type OcrResumeSummary = {
 	failed: number;
 };
 type OcrProcessor = (pageId: string) => Promise<OcrRunResult>;
+export type OcrResumeOptions = { signal?: AbortSignal; client?: SupabaseClient<Database> };
 
 function validId(value: string) {
 	if (!UUID.test(value)) throw new TypeError('Invalid document identifier');
@@ -67,7 +68,8 @@ export function parsePendingOcrPages(data: unknown): readonly PendingOcrPage[] {
 export async function resumeDocumentOcrWithGateway(
 	documentId: string,
 	gateway: OcrResumeGateway,
-	processor: OcrProcessor = processPageOcr
+	processor: OcrProcessor = processPageOcr,
+	options: Pick<OcrResumeOptions, 'signal'> = {}
 ): Promise<OcrResumeSummary> {
 	const validDocumentId = validId(documentId);
 	await gateway.recoverStaleJobs();
@@ -77,9 +79,11 @@ export async function resumeDocumentOcrWithGateway(
 	let needsReview = 0;
 	let pending = 0;
 	let failed = 0;
+	let processed = 0;
 
 	async function consume() {
 		while (cursor < pages.length) {
+			if (options.signal?.aborted) return;
 			const page = pages[cursor++];
 			if (!page) return;
 			try {
@@ -91,11 +95,14 @@ export async function resumeDocumentOcrWithGateway(
 			} catch (error) {
 				if (error instanceof OcrProcessingError && error.retryable) pending += 1;
 				else failed += 1;
+			} finally {
+				processed += 1;
 			}
 		}
 	}
 
 	await Promise.all(Array.from({ length: Math.min(2, pages.length) }, () => consume()));
+	pending += pages.length - processed;
 	return Object.freeze({ completed, needsReview, pending, failed });
 }
 
@@ -123,9 +130,11 @@ class SupabaseGateway implements OcrResumeGateway {
 	}
 }
 
-export function resumeDocumentOcr(
-	documentId: string,
-	client: SupabaseClient<Database> = getSupabaseClient()
-) {
-	return resumeDocumentOcrWithGateway(documentId, new SupabaseGateway(client));
+export function resumeDocumentOcr(documentId: string, options: OcrResumeOptions = {}) {
+	return resumeDocumentOcrWithGateway(
+		documentId,
+		new SupabaseGateway(options.client ?? getSupabaseClient()),
+		processPageOcr,
+		{ signal: options.signal }
+	);
 }
