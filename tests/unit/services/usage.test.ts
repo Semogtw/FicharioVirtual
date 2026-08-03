@@ -41,6 +41,9 @@ describe('usage overview', () => {
 		expect(() => parseUsageOverview({ ...payload, privateContent: 'no' })).toThrow(
 			'Invalid usage overview'
 		);
+		expect(() =>
+			parseUsageOverview({ ...payload, generatedAt: '2026-02-30T00:00:00.000Z' })
+		).toThrow('Invalid usage overview');
 	});
 
 	it('validates the RPC response before exposing it', async () => {
