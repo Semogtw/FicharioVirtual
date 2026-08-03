@@ -36,6 +36,20 @@ describe('deployable static artifact workflow', () => {
 		expect(workflow).not.toContain('GEMINI_API_KEY');
 	});
 
+	it('verifies the packaged artifact with the reusable post-download command before upload', () => {
+		const workflow = read('.github/workflows/build-deployment-artifact.yml');
+		const packageJson = read('package.json');
+
+		expect(packageJson).toContain(
+			'"test:deployment:artifact": "node tools/checks/check-deployment-artifact.mjs"'
+		);
+		expect(workflow).toContain('- name: Verify packaged deployment artifact');
+		expect(workflow).toContain('run: pnpm test:deployment:artifact -- fichario-deploy');
+		expect(workflow.indexOf('run: pnpm test:deployment:artifact -- fichario-deploy')).toBeLessThan(
+			workflow.indexOf('- name: Upload deployable static artifact')
+		);
+	});
+
 	it('packages only the static output with portable checksums and a commit manifest', () => {
 		const workflow = read('.github/workflows/build-deployment-artifact.yml');
 
