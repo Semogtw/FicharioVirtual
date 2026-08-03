@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+	parseNewNotebookInput,
 	parseNotebookRecord,
-	parseNotebookRecords
+	parseNotebookRecords,
+	parseNotebookUpdate
 } from '../../../src/lib/services/notebooks';
 
 const notebookId = '11111111-1111-4111-8111-111111111111';
@@ -56,5 +58,33 @@ describe('notebook response contract', () => {
 		expect(() => parseNotebookRecords([summary(), summary()])).toThrow(
 			'Invalid notebook response'
 		);
+	});
+});
+
+describe('notebook input contract', () => {
+	it('normalizes create and update inputs', () => {
+		expect(
+			parseNewNotebookInput({
+				name: '  Biologia  ',
+				description: '  Células e genética  ',
+				coverStyle: ' linen '
+			})
+		).toEqual({ name: 'Biologia', description: 'Células e genética', coverStyle: 'linen' });
+		expect(parseNotebookUpdate({ description: '   ' })).toEqual({ description: null });
+	});
+
+	it('rejects unsafe or empty notebook changes', () => {
+		expect(() => parseNewNotebookInput({ name: '   ' })).toThrow('Invalid notebook input');
+		expect(() => parseNewNotebookInput({ name: 'Bio\u0000logia' })).toThrow(
+			'Invalid notebook input'
+		);
+		expect(() =>
+			parseNewNotebookInput({ name: 'Biologia', description: 'x'.repeat(2_001) })
+		).toThrow('Invalid notebook input');
+		expect(() => parseNewNotebookInput({ name: 'Biologia', coverStyle: '   ' })).toThrow(
+			'Invalid notebook input'
+		);
+		expect(() => parseNotebookUpdate({})).toThrow('Invalid notebook input');
+		expect(() => parseNotebookUpdate({ name: '   ' })).toThrow('Invalid notebook input');
 	});
 });
