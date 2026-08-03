@@ -29,9 +29,7 @@ const optionalDescription = z
 		const normalized = value.trim();
 		return normalized.length === 0 ? null : normalized;
 	})
-	.refine(
-		(value) => value === null || (value.length <= 2_000 && !CONTROL_CHARACTERS.test(value))
-	);
+	.refine((value) => value === null || (value.length <= 2_000 && !CONTROL_CHARACTERS.test(value)));
 const newNotebookInputSchema = z
 	.object({
 		name: normalizedText(120),
@@ -48,9 +46,7 @@ const notebookUpdateSchema = z
 	.strict()
 	.refine(
 		(value) =>
-			value.name !== undefined ||
-			value.description !== undefined ||
-			value.coverStyle !== undefined
+			value.name !== undefined || value.description !== undefined || value.coverStyle !== undefined
 	);
 
 export function parseNewNotebookInput(data: unknown): NewNotebookInput {
