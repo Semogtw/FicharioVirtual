@@ -160,8 +160,16 @@ function expectedPublicationStatus(
 	return 'ready';
 }
 
-export function parsePdfImportPublication(data: unknown): PdfImportPublication {
-	if (data === null || typeof data !== 'object' || Array.isArray(data)) {
+export function parsePdfImportPublication(
+	data: unknown,
+	expectedDocumentId: string
+): PdfImportPublication {
+	if (
+		!UUID.test(expectedDocumentId) ||
+		data === null ||
+		typeof data !== 'object' ||
+		Array.isArray(data)
+	) {
 		throw new TypeError('Invalid PDF import publication');
 	}
 	const value = data as Record<string, unknown>;
@@ -172,6 +180,7 @@ export function parsePdfImportPublication(data: unknown): PdfImportPublication {
 	if (
 		typeof documentId !== 'string' ||
 		!UUID.test(documentId) ||
+		documentId !== expectedDocumentId ||
 		typeof pageCount !== 'number' ||
 		!Number.isInteger(pageCount) ||
 		pageCount < 1 ||
@@ -416,7 +425,7 @@ class SupabasePdfGateway implements PdfImportGateway {
 		});
 		if (error) throw new PdfUploadError('metadata_failed');
 		try {
-			return parsePdfImportPublication(data);
+			return parsePdfImportPublication(data, input.documentId);
 		} catch {
 			throw new PdfUploadError('metadata_failed');
 		}
