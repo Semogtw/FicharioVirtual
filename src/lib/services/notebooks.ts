@@ -11,14 +11,20 @@ import type { Database } from '$lib/types/database';
 import { getSupabaseClient } from './supabase';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/u;
+
+function hasControlCharacters(value: string) {
+	return [...value].some((character) => {
+		const code = character.codePointAt(0);
+		return code !== undefined && (code < 32 || code === 127);
+	});
+}
 
 function normalizedText(maximum: number) {
 	return z
 		.string()
 		.transform((value) => value.trim())
 		.refine(
-			(value) => value.length > 0 && value.length <= maximum && !CONTROL_CHARACTERS.test(value)
+			(value) => value.length > 0 && value.length <= maximum && !hasControlCharacters(value)
 		);
 }
 
@@ -29,7 +35,7 @@ const optionalDescription = z
 		const normalized = value.trim();
 		return normalized.length === 0 ? null : normalized;
 	})
-	.refine((value) => value === null || (value.length <= 2_000 && !CONTROL_CHARACTERS.test(value)));
+	.refine((value) => value === null || (value.length <= 2_000 && !hasControlCharacters(value)));
 const newNotebookInputSchema = z
 	.object({
 		name: normalizedText(120),
