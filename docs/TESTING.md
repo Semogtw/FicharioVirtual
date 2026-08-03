@@ -54,6 +54,24 @@ pnpm test:functions:check
 pnpm test:db:local
 ```
 
+## Artifact de deployment e host publicado
+
+Antes de publicar um pacote baixado do GitHub Actions:
+
+```bash
+pnpm test:deployment:artifact -- /caminho/para/fichario-deploy
+```
+
+O gate pré-publicação exige o manifest schema 2, confere checksums de todos os arquivos, rejeita paths inseguros e links simbólicos, mantém `site/` como única raiz pública e valida os snapshots `source/package.json` e `source/pnpm-lock.yaml` contra os hashes declarados. O package snapshot precisa identificar o Fichário Virtual e o lockfile precisa ser pnpm v9 com importador raiz.
+
+Depois de hospedar somente `fichario-deploy/site/`, execute:
+
+```bash
+pnpm test:deployment -- https://seu-dominio.example
+```
+
+O gate pós-publicação valida HTTPS, redirect HTTP, headers, CSP, HSTS, fallback SPA, manifest, service worker e políticas de cache. Nenhum dos dois gates substitui Auth, RLS, Storage ou OCR em staging.
+
 ## Gates de frontend
 
 ```bash
