@@ -36,9 +36,11 @@ describe('parsePdfWorkerResponse', () => {
 	});
 
 	it('accepts exact documented inspection failures', () => {
-		expect(
-			parsePdfWorkerResponse({ type: 'failure', id, code: 'encrypted_pdf' }, id)
-		).toEqual({ type: 'failure', id, code: 'encrypted_pdf' });
+		expect(parsePdfWorkerResponse({ type: 'failure', id, code: 'encrypted_pdf' }, id)).toEqual({
+			type: 'failure',
+			id,
+			code: 'encrypted_pdf'
+		});
 	});
 
 	it.each([
@@ -65,8 +67,6 @@ describe('parsePdfWorkerResponse', () => {
 		},
 		{ type: 'success', id, inspection: inspection(), extra: true }
 	])('rejects malformed inspection worker response %#', (value) => {
-		expect(() => parsePdfWorkerResponse(value, id)).toThrow(
-			'Invalid PDF worker response'
-		);
+		expect(() => parsePdfWorkerResponse(value, id)).toThrow('Invalid PDF worker response');
 	});
 });
