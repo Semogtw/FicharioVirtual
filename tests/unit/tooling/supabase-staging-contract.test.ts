@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	assertAuthorizedAccount,
 	assertDeniedStorageOperation,
+	assertExpiredSignedUrlResponse,
 	assertProbeBytes,
 	assertProbeIsolation,
 	resolveStagingFailure,
@@ -113,6 +114,17 @@ describe('Supabase staging contract', () => {
 				error: null
 			})
 		).toThrow(/unexpectedly succeeded/);
+	});
+
+	it('requires an expired signed URL to return a client-side denial', () => {
+		expect(() => assertExpiredSignedUrlResponse({ ok: false, status: 400 })).not.toThrow();
+		expect(() => assertExpiredSignedUrlResponse({ ok: false, status: 403 })).not.toThrow();
+		expect(() => assertExpiredSignedUrlResponse({ ok: true, status: 200 })).toThrow(
+			/unexpectedly remained valid/
+		);
+		expect(() => assertExpiredSignedUrlResponse({ ok: false, status: 503 })).toThrow(
+			/unexpected HTTP status/
+		);
 	});
 
 	it('preserves verification and cleanup failures without masking either cause', () => {
