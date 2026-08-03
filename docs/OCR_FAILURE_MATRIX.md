@@ -5,9 +5,10 @@ Este documento descreve como o backend classifica falhas, qual estado deve ser p
 A fonte de verdade executável continua sendo:
 
 - `supabase/functions/_shared/ocr-contract.ts` para classificação do provedor;
-- `supabase/functions/process-ocr/index.ts` para resposta HTTP e persistência;
+- `supabase/functions/_shared/ocr-failure.ts` para backoff, decisão de persistência e resposta pública;
+- `supabase/functions/process-ocr/index.ts` para executar a decisão contra o Supabase;
 - `claim_ocr_job`, `fail_ocr_job` e `block_ocr_job_quota` para transições SQL;
-- testes unitários e pgTAP para contratos determinísticos.
+- testes unitários, integração loopback e pgTAP para contratos determinísticos.
 
 ## Estados persistidos
 
@@ -26,7 +27,7 @@ A fonte de verdade executável continua sendo:
 | objeto temporariamente indisponível no Storage | `ocr_source_unavailable`       | `retryable`                                           | base 30 s                         | `202 retry_later`          |
 | imagem acima de 14 MiB inline                  | `ocr_source_too_large`         | `failed`                                              | não                               | `413`                      |
 
-O atraso efetivo inclui backoff exponencial por `attempt_count`, jitter abaixo de um segundo e teto de uma hora.
+O atraso efetivo inclui backoff exponencial por `attempt_count`, jitter abaixo de um segundo e teto de uma hora. `attemptCount` ausente, fracionário ou menor que 1 é recusado como `ocr_claim_failed`; ele nunca é convertido silenciosamente em primeira tentativa.
 
 ## Cenários determinísticos
 
@@ -43,6 +44,28 @@ Os seguintes contratos já podem ser comprovados sem chamada externa:
 - abandono de retry automático depois da terceira falha genérica.
 
 Esses casos pertencem a unitários, pgTAP e testes locais de concorrência. Não precisam consumir quota do provedor.
+
+### Integração HTTP em loopback
+
+Execute:
+
+```bash
+pnpm test:ocr:faults:local
+```
+
+O gate sobe um servidor efêmero em `127.0.0.1`, usa o cliente Gemini compartilhado e prova sete cenários completos de transporte e decisão:
+
+1. 429 transitório;
+2. quota diária do provedor;
+3. 503;
+4. payload inválido antes da terceira tentativa;
+5. payload inválido na terceira tentativa;
+6. timeout/abort HTTP antes da terceira tentativa;
+7. timeout/abort HTTP na terceira tentativa.
+
+O servidor valida método, `Content-Type`, API key apenas no header, bytes da imagem e solicitação de resposta JSON estruturada. A URL não recebe a chave e nenhuma conexão externa é aberta.
+
+Esse gate comprova cliente, classificação, backoff e resposta planejada. Ele não comprova a chamada da Edge Function implantada nem a persistência real em `pages` e `ocr_jobs`.
 
 ## Cenários remotos controláveis
 
@@ -64,16 +87,17 @@ Configure um identificador sintaticamente válido, mas inexistente, no staging. 
 
 Use uma conta de teste isolada e um `OCR_DAILY_HARD_LIMIT` baixo. Depois que o contador diário alcançar o limite, a próxima claim deve ficar `blocked_quota` com `daily_hard_limit` **antes** de chamar o provedor. Restaure o limite após a execução.
 
-## Cenários que exigem infraestrutura externa controlada
+## Cenários que ainda exigem infraestrutura externa controlada
 
-429 transitório, 503, timeout e payload inválido não devem ser forçados por body, header, query string ou secret especial reconhecido pela função implantada. Isso criaria uma superfície de teste acessível em produção.
+A classificação local de 429 transitório, 503, timeout e payload inválido já possui evidência por HTTP loopback. Ainda falta observar a função implantada, a escrita no banco, a retomada posterior e o cleanup em staging.
 
-Para obter evidência real, use uma das opções:
+Essas falhas não devem ser forçadas por body, header, query string, endpoint configurável ou secret especial reconhecido pela função implantada. O gate de fonte rejeita superfícies como `GEMINI_API_URL`, `OCR_PROVIDER_URL` e `X-FICHARIO-FAULT` no código de produção.
 
-1. endpoint/proxy de provedor isolado em um projeto descartável e sem tráfego real;
+Para obter evidência remota, use uma das opções:
+
+1. proxy de provedor isolado em um projeto descartável e sem tráfego real, configurado fora da função de produção;
 2. mecanismo oficial de sandbox/fault injection do provedor, quando disponível;
-3. ocorrência real capturada pelo relatório sanitizado e pelos estados persistidos;
-4. teste de integração local com transporte injetado fora da função implantada.
+3. ocorrência real capturada pelo relatório sanitizado e pelos estados persistidos.
 
 Nunca direcione produção para um proxy de teste e nunca mantenha uma chave de simulação após a janela de validação.
 
