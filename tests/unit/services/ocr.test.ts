@@ -85,6 +85,17 @@ describe('processPageOcr', () => {
 		);
 	});
 
+	it('treats transport failures without an HTTP response as retryable', async () => {
+		await expect(
+			processPageOcr(
+				pageId,
+				client({ data: null, error: { message: 'Failed to fetch' } })
+			)
+		).rejects.toEqual(
+			expect.objectContaining({ code: 'ocr_transport_failed', retryable: true })
+		);
+	});
+
 	it('maps a permanent provider response to a non-retryable safe error', async () => {
 		const response = new Response(
 			JSON.stringify({ code: 'gemini_authentication_failed', retryable: false }),
