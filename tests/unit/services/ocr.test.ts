@@ -41,6 +41,50 @@ describe('processPageOcr', () => {
 		).resolves.toEqual({ state: 'quota_exhausted' });
 	});
 
+	it('rejects completion responses with undeclared fields', async () => {
+		await expect(
+			processPageOcr(
+				pageId,
+				client({
+					data: {
+						state: 'complete',
+						needsReview: false,
+						warningCount: 0,
+						jobId: pageId
+					},
+					error: null
+				})
+			)
+		).rejects.toEqual(
+			expect.objectContaining({ code: 'ocr_response_invalid', retryable: true })
+		);
+	});
+
+	it('rejects deferred states with undeclared fields', async () => {
+		await expect(
+			processPageOcr(
+				pageId,
+				client({ data: { state: 'busy', jobId: pageId }, error: null })
+			)
+		).rejects.toEqual(
+			expect.objectContaining({ code: 'ocr_response_invalid', retryable: true })
+		);
+	});
+
+	it('rejects warning counts beyond the provider response contract', async () => {
+		await expect(
+			processPageOcr(
+				pageId,
+				client({
+					data: { state: 'complete', needsReview: true, warningCount: 101 },
+					error: null
+				})
+			)
+		).rejects.toEqual(
+			expect.objectContaining({ code: 'ocr_response_invalid', retryable: true })
+		);
+	});
+
 	it('maps a permanent provider response to a non-retryable safe error', async () => {
 		const response = new Response(
 			JSON.stringify({ code: 'gemini_authentication_failed', retryable: false }),
