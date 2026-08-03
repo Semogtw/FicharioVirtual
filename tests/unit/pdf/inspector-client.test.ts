@@ -39,7 +39,7 @@ class FakePdfWorker implements PdfWorkerLike {
 					hasEncodingIssues: false
 				}
 			}
-		} as MessageEvent<PdfWorkerResponse>);
+		} as unknown as MessageEvent<PdfWorkerResponse>);
 	}
 }
 
