@@ -124,6 +124,14 @@ describe('document detail response contract', () => {
 		await expect(
 			loadDocumentDetailWithGateway(documentId, malformedPage.value)
 		).rejects.toMatchObject({ name: 'DocumentDetailError', code: 'unavailable' });
+
+		const impossibleTimestamp = gateway();
+		impossibleTimestamp.value.listPages = async () => [
+			pageRecord({ updated_at: '2026-02-30T00:00:00.000Z' })
+		];
+		await expect(
+			loadDocumentDetailWithGateway(documentId, impossibleTimestamp.value)
+		).rejects.toMatchObject({ name: 'DocumentDetailError', code: 'unavailable' });
 	});
 
 	it('rejects a correction response that does not match the requested page', async () => {
