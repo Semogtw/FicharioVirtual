@@ -74,6 +74,9 @@ describe('listReviewItems', () => {
 		await expect(
 			listReviewItems({}, client([row({ warnings: [{ code: 'bad' }] })]))
 		).rejects.toBeInstanceOf(ReviewServiceError);
+		await expect(
+			listReviewItems({}, client([row({ updated_at: '2026-02-30T00:00:00.000Z' })]))
+		).rejects.toBeInstanceOf(ReviewServiceError);
 	});
 
 	it('normalizes transport failures without leaking backend details', async () => {
