@@ -23,9 +23,7 @@ function normalizedText(maximum: number) {
 	return z
 		.string()
 		.transform((value) => value.trim())
-		.refine(
-			(value) => value.length > 0 && value.length <= maximum && !hasControlCharacters(value)
-		);
+		.refine((value) => value.length > 0 && value.length <= maximum && !hasControlCharacters(value));
 }
 
 const optionalDescription = z
