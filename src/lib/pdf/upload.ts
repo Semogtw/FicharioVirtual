@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { calculateSha256 } from '$lib/import/hash';
+import { parseDuplicateDocumentId } from '$lib/import/duplicate-result';
 import { recordOcrConsent } from '$lib/services/ocr-consent';
 import { processPageOcr, type OcrRunResult } from '$lib/services/ocr';
 import { getSupabaseClient } from '$lib/services/supabase';
@@ -374,7 +375,11 @@ class SupabasePdfGateway implements PdfImportGateway {
 			.eq('sha256', sha256)
 			.maybeSingle();
 		if (error) throw new PdfUploadError('duplicate_check_failed');
-		return data?.id ?? null;
+		try {
+			return parseDuplicateDocumentId(data);
+		} catch {
+			throw new PdfUploadError('duplicate_check_failed');
+		}
 	}
 
 	async upload(path: string, blob: Blob) {
