@@ -13,9 +13,9 @@ vi.mock('../../../src/lib/services/supabase', () => ({
 import { OcrConsentError, recordOcrConsent } from '../../../src/lib/services/ocr-consent';
 
 function client(result: unknown | (() => Promise<unknown>)) {
-	return {
-		rpc: vi.fn(typeof result === 'function' ? result : async () => result)
-	} as never;
+	const implementation =
+		typeof result === 'function' ? (result as () => Promise<unknown>) : async () => result;
+	return { rpc: vi.fn(implementation) };
 }
 
 beforeEach(() => {
@@ -34,7 +34,7 @@ describe('recordOcrConsent', () => {
 	it('sends the exact validated consent version', async () => {
 		const gateway = client({ data: true, error: null });
 
-		await expect(recordOcrConsent(7, gateway)).resolves.toBeUndefined();
+		await expect(recordOcrConsent(7, gateway as never)).resolves.toBeUndefined();
 
 		expect(gateway.rpc).toHaveBeenCalledWith('record_ocr_consent', { consent_version: 7 });
 	});
@@ -44,7 +44,9 @@ describe('recordOcrConsent', () => {
 		{ data: null, error: null },
 		{ data: true, error: { message: 'database detail' } }
 	])('maps rejected persistence response %# to a safe domain error', async (result) => {
-		await expect(recordOcrConsent(1, client(result))).rejects.toBeInstanceOf(OcrConsentError);
+		await expect(recordOcrConsent(1, client(result) as never)).rejects.toBeInstanceOf(
+			OcrConsentError
+		);
 	});
 
 	it('maps a thrown transport failure to the same safe domain error', async () => {
@@ -52,7 +54,7 @@ describe('recordOcrConsent', () => {
 			throw new Error('private transport detail');
 		});
 
-		await expect(recordOcrConsent(1, gateway)).rejects.toEqual(
+		await expect(recordOcrConsent(1, gateway as never)).rejects.toEqual(
 			expect.objectContaining({
 				name: 'OcrConsentError',
 				message: 'Não foi possível registrar o consentimento de leitura automática.'
