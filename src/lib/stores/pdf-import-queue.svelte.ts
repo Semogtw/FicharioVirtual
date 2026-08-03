@@ -5,7 +5,7 @@ import {
 	type PdfUploadProgress,
 	type UploadedPdf
 } from '$lib/pdf/upload';
-import { resumeDocumentOcr } from '$lib/services/ocr-resume';
+import { resumeDocumentOcr, type OcrResumeSummary } from '$lib/services/ocr-resume';
 
 export type PdfQueueStatus =
 	| 'queued'
@@ -55,8 +55,29 @@ function message(error: unknown) {
 
 export function pdfQueueStatusFromResult(result: UploadedPdf): PdfQueueStatus {
 	if (result.ocrPending > 0) return 'waiting';
+	if (result.ocrFailed > 0) return 'failed';
 	if (result.reviewPageCount > 0 || result.ocrNeedsReview > 0) return 'needs_review';
 	return 'complete';
+}
+
+export function mergePdfOcrResumeSummary(
+	result: UploadedPdf,
+	summary: OcrResumeSummary
+): UploadedPdf {
+	let remaining = result.ocrPending;
+	const completed = Math.min(summary.completed, remaining);
+	remaining -= completed;
+	const needsReview = Math.min(summary.needsReview, remaining);
+	remaining -= needsReview;
+	const failed = Math.min(summary.failed, remaining);
+	remaining -= failed;
+	return Object.freeze({
+		...result,
+		ocrCompleted: result.ocrCompleted + completed,
+		ocrNeedsReview: result.ocrNeedsReview + needsReview,
+		ocrPending: remaining,
+		ocrFailed: result.ocrFailed + failed
+	});
 }
 
 function phaseStatus(progress: PdfUploadProgress): PdfQueueStatus {
@@ -81,6 +102,9 @@ async function processItem(item: PdfQueueItem) {
 			}
 		});
 		item.status = pdfQueueStatusFromResult(item.result);
+		if (item.result.ocrFailed > 0) {
+			item.error = `${item.result.ocrFailed} página(s) não puderam ser lidas automaticamente.`;
+		}
 	} catch (error) {
 		if (error instanceof DOMException && error.name === 'AbortError') {
 			item.status = 'cancelled';
@@ -153,14 +177,11 @@ export async function retryPdfImport(itemId: string) {
 		item.status = 'reading';
 		try {
 			const summary = await resumeDocumentOcr(item.result.documentId);
-			item.result = Object.freeze({
-				...item.result,
-				ocrCompleted: item.result.ocrCompleted + summary.completed,
-				ocrNeedsReview: item.result.ocrNeedsReview + summary.needsReview,
-				ocrPending: summary.pending + summary.failed
-			});
+			item.result = mergePdfOcrResumeSummary(item.result, summary);
 			item.status = pdfQueueStatusFromResult(item.result);
-			if (summary.failed > 0) item.error = 'Algumas páginas ainda não puderam ser retomadas.';
+			if (item.result.ocrFailed > 0) {
+				item.error = `${item.result.ocrFailed} página(s) não puderam ser lidas automaticamente.`;
+			}
 		} catch (error) {
 			item.status = 'waiting';
 			item.error = message(error);
