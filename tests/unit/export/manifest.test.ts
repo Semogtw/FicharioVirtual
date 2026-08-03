@@ -59,9 +59,15 @@ describe('export manifest', () => {
 		expect(() => parseExportManifest({ ...manifest, documents: {} })).toThrow(
 			'Invalid export manifest'
 		);
+		expect(() =>
+			parseExportManifest({ ...manifest, exportedAt: '2026-02-30T00:00:00.000Z' })
+		).toThrow('Invalid export manifest');
 	});
 
 	it('creates a stable UTC JSON filename', () => {
 		expect(exportFilename('2026-08-02T06:07:08.000Z')).toBe('fichario-2026-08-02T06-07-08Z.json');
+		expect(() => exportFilename('2026-02-30T00:00:00.000Z')).toThrow(
+			'Invalid export timestamp'
+		);
 	});
 });
