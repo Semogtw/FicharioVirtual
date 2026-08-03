@@ -1,16 +1,8 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, parseAppOrigin } from '../_shared/cors.ts';
-import {
-	claimStateHttpStatus,
-	classifyGeminiFailure,
-	geminiFailureResponse
-} from '../_shared/ocr-contract.ts';
-import {
-	GeminiHttpError,
-	GeminiResponseError,
-	GeminiTransportError,
-	requestGeminiOcr
-} from '../_shared/gemini-ocr-client.ts';
+import { claimStateHttpStatus } from '../_shared/ocr-contract.ts';
+import { planOcrFailure } from '../_shared/ocr-failure.ts';
+import { requestGeminiOcr } from '../_shared/gemini-ocr-client.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MODEL = /^[A-Za-z0-9._-]{3,128}$/;
@@ -273,47 +265,13 @@ Deno.serve(async (request) => {
 			warningCount: result.warnings.length
 		});
 	} catch (error) {
-		if (error instanceof GeminiHttpError) {
-			const failure = classifyGeminiFailure(error.status, error.responseBody);
-			const failedAt = new Date();
-			const persisted = failure.quotaExhausted
-				? await blockQuota(failure.code, failedAt.toISOString())
-				: await failJob({
-						code: failure.code,
-						message: failure.safeMessage,
-						retryable: failure.retryable,
-						failedAt: failedAt.toISOString(),
-						nextRetryAt:
-							failure.retryable && failure.delaySeconds
-								? retryAt(attemptCount, failure.delaySeconds)
-								: null
-					});
-			if (!persisted) return respond(503, { code: 'ocr_failure_persistence_failed' });
-			const failureResponse = geminiFailureResponse(failure, error.status);
-			return respond(failureResponse.status, failureResponse.body);
-		}
-
-		const retryable = attemptCount < 3;
-		const failedAt = new Date();
-		const responseInvalid = error instanceof GeminiResponseError;
-		const requestInterrupted =
-			error instanceof GeminiTransportError ||
-			(error instanceof DOMException && error.name === 'AbortError');
-		const code = responseInvalid ? 'ocr_response_invalid' : 'ocr_request_failed';
-		const persisted = await failJob({
-			code,
-			message: responseInvalid
-				? 'O provedor retornou um formato de transcrição inválido.'
-				: requestInterrupted
-					? 'A solicitação de leitura foi interrompida.'
-					: 'A leitura falhou antes de produzir um resultado válido.',
-			retryable,
-			failedAt: failedAt.toISOString(),
-			nextRetryAt: retryable ? retryAt(attemptCount, 45) : null
-		});
+		const decision = planOcrFailure(error, { attemptCount, failedAt: new Date() });
+		const persisted =
+			decision.persistence.kind === 'block_quota'
+				? await blockQuota(decision.persistence.code, decision.persistence.failedAt)
+				: await failJob(decision.persistence);
 		if (!persisted) return respond(503, { code: 'ocr_failure_persistence_failed' });
-		if (retryable) return respond(202, { state: 'retry_later' });
-		return respond(responseInvalid ? 422 : 503, { code, retryable: false });
+		return respond(decision.response.status, decision.response.body);
 	} finally {
 		clearTimeout(timeoutId);
 		bytes?.fill(0);
