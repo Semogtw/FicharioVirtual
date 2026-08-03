@@ -17,6 +17,7 @@ supabase start >/dev/null
 supabase db reset
 supabase test db
 
+bash tools/checks/test-ocr-claim-contracts.sh
 bash tools/checks/test-ocr-claim-concurrency.sh
 bash tools/checks/test-ocr-idempotency.sh
 
