@@ -39,6 +39,23 @@ describe('processPageOcr', () => {
 		});
 	});
 
+	it('preserves the review state of an already-complete page', async () => {
+		await expect(
+			processPageOcr(
+				pageId,
+				client({ data: { state: 'already_complete', needsReview: true }, error: null })
+			)
+		).resolves.toEqual({ state: 'already_complete', needsReview: true });
+	});
+
+	it('rejects an already-complete response without its review state', async () => {
+		await expect(
+			processPageOcr(pageId, client({ data: { state: 'already_complete' }, error: null }))
+		).rejects.toEqual(
+			expect.objectContaining({ code: 'ocr_response_invalid', retryable: true })
+		);
+	});
+
 	it('returns deferred retry and quota states without treating them as failures', async () => {
 		await expect(
 			processPageOcr(pageId, client({ data: { state: 'retry_later' }, error: null }))
