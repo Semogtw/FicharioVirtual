@@ -59,6 +59,15 @@ async function mappedError(error: { context?: unknown; message?: string }) {
 	return new OcrProcessingError(code, retryable, messages[code]);
 }
 
+function hasExactKeys(record: Record<string, unknown>, expected: readonly string[]): boolean {
+	const actual = Object.keys(record).sort();
+	const sortedExpected = [...expected].sort();
+	return (
+		actual.length === sortedExpected.length &&
+		actual.every((key, index) => key === sortedExpected[index])
+	);
+}
+
 function parseResult(data: unknown): OcrRunResult {
 	if (data === null || typeof data !== 'object' || Array.isArray(data)) {
 		throw new OcrProcessingError('ocr_response_invalid', true);
@@ -66,9 +75,11 @@ function parseResult(data: unknown): OcrRunResult {
 	const value = data as Record<string, unknown>;
 	if (value.state === 'complete') {
 		if (
+			!hasExactKeys(value, ['state', 'needsReview', 'warningCount']) ||
 			typeof value.needsReview !== 'boolean' ||
 			!Number.isInteger(value.warningCount) ||
-			(value.warningCount as number) < 0
+			(value.warningCount as number) < 0 ||
+			(value.warningCount as number) > 100
 		) {
 			throw new OcrProcessingError('ocr_response_invalid', true);
 		}
@@ -84,6 +95,9 @@ function parseResult(data: unknown): OcrRunResult {
 		value.state === 'retry_later' ||
 		value.state === 'quota_exhausted'
 	) {
+		if (!hasExactKeys(value, ['state'])) {
+			throw new OcrProcessingError('ocr_response_invalid', true);
+		}
 		return Object.freeze({ state: value.state });
 	}
 	throw new OcrProcessingError('ocr_response_invalid', true);
