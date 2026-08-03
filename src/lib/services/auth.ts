@@ -9,7 +9,7 @@ type ServiceError = { message: string; status?: number };
 type AllowlistQuery = {
 	select(columns: string): AllowlistQuery;
 	eq(column: string, value: string | boolean): AllowlistQuery;
-	maybeSingle(): Promise<{ data: { is_active: boolean } | null; error: ServiceError | null }>;
+	maybeSingle(): Promise<{ data: unknown; error: ServiceError | null }>;
 };
 
 export type AuthClientLike = {
@@ -59,33 +59,64 @@ function normalizeCredentials(email: string, password: string) {
 	return { email: normalizedEmail, password };
 }
 
+function unavailable(error: unknown): never {
+	if (error instanceof AuthServiceError) throw error;
+	throw new AuthServiceError('auth_unavailable');
+}
+
+function parseAllowlistRow(data: unknown): boolean | null {
+	if (data === null) return null;
+	if (typeof data !== 'object' || Array.isArray(data)) {
+		throw new AuthServiceError('auth_unavailable');
+	}
+	const keys = Object.keys(data);
+	if (keys.length !== 1 || keys[0] !== 'is_active') {
+		throw new AuthServiceError('auth_unavailable');
+	}
+	const active = (data as { is_active?: unknown }).is_active;
+	if (typeof active !== 'boolean') throw new AuthServiceError('auth_unavailable');
+	return active;
+}
+
 async function closeUnauthorizedSession(client: AuthClientLike) {
-	const { error } = await client.auth.signOut();
-	if (error) throw new AuthServiceError('auth_unavailable');
+	try {
+		const { error } = await client.auth.signOut();
+		if (error) throw new AuthServiceError('auth_unavailable');
+	} catch (error) {
+		unavailable(error);
+	}
 }
 
 async function authorizeSession(session: Session, client: AuthClientLike): Promise<Session | null> {
-	const { data, error } = await client
-		.from('app_users')
-		.select('is_active')
-		.eq('user_id', session.user.id)
-		.eq('is_active', true)
-		.maybeSingle();
+	try {
+		const { data, error } = await client
+			.from('app_users')
+			.select('is_active')
+			.eq('user_id', session.user.id)
+			.eq('is_active', true)
+			.maybeSingle();
 
-	if (error) throw new AuthServiceError('auth_unavailable');
-	if (data?.is_active === true) return session;
+		if (error) throw new AuthServiceError('auth_unavailable');
+		if (parseAllowlistRow(data) === true) return session;
 
-	await closeUnauthorizedSession(client);
-	return null;
+		await closeUnauthorizedSession(client);
+		return null;
+	} catch (error) {
+		unavailable(error);
+	}
 }
 
 export async function loadAuthorizedSession(
 	client: AuthClientLike = defaultClient()
 ): Promise<Session | null> {
-	const { data, error } = await client.auth.getSession();
-	if (error) throw new AuthServiceError('auth_unavailable');
-	if (data.session === null) return null;
-	return authorizeSession(data.session, client);
+	try {
+		const { data, error } = await client.auth.getSession();
+		if (error) throw new AuthServiceError('auth_unavailable');
+		if (data.session === null) return null;
+		return await authorizeSession(data.session, client);
+	} catch (error) {
+		unavailable(error);
+	}
 }
 
 export async function signIn(
@@ -95,23 +126,31 @@ export async function signIn(
 ): Promise<Session> {
 	const credentials = normalizeCredentials(email, password);
 	const gateway = client ?? defaultClient();
-	const { data, error } = await gateway.auth.signInWithPassword(credentials);
+	try {
+		const { data, error } = await gateway.auth.signInWithPassword(credentials);
 
-	if (error) {
-		const invalidCredentials =
-			error.status === 400 ||
-			error.status === 401 ||
-			/invalid login|invalid credentials/i.test(error.message);
-		throw new AuthServiceError(invalidCredentials ? 'invalid_credentials' : 'auth_unavailable');
+		if (error) {
+			const invalidCredentials =
+				error.status === 400 ||
+				error.status === 401 ||
+				/invalid login|invalid credentials/i.test(error.message);
+			throw new AuthServiceError(invalidCredentials ? 'invalid_credentials' : 'auth_unavailable');
+		}
+		if (data.session === null) throw new AuthServiceError('auth_unavailable');
+
+		const authorized = await authorizeSession(data.session, gateway);
+		if (authorized === null) throw new AuthServiceError('not_authorized');
+		return authorized;
+	} catch (error) {
+		unavailable(error);
 	}
-	if (data.session === null) throw new AuthServiceError('auth_unavailable');
-
-	const authorized = await authorizeSession(data.session, gateway);
-	if (authorized === null) throw new AuthServiceError('not_authorized');
-	return authorized;
 }
 
 export async function signOut(client: AuthClientLike = defaultClient()): Promise<void> {
-	const { error } = await client.auth.signOut();
-	if (error) throw new AuthServiceError('auth_unavailable');
+	try {
+		const { error } = await client.auth.signOut();
+		if (error) throw new AuthServiceError('auth_unavailable');
+	} catch (error) {
+		unavailable(error);
+	}
 }
