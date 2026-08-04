@@ -18,4 +18,12 @@ describe('draft route request ordering', () => {
 		expect(source).toContain('onDestroy(() => {');
 		expect(source).toContain('refreshRequests.next();');
 	});
+
+	it('resolves more than one hundred local drafts in bounded batches', () => {
+		expect(source).toContain('const draftLocationBatchSize = 100;');
+		expect(source).toContain('offset += draftLocationBatchSize');
+		expect(source).toContain('drafts.slice(offset, offset + draftLocationBatchSize)');
+		expect(source).toContain('const batchLocations = await resolveDraftLocations(');
+		expect(source).toContain('locations.push(...batchLocations);');
+	});
 });
