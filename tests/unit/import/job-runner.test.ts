@@ -41,7 +41,7 @@ describe('OcrJobRunner', () => {
 				maximum = Math.max(maximum, active);
 				await Promise.resolve();
 				active -= 1;
-				return { state: 'complete', needsReview: false, warningCount: 0 };
+				return { state: 'complete' as const, needsReview: false, warningCount: 0 };
 			})
 		};
 		const runner = new OcrJobRunner(gateway, coordinator(), {
@@ -80,7 +80,7 @@ describe('OcrJobRunner', () => {
 					signal.addEventListener('abort', abort, { once: true });
 					void release?.promise.then(resolve);
 				});
-				return { state: 'complete', needsReview: false, warningCount: 0 };
+				return { state: 'complete' as const, needsReview: false, warningCount: 0 };
 			})
 		};
 		const runner = new OcrJobRunner(gateway, coordinator());
