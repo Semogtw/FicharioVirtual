@@ -54,8 +54,8 @@ describe('async route safety', () => {
 		);
 		expect(notebookRoute).toContain('$effect(() => {');
 		expect(notebookRoute).toContain('const notebookId = page.params.id;');
-		expect(notebookRoute).toContain('initializeRequests.next()');
-		expect(notebookRoute).toContain('initializeRequests.isCurrent(version)');
+		expect(notebookRoute).toContain('notebookRequests.next()');
+		expect(notebookRoute).toContain('notebookRequests.isCurrent(version)');
 		expect(notebookRoute).not.toContain('onMount(() =>');
 	});
 
