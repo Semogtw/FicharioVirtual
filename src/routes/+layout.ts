@@ -14,22 +14,24 @@ export const load: LayoutLoad = async ({ url }) => {
 		return { session: null, authState: 'unverified' as const };
 	}
 
+	let session;
 	try {
-		const session = await loadAuthorizedSession();
-		if (session === null && !isLoginRoute) {
-			redirect(307, '/login/');
-		}
-		if (session !== null && isLoginRoute) {
-			redirect(307, '/');
-		}
-		return {
-			session,
-			authState: session === null ? ('anonymous' as const) : ('authorized' as const)
-		};
+		session = await loadAuthorizedSession();
 	} catch {
 		if (!isLoginRoute) {
 			redirect(307, '/login/?reason=unavailable');
 		}
 		return { session: null, authState: 'unavailable' as const };
 	}
+
+	if (session === null && !isLoginRoute) {
+		redirect(307, '/login/');
+	}
+	if (session !== null && isLoginRoute) {
+		redirect(307, '/');
+	}
+	return {
+		session,
+		authState: session === null ? ('anonymous' as const) : ('authorized' as const)
+	};
 };
