@@ -7,6 +7,7 @@
 
 	let exporting = $state(false);
 	let signingOut = $state(false);
+	let signedOut = $state(false);
 	let message = $state<string | null>(null);
 	let error = $state<string | null>(null);
 
@@ -28,14 +29,23 @@
 
 	async function signOut() {
 		if (signingOut || exporting) return;
+		if (signedOut) return;
 		signingOut = true;
 		error = null;
 		message = null;
 		try {
-			await endSession();
-			await goto('/login/');
-		} catch {
-			error = sessionState.error ?? 'Não foi possível encerrar a sessão agora.';
+			try {
+				await endSession();
+			} catch {
+				error = sessionState.error ?? 'Não foi possível encerrar a sessão agora.';
+				return;
+			}
+			signedOut = true;
+			try {
+				await goto('/login/');
+			} catch {
+				error = 'Sessão encerrada, mas não foi possível abrir a tela de acesso.';
+			}
 		} finally {
 			signingOut = false;
 		}
@@ -53,61 +63,69 @@
 		<p>Controle exportação, instalação e sessão sem expor chaves ou caminhos privados.</p>
 	</header>
 
-	{#if error}<p class="error" role="alert">{error}</p>{/if}
-	{#if message}<p class="message" role="status">{message}</p>{/if}
-
-	<section class="settings-card" aria-labelledby="export-title">
-		<div>
-			<h2 id="export-title">Exportação portátil</h2>
-			<p>
-				Baixe um JSON versionado com cadernos, metadados, tags, fontes de texto, correções e avisos.
-				Caminhos privados, tokens e URLs assinadas não entram no arquivo.
-			</p>
+	{#if signedOut}
+		<div class="signed-out" role="status">
+			<p>Sessão encerrada.</p>
+			{#if error}<p class="signed-out-error">{error}</p>{/if}
+			<a href="/login/">Abrir tela de acesso</a>
 		</div>
-		<Button
-			label={exporting ? 'Gerando…' : 'Exportar catálogo JSON'}
-			disabled={exporting || signingOut}
-			onclick={() => void exportData()}
-		/>
-	</section>
+	{:else}
+		{#if error}<p class="error" role="alert">{error}</p>{/if}
+		{#if message}<p class="message" role="status">{message}</p>{/if}
 
-	<section class="settings-card" aria-labelledby="originals-title">
-		<div>
-			<h2 id="originals-title">Arquivos originais</h2>
-			<p>
-				Cada documento oferece um link assinado de curta duração para o original. Isso evita criar
-				um arquivo público ou uma URL permanente durante a exportação.
-			</p>
-		</div>
-		<a class="secondary-link" href="/library/">Abrir biblioteca</a>
-	</section>
+		<section class="settings-card" aria-labelledby="export-title">
+			<div>
+				<h2 id="export-title">Exportação portátil</h2>
+				<p>
+					Baixe um JSON versionado com cadernos, metadados, tags, fontes de texto, correções e
+					avisos. Caminhos privados, tokens e URLs assinadas não entram no arquivo.
+				</p>
+			</div>
+			<Button
+				label={exporting ? 'Gerando…' : 'Exportar catálogo JSON'}
+				disabled={exporting || signingOut}
+				onclick={() => void exportData()}
+			/>
+		</section>
 
-	<section class="settings-card" aria-labelledby="install-title">
-		<h2 id="install-title" class="visually-hidden">Instalação</h2>
-		<InstallAppButton />
-	</section>
+		<section class="settings-card" aria-labelledby="originals-title">
+			<div>
+				<h2 id="originals-title">Arquivos originais</h2>
+				<p>
+					Cada documento oferece um link assinado de curta duração para o original. Isso evita criar
+					um arquivo público ou uma URL permanente durante a exportação.
+				</p>
+			</div>
+			<a class="secondary-link" href="/library/">Abrir biblioteca</a>
+		</section>
 
-	<section class="policy" aria-labelledby="policy-title">
-		<h2 id="policy-title">Política operacional</h2>
-		<ul>
-			<li>Nenhuma cobrança é ativada automaticamente.</li>
-			<li>A leitura externa exige consentimento e usa limite diário configurado no backend.</li>
-			<li>
-				Quando a cota termina, páginas ficam pendentes em vez de trocar silenciosamente de modelo.
-			</li>
-			<li>O service worker não guarda respostas autenticadas, documentos ou transcrições.</li>
-		</ul>
-	</section>
+		<section class="settings-card" aria-labelledby="install-title">
+			<h2 id="install-title" class="visually-hidden">Instalação</h2>
+			<InstallAppButton />
+		</section>
 
-	<section class="danger-zone" aria-labelledby="session-title">
-		<div>
-			<h2 id="session-title">Sessão atual</h2>
-			<p>Encerre o acesso neste navegador. Os documentos permanecem no arquivo privado.</p>
-		</div>
-		<button type="button" disabled={signingOut || exporting} onclick={() => void signOut()}>
-			{signingOut ? 'Saindo…' : 'Sair'}
-		</button>
-	</section>
+		<section class="policy" aria-labelledby="policy-title">
+			<h2 id="policy-title">Política operacional</h2>
+			<ul>
+				<li>Nenhuma cobrança é ativada automaticamente.</li>
+				<li>A leitura externa exige consentimento e usa limite diário configurado no backend.</li>
+				<li>
+					Quando a cota termina, páginas ficam pendentes em vez de trocar silenciosamente de modelo.
+				</li>
+				<li>O service worker não guarda respostas autenticadas, documentos ou transcrições.</li>
+			</ul>
+		</section>
+
+		<section class="danger-zone" aria-labelledby="session-title">
+			<div>
+				<h2 id="session-title">Sessão atual</h2>
+				<p>Encerre o acesso neste navegador. Os documentos permanecem no arquivo privado.</p>
+			</div>
+			<button type="button" disabled={signingOut || exporting} onclick={() => void signOut()}>
+				{signingOut ? 'Saindo…' : 'Sair'}
+			</button>
+		</section>
+	{/if}
 </div>
 
 <style>
@@ -206,6 +224,35 @@
 		border-color: rgb(155 63 54 / 35%);
 		color: var(--danger);
 		cursor: pointer;
+	}
+
+	.signed-out {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: 1rem;
+		border-left: 0.3rem solid var(--archive);
+		background: var(--archive-soft);
+	}
+
+	.signed-out p {
+		margin: 0;
+	}
+
+	.signed-out .signed-out-error {
+		color: var(--danger);
+	}
+
+	.signed-out a {
+		min-height: 2.55rem;
+		display: inline-flex;
+		align-items: center;
+		padding: 0.6rem 0.85rem;
+		border-radius: var(--radius-sm);
+		background: var(--archive);
+		color: white;
+		font-weight: 720;
 	}
 
 	.error,
