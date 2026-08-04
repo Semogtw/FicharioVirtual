@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import Button from '$lib/components/Button.svelte';
 	import DocumentCard from '$lib/components/DocumentCard.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
@@ -16,12 +16,15 @@
 	import { RequestVersion } from '$lib/services/request-version';
 
 	const requests = new RequestVersion();
+	const notebookRequests = new RequestVersion();
 	let documents = $state<DocumentSummary[]>([]);
 	let notebooks = $state<readonly NotebookSummary[]>([]);
 	let nextCursor = $state<DocumentCursor | null>(null);
 	let loading = $state(true);
 	let loadingMore = $state(false);
+	let notebookLoading = $state(true);
 	let error = $state<string | null>(null);
+	let notebookError = $state<string | null>(null);
 	let notebookId = $state('');
 	let kind = $state<DocumentKind | ''>('');
 	let status = $state<DocumentStatus | ''>('');
@@ -60,14 +63,34 @@
 		}
 	}
 
+	async function loadNotebookOptions(version = notebookRequests.next()) {
+		notebookLoading = true;
+		notebookError = null;
+		try {
+			const loadedNotebooks = await listNotebooks();
+			if (!notebookRequests.isCurrent(version)) return;
+			notebooks = loadedNotebooks;
+		} catch {
+			if (notebookRequests.isCurrent(version)) {
+				notebookError = 'Não foi possível carregar os cadernos para o filtro.';
+			}
+		} finally {
+			if (notebookRequests.isCurrent(version)) notebookLoading = false;
+		}
+	}
+
 	async function initialize() {
-		const notebooksPromise = listNotebooks().catch(() => [] as const);
+		void loadNotebookOptions();
 		await load(true);
-		notebooks = await notebooksPromise;
 	}
 
 	onMount(() => {
 		void initialize();
+	});
+
+	onDestroy(() => {
+		requests.next();
+		notebookRequests.next();
 	});
 </script>
 
@@ -92,7 +115,7 @@
 	>
 		<label>
 			<span>Caderno</span>
-			<select bind:value={notebookId} onchange={() => void load(true)}>
+			<select bind:value={notebookId} disabled={notebookLoading} onchange={() => void load(true)}>
 				<option value="">Todos</option>
 				{#each notebooks as notebook}
 					<option value={notebook.id}>{notebook.name}</option>
@@ -126,6 +149,17 @@
 			<input type="date" bind:value={createdTo} onchange={() => void load(true)} />
 		</label>
 	</form>
+
+	{#if notebookError}
+		<div class="filter-warning" role="status">
+			<p>{notebookError}</p>
+			<Button
+				label="Tentar carregar cadernos"
+				variant="secondary"
+				onclick={() => void loadNotebookOptions()}
+			/>
+		</div>
+	{/if}
 
 	{#if error}
 		<div class="error" role="alert">
@@ -251,6 +285,7 @@
 		text-align: center;
 	}
 
+	.filter-warning,
 	.error {
 		display: flex;
 		align-items: center;
@@ -261,8 +296,21 @@
 		background: rgb(155 63 54 / 7%);
 	}
 
+	.filter-warning {
+		border-left: 0.3rem solid var(--accent);
+		background: rgb(166 94 67 / 7%);
+	}
+
+	.filter-warning p,
 	.error p {
 		margin: 0;
+	}
+
+	.filter-warning p {
+		color: var(--accent-strong);
+	}
+
+	.error p {
 		color: var(--danger);
 	}
 
