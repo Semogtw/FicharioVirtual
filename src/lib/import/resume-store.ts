@@ -1,14 +1,12 @@
 import type { ImagePreparationMode } from './image-types';
 import type { UploadedPage } from './upload';
 import { isIsoTimestamp } from '$lib/validation/iso-timestamp';
+import { createResumeStore, type ResumeObjectStore } from './resume-database';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHA256 = /^[0-9a-f]{64}$/;
 const LOCAL_ID = /^[A-Za-z0-9_-]{1,160}$/;
 const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
-const DATABASE_NAME = 'fichario-resume';
-const STORE_NAME = 'image-imports';
-const DATABASE_VERSION = 1;
 
 export type StoredImageImportStatus =
 	'queued' | 'preparing' | 'uploading' | 'reading' | 'waiting' | 'failed' | 'cancelled';
@@ -29,11 +27,7 @@ export type StoredImageImportRecord = Readonly<{
 	updatedAt: string;
 }>;
 
-export interface ImportResumeStore {
-	put(value: StoredImageImportRecord): Promise<void>;
-	list(): Promise<readonly unknown[]>;
-	delete(id: string): Promise<void>;
-}
+export type ImportResumeStore = ResumeObjectStore<StoredImageImportRecord>;
 
 function invalidRecord(): never {
 	throw new TypeError('Invalid stored image import');
@@ -180,74 +174,10 @@ export function parseStoredImageImport(data: unknown): StoredImageImportRecord {
 	});
 }
 
-function requestResult<T>(request: IDBRequest<T>): Promise<T> {
-	return new Promise<T>((resolve, reject) => {
-		request.onsuccess = () => resolve(request.result);
-		request.onerror = () => reject(request.error ?? new Error('IndexedDB request failed'));
-	});
-}
-
-function transactionDone(transaction: IDBTransaction): Promise<void> {
-	return new Promise<void>((resolve, reject) => {
-		transaction.oncomplete = () => resolve();
-		transaction.onerror = () =>
-			reject(transaction.error ?? new Error('IndexedDB transaction failed'));
-		transaction.onabort = () =>
-			reject(transaction.error ?? new Error('IndexedDB transaction aborted'));
-	});
-}
-
-class BrowserImportResumeStore implements ImportResumeStore {
-	private database: Promise<IDBDatabase> | null = null;
-
-	async put(value: StoredImageImportRecord) {
-		const database = await this.open();
-		const transaction = database.transaction(STORE_NAME, 'readwrite');
-		transaction.objectStore(STORE_NAME).put(value);
-		await transactionDone(transaction);
-	}
-
-	async list() {
-		const database = await this.open();
-		const transaction = database.transaction(STORE_NAME, 'readonly');
-		const result = await requestResult(transaction.objectStore(STORE_NAME).getAll());
-		await transactionDone(transaction);
-		return result;
-	}
-
-	async delete(id: string) {
-		const database = await this.open();
-		const transaction = database.transaction(STORE_NAME, 'readwrite');
-		transaction.objectStore(STORE_NAME).delete(id);
-		await transactionDone(transaction);
-	}
-
-	private open() {
-		if (typeof indexedDB === 'undefined') {
-			return Promise.reject(new Error('IndexedDB is unavailable'));
-		}
-		this.database ??= new Promise<IDBDatabase>((resolve, reject) => {
-			const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
-			request.onupgradeneeded = () => {
-				const database = request.result;
-				if (!database.objectStoreNames.contains(STORE_NAME)) {
-					const store = database.createObjectStore(STORE_NAME, { keyPath: 'id' });
-					store.createIndex('userId', 'userId', { unique: false });
-					store.createIndex('updatedAt', 'updatedAt', { unique: false });
-				}
-			};
-			request.onsuccess = () => resolve(request.result);
-			request.onerror = () => reject(request.error ?? new Error('IndexedDB open failed'));
-			request.onblocked = () => reject(new Error('IndexedDB upgrade blocked'));
-		});
-		return this.database;
-	}
-}
-
 let browserStore: ImportResumeStore | null = null;
 
 function defaultStore() {
-	browserStore ??= new BrowserImportResumeStore();
+	browserStore ??= createResumeStore<StoredImageImportRecord>('image-imports');
 	return browserStore;
 }
 
