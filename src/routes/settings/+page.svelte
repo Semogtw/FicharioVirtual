@@ -1,8 +1,10 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { onDestroy } from 'svelte';
 	import Button from '$lib/components/Button.svelte';
 	import InstallAppButton from '$lib/components/InstallAppButton.svelte';
 	import { createPortableExport, downloadPortableExport } from '$lib/services/export';
+	import { RequestVersion } from '$lib/services/request-version';
 	import { endSession, sessionState } from '$lib/stores/session.svelte';
 
 	let exporting = $state(false);
@@ -10,20 +12,24 @@
 	let signedOut = $state(false);
 	let message = $state<string | null>(null);
 	let error = $state<string | null>(null);
+	const exportRequests = new RequestVersion();
 
 	async function exportData() {
 		if (exporting || signingOut) return;
+		const version = exportRequests.next();
 		exporting = true;
 		error = null;
 		message = null;
 		try {
 			const manifest = await createPortableExport();
+			if (!exportRequests.isCurrent(version)) return;
 			downloadPortableExport(manifest);
 			message = `${manifest.documents.length} documentos e ${manifest.notebooks.length} cadernos exportados.`;
 		} catch (caught) {
+			if (!exportRequests.isCurrent(version)) return;
 			error = caught instanceof Error ? caught.message : 'Não foi possível gerar a exportação.';
 		} finally {
-			exporting = false;
+			if (exportRequests.isCurrent(version)) exporting = false;
 		}
 	}
 
@@ -50,6 +56,10 @@
 			signingOut = false;
 		}
 	}
+
+	onDestroy(() => {
+		exportRequests.next();
+	});
 </script>
 
 <svelte:head>
