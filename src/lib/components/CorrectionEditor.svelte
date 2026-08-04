@@ -8,6 +8,7 @@
 	} from '$lib/review/draft-index';
 	import { createLatestSerialExecutor } from '$lib/review/latest-serial-executor';
 	import { savePageCorrection } from '$lib/services/document-detail';
+	import { RequestVersion } from '$lib/services/request-version';
 
 	interface CorrectionEditorProps {
 		page: PageDetail;
@@ -27,6 +28,8 @@
 		backedUp: boolean;
 	};
 
+	const editorLifecycle = new RequestVersion();
+	const lifecycleVersion = editorLifecycle.next();
 	const remoteSaves = createLatestSerialExecutor<SaveRequest>(performRemoteSave);
 
 	function storeDraft(draftText = text): boolean {
@@ -49,6 +52,7 @@
 	async function performRemoteSave(request: SaveRequest) {
 		try {
 			const saved = await savePageCorrection(page.id, request.text);
+			if (!editorLifecycle.isCurrent(lifecycleVersion)) return;
 			if (request.version !== editVersion) return;
 			try {
 				discardCorrectionDraft(page.id);
@@ -59,6 +63,7 @@
 			saveState = 'saved';
 			onSaved?.(saved);
 		} catch {
+			if (!editorLifecycle.isCurrent(lifecycleVersion)) return;
 			if (request.version !== editVersion) return;
 			saveState = 'error';
 			error = request.backedUp
@@ -100,6 +105,7 @@
 	});
 
 	onDestroy(() => {
+		editorLifecycle.next();
 		if (timer) clearTimeout(timer);
 	});
 </script>
