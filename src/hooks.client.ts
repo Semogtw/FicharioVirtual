@@ -1,8 +1,10 @@
 import { invalidateAll } from '$app/navigation';
 import type { ClientInit } from '@sveltejs/kit';
 import { pauseQueue, resumeQueue } from '$lib/import/job-runner';
+import { restoreImageImports } from '$lib/stores/import-queue.svelte';
 import {
 	initializeSession,
+	sessionState,
 	startSessionTracking,
 	subscribeSessionAuthorization
 } from '$lib/stores/session.svelte';
@@ -11,6 +13,7 @@ export const init: ClientInit = () => {
 	subscribeSessionAuthorization((authorized) => {
 		if (authorized) void resumeQueue();
 		else pauseQueue();
+		if (authorized && sessionState.user) void restoreImageImports(sessionState.user.id);
 	});
 	void initializeSession();
 	try {
