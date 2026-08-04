@@ -14,18 +14,19 @@
 	let showForm = $state(false);
 	let name = $state('');
 	let description = $state('');
-	let error = $state<string | null>(null);
+	let loadError = $state<string | null>(null);
+	let createError = $state<string | null>(null);
 
 	async function refresh(version = refreshRequests.next()) {
 		loading = true;
-		error = null;
+		loadError = null;
 		try {
 			const loaded = await listNotebooks();
 			if (!refreshRequests.isCurrent(version)) return;
 			notebooks = loaded;
 		} catch {
 			if (refreshRequests.isCurrent(version)) {
-				error = 'Não foi possível carregar os cadernos agora.';
+				loadError = 'Não foi possível carregar os cadernos agora.';
 			}
 		} finally {
 			if (refreshRequests.isCurrent(version)) loading = false;
@@ -36,7 +37,7 @@
 		event.preventDefault();
 		if (creating || name.trim().length === 0) return;
 		creating = true;
-		error = null;
+		createError = null;
 		try {
 			const notebook = await createNotebook({ name, description });
 			notebooks = Object.freeze([
@@ -48,7 +49,7 @@
 			showForm = false;
 			await refresh();
 		} catch {
-			error = 'Não foi possível criar o caderno.';
+			createError = 'Não foi possível criar o caderno.';
 		} finally {
 			creating = false;
 		}
@@ -96,24 +97,31 @@
 					placeholder="Conteúdo, semestre ou finalidade"
 				></textarea>
 			</label>
-			<Button label={creating ? 'Criando…' : 'Criar caderno'} type="submit" disabled={creating} />
+			<div class="form-actions">
+				{#if createError}<p class="form-error" role="alert">{createError}</p>{/if}
+				<Button label={creating ? 'Criando…' : 'Criar caderno'} type="submit" disabled={creating} />
+			</div>
 		</form>
 	{/if}
 
-	{#if error}
+	{#if loadError}
 		<div class="error" role="alert">
-			<p>{error}</p>
+			<p>{loadError}</p>
 			<Button label="Tentar novamente" variant="secondary" onclick={() => void refresh()} />
 		</div>
-	{:else if loading}
+	{/if}
+
+	{#if loading && notebooks.length === 0}
 		<p class="loading" role="status">Abrindo seus cadernos…</p>
 	{:else if notebooks.length === 0}
-		<EmptyState
-			title="Nenhum caderno criado"
-			description="Crie um caderno para reunir documentos por matéria, projeto ou período."
-			actionLabel="Criar primeiro caderno"
-			onAction={() => (showForm = true)}
-		/>
+		{#if !loadError}
+			<EmptyState
+				title="Nenhum caderno criado"
+				description="Crie um caderno para reunir documentos por matéria, projeto ou período."
+				actionLabel="Criar primeiro caderno"
+				onAction={() => (showForm = true)}
+			/>
+		{/if}
 	{:else}
 		<section class="grid" aria-label="Cadernos">
 			{#each notebooks as notebook (notebook.id)}
@@ -193,6 +201,19 @@
 
 	input {
 		min-height: 2.75rem;
+	}
+
+	.form-actions {
+		display: grid;
+		gap: 0.4rem;
+		align-items: end;
+	}
+
+	.form-error {
+		max-width: 16rem;
+		margin: 0;
+		color: var(--danger);
+		font-size: 0.75rem;
 	}
 
 	.grid {
