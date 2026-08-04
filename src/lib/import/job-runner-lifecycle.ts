@@ -24,9 +24,7 @@ function browserOnlineTarget(): OcrQueueLifecycleTarget | null {
 }
 
 function browserVisibilityTarget(): OcrQueueLifecycleTarget | null {
-	return typeof document === 'undefined'
-		? null
-		: (document as unknown as OcrQueueLifecycleTarget);
+	return typeof document === 'undefined' ? null : (document as unknown as OcrQueueLifecycleTarget);
 }
 
 function browserVisibilityState() {
@@ -44,9 +42,7 @@ export function createOcrQueueLifecycle(
 	const onlineTarget =
 		options.onlineTarget === undefined ? browserOnlineTarget() : options.onlineTarget;
 	const visibilityTarget =
-		options.visibilityTarget === undefined
-			? browserVisibilityTarget()
-			: options.visibilityTarget;
+		options.visibilityTarget === undefined ? browserVisibilityTarget() : options.visibilityTarget;
 	const visibilityState = options.visibilityState ?? browserVisibilityState;
 	const isOnline = options.isOnline ?? browserOnlineState;
 	const scheduleInterval =
