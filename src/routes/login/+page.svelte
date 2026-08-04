@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { onDestroy } from 'svelte';
 	import Button from '$lib/components/Button.svelte';
+	import { RequestVersion } from '$lib/services/request-version';
 	import { authenticate, sessionState } from '$lib/stores/session.svelte';
 
 	let email = $state('');
@@ -8,29 +10,38 @@
 	let submitting = $state(false);
 	let authenticated = $state(false);
 	let navigationError = $state<string | null>(null);
+	const authenticationRequests = new RequestVersion();
 
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
 		if (submitting || authenticated) return;
+		const version = authenticationRequests.next();
 		submitting = true;
 		navigationError = null;
 		try {
 			try {
 				await authenticate(email, password);
+				if (!authenticationRequests.isCurrent(version)) return;
 				authenticated = true;
 			} catch {
+				if (!authenticationRequests.isCurrent(version)) return;
 				// The store exposes a safe, user-facing authentication error.
 				return;
 			}
 			try {
 				await goto('/');
 			} catch {
+				if (!authenticationRequests.isCurrent(version)) return;
 				navigationError = 'Acesso confirmado, mas não foi possível abrir o fichário.';
 			}
 		} finally {
-			submitting = false;
+			if (authenticationRequests.isCurrent(version)) submitting = false;
 		}
 	}
+
+	onDestroy(() => {
+		authenticationRequests.next();
+	});
 </script>
 
 <svelte:head>
