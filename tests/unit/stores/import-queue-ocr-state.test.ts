@@ -7,9 +7,9 @@ const source = readFileSync(
 );
 
 describe('import queue OCR state', () => {
-	it('preserves review state when another worker completed the page', () => {
+	it('preserves and persists review state when another worker completed the page', () => {
 		expect(source).toMatch(
-			/if \(result\.state === 'complete' \|\| result\.state === 'already_complete'\) \{\s*item\.status = result\.needsReview \? 'needs_review' : 'complete';\s*return;\s*\}/
+			/if \(result\.state === 'complete' \|\| result\.state === 'already_complete'\) \{\s*item\.status = result\.needsReview \? 'needs_review' : 'complete';\s*void persistItem\(item\);\s*return;\s*\}/
 		);
 	});
 });
