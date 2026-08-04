@@ -12,9 +12,7 @@ describe('InstallAppButton lifecycle', () => {
 		expect(source).toMatch(
 			/await event\.prompt\(\);[\s\S]*const choice = await event\.userChoice;[\s\S]*if \(!installRequests\.isCurrent\(version\)\) return;[\s\S]*choice\.outcome === 'accepted'/
 		);
-		expect(source).toMatch(
-			/onDestroy\(\(\) => \{[\s\S]*installRequests\.next\(\);[\s\S]*\}\);/
-		);
+		expect(source).toMatch(/onDestroy\(\(\) => \{[\s\S]*installRequests\.next\(\);[\s\S]*\}\);/);
 	});
 
 	it('consumes the browser prompt once and handles prompt failures', () => {
