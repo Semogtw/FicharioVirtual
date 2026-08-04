@@ -17,6 +17,7 @@
 
 	const initializeRequests = new RequestVersion();
 	const assignmentRequests = new RequestVersion();
+	const mutationRequests = new RequestVersion();
 	let tags = $state<readonly TagSummary[]>([]);
 	let documents = $state<readonly DocumentSummary[]>([]);
 	let activeTagId = $state<string | null>(null);
@@ -34,8 +35,13 @@
 
 	let activeTag = $derived(tags.find((tag) => tag.id === activeTagId) ?? null);
 
-	async function refreshTags(preferredId: string | null = activeTagId) {
-		tags = await listTags();
+	async function refreshTags(
+		preferredId: string | null = activeTagId,
+		version = mutationRequests.current()
+	) {
+		const loadedTags = await listTags();
+		if (!mutationRequests.isCurrent(version)) return;
+		tags = loadedTags;
 		const nextId = tags.some((tag) => tag.id === preferredId) ? preferredId : (tags[0]?.id ?? null);
 		activeTagId = nextId;
 		if (nextId) await loadAssignments(nextId);
@@ -98,18 +104,23 @@
 
 	async function addTag() {
 		if (!initialized || saving || pendingDocumentId || !newTagName.trim()) return;
+		const version = mutationRequests.next();
 		saving = true;
 		error = null;
 		message = null;
 		try {
 			const tagId = await createTag(newTagName);
+			if (!mutationRequests.isCurrent(version)) return;
 			newTagName = '';
-			await refreshTags(tagId);
+			await refreshTags(tagId, version);
+			if (!mutationRequests.isCurrent(version)) return;
 			message = 'Tag criada.';
 		} catch (caught) {
-			error = caught instanceof Error ? caught.message : 'Não foi possível criar a tag.';
+			if (mutationRequests.isCurrent(version)) {
+				error = caught instanceof Error ? caught.message : 'Não foi possível criar a tag.';
+			}
 		} finally {
-			saving = false;
+			if (mutationRequests.isCurrent(version)) saving = false;
 		}
 	}
 
@@ -117,16 +128,21 @@
 		if (!activeTag || saving || pendingDocumentId) return;
 		const requested = window.prompt('Novo nome da tag', activeTag.name);
 		if (requested === null || requested.trim() === activeTag.name) return;
+		const version = mutationRequests.next();
 		saving = true;
 		error = null;
 		try {
 			await renameTag(activeTag.id, requested);
-			await refreshTags(activeTag.id);
+			if (!mutationRequests.isCurrent(version)) return;
+			await refreshTags(activeTag.id, version);
+			if (!mutationRequests.isCurrent(version)) return;
 			message = 'Tag renomeada.';
 		} catch (caught) {
-			error = caught instanceof Error ? caught.message : 'Não foi possível renomear a tag.';
+			if (mutationRequests.isCurrent(version)) {
+				error = caught instanceof Error ? caught.message : 'Não foi possível renomear a tag.';
+			}
 		} finally {
-			saving = false;
+			if (mutationRequests.isCurrent(version)) saving = false;
 		}
 	}
 
@@ -134,27 +150,33 @@
 		if (!activeTag || saving || pendingDocumentId) return;
 		if (!window.confirm(`Excluir a tag “${activeTag.name}”? Os documentos não serão apagados.`))
 			return;
+		const version = mutationRequests.next();
 		saving = true;
 		error = null;
 		try {
 			await deleteTag(activeTag.id);
-			await refreshTags(null);
+			if (!mutationRequests.isCurrent(version)) return;
+			await refreshTags(null, version);
+			if (!mutationRequests.isCurrent(version)) return;
 			message = 'Tag excluída.';
 		} catch (caught) {
-			error = caught instanceof Error ? caught.message : 'Não foi possível excluir a tag.';
+			if (mutationRequests.isCurrent(version)) {
+				error = caught instanceof Error ? caught.message : 'Não foi possível excluir a tag.';
+			}
 		} finally {
-			saving = false;
+			if (mutationRequests.isCurrent(version)) saving = false;
 		}
 	}
 
 	async function toggleDocument(documentId: string, assigned: boolean) {
 		if (!activeTag || saving || !assignmentsReady || pendingDocumentId) return;
 		const tagId = activeTag.id;
+		const version = mutationRequests.next();
 		pendingDocumentId = documentId;
 		error = null;
 		try {
 			await setTagMembership(tagId, documentId, assigned);
-			if (activeTagId !== tagId) return;
+			if (!mutationRequests.isCurrent(version) || activeTagId !== tagId) return;
 			const next = new Set(assignedDocumentIds);
 			if (assigned) next.add(documentId);
 			else next.delete(documentId);
@@ -168,9 +190,11 @@
 					: tag
 			);
 		} catch (caught) {
-			error = caught instanceof Error ? caught.message : 'Não foi possível atualizar a tag.';
+			if (mutationRequests.isCurrent(version)) {
+				error = caught instanceof Error ? caught.message : 'Não foi possível atualizar a tag.';
+			}
 		} finally {
-			pendingDocumentId = null;
+			if (mutationRequests.isCurrent(version)) pendingDocumentId = null;
 		}
 	}
 
@@ -181,6 +205,7 @@
 	onDestroy(() => {
 		initializeRequests.next();
 		assignmentRequests.next();
+		mutationRequests.next();
 	});
 </script>
 
