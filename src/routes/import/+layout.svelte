@@ -1,18 +1,19 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { importHref, parseRequestedNotebookId } from '$lib/import/notebook-selection';
 	import type { Snippet } from 'svelte';
 
 	let { children }: { children: Snippet } = $props();
+	let requestedNotebookId = $derived(parseRequestedNotebookId(page.url.searchParams));
+	let imageHref = $derived(importHref('/import/', requestedNotebookId));
+	let pdfHref = $derived(importHref('/import/pdf/', requestedNotebookId));
 </script>
 
 <nav class="import-tabs" aria-label="Tipo de importação">
-	<a href="/import/" aria-current={page.url.pathname === '/import/' ? 'page' : undefined}>
+	<a href={imageHref} aria-current={page.url.pathname === '/import/' ? 'page' : undefined}>
 		Imagens
 	</a>
-	<a
-		href="/import/pdf/"
-		aria-current={page.url.pathname.startsWith('/import/pdf') ? 'page' : undefined}
-	>
+	<a href={pdfHref} aria-current={page.url.pathname.startsWith('/import/pdf') ? 'page' : undefined}>
 		PDFs
 	</a>
 </nav>
