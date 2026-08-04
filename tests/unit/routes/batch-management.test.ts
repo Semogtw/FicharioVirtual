@@ -51,6 +51,22 @@ describe('batch document management routes', () => {
 		expect(tags).toContain('onclick={() => void loadAssignments(activeTag.id)}');
 	});
 
+	it('keeps title organization available when notebook options fail', () => {
+		const organization = read('src/routes/library/organize/+page.svelte');
+
+		expect(organization).toContain('let notebookOptionsReady = $state(false);');
+		expect(organization).toContain('async function loadNotebookOptions');
+		expect(organization).toContain('Não foi possível carregar os cadernos para organização.');
+		expect(organization).toContain('onclick={() => void loadNotebookOptions()}');
+		expect(organization).toContain('disabled={row.saving || !notebookOptionsReady}');
+		expect(organization).toContain(
+			'notebookId: notebookOptionsReady ? row.notebookId || null : row.document.notebookId'
+		);
+		expect(organization).not.toMatch(
+			/Promise\.all\(\[[\s\S]*listAllDocuments\(\)[\s\S]*listNotebooks\(\)/
+		);
+	});
+
 	it('prevents edits from changing context while a save is in flight', () => {
 		const organization = read('src/routes/library/organize/+page.svelte');
 		const tags = read('src/routes/library/tags/+page.svelte');
