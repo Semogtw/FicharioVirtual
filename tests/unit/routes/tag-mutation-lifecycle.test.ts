@@ -16,8 +16,6 @@ describe('tag mutation lifecycle', () => {
 		expect(source).toMatch(
 			/await setTagMembership\(tagId, documentId, assigned\);[\s\S]*if \(!mutationRequests\.isCurrent\(version\) \|\| activeTagId !== tagId\) return;/
 		);
-		expect(source).toMatch(
-			/onDestroy\(\(\) => \{[\s\S]*mutationRequests\.next\(\);[\s\S]*\}\);/
-		);
+		expect(source).toMatch(/onDestroy\(\(\) => \{[\s\S]*mutationRequests\.next\(\);[\s\S]*\}\);/);
 	});
 });
