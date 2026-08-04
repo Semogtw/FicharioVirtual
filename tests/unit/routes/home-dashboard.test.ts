@@ -8,7 +8,9 @@ describe('home dashboard', () => {
 		expect(source).toContain("import DocumentCard from '$lib/components/DocumentCard.svelte';");
 		expect(source).toContain("import { listDocuments } from '$lib/services/documents';");
 		expect(source).toContain("import { loadUsageOverview } from '$lib/services/usage';");
-		expect(source).toContain('Promise.all([loadUsageOverview(), listDocuments({ limit: 6 })])');
+		expect(source).toMatch(
+			/Promise\.all\(\[[\s\S]*loadUsageOverview\(\)[\s\S]*listDocuments\(\{ limit: 6 \}\)[\s\S]*\]\)/
+		);
 		expect(source).toContain('usage.totals.documents');
 		expect(source).toContain('usage.totals.pages');
 		expect(source).toContain('usage.totals.reviewPages');
