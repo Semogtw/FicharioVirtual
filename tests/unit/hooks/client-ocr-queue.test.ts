@@ -11,12 +11,14 @@ describe('client OCR queue lifecycle', () => {
 		expect(hook).toContain(
 			"import { restoreImageImports } from '$lib/stores/import-queue.svelte';"
 		);
+		expect(hook).toContain(
+			"import { restorePdfImports } from '$lib/stores/pdf-import-queue.svelte';"
+		);
 		expect(hook).toContain('subscribeSessionAuthorization((authorized) => {');
 		expect(hook).toContain('if (authorized) void resumeQueue();');
 		expect(hook).toContain('else pauseQueue();');
-		expect(hook).toContain(
-			'if (authorized && sessionState.user) void restoreImageImports(sessionState.user.id);'
-		);
+		expect(hook).toContain('void restoreImageImports(sessionState.user.id);');
+		expect(hook).toContain('void restorePdfImports(sessionState.user.id);');
 		expect(session).toContain('export function subscribeSessionAuthorization(');
 		expect(session).toContain('authorizationListeners');
 	});
