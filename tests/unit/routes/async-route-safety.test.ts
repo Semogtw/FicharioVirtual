@@ -67,6 +67,20 @@ describe('async route safety', () => {
 		);
 	});
 
+	it('ignores stale review pages after a newer queue reload', () => {
+		const reviewRoute = read('src/routes/review/+page.svelte');
+
+		expect(reviewRoute).toContain(
+			"import { RequestVersion } from '$lib/services/request-version';"
+		);
+		expect(reviewRoute).toContain('const loadRequests = new RequestVersion();');
+		expect(reviewRoute).toContain('loadRequests.next()');
+		expect(reviewRoute).toContain('loadRequests.isCurrent(version)');
+		expect(reviewRoute).toMatch(
+			/const offset = reset \? 0 : items\.length;[\s\S]*if \(!loadRequests\.isCurrent\(version\)\) return;[\s\S]*items = reset/
+		);
+	});
+
 	it('offers OCR retry only for states accepted by claim_ocr_job', () => {
 		const reviewRoute = read('src/routes/review/+page.svelte');
 
