@@ -79,9 +79,16 @@ function hasExactKeys(record: Record<string, unknown>, expected: readonly string
 function isImportStatus(value: unknown): value is ImportStatus {
 	return (
 		typeof value === 'string' &&
-		['draft', 'preparing', 'uploading', 'processing', 'completed', 'paused', 'failed', 'cancelled'].includes(
-			value
-		)
+		[
+			'draft',
+			'preparing',
+			'uploading',
+			'processing',
+			'completed',
+			'paused',
+			'failed',
+			'cancelled'
+		].includes(value)
 	);
 }
 
@@ -285,7 +292,7 @@ class SupabaseImportSessionsGateway implements ImportSessionsGateway {
 	async create(input: ImportSessionInsert) {
 		const { data, error } = await this.client
 			.from('import_sessions')
-			.insert(input)
+			.upsert(input, { onConflict: 'user_id,local_resume_key' })
 			.select(SELECT_FIELDS)
 			.single();
 		if (error || data === null) throw new ImportSessionServiceError();
@@ -334,10 +341,7 @@ export function updateImportSession(
 	return updateImportSessionWithGateway(gateway(client), id, input);
 }
 
-export async function listActiveImportSessions(
-	userId: string,
-	client?: SupabaseClient<Database>
-) {
+export async function listActiveImportSessions(userId: string, client?: SupabaseClient<Database>) {
 	try {
 		return await listActiveImportSessionsWithGateway(gateway(client), userId);
 	} catch (error) {
