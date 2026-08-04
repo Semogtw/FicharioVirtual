@@ -20,6 +20,7 @@
 	let assignedDocumentIds = $state<ReadonlySet<string>>(new Set());
 	let newTagName = $state('');
 	let loading = $state(true);
+	let initialized = $state(false);
 	let loadingAssignments = $state(false);
 	let saving = $state(false);
 	let pendingDocumentId = $state<string | null>(null);
@@ -53,14 +54,17 @@
 
 	async function initialize() {
 		loading = true;
+		initialized = false;
 		error = null;
 		try {
 			const [loadedTags, loadedDocuments] = await Promise.all([listTags(), listAllDocuments()]);
 			tags = loadedTags;
 			documents = loadedDocuments;
 			activeTagId = tags[0]?.id ?? null;
+			initialized = true;
 			if (activeTagId) await loadAssignments(activeTagId);
 		} catch (caught) {
+			initialized = false;
 			error = caught instanceof Error ? caught.message : 'Não foi possível abrir as tags.';
 		} finally {
 			loading = false;
@@ -68,7 +72,7 @@
 	}
 
 	async function addTag() {
-		if (saving || !newTagName.trim()) return;
+		if (!initialized || saving || !newTagName.trim()) return;
 		saving = true;
 		error = null;
 		message = null;
@@ -174,12 +178,19 @@
 		</label>
 		<Button
 			label={saving ? 'Salvando…' : 'Criar tag'}
-			disabled={saving || !newTagName.trim()}
+			disabled={!initialized || saving || !newTagName.trim()}
 			type="submit"
 		/>
 	</form>
 
-	{#if error}<p class="error" role="alert">{error}</p>{/if}
+	{#if error}
+		<div class="error" role="alert">
+			<p>{error}</p>
+			{#if !initialized}
+				<Button label="Tentar novamente" variant="secondary" onclick={() => void initialize()} />
+			{/if}
+		</div>
+	{/if}
 	{#if message}<p class="message" role="status">{message}</p>{/if}
 
 	{#if loading}
@@ -476,6 +487,17 @@
 		border-left: 0.3rem solid var(--danger);
 		background: rgb(155 63 54 / 7%);
 		color: var(--danger);
+	}
+
+	.error {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+	}
+
+	.error p {
+		margin: 0;
 	}
 
 	.message {
