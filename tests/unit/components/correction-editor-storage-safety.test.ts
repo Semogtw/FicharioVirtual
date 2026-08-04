@@ -21,4 +21,19 @@ describe('CorrectionEditor local draft safety', () => {
 			'Não foi possível salvar no servidor e o navegador não permitiu criar um rascunho local.'
 		);
 	});
+
+	it('does not publish save completion after the editor leaves the page', () => {
+		expect(source).toContain("import { RequestVersion } from '$lib/services/request-version';");
+		expect(source).toContain('const editorLifecycle = new RequestVersion();');
+		expect(source).toContain('const lifecycleVersion = editorLifecycle.next();');
+		expect(source).toMatch(
+			/const saved = await savePageCorrection\(page\.id, request\.text\);[\s\S]*if \(!editorLifecycle\.isCurrent\(lifecycleVersion\)\) return;[\s\S]*onSaved\?\.\(saved\);/
+		);
+		expect(source).toMatch(
+			/catch \{[\s\S]*if \(!editorLifecycle\.isCurrent\(lifecycleVersion\)\) return;[\s\S]*saveState = 'error';/
+		);
+		expect(source).toMatch(
+			/onDestroy\(\(\) => \{[\s\S]*editorLifecycle\.next\(\);[\s\S]*\}\);/
+		);
+	});
 });
