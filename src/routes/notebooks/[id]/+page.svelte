@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { onDestroy } from 'svelte';
 	import DocumentCard from '$lib/components/DocumentCard.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import type { DocumentSummary } from '$lib/domain/document';
@@ -8,33 +9,55 @@
 	import { listNotebooks } from '$lib/services/notebooks';
 	import { RequestVersion } from '$lib/services/request-version';
 
+	const notebookRequests = new RequestVersion();
+	const documentRequests = new RequestVersion();
 	let notebook = $state<NotebookSummary | null>(null);
 	let documents = $state<readonly DocumentSummary[]>([]);
 	let loading = $state(true);
+	let documentsLoading = $state(false);
 	let error = $state<string | null>(null);
-	const initializeRequests = new RequestVersion();
+	let documentsError = $state<string | null>(null);
 
-	async function initialize(notebookId = page.params.id) {
-		const version = initializeRequests.next();
+	async function loadDocuments(notebookId: string, version = documentRequests.next()) {
+		documentsLoading = true;
+		documentsError = null;
+		try {
+			const loadedDocuments = await listAllDocuments({ filters: { notebookId } });
+			if (!documentRequests.isCurrent(version)) return;
+			documents = loadedDocuments;
+		} catch {
+			if (documentRequests.isCurrent(version)) {
+				documents = Object.freeze([]);
+				documentsError = 'Não foi possível carregar os documentos deste caderno.';
+			}
+		} finally {
+			if (documentRequests.isCurrent(version)) documentsLoading = false;
+		}
+	}
+
+	async function initialize(notebookId: string, version = notebookRequests.next()) {
 		loading = true;
 		error = null;
+		documentRequests.next();
+		documents = Object.freeze([]);
+		documentsLoading = false;
+		documentsError = null;
 		try {
-			const [notebooks, loadedDocuments] = await Promise.all([
-				listNotebooks(),
-				listAllDocuments({ filters: { notebookId } })
-			]);
-			if (!initializeRequests.isCurrent(version)) return;
+			const notebooks = await listNotebooks();
+			if (!notebookRequests.isCurrent(version)) return;
 			const loadedNotebook = notebooks.find((item) => item.id === notebookId) ?? null;
 			notebook = loadedNotebook;
-			documents = loadedNotebook ? loadedDocuments : Object.freeze([]);
-			if (!loadedNotebook) error = 'Este caderno não existe ou não está disponível.';
+			if (!loadedNotebook) {
+				error = 'Este caderno não existe ou não está disponível.';
+				return;
+			}
+			void loadDocuments(notebookId);
 		} catch {
-			if (!initializeRequests.isCurrent(version)) return;
+			if (!notebookRequests.isCurrent(version)) return;
 			notebook = null;
-			documents = Object.freeze([]);
 			error = 'Não foi possível abrir este caderno agora.';
 		} finally {
-			if (initializeRequests.isCurrent(version)) loading = false;
+			if (notebookRequests.isCurrent(version)) loading = false;
 		}
 	}
 
@@ -42,7 +65,17 @@
 		const notebookId = page.params.id;
 		notebook = null;
 		documents = Object.freeze([]);
+		if (!notebookId) {
+			loading = false;
+			error = 'Este caderno não existe ou não está disponível.';
+			return;
+		}
 		void initialize(notebookId);
+	});
+
+	onDestroy(() => {
+		notebookRequests.next();
+		documentRequests.next();
 	});
 </script>
 
@@ -67,7 +100,20 @@
 			<a class="primary-action" href={`/import/?notebook=${notebook.id}`}>Adicionar documento</a>
 		</header>
 
-		{#if documents.length === 0}
+		{#if documentsError}
+			<div class="documents-error" role="status">
+				<p>{documentsError}</p>
+				<button
+					type="button"
+					disabled={documentsLoading}
+					onclick={() => notebook && void loadDocuments(notebook.id)}
+				>
+					{documentsLoading ? 'Carregando…' : 'Tentar carregar documentos'}
+				</button>
+			</div>
+		{:else if documentsLoading}
+			<p class="loading" role="status">Carregando documentos do caderno…</p>
+		{:else if documents.length === 0}
 			<EmptyState
 				title="Este caderno está vazio"
 				description="Adicione um documento existente ou importe um novo arquivo diretamente para este caderno."
@@ -150,11 +196,37 @@
 		text-align: center;
 	}
 
+	.documents-error,
 	.error {
 		padding: 1rem;
 		border-left: 0.3rem solid var(--danger);
 		background: rgb(155 63 54 / 7%);
 		color: var(--danger);
+	}
+
+	.documents-error {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		border-left-color: var(--accent);
+		background: rgb(166 94 67 / 7%);
+		color: var(--accent-strong);
+	}
+
+	.documents-error p {
+		margin: 0;
+	}
+
+	.documents-error button {
+		min-height: 2.45rem;
+		padding: 0.55rem 0.75rem;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--radius-sm);
+		background: var(--surface-strong);
+		color: var(--ink);
+		font-weight: 720;
+		cursor: pointer;
 	}
 
 	@media (max-width: 560px) {
