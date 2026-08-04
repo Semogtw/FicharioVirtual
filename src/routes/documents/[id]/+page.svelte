@@ -13,6 +13,7 @@
 	let loading = $state(true);
 	let retrying = $state(false);
 	let deleting = $state(false);
+	let deleted = $state(false);
 	let error = $state<string | null>(null);
 	let highlightedQuery = $derived(page.url.searchParams.get('highlight')?.slice(0, 200) ?? '');
 	const refreshRequests = new RequestVersion();
@@ -81,10 +82,21 @@
 		error = null;
 		try {
 			await deleteDocument(documentId);
-			if (page.params.id === documentId) await goto('/library/');
 		} catch {
 			if (page.params.id === documentId) {
 				error = 'Não foi possível excluir o documento agora.';
+				deleting = false;
+			}
+			return;
+		}
+		if (page.params.id !== documentId) return;
+		deleted = true;
+		detail = null;
+		try {
+			await goto('/library/');
+		} catch {
+			if (page.params.id === documentId) {
+				error = 'Documento excluído, mas não foi possível voltar à biblioteca.';
 				deleting = false;
 			}
 		}
@@ -98,6 +110,7 @@
 		selectedPageNumber = pageNumber;
 		retrying = false;
 		deleting = false;
+		deleted = false;
 		void refresh(documentId, pageNumber);
 	});
 </script>
@@ -111,6 +124,12 @@
 
 	{#if loading}
 		<p class="loading" role="status">Abrindo o documento privado…</p>
+	{:else if deleted}
+		<div class="deleted" role="status">
+			<p>O documento foi excluído.</p>
+			{#if error}<p class="deleted-error">{error}</p>{/if}
+			<a href="/library/">Voltar à biblioteca</a>
+		</div>
 	{:else if error && !detail}
 		<div class="fatal" role="alert">
 			<p>{error}</p>
@@ -367,6 +386,35 @@
 		padding: 4rem;
 		color: var(--muted);
 		text-align: center;
+	}
+
+	.deleted {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: 1rem;
+		border-left: 0.3rem solid var(--archive);
+		background: var(--archive-soft);
+	}
+
+	.deleted p {
+		margin: 0;
+	}
+
+	.deleted .deleted-error {
+		color: var(--danger);
+	}
+
+	.deleted a {
+		min-height: 2.55rem;
+		display: inline-flex;
+		align-items: center;
+		padding: 0.6rem 0.85rem;
+		border-radius: var(--radius-sm);
+		background: var(--archive);
+		color: white;
+		font-weight: 720;
 	}
 
 	.fatal {
