@@ -1,10 +1,51 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { onDestroy, onMount } from 'svelte';
+	import DocumentCard from '$lib/components/DocumentCard.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
+	import type { DocumentSummary } from '$lib/domain/document';
+	import { listDocuments } from '$lib/services/documents';
+	import { RequestVersion } from '$lib/services/request-version';
+	import { loadUsageOverview } from '$lib/services/usage';
+	import type { UsageOverview } from '$lib/services/usage';
+
+	const dashboardRequests = new RequestVersion();
+	let usage = $state<UsageOverview | null>(null);
+	let recentDocuments = $state<readonly DocumentSummary[]>([]);
+	let loading = $state(true);
+	let error = $state<string | null>(null);
 
 	function startImport() {
 		void goto('/import/');
 	}
+
+	async function loadDashboard(version = dashboardRequests.next()) {
+		loading = true;
+		error = null;
+		try {
+			const [loadedUsage, documentPage] = await Promise.all([
+				loadUsageOverview(),
+				listDocuments({ limit: 6 })
+			]);
+			if (!dashboardRequests.isCurrent(version)) return;
+			usage = loadedUsage;
+			recentDocuments = documentPage.items;
+		} catch {
+			if (dashboardRequests.isCurrent(version)) {
+				error = 'Não foi possível carregar o resumo do fichário agora.';
+			}
+		} finally {
+			if (dashboardRequests.isCurrent(version)) loading = false;
+		}
+	}
+
+	onMount(() => {
+		void loadDashboard();
+	});
+
+	onDestroy(() => {
+		dashboardRequests.next();
+	});
 </script>
 
 <svelte:head>
@@ -23,21 +64,21 @@
 		<a class="primary-action" href="/import/">Importar documento</a>
 	</header>
 
-	<section class="overview" aria-label="Resumo da biblioteca">
+	<section class="overview" aria-label="Resumo da biblioteca" aria-busy={loading}>
 		<article>
 			<span>Documentos</span>
-			<strong>0</strong>
-			<small>A biblioteca está pronta para começar</small>
+			<strong>{usage ? usage.totals.documents.toLocaleString('pt-BR') : '—'}</strong>
+			<small>Arquivos privados preservados no fichário</small>
 		</article>
 		<article>
-			<span>Páginas pesquisáveis</span>
-			<strong>0</strong>
-			<small>Texto nativo e leituras revisadas</small>
+			<span>Páginas no fichário</span>
+			<strong>{usage ? usage.totals.pages.toLocaleString('pt-BR') : '—'}</strong>
+			<small>Texto nativo, leituras e correções manuais</small>
 		</article>
 		<article>
 			<span>Para revisar</span>
-			<strong>0</strong>
-			<small>Nenhum trecho aguardando atenção</small>
+			<strong>{usage ? usage.totals.reviewPages.toLocaleString('pt-BR') : '—'}</strong>
+			<small>Páginas que ainda pedem atenção humana</small>
 		</article>
 	</section>
 
@@ -50,12 +91,27 @@
 			<a href="/library/">Ver biblioteca</a>
 		</div>
 
-		<EmptyState
-			title="Seu fichário ainda está vazio"
-			description="Importe uma imagem ou PDF. O arquivo original será preservado enquanto o texto é preparado para pesquisa."
-			actionLabel="Importar o primeiro documento"
-			onAction={startImport}
-		/>
+		{#if loading}
+			<p class="loading" role="status">Atualizando o resumo do fichário…</p>
+		{:else if error}
+			<div class="error" role="alert">
+				<p>{error}</p>
+				<button type="button" onclick={() => void loadDashboard()}>Tentar novamente</button>
+			</div>
+		{:else if recentDocuments.length === 0}
+			<EmptyState
+				title="Seu fichário ainda está vazio"
+				description="Importe uma imagem ou PDF. O arquivo original será preservado enquanto o texto é preparado para pesquisa."
+				actionLabel="Importar o primeiro documento"
+				onAction={startImport}
+			/>
+		{:else}
+			<div class="recent-grid" aria-label="Documentos adicionados recentemente">
+				{#each recentDocuments as document (document.id)}
+					<DocumentCard {document} />
+				{/each}
+			</div>
+		{/if}
 	</section>
 </div>
 
@@ -161,11 +217,16 @@
 		gap: 1.25rem;
 	}
 
-	.section-heading {
+	.section-heading,
+	.error {
 		display: flex;
-		align-items: end;
+		align-items: center;
 		justify-content: space-between;
 		gap: 1rem;
+	}
+
+	.section-heading {
+		align-items: end;
 	}
 
 	h2 {
@@ -176,6 +237,40 @@
 	.section-heading > a {
 		color: var(--archive);
 		font-weight: 720;
+	}
+
+	.recent-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+		gap: 1rem;
+	}
+
+	.loading {
+		padding: 3rem;
+		color: var(--muted);
+		text-align: center;
+	}
+
+	.error {
+		padding: 1rem;
+		border-left: 0.3rem solid var(--danger);
+		background: rgb(155 63 54 / 7%);
+		color: var(--danger);
+	}
+
+	.error p {
+		margin: 0;
+	}
+
+	.error button {
+		min-height: 2.45rem;
+		padding: 0.55rem 0.75rem;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--radius-sm);
+		background: var(--surface-strong);
+		color: var(--ink);
+		font-weight: 720;
+		cursor: pointer;
 	}
 
 	@media (max-width: 760px) {
