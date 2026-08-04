@@ -91,7 +91,18 @@ jobs:
       - name: Run frontend verification
         id: frontend
         continue-on-error: true
-        run: pnpm verify
+        run: |
+          set -o pipefail
+          pnpm verify 2>&1 | tee /tmp/frontend-verification.log
+
+      - name: Upload frontend failure log
+        if: steps.frontend.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-failure-${{ github.sha }}
+          path: /tmp/frontend-verification.log
+          if-no-files-found: error
+          retention-days: 3
 
       - name: Prepare Prettier repair patch
         id: formatting
@@ -201,6 +212,12 @@ jobs:
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
+          FRONTEND_OUTCOME: ${{ steps.frontend.outcome }}
+          SOURCE_OUTCOME: ${{ steps.source.outcome }}
+          CHROMIUM_OUTCOME: ${{ steps.chromium.outcome }}
+          BROWSER_OUTCOME: ${{ steps.browser.outcome }}
+          EDGE_OUTCOME: ${{ steps.edge.outcome }}
+          DATABASE_OUTCOME: ${{ steps.database.outcome }}
         run: |
           if [ -z "${RECEIPT_ISSUE:-}" ]; then
             echo 'Receipt issue was not created.' >&2
@@ -211,5 +228,12 @@ jobs:
           Commit: ${{ github.sha }}
           Run ID: ${{ github.run_id }}
           Workflow: ${{ github.workflow }}
+
+          Frontend: $FRONTEND_OUTCOME
+          Source: $SOURCE_OUTCOME
+          Chromium: $CHROMIUM_OUTCOME
+          Browser: $BROWSER_OUTCOME
+          Edge: $EDGE_OUTCOME
+          Database: $DATABASE_OUTCOME
           EOF
           gh issue edit "$RECEIPT_ISSUE" --body-file /tmp/receipt.md
