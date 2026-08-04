@@ -1,9 +1,10 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import Button from '$lib/components/Button.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import type { DocumentSummary } from '$lib/domain/document';
 	import { listAllDocuments } from '$lib/services/documents';
+	import { RequestVersion } from '$lib/services/request-version';
 	import {
 		createTag,
 		deleteTag,
@@ -14,6 +15,7 @@
 		type TagSummary
 	} from '$lib/services/tags';
 
+	const assignmentRequests = new RequestVersion();
 	let tags = $state<readonly TagSummary[]>([]);
 	let documents = $state<readonly DocumentSummary[]>([]);
 	let activeTagId = $state<string | null>(null);
@@ -34,21 +36,31 @@
 		const nextId = tags.some((tag) => tag.id === preferredId) ? preferredId : (tags[0]?.id ?? null);
 		activeTagId = nextId;
 		if (nextId) await loadAssignments(nextId);
-		else assignedDocumentIds = new Set();
+		else {
+			assignmentRequests.next();
+			assignedDocumentIds = new Set();
+			loadingAssignments = false;
+		}
 	}
 
-	async function loadAssignments(tagId: string) {
+	async function loadAssignments(tagId: string, version = assignmentRequests.next()) {
 		loadingAssignments = true;
 		error = null;
 		try {
-			assignedDocumentIds = await listTagDocumentIds(tagId);
+			const loadedAssignments = await listTagDocumentIds(tagId);
+			if (!assignmentRequests.isCurrent(version) || activeTagId !== tagId) return;
+			assignedDocumentIds = loadedAssignments;
 		} catch (caught) {
-			error =
-				caught instanceof Error
-					? caught.message
-					: 'Não foi possível carregar os documentos da tag.';
+			if (assignmentRequests.isCurrent(version) && activeTagId === tagId) {
+				error =
+					caught instanceof Error
+						? caught.message
+						: 'Não foi possível carregar os documentos da tag.';
+			}
 		} finally {
-			loadingAssignments = false;
+			if (assignmentRequests.isCurrent(version) && activeTagId === tagId) {
+				loadingAssignments = false;
+			}
 		}
 	}
 
@@ -124,16 +136,18 @@
 
 	async function toggleDocument(documentId: string, assigned: boolean) {
 		if (!activeTag || pendingDocumentId) return;
+		const tagId = activeTag.id;
 		pendingDocumentId = documentId;
 		error = null;
 		try {
-			await setTagMembership(activeTag.id, documentId, assigned);
+			await setTagMembership(tagId, documentId, assigned);
+			if (activeTagId !== tagId) return;
 			const next = new Set(assignedDocumentIds);
 			if (assigned) next.add(documentId);
 			else next.delete(documentId);
 			assignedDocumentIds = next;
 			tags = tags.map((tag) =>
-				tag.id === activeTag.id
+				tag.id === tagId
 					? Object.freeze({
 							...tag,
 							documentCount: Math.max(0, tag.documentCount + (assigned ? 1 : -1))
@@ -149,6 +163,10 @@
 
 	onMount(() => {
 		void initialize();
+	});
+
+	onDestroy(() => {
+		assignmentRequests.next();
 	});
 </script>
 
