@@ -16,4 +16,13 @@ describe('InstallAppButton lifecycle', () => {
 			/onDestroy\(\(\) => \{[\s\S]*installRequests\.next\(\);[\s\S]*\}\);/
 		);
 	});
+
+	it('consumes the browser prompt once and handles prompt failures', () => {
+		expect(source).toMatch(
+			/const event = promptEvent;[\s\S]*promptEvent = null;[\s\S]*try \{[\s\S]*await event\.prompt\(\);/
+		);
+		expect(source).toMatch(
+			/catch \{[\s\S]*if \(!installRequests\.isCurrent\(version\)\) return;[\s\S]*message = 'Não foi possível abrir a instalação do aplicativo\.';/
+		);
+	});
 });
