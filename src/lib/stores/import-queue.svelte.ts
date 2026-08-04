@@ -95,10 +95,14 @@ function abortError() {
 }
 
 function storedStatus(item: ImportQueueItem): StoredImageImportRecord['status'] {
-	if (item.status === 'needs_review' || item.status === 'complete' || item.status === 'duplicate') {
-		return 'cancelled';
+	switch (item.status) {
+		case 'needs_review':
+		case 'complete':
+		case 'duplicate':
+			return 'cancelled';
+		default:
+			return item.status;
 	}
-	return item.status;
 }
 
 function terminalStatus(item: ImportQueueItem) {
