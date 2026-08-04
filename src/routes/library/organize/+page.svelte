@@ -19,6 +19,8 @@
 
 	const documentRequests = new RequestVersion();
 	const notebookRequests = new RequestVersion();
+	const routeLifecycle = new RequestVersion();
+	const lifecycleVersion = routeLifecycle.next();
 	let rows = $state<EditableDocument[]>([]);
 	let notebooks = $state<readonly NotebookSummary[]>([]);
 	let loading = $state(true);
@@ -88,6 +90,7 @@
 				title: row.title,
 				notebookId: notebookOptionsReady ? row.notebookId || null : row.document.notebookId
 			});
+			if (!routeLifecycle.isCurrent(lifecycleVersion)) return;
 			row.title = updated.title;
 			row.notebookId = updated.notebookId ?? '';
 			row.document = Object.freeze({
@@ -98,9 +101,11 @@
 			});
 			row.saved = true;
 		} catch (caught) {
-			row.error = caught instanceof Error ? caught.message : 'Não foi possível salvar.';
+			if (routeLifecycle.isCurrent(lifecycleVersion)) {
+				row.error = caught instanceof Error ? caught.message : 'Não foi possível salvar.';
+			}
 		} finally {
-			row.saving = false;
+			if (routeLifecycle.isCurrent(lifecycleVersion)) row.saving = false;
 		}
 	}
 
@@ -112,6 +117,7 @@
 	onDestroy(() => {
 		documentRequests.next();
 		notebookRequests.next();
+		routeLifecycle.next();
 	});
 </script>
 
