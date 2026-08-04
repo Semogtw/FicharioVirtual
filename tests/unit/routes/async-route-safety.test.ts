@@ -67,6 +67,19 @@ describe('async route safety', () => {
 		);
 	});
 
+	it('does not let an older notebook refresh hide a newly created notebook', () => {
+		const notebooksRoute = read('src/routes/notebooks/+page.svelte');
+
+		expect(notebooksRoute).toContain(
+			"import { RequestVersion } from '$lib/services/request-version';"
+		);
+		expect(notebooksRoute).toContain('const refreshRequests = new RequestVersion();');
+		expect(notebooksRoute).toContain('refreshRequests.isCurrent(version)');
+		expect(notebooksRoute).toMatch(
+			/const notebook = await createNotebook[\s\S]*await refresh\(\);/
+		);
+	});
+
 	it('ignores stale review pages after a newer queue reload', () => {
 		const reviewRoute = read('src/routes/review/+page.svelte');
 
