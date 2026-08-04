@@ -1,7 +1,13 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { replaceState } from '$app/navigation';
+	import { page } from '$app/state';
 	import Button from '$lib/components/Button.svelte';
 	import type { NotebookSummary } from '$lib/domain/notebook';
+	import {
+		importSelectionUrl,
+		parseRequestedNotebookId,
+		resolveRequestedNotebookId
+	} from '$lib/import/notebook-selection';
 	import type { ImagePreparationMode } from '$lib/import/image-types';
 	import { listNotebooks } from '$lib/services/notebooks';
 	import {
@@ -79,10 +85,28 @@
 		return (item.status === 'complete' || item.status === 'needs_review') && item.result !== null;
 	}
 
-	onMount(() => {
+	function selectNotebook(event: Event) {
+		const select = event.currentTarget as HTMLSelectElement;
+		notebookId = select.value;
+		const url = importSelectionUrl(page.url, notebookId);
+		replaceState(url, page.state);
+	}
+
+	$effect(() => {
+		let active = true;
 		void listNotebooks()
-			.then((items) => (notebooks = items))
+			.then((items) => {
+				if (active) notebooks = items;
+			})
 			.catch(() => undefined);
+		return () => {
+			active = false;
+		};
+	});
+
+	$effect(() => {
+		const requestedNotebookId = parseRequestedNotebookId(page.url.searchParams);
+		notebookId = resolveRequestedNotebookId(requestedNotebookId, notebooks);
 	});
 </script>
 
@@ -108,7 +132,7 @@
 	<section class="settings" aria-label="Opções da importação">
 		<label>
 			<span>Caderno</span>
-			<select bind:value={notebookId}>
+			<select bind:value={notebookId} onchange={selectNotebook}>
 				<option value="">Sem caderno</option>
 				{#each notebooks as notebook}
 					<option value={notebook.id}>{notebook.name}</option>
