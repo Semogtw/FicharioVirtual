@@ -8,9 +8,7 @@ const source = readFileSync(
 
 describe('image import cancellation affordance', () => {
 	it('keeps cancellation available while OCR is running', () => {
-		expect(source).toContain(
-			"return ['preparing', 'uploading', 'reading'].includes(item.status);"
-		);
+		expect(source).toContain("return ['preparing', 'uploading', 'reading'].includes(item.status);");
 		expect(source).toContain('onclick={() => cancelImport(item.id)}');
 	});
 });
