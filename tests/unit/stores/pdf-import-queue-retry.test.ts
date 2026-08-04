@@ -96,4 +96,28 @@ describe('PDF OCR resume cancellation', () => {
 			expect.objectContaining({ ocrCompleted: 2, ocrPending: 1, ocrFailed: 0 })
 		);
 	});
+
+	it('reports an aborted resume as cancelled instead of a pending failure', async () => {
+		resume.resumeDocumentOcr.mockImplementation(
+			(_documentId: string, options?: { signal?: AbortSignal }) =>
+				new Promise((_resolve, reject) => {
+					options?.signal?.addEventListener(
+						'abort',
+						() => reject(new DOMException('OCR resume was cancelled', 'AbortError')),
+						{ once: true }
+					);
+				})
+		);
+		const item = waitingItem();
+		pdfImportQueue.items.push(item);
+
+		const retry = retryPdfImport(item.id);
+		await vi.waitFor(() => expect(item.status).toBe('reading'));
+		cancelPdfImport(item.id);
+		await retry;
+
+		expect(item.status).toBe('cancelled');
+		expect(item.error).toBeNull();
+		expect(item.result).toEqual(uploadedPdf());
+	});
 });
