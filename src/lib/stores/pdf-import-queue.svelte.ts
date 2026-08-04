@@ -194,8 +194,7 @@ async function synchronizeItem(item: PdfQueueItem) {
 			uploadedItems: item.uploaded ? 1 : 0,
 			completedItems: item.published ? 1 : 0,
 			lastErrorCode: item.status === 'failed' ? 'pdf_import_failed' : null,
-			finishedAt:
-				status === 'completed' || status === 'cancelled' ? new Date().toISOString() : null
+			finishedAt: status === 'completed' || status === 'cancelled' ? new Date().toISOString() : null
 		});
 	} catch {
 		// A later transition or app opening retries the idempotent session update.
@@ -423,7 +422,9 @@ export async function restorePdfImports(userId: string, store?: PdfResumeStore) 
 	if (restoringUsers.has(userId)) return;
 	restoringUsers.add(userId);
 	try {
-		const recordsPromise = store ? listStoredPdfImports(userId, store) : listStoredPdfImports(userId);
+		const recordsPromise = store
+			? listStoredPdfImports(userId, store)
+			: listStoredPdfImports(userId);
 		const [records, remoteSessions] = await Promise.all([
 			recordsPromise,
 			listActiveImportSessions(userId).catch(() => [])
