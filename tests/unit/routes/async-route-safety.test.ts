@@ -8,6 +8,18 @@ function read(path: string) {
 }
 
 describe('async route safety', () => {
+	it('reacts to search query URL changes without keeping stale results', () => {
+		const searchRoute = read('src/routes/search/+page.svelte');
+
+		expect(searchRoute).toContain('$effect(() => {');
+		expect(searchRoute).toContain(
+			"const routeQuery = page.url.searchParams.get('q')?.slice(0, 200) ?? '';"
+		);
+		expect(searchRoute).toContain('query = routeQuery;');
+		expect(searchRoute).toContain('void run(true);');
+		expect(searchRoute).not.toContain('onMount(() =>');
+	});
+
 	it('invalidates in-flight search results when the query is cleared', () => {
 		const searchRoute = read('src/routes/search/+page.svelte');
 
