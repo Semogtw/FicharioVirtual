@@ -43,7 +43,7 @@ function uploadedPdf(): UploadedPdf {
 			hasEncodingIssues: false
 		},
 		sha256: 'a'.repeat(64),
-		storagePath: 'user/document/original.pdf',
+		storagePath: '11111111-1111-4111-8111-111111111111/document/original.pdf',
 		ocrCompleted: 0,
 		ocrNeedsReview: 0,
 		ocrPending: 3,
@@ -54,11 +54,17 @@ function uploadedPdf(): UploadedPdf {
 function waitingItem(): PdfQueueItem {
 	return {
 		id: crypto.randomUUID(),
+		userId: '11111111-1111-4111-8111-111111111111',
+		sessionId: null,
+		resumeKey: crypto.randomUUID(),
 		file: new File(['pdf'], 'scan.pdf', { type: 'application/pdf' }),
 		notebookId: null,
 		consentGranted: true,
 		status: 'waiting',
 		progress: null,
+		inspected: true,
+		uploaded: true,
+		published: true,
 		result: uploadedPdf(),
 		duplicateDocumentId: null,
 		error: null
