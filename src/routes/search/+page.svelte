@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 	import Button from '$lib/components/Button.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import type { NotebookSummary } from '$lib/domain/notebook';
@@ -11,7 +11,7 @@
 
 	const pageSize = 30;
 	const requests = new RequestVersion();
-	let query = $state(page.url.searchParams.get('q')?.slice(0, 200) ?? '');
+	let query = $state('');
 	let notebookId = $state('');
 	let results = $state<readonly SearchResult[]>([]);
 	let notebooks = $state<readonly NotebookSummary[]>([]);
@@ -77,11 +77,24 @@
 		timer = setTimeout(() => void run(true, version), 220);
 	}
 
-	onMount(() => {
+	$effect(() => {
+		let active = true;
 		void listNotebooks()
-			.then((items) => (notebooks = items))
+			.then((items) => {
+				if (active) notebooks = items;
+			})
 			.catch(() => undefined);
-		if (query.trim()) void run(true);
+		return () => {
+			active = false;
+		};
+	});
+
+	$effect(() => {
+		const routeQuery = page.url.searchParams.get('q')?.slice(0, 200) ?? '';
+		query = routeQuery;
+		untrack(() => {
+			void run(true);
+		});
 	});
 
 	onDestroy(() => {
