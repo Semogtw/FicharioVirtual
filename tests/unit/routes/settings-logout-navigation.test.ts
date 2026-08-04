@@ -16,4 +16,15 @@ describe('settings logout completion', () => {
 		expect(source).toContain('Sessão encerrada.');
 		expect(source).toContain('href="/login/"');
 	});
+
+	it('does not publish logout completion or navigate after leaving settings', () => {
+		expect(source).toContain('const signOutRequests = new RequestVersion();');
+		expect(source).toContain('const version = signOutRequests.next();');
+		expect(source).toMatch(
+			/await endSession\(\);[\s\S]*if \(!signOutRequests\.isCurrent\(version\)\) return;[\s\S]*signedOut = true;[\s\S]*await goto\('\/login\/'\);/
+		);
+		expect(source).toMatch(
+			/onDestroy\(\(\) => \{[\s\S]*signOutRequests\.next\(\);[\s\S]*\}\);/
+		);
+	});
 });
