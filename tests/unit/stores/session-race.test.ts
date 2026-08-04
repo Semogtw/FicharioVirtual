@@ -1,3 +1,4 @@
+import type { Session } from '@supabase/supabase-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 function deferred<T>() {
@@ -49,7 +50,7 @@ import {
 
 const authenticatedSession = {
 	user: { id: '11111111-1111-4111-8111-111111111111', email: 'owner@example.test' }
-} as never;
+} as unknown as Session;
 
 describe('session operation ordering', () => {
 	beforeEach(() => {
