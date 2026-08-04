@@ -24,9 +24,11 @@
 	let loading = $state(true);
 	let initialized = $state(false);
 	let loadingAssignments = $state(false);
+	let assignmentsReady = $state(false);
 	let saving = $state(false);
 	let pendingDocumentId = $state<string | null>(null);
 	let error = $state<string | null>(null);
+	let assignmentError = $state<string | null>(null);
 	let message = $state<string | null>(null);
 
 	let activeTag = $derived(tags.find((tag) => tag.id === activeTagId) ?? null);
@@ -40,19 +42,24 @@
 			assignmentRequests.next();
 			assignedDocumentIds = new Set();
 			loadingAssignments = false;
+			assignmentsReady = false;
+			assignmentError = null;
 		}
 	}
 
 	async function loadAssignments(tagId: string, version = assignmentRequests.next()) {
 		loadingAssignments = true;
-		error = null;
+		assignmentsReady = false;
+		assignmentError = null;
 		try {
 			const loadedAssignments = await listTagDocumentIds(tagId);
 			if (!assignmentRequests.isCurrent(version) || activeTagId !== tagId) return;
 			assignedDocumentIds = loadedAssignments;
+			assignmentsReady = true;
 		} catch (caught) {
 			if (assignmentRequests.isCurrent(version) && activeTagId === tagId) {
-				error =
+				assignmentsReady = false;
+				assignmentError =
 					caught instanceof Error
 						? caught.message
 						: 'Não foi possível carregar os documentos da tag.';
@@ -67,6 +74,8 @@
 	async function initialize() {
 		loading = true;
 		initialized = false;
+		assignmentsReady = false;
+		assignmentError = null;
 		error = null;
 		try {
 			const [loadedTags, loadedDocuments] = await Promise.all([listTags(), listAllDocuments()]);
@@ -135,7 +144,7 @@
 	}
 
 	async function toggleDocument(documentId: string, assigned: boolean) {
-		if (!activeTag || pendingDocumentId) return;
+		if (!activeTag || !assignmentsReady || pendingDocumentId) return;
 		const tagId = activeTag.id;
 		pendingDocumentId = documentId;
 		error = null;
@@ -264,6 +273,13 @@
 
 				{#if loadingAssignments}
 					<p class="loading">Verificando associações…</p>
+				{:else if assignmentError && activeTag}
+					<div class="assignment-error" role="alert">
+						<p>{assignmentError}</p>
+						<button type="button" onclick={() => void loadAssignments(activeTag.id)}>
+							Tentar novamente
+						</button>
+					</div>
 				{:else if documents.length === 0}
 					<EmptyState
 						title="Biblioteca vazia"
@@ -277,7 +293,7 @@
 									<input
 										type="checkbox"
 										checked={assignedDocumentIds.has(document.id)}
-										disabled={pendingDocumentId !== null}
+										disabled={!assignmentsReady || pendingDocumentId !== null}
 										onchange={(event) =>
 											void toggleDocument(
 												document.id,
@@ -516,6 +532,33 @@
 
 	.error p {
 		margin: 0;
+	}
+
+	.assignment-error {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		padding: 0.75rem 0.9rem;
+		border-left: 0.3rem solid var(--danger);
+		background: rgb(155 63 54 / 7%);
+		color: var(--danger);
+	}
+
+	.assignment-error p {
+		margin: 0;
+	}
+
+	.assignment-error button {
+		min-height: 2.35rem;
+		padding: 0.5rem 0.7rem;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--radius-sm);
+		background: var(--surface-strong);
+		color: var(--ink);
+		font-size: 0.76rem;
+		font-weight: 720;
+		cursor: pointer;
 	}
 
 	.message {
