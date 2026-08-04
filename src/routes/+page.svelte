@@ -12,8 +12,10 @@
 	const dashboardRequests = new RequestVersion();
 	let usage = $state<UsageOverview | null>(null);
 	let recentDocuments = $state<readonly DocumentSummary[]>([]);
+	let documentsAvailable = $state(false);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
+	let warning = $state<string | null>(null);
 
 	function startImport() {
 		void goto('/import/');
@@ -22,14 +24,30 @@
 	async function loadDashboard(version = dashboardRequests.next()) {
 		loading = true;
 		error = null;
+		warning = null;
 		try {
-			const [loadedUsage, documentPage] = await Promise.all([
+			const [usageResult, documentsResult] = await Promise.allSettled([
 				loadUsageOverview(),
 				listDocuments({ limit: 6 })
 			]);
 			if (!dashboardRequests.isCurrent(version)) return;
-			usage = loadedUsage;
-			recentDocuments = documentPage.items;
+
+			if (usageResult.status === 'fulfilled') usage = usageResult.value;
+			else usage = null;
+
+			if (documentsResult.status === 'fulfilled') {
+				recentDocuments = documentsResult.value.items;
+				documentsAvailable = true;
+			} else {
+				recentDocuments = [];
+				documentsAvailable = false;
+			}
+
+			if (usageResult.status === 'rejected' && documentsResult.status === 'rejected') {
+				error = 'Não foi possível carregar o resumo do fichário agora.';
+			} else if (usageResult.status === 'rejected' || documentsResult.status === 'rejected') {
+				warning = 'Parte do resumo não pôde ser atualizada.';
+			}
 		} catch {
 			if (dashboardRequests.isCurrent(version)) {
 				error = 'Não foi possível carregar o resumo do fichário agora.';
@@ -82,6 +100,8 @@
 		</article>
 	</section>
 
+	{#if warning}<p class="warning" role="status">{warning}</p>{/if}
+
 	<section class="recent" aria-labelledby="recent-title">
 		<div class="section-heading">
 			<div>
@@ -96,6 +116,11 @@
 		{:else if error}
 			<div class="error" role="alert">
 				<p>{error}</p>
+				<button type="button" onclick={() => void loadDashboard()}>Tentar novamente</button>
+			</div>
+		{:else if !documentsAvailable}
+			<div class="error" role="alert">
+				<p>Os documentos recentes não puderam ser carregados.</p>
 				<button type="button" onclick={() => void loadDashboard()}>Tentar novamente</button>
 			</div>
 		{:else if recentDocuments.length === 0}
@@ -249,6 +274,14 @@
 		padding: 3rem;
 		color: var(--muted);
 		text-align: center;
+	}
+
+	.warning {
+		margin: 0;
+		padding: 0.75rem 0.9rem;
+		border-left: 0.3rem solid var(--accent);
+		background: rgb(166 94 67 / 7%);
+		color: var(--accent-strong);
 	}
 
 	.error {
