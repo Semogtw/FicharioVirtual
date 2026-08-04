@@ -1,6 +1,6 @@
 # Prontidão do Fichário Virtual
 
-_Atualizado em 3 de agosto de 2026._
+_Atualizado em 4 de agosto de 2026._
 
 Os percentuais abaixo são uma estimativa de engenharia, não uma métrica automática. Eles separam implementação do produto de validação operacional para evitar que um MVP funcional seja confundido com uma release já pronta para dados reais.
 
@@ -28,7 +28,7 @@ A estimativa total usa aproximadamente 70% de peso para implementação e 30% pa
 - PWA com cache restrito ao shell público;
 - 27 migrations aplicáveis em banco limpo;
 - 54 contratos pgTAP;
-- 232 testes unitários em 56 arquivos;
+- 475 testes unitários em 111 arquivos no checkpoint `dc939f6c6f7932a767296301263cf79a9bf64666`;
 - 3 cenários E2E no Chromium;
 - gate HTTP loopback com 7 cenários de falha OCR;
 - classificação e backoff locais para 429 diário/transitório, 503, payload inválido e timeout;
@@ -42,7 +42,7 @@ A estimativa total usa aproximadamente 70% de peso para implementação e 30% pa
 - verificação de URL assinada antes e depois da expiração;
 - verificador de OCR real com imagem sintética e cleanup por Edge Function;
 - workflows manuais protegidos para host, Supabase e OCR;
-- workflow leve para formatação de documentação;
+- workflow integral para código e documentação, com archive do source, log de falha e patch de Prettier;
 - workspace offline com Node, pnpm/store, Chromium, Deno/cache e Supabase CLI;
 - proteção do repositório de toolchains contra material de chave privada rastreado.
 
