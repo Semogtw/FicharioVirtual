@@ -11,6 +11,7 @@
 		location: DraftLocation | null;
 	};
 
+	const draftLocationBatchSize = 100;
 	const refreshRequests = new RequestVersion();
 	let rows = $state<readonly DraftRow[]>([]);
 	let loading = $state(true);
@@ -21,8 +22,13 @@
 		error = null;
 		try {
 			const drafts = listCorrectionDrafts();
-			const locations = await resolveDraftLocations(drafts.map((draft) => draft.pageId));
-			if (!refreshRequests.isCurrent(version)) return;
+			const locations: DraftLocation[] = [];
+			for (let offset = 0; offset < drafts.length; offset += draftLocationBatchSize) {
+				const batch = drafts.slice(offset, offset + draftLocationBatchSize);
+				const batchLocations = await resolveDraftLocations(batch.map((draft) => draft.pageId));
+				if (!refreshRequests.isCurrent(version)) return;
+				locations.push(...batchLocations);
+			}
 			const byPage = new Map(locations.map((location) => [location.pageId, location] as const));
 			const loadedRows = Object.freeze(
 				drafts.map((draft) => Object.freeze({ draft, location: byPage.get(draft.pageId) ?? null }))
