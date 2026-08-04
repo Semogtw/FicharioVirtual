@@ -334,6 +334,10 @@ export type Database = {
 					document_count: number;
 				}>;
 			};
+			list_runnable_ocr_jobs: {
+				Args: { selection_at?: string; result_limit?: number };
+				Returns: Array<{ page_id: string; attempt_count: number }>;
+			};
 			list_resumable_ocr_pages: {
 				Args: { target_document_id: string; selection_at?: string };
 				Returns: Array<{ page_id: string; page_number: number }>;
