@@ -49,7 +49,12 @@ function hasExactKeys(record: Record<string, unknown>, expected: readonly string
 }
 
 function validLocalText(value: string, minimum: number, maximum: number) {
-	return value.length >= minimum && value.length <= maximum && !/[\u0000-\u001f\u007f]/.test(value);
+	if (value.length < minimum || value.length > maximum) return false;
+	for (let index = 0; index < value.length; index += 1) {
+		const code = value.charCodeAt(index);
+		if (code < 32 || code === 127) return false;
+	}
+	return true;
 }
 
 function parseUploadedPage(data: unknown, userId: string): UploadedPage | null {
