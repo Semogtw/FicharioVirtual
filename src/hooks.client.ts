@@ -1,6 +1,7 @@
 import { invalidateAll } from '$app/navigation';
 import type { ClientInit } from '@sveltejs/kit';
 import { pauseQueue, resumeQueue } from '$lib/import/job-runner';
+import { createOcrQueueLifecycle } from '$lib/import/job-runner-lifecycle';
 import { restoreImageImports } from '$lib/stores/import-queue.svelte';
 import { restorePdfImports } from '$lib/stores/pdf-import-queue.svelte';
 import {
@@ -11,9 +12,13 @@ import {
 } from '$lib/stores/session.svelte';
 
 export const init: ClientInit = () => {
+	const ocrQueueLifecycle = createOcrQueueLifecycle(() => void resumeQueue());
 	subscribeSessionAuthorization((authorized) => {
-		if (authorized) void resumeQueue();
-		else pauseQueue();
+		if (authorized) ocrQueueLifecycle.start();
+		else {
+			ocrQueueLifecycle.stop();
+			pauseQueue();
+		}
 		if (authorized && sessionState.user) {
 			void restoreImageImports(sessionState.user.id);
 			void restorePdfImports(sessionState.user.id);
