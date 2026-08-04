@@ -184,7 +184,11 @@ async function synchronizeItem(item: ImportQueueItem) {
 			uploadedItems: item.result !== null ? 1 : 0,
 			completedItems: completed ? 1 : 0,
 			lastErrorCode:
-				item.status === 'failed' ? 'import_failed' : item.status === 'waiting' ? 'ocr_pending' : null,
+				item.status === 'failed'
+					? 'import_failed'
+					: item.status === 'waiting'
+						? 'ocr_pending'
+						: null,
 			finishedAt: status === 'completed' || status === 'cancelled' ? new Date().toISOString() : null
 		});
 	} catch {
