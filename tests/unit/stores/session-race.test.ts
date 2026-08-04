@@ -126,4 +126,18 @@ describe('session operation ordering', () => {
 
 		stopTracking();
 	});
+
+	it('ignores an auth event already queued when session tracking stops', async () => {
+		sessionState.user = authenticatedSession.user;
+		sessionState.authorized = true;
+		const stopTracking = startSessionTracking();
+
+		tracking.callback?.('SIGNED_OUT', null);
+		stopTracking();
+		await Promise.resolve();
+
+		expect(tracking.unsubscribe).toHaveBeenCalledOnce();
+		expect(sessionState.authorized).toBe(true);
+		expect(sessionState.user?.id).toBe('11111111-1111-4111-8111-111111111111');
+	});
 });
