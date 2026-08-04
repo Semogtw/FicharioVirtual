@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
+	import { RequestVersion } from '$lib/services/request-version';
 
 	type InstallPromptEvent = Event & {
 		prompt(): Promise<void>;
@@ -9,6 +10,7 @@
 	let promptEvent = $state<InstallPromptEvent | null>(null);
 	let installed = $state(false);
 	let message = $state<string | null>(null);
+	const installRequests = new RequestVersion();
 
 	function capture(event: Event) {
 		event.preventDefault();
@@ -23,8 +25,11 @@
 
 	async function install() {
 		if (!promptEvent) return;
-		await promptEvent.prompt();
-		const choice = await promptEvent.userChoice;
+		const event = promptEvent;
+		const version = installRequests.next();
+		await event.prompt();
+		const choice = await event.userChoice;
+		if (!installRequests.isCurrent(version)) return;
 		if (choice.outcome === 'accepted') markInstalled();
 		else message = 'A instalação foi cancelada.';
 	}
@@ -36,6 +41,7 @@
 	});
 
 	onDestroy(() => {
+		installRequests.next();
 		window.removeEventListener('beforeinstallprompt', capture);
 		window.removeEventListener('appinstalled', markInstalled);
 	});
