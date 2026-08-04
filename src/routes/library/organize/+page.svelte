@@ -1,11 +1,12 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import type { DocumentSummary } from '$lib/domain/document';
 	import type { NotebookSummary } from '$lib/domain/notebook';
 	import { updateDocumentOrganization } from '$lib/services/document-organization';
 	import { listAllDocuments } from '$lib/services/documents';
 	import { listNotebooks } from '$lib/services/notebooks';
+	import { RequestVersion } from '$lib/services/request-version';
 
 	type EditableDocument = {
 		document: DocumentSummary;
@@ -16,32 +17,61 @@
 		error: string | null;
 	};
 
+	const documentRequests = new RequestVersion();
+	const notebookRequests = new RequestVersion();
 	let rows = $state<EditableDocument[]>([]);
 	let notebooks = $state<readonly NotebookSummary[]>([]);
 	let loading = $state(true);
+	let notebookOptionsReady = $state(false);
+	let notebookLoading = $state(true);
 	let error = $state<string | null>(null);
+	let notebookError = $state<string | null>(null);
 
-	async function load() {
+	function rowForDocument(document: DocumentSummary): EditableDocument {
+		return {
+			document,
+			title: document.title,
+			notebookId: document.notebookId ?? '',
+			saving: false,
+			saved: false,
+			error: null
+		};
+	}
+
+	async function loadDocuments(version = documentRequests.next()) {
 		loading = true;
 		error = null;
 		try {
-			const [loadedDocuments, loadedNotebooks] = await Promise.all([
-				listAllDocuments(),
-				listNotebooks()
-			]);
-			notebooks = loadedNotebooks;
-			rows = loadedDocuments.map((document) => ({
-				document,
-				title: document.title,
-				notebookId: document.notebookId ?? '',
-				saving: false,
-				saved: false,
-				error: null
-			}));
+			const documents = await listAllDocuments();
+			if (!documentRequests.isCurrent(version)) return;
+			rows = documents.map(rowForDocument);
 		} catch (caught) {
-			error = caught instanceof Error ? caught.message : 'Não foi possível carregar a organização.';
+			if (documentRequests.isCurrent(version)) {
+				error =
+					caught instanceof Error
+						? caught.message
+						: 'Não foi possível carregar a organização.';
+			}
 		} finally {
-			loading = false;
+			if (documentRequests.isCurrent(version)) loading = false;
+		}
+	}
+
+	async function loadNotebookOptions(version = notebookRequests.next()) {
+		notebookLoading = true;
+		notebookOptionsReady = false;
+		notebookError = null;
+		try {
+			const loadedNotebooks = await listNotebooks();
+			if (!notebookRequests.isCurrent(version)) return;
+			notebooks = loadedNotebooks;
+			notebookOptionsReady = true;
+		} catch {
+			if (notebookRequests.isCurrent(version)) {
+				notebookError = 'Não foi possível carregar os cadernos para organização.';
+			}
+		} finally {
+			if (notebookRequests.isCurrent(version)) notebookLoading = false;
 		}
 	}
 
@@ -58,7 +88,7 @@
 		try {
 			const updated = await updateDocumentOrganization(row.document.id, {
 				title: row.title,
-				notebookId: row.notebookId || null
+				notebookId: notebookOptionsReady ? row.notebookId || null : row.document.notebookId
 			});
 			row.title = updated.title;
 			row.notebookId = updated.notebookId ?? '';
@@ -77,7 +107,13 @@
 	}
 
 	onMount(() => {
-		void load();
+		void loadDocuments();
+		void loadNotebookOptions();
+	});
+
+	onDestroy(() => {
+		documentRequests.next();
+		notebookRequests.next();
 	});
 </script>
 
@@ -94,12 +130,21 @@
 		</p>
 	</header>
 
+	{#if notebookError}
+		<div class="notebook-warning" role="status">
+			<p>{notebookError}</p>
+			<button type="button" disabled={notebookLoading} onclick={() => void loadNotebookOptions()}>
+				{notebookLoading ? 'Carregando…' : 'Tentar novamente'}
+			</button>
+		</div>
+	{/if}
+
 	{#if loading}
 		<p class="loading" role="status">Carregando documentos…</p>
 	{:else if error}
 		<div class="fatal" role="alert">
 			<p>{error}</p>
-			<button type="button" onclick={() => void load()}>Tentar novamente</button>
+			<button type="button" onclick={() => void loadDocuments()}>Tentar novamente</button>
 		</div>
 	{:else if rows.length === 0}
 		<EmptyState
@@ -127,7 +172,7 @@
 							<span>Caderno</span>
 							<select
 								bind:value={row.notebookId}
-								disabled={row.saving}
+								disabled={row.saving || !notebookOptionsReady}
 								onchange={() => changed(row)}
 							>
 								<option value="">Sem caderno</option>
@@ -263,7 +308,8 @@
 
 	.actions a,
 	.actions button,
-	.fatal button {
+	.fatal button,
+	.notebook-warning button {
 		min-height: 2.4rem;
 		display: inline-flex;
 		align-items: center;
@@ -289,6 +335,7 @@
 		text-align: center;
 	}
 
+	.notebook-warning,
 	.fatal {
 		display: flex;
 		align-items: center;
@@ -299,8 +346,21 @@
 		background: rgb(155 63 54 / 7%);
 	}
 
+	.notebook-warning {
+		border-left-color: var(--accent);
+		background: rgb(166 94 67 / 7%);
+	}
+
+	.notebook-warning p,
 	.fatal p {
 		margin: 0;
+	}
+
+	.notebook-warning p {
+		color: var(--accent-strong);
+	}
+
+	.fatal p {
 		color: var(--danger);
 	}
 
