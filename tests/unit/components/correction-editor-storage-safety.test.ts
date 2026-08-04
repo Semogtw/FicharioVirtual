@@ -32,8 +32,6 @@ describe('CorrectionEditor local draft safety', () => {
 		expect(source).toMatch(
 			/catch \{[\s\S]*if \(!editorLifecycle\.isCurrent\(lifecycleVersion\)\) return;[\s\S]*saveState = 'error';/
 		);
-		expect(source).toMatch(
-			/onDestroy\(\(\) => \{[\s\S]*editorLifecycle\.next\(\);[\s\S]*\}\);/
-		);
+		expect(source).toMatch(/onDestroy\(\(\) => \{[\s\S]*editorLifecycle\.next\(\);[\s\S]*\}\);/);
 	});
 });
