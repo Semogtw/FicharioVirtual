@@ -48,11 +48,13 @@ export type ImportQueueItem = {
 
 export const importQueue = $state<{ items: ImportQueueItem[] }>({ items: [] });
 
+const IMPORT_LOCK_RETRY_MS = 1_000;
 const controllers = new Map<string, AbortController>();
 const queuedFiles = new WeakSet<File>();
 const persistenceChains = new Map<string, Promise<void>>();
 const itemStores = new Map<string, ImportResumeStore>();
 const restoringUsers = new Set<string>();
+const importRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
 let consentPromise: Promise<void> | null = null;
 let importChannel: BroadcastChannel | null = null;
 
@@ -217,6 +219,32 @@ async function withImportLock(item: ImportQueueItem, operation: () => Promise<vo
 	return runBrowserExclusive(`fichario-import-${item.resumeKey}`, operation);
 }
 
+function clearImportRetry(itemId: string) {
+	const timer = importRetryTimers.get(itemId);
+	if (timer === undefined) return;
+	clearTimeout(timer);
+	importRetryTimers.delete(itemId);
+}
+
+function scheduleImportRetry(
+	item: ImportQueueItem,
+	retry: () => void = () => void processItemWithLock(item),
+	expectedStatus: ImportQueueStatus = 'queued'
+) {
+	if (
+		importRetryTimers.has(item.id) ||
+		!importQueue.items.includes(item) ||
+		item.status !== expectedStatus
+	) {
+		return;
+	}
+	const timer = setTimeout(() => {
+		importRetryTimers.delete(item.id);
+		if (importQueue.items.includes(item) && item.status === expectedStatus) retry();
+	}, IMPORT_LOCK_RETRY_MS);
+	importRetryTimers.set(item.id, timer);
+}
+
 async function processOcr(item: ImportQueueItem, signal?: AbortSignal) {
 	if (!item.result) throw new Error('A página importada não está disponível para leitura.');
 	item.status = 'reading';
@@ -298,8 +326,10 @@ async function processItem(item: ImportQueueItem) {
 	}
 }
 
-function processItemWithLock(item: ImportQueueItem) {
-	return withImportLock(item, () => processItem(item));
+async function processItemWithLock(item: ImportQueueItem) {
+	const acquired = await withImportLock(item, () => processItem(item));
+	if (!acquired) scheduleImportRetry(item);
+	return acquired;
 }
 
 export function addImages(
@@ -333,6 +363,7 @@ export function addImages(
 }
 
 export function cancelImport(itemId: string) {
+	clearImportRetry(itemId);
 	controllers.get(itemId)?.abort();
 	const item = importQueue.items.find((candidate) => candidate.id === itemId);
 	if (item?.status === 'queued') {
@@ -363,11 +394,17 @@ async function retryOcr(item: ImportQueueItem) {
 	}
 }
 
-function retryOcrWithLock(item: ImportQueueItem) {
-	return withImportLock(item, () => retryOcr(item));
+async function retryOcrWithLock(item: ImportQueueItem) {
+	const expectedStatus = item.status;
+	const acquired = await withImportLock(item, () => retryOcr(item));
+	if (!acquired) {
+		scheduleImportRetry(item, () => void retryOcrWithLock(item), expectedStatus);
+	}
+	return acquired;
 }
 
 export function retryImport(itemId: string) {
+	clearImportRetry(itemId);
 	const item = importQueue.items.find((candidate) => candidate.id === itemId);
 	if (!item || !['failed', 'cancelled', 'waiting'].includes(item.status)) return;
 	if (item.result) void retryOcrWithLock(item);
@@ -375,6 +412,7 @@ export function retryImport(itemId: string) {
 }
 
 export function removeImport(itemId: string) {
+	clearImportRetry(itemId);
 	cancelImport(itemId);
 	const index = importQueue.items.findIndex((candidate) => candidate.id === itemId);
 	if (index < 0) return;

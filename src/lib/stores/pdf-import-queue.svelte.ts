@@ -55,12 +55,14 @@ export type PdfQueueItem = {
 
 export const pdfImportQueue = $state<{ items: PdfQueueItem[] }>({ items: [] });
 
+const IMPORT_LOCK_RETRY_MS = 1_000;
 const controllers = new Map<string, AbortController>();
 const queuedFiles = new WeakSet<File>();
 const persistenceChains = new Map<string, Promise<void>>();
 const itemStores = new Map<string, PdfResumeStore>();
 const restoringUsers = new Set<string>();
 let running = false;
+let lockRetryTimer: ReturnType<typeof setTimeout> | null = null;
 let importChannel: BroadcastChannel | null = null;
 
 function id(prefix = 'pdf') {
@@ -291,14 +293,33 @@ function processItemWithLock(item: PdfQueueItem) {
 	return withImportLock(item, () => processItem(item));
 }
 
+function clearPumpRetry() {
+	if (lockRetryTimer === null) return;
+	clearTimeout(lockRetryTimer);
+	lockRetryTimer = null;
+}
+
+function schedulePumpRetry() {
+	if (lockRetryTimer !== null) return;
+	lockRetryTimer = setTimeout(() => {
+		lockRetryTimer = null;
+		void pump();
+	}, IMPORT_LOCK_RETRY_MS);
+}
+
 async function pump() {
 	if (running) return;
+	clearPumpRetry();
 	running = true;
 	try {
 		while (true) {
 			const next = pdfImportQueue.items.find((item) => item.status === 'queued');
 			if (!next) return;
-			await processItemWithLock(next);
+			const acquired = await processItemWithLock(next);
+			if (!acquired) {
+				schedulePumpRetry();
+				return;
+			}
 		}
 	} finally {
 		running = false;
@@ -342,6 +363,9 @@ export function cancelPdfImport(itemId: string) {
 	if (item?.status === 'queued') {
 		item.status = 'cancelled';
 		void persistItem(item);
+		if (!pdfImportQueue.items.some((candidate) => candidate.status === 'queued')) {
+			clearPumpRetry();
+		}
 	}
 }
 
@@ -390,6 +414,9 @@ export function removePdfImport(itemId: string) {
 	if (!item.published && !terminalStatus(item)) item.status = 'cancelled';
 	void persistItem(item).finally(() => itemStores.delete(item.id));
 	queuedFiles.delete(item.file);
+	if (!pdfImportQueue.items.some((candidate) => candidate.status === 'queued')) {
+		clearPumpRetry();
+	}
 }
 
 export function clearFinishedPdfImports() {
