@@ -6,16 +6,18 @@
 	let email = $state('');
 	let password = $state('');
 	let submitting = $state(false);
+	let authenticated = $state(false);
 	let navigationError = $state<string | null>(null);
 
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
-		if (submitting) return;
+		if (submitting || authenticated) return;
 		submitting = true;
 		navigationError = null;
 		try {
 			try {
 				await authenticate(email, password);
+				authenticated = true;
 			} catch {
 				// The store exposes a safe, user-facing authentication error.
 				return;
@@ -56,38 +58,46 @@
 	</section>
 
 	<section class="form-panel" aria-label="Formulário de acesso">
-		<form onsubmit={submit}>
-			<div class="field">
-				<label for="email">E-mail</label>
-				<input id="email" type="email" bind:value={email} autocomplete="username" required />
+		{#if authenticated}
+			<div class="authenticated" role="status">
+				<h2>Acesso confirmado.</h2>
+				{#if navigationError}<p class="error">{navigationError}</p>{/if}
+				<a href="/">Abrir o fichário</a>
 			</div>
+		{:else}
+			<form onsubmit={submit}>
+				<div class="field">
+					<label for="email">E-mail</label>
+					<input id="email" type="email" bind:value={email} autocomplete="username" required />
+				</div>
 
-			<div class="field">
-				<label for="password">Senha</label>
-				<input
-					id="password"
-					type="password"
-					bind:value={password}
-					autocomplete="current-password"
-					required
+				<div class="field">
+					<label for="password">Senha</label>
+					<input
+						id="password"
+						type="password"
+						bind:value={password}
+						autocomplete="current-password"
+						required
+					/>
+				</div>
+
+				{#if sessionState.error}
+					<p class="error" role="alert">{sessionState.error}</p>
+				{/if}
+
+				<Button
+					label={submitting ? 'Confirmando acesso…' : 'Entrar'}
+					type="submit"
+					disabled={submitting}
 				/>
-			</div>
+			</form>
 
-			{#if sessionState.error ?? navigationError}
-				<p class="error" role="alert">{sessionState.error ?? navigationError}</p>
-			{/if}
-
-			<Button
-				label={submitting ? 'Confirmando acesso…' : 'Entrar'}
-				type="submit"
-				disabled={submitting}
-			/>
-		</form>
-
-		<p class="access-note">
-			Este projeto possui <strong>cadastro público desativado</strong>. Novas contas são adicionadas
-			manualmente pelo proprietário.
-		</p>
+			<p class="access-note">
+				Este projeto possui <strong>cadastro público desativado</strong>. Novas contas são adicionadas
+				manualmente pelo proprietário.
+			</p>
+		{/if}
 	</section>
 </main>
 
@@ -203,6 +213,32 @@
 		border-radius: var(--radius-sm);
 		background: var(--surface-strong);
 		color: var(--ink);
+	}
+
+	.authenticated {
+		display: grid;
+		gap: 1rem;
+		width: min(100%, 28rem);
+		padding: 1rem;
+		border-left: 0.3rem solid var(--archive);
+		background: var(--archive-soft);
+	}
+
+	.authenticated h2,
+	.authenticated p {
+		margin: 0;
+	}
+
+	.authenticated a {
+		width: fit-content;
+		min-height: 2.75rem;
+		display: inline-flex;
+		align-items: center;
+		padding: 0.65rem 0.9rem;
+		border-radius: var(--radius-sm);
+		background: var(--archive);
+		color: white;
+		font-weight: 740;
 	}
 
 	.error {
