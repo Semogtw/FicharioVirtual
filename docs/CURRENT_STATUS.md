@@ -2,64 +2,53 @@
 
 _Atualizado: 2026-08-04_  
 _Branch ativa: `main`_  
-_Checkpoint de código coberto por este documento: `af1ed46b7ac6af1ca008eaf584498e0d724400e1`_  
-_Último gate local integral confirmado: `788f170409a323adb8d5b45e83d615f7c1f8d31f`_  
-_Estado: MVP funcional com hardening amplo de contratos, concorrência e recuperação; o checkpoint novo ainda precisa de recibo integral de validação e os gates externos continuam pendentes._
+_Último checkpoint de código integralmente validado: `dc939f6c6f7932a767296301263cf79a9bf64666`_  
+_Recibo: workflow `Validate current head`, run `30928622139`, issue `Semogtw/FicharioVirtual#1`_  
+_Estado: MVP funcional com hardening amplo de contratos, concorrência e recuperação; staging real, OCR externo e host HTTPS continuam pendentes._
 
 ## Resumo executivo
 
 O Fichário Virtual é uma PWA SvelteKit estática para organizar imagens e PDFs privados, preservar texto nativo, executar OCR seletivo no backend e oferecer busca, leitura, revisão, organização e exportação. A aplicação usa Supabase Auth, PostgreSQL, RLS, Storage privado e Edge Functions.
 
-O MVP está implementado. O trabalho mais recente corrigiu uma busca global que apontava para a rota errada, eliminou novas corridas de teardown em componentes e mutações, preservou o controle de fluxo de redirects do SvelteKit e alinhou o cancelamento da retomada de OCR em PDFs.
+O MVP está implementado. O checkpoint validado mais recente corrigiu a busca global, preservou o controle de fluxo de redirects do SvelteKit, eliminou novas corridas de teardown em componentes e mutações, fortaleceu o rastreamento de sessão e alinhou o cancelamento da retomada de OCR em PDFs.
 
-A prontidão operacional ainda depende de staging real, host HTTPS, testes em dispositivos e verificação dos limites gratuitos. Percentuais de prontidão, quando necessários, devem ser derivados de `docs/READINESS.md`; este documento registra fatos e evidências, não estimativas novas.
+A prontidão operacional ainda depende de staging real, host HTTPS, testes em dispositivos e verificação dos limites gratuitos. Percentuais de prontidão, quando necessários, devem ser derivados de `docs/READINESS.md`; este documento registra fatos e evidências.
 
-## Evidência e estado dos gates
+## Evidência do checkpoint validado
 
-### Último gate local integral confirmado
-
-No SHA `788f170409a323adb8d5b45e83d615f7c1f8d31f`, o workspace offline passou:
+No SHA `dc939f6c6f7932a767296301263cf79a9bf64666`, o workflow `Validate current head` passou integralmente:
 
 ```text
 Prettier: PASS
 ESLint: PASS
 svelte-check: PASS — 0 erros, 0 warnings
-Vitest: PASS — 460 testes em 102 arquivos
+Vitest: PASS — 475 testes em 111 arquivos
 build estático/PWA: PASS
-5 gates offline de fonte: PASS
-6 módulos Edge verificados com Deno offline: PASS
+gates offline de fonte: PASS
+Edge Functions com Deno: PASS
 Playwright Chromium: PASS — 3/3 E2E
+Supabase local: PASS — migrations, RLS, Storage e 54 testes de banco
 ```
 
-O SHA inclui snapshots de Prettier gerados pela mesma toolchain usada no checkout limpo.
+O recibo persistente está em `Semogtw/FicharioVirtual#1`, associado ao run `30928622139`. O workflow também publica o archive exato do source validado e, quando o frontend falha, artifacts de log e reparo de Prettier.
 
-### Checkpoint novo
+Este documento é posterior ao checkpoint acima. O próprio commit documental deve ser considerado validado somente quando o recibo registrar sucesso para seu SHA.
 
-O código documentado até `af1ed46b7ac6af1ca008eaf584498e0d724400e1` contém testes e implementações posteriores ao gate local acima. O workflow automático `Validate current head` publica o recibo persistente em `Semogtw/FicharioVirtual#1`.
-
-Nesta sessão, o checkout local não pôde ser materializado porque o ambiente não resolveu `github.com`; por isso os commits foram gravados diretamente pela conexão GitHub e os gates completos não foram declarados como locais. Não atribuir `PASS` ao checkpoint novo até o recibo do workflow registrar sucesso para o SHA correspondente.
-
-### Checkout exato da toolchain
-
-O trigger `Semogtw/Offline-Toolchains@63799e383a5d2b07ba96dae486e528541766c6ab` ainda aponta para `788f170409a323adb8d5b45e83d615f7c1f8d31f`.
-
-O recibo persistente desse bundle é `Semogtw/Offline-Toolchains#28`. O trigger deve ser movido para um checkpoint novo somente depois que o código estiver estabilizado e o workflow do repositório principal estiver verde.
-
-### Gates externos ainda não executados
+## Gates externos ainda não executados
 
 ```text
-pnpm verify:full: NOT RUN — exige Supabase local completo, Docker e banco recriado
-pnpm test:db:local: NOT RUN — Docker/imagens Supabase não fazem parte do bundle portátil
 Verify Supabase staging: NOT RUN — projeto e credenciais de staging não configurados
 Verify OCR staging: NOT RUN — função e secret do provedor não configurados em staging
 Verify deployed Fichário: NOT RUN — host HTTPS final não publicado
+Testes em tablet e celular físicos: NOT RUN
+Verificação operacional de billing, backup e rollback: NOT RUN
 ```
 
-## Mudanças posteriores ao último gate local
+## Mudanças do checkpoint
 
 ### Navegação e busca
 
-- a busca global do `AppShell` agora navega para `/search/?q=...`, em vez de enviar a consulta para `/library/`, que não consumia o parâmetro;
+- a busca global do `AppShell` navega para `/search/?q=...`, em vez de enviar a consulta para `/library/`, que não consumia o parâmetro;
 - o campo superior reflete o `q` da rota de pesquisa atual;
 - o guard de `+layout.ts` captura somente a consulta de autenticação e mantém `redirect()` fora do `catch`, preservando o controle de fluxo do SvelteKit.
 
@@ -77,7 +66,15 @@ Verify deployed Fichário: NOT RUN — host HTTPS final não publicado
 
 - o cancelamento de uma retomada de OCR de PDF que rejeita com `AbortError` permanece em `cancelled`, sem ser reclassificado como falha pendente;
 - a fila continua preservando resultados parciais quando o provedor conclui trabalho mesmo após o sinal de cancelamento;
-- os clientes de worker de imagem e PDF foram revisados e continuam encerrando worker e listener por tarefa.
+- os clientes de worker de imagem e PDF encerram worker e listener por tarefa.
+
+### Pipeline e documentação
+
+- o workflow valida também `README.md` e `docs/**`;
+- falhas de frontend geram log persistente;
+- falhas de formatação geram um patch exato produzido pela versão travada do Prettier;
+- o recibo informa outcomes de frontend, source, Chromium, browser, Edge e banco;
+- `docs/TESTING.md` foi reconstruído para refletir os comandos e gates reais do repositório.
 
 ## Produto implementado
 
@@ -152,6 +149,8 @@ O repositório `Semogtw/Offline-Toolchains` fabrica um workspace Linux x64 com N
 
 O bundle permite instalar dependências com o registry bloqueado, executar frontend, build/PWA, gates de fonte, E2E e `deno check`. Docker e imagens Supabase continuam externos ao archive.
 
+O trigger deve ser movido para um checkpoint novo somente depois que o source estiver estabilizado e o workflow do repositório principal estiver verde. O próximo alvo é o commit documental que preservar este checkpoint verde e também passar pelo workflow.
+
 Ao atualizar o source commit:
 
 1. estabilizar o HEAD e obter o recibo verde do repositório principal;
@@ -159,7 +158,7 @@ Ao atualizar o source commit:
 3. aguardar o recibo em `Offline-Toolchains#28`;
 4. baixar manifest e partes do run bem-sucedido;
 5. conferir SHA-256 antes de extrair;
-6. usar o novo bundle como base, sem sobrepor um checkout antigo de forma implícita.
+6. usar o novo bundle como base, sem sobrepor um checkout antigo implicitamente.
 
 ## Ainda não validado externamente
 
@@ -174,16 +173,15 @@ Ao atualizar o source commit:
 
 ## Próximas prioridades
 
-1. obter `PASS` do workflow para o HEAD atual e corrigir qualquer regressão encontrada;
-2. atualizar a toolchain offline para o SHA estabilizado e obter recibo exato;
-3. executar `pnpm verify:full` em ambiente com Docker e imagens Supabase disponíveis;
-4. criar um projeto Supabase de staging sem dados reais;
-5. aplicar migrations e cadastrar duas contas exclusivas de teste;
-6. executar `Verify Supabase staging` e `Verify OCR staging`;
-7. publicar um host HTTPS e executar `Verify deployed Fichário`;
-8. testar PDFs, cancelamento, retomada e PWA em tablet e celular;
-9. confirmar billing desativado, backup e rollback;
-10. somente então decidir entre staging prolongado e release privada.
+1. validar os commits documentais posteriores ao checkpoint de código;
+2. atualizar a toolchain offline para o SHA final estabilizado e obter recibo exato;
+3. criar um projeto Supabase de staging sem dados reais;
+4. aplicar migrations e cadastrar duas contas exclusivas de teste;
+5. executar `Verify Supabase staging` e `Verify OCR staging`;
+6. publicar um host HTTPS e executar `Verify deployed Fichário`;
+7. testar PDFs, cancelamento, retomada e PWA em tablet e celular;
+8. confirmar billing desativado, backup e rollback;
+9. somente então decidir entre staging prolongado e release privada.
 
 ## Regras de continuidade
 
