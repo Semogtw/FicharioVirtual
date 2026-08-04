@@ -26,12 +26,18 @@
 	async function install() {
 		if (!promptEvent) return;
 		const event = promptEvent;
+		promptEvent = null;
 		const version = installRequests.next();
-		await event.prompt();
-		const choice = await event.userChoice;
-		if (!installRequests.isCurrent(version)) return;
-		if (choice.outcome === 'accepted') markInstalled();
-		else message = 'A instalação foi cancelada.';
+		try {
+			await event.prompt();
+			const choice = await event.userChoice;
+			if (!installRequests.isCurrent(version)) return;
+			if (choice.outcome === 'accepted') markInstalled();
+			else message = 'A instalação foi cancelada.';
+		} catch {
+			if (!installRequests.isCurrent(version)) return;
+			message = 'Não foi possível abrir a instalação do aplicativo.';
+		}
 	}
 
 	onMount(() => {
