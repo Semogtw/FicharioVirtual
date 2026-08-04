@@ -41,6 +41,16 @@ describe('batch document management routes', () => {
 		expect(tags).toContain('tag.id === tagId');
 	});
 
+	it('blocks tag membership edits until assignments load successfully', () => {
+		const tags = read('src/routes/library/tags/+page.svelte');
+
+		expect(tags).toContain('let assignmentsReady = $state(false);');
+		expect(tags).toContain('let assignmentError = $state<string | null>(null);');
+		expect(tags).toContain('if (!activeTag || !assignmentsReady || pendingDocumentId) return;');
+		expect(tags).toContain('disabled={!assignmentsReady || pendingDocumentId !== null}');
+		expect(tags).toContain('onclick={() => void loadAssignments(activeTag.id)}');
+	});
+
 	it('prevents edits from changing context while a save is in flight', () => {
 		const organization = read('src/routes/library/organize/+page.svelte');
 		const tags = read('src/routes/library/tags/+page.svelte');
