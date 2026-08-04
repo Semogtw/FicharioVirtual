@@ -21,7 +21,7 @@ const upload = vi.hoisted(() => ({
 			hasEncodingIssues: false
 		},
 		sha256: 'a'.repeat(64),
-		storagePath: 'user/document/original.pdf',
+		storagePath: '11111111-1111-4111-8111-111111111111/document/original.pdf',
 		ocrCompleted: 0,
 		ocrNeedsReview: 0,
 		ocrPending: 0,
@@ -36,6 +36,10 @@ vi.mock('$lib/pdf/upload', async (importOriginal) => {
 
 vi.mock('$lib/services/ocr-resume', () => ({
 	resumeDocumentOcr: vi.fn()
+}));
+
+vi.mock('$lib/stores/session.svelte', () => ({
+	sessionState: { user: { id: '11111111-1111-4111-8111-111111111111' } }
 }));
 
 import {
