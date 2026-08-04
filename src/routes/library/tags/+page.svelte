@@ -97,7 +97,7 @@
 	}
 
 	async function addTag() {
-		if (!initialized || saving || !newTagName.trim()) return;
+		if (!initialized || saving || pendingDocumentId || !newTagName.trim()) return;
 		saving = true;
 		error = null;
 		message = null;
@@ -114,7 +114,7 @@
 	}
 
 	async function renameActiveTag() {
-		if (!activeTag || saving) return;
+		if (!activeTag || saving || pendingDocumentId) return;
 		const requested = window.prompt('Novo nome da tag', activeTag.name);
 		if (requested === null || requested.trim() === activeTag.name) return;
 		saving = true;
@@ -131,7 +131,7 @@
 	}
 
 	async function removeActiveTag() {
-		if (!activeTag || saving) return;
+		if (!activeTag || saving || pendingDocumentId) return;
 		if (!window.confirm(`Excluir a tag “${activeTag.name}”? Os documentos não serão apagados.`))
 			return;
 		saving = true;
@@ -148,7 +148,7 @@
 	}
 
 	async function toggleDocument(documentId: string, assigned: boolean) {
-		if (!activeTag || !assignmentsReady || pendingDocumentId) return;
+		if (!activeTag || saving || !assignmentsReady || pendingDocumentId) return;
 		const tagId = activeTag.id;
 		pendingDocumentId = documentId;
 		error = null;
@@ -210,7 +210,7 @@
 		</label>
 		<Button
 			label={saving ? 'Salvando…' : 'Criar tag'}
-			disabled={!initialized || saving || !newTagName.trim()}
+			disabled={!initialized || saving || pendingDocumentId !== null || !newTagName.trim()}
 			type="submit"
 		/>
 	</form>
@@ -262,13 +262,15 @@
 						<h2 id="assignment-title">{activeTag?.name}</h2>
 					</div>
 					<div class="tag-actions">
-						<button type="button" disabled={saving} onclick={() => void renameActiveTag()}
-							>Renomear</button
+						<button
+							type="button"
+							disabled={saving || pendingDocumentId !== null}
+							onclick={() => void renameActiveTag()}>Renomear</button
 						>
 						<button
 							class="danger"
 							type="button"
-							disabled={saving}
+							disabled={saving || pendingDocumentId !== null}
 							onclick={() => void removeActiveTag()}
 						>
 							Excluir
@@ -298,7 +300,7 @@
 									<input
 										type="checkbox"
 										checked={assignedDocumentIds.has(document.id)}
-										disabled={!assignmentsReady || pendingDocumentId !== null}
+										disabled={saving || !assignmentsReady || pendingDocumentId !== null}
 										onchange={(event) =>
 											void toggleDocument(
 												document.id,
@@ -494,7 +496,7 @@
 	.documents input {
 		width: 1.1rem;
 		height: 1.1rem;
-		flex: 0 0 aut;
+		flex: 0 0 auto;
 	}
 
 	.documents label span {
@@ -576,10 +578,12 @@
 		.workspace {
 			grid-template-columns: 1fr;
 		}
+
 		aside ul {
 			display: flex;
 			overflow-x: auto;
 		}
+
 		aside li {
 			min-width: 10rem;
 		}
@@ -589,6 +593,7 @@
 		.create-form {
 			grid-template-columns: 1fr;
 		}
+
 		.assignment-heading,
 		.documents li {
 			align-items: flex-start;
