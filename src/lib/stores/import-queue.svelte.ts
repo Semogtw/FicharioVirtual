@@ -1,3 +1,4 @@
+import { runBrowserExclusive } from '$lib/import/browser-exclusive';
 import type { ImagePreparationMode } from '$lib/import/image-types';
 import { prepareImage } from '$lib/import/image-client';
 import {
@@ -54,14 +55,6 @@ const itemStores = new Map<string, ImportResumeStore>();
 const restoringUsers = new Set<string>();
 let consentPromise: Promise<void> | null = null;
 let importChannel: BroadcastChannel | null = null;
-
-type LockManagerLike = {
-	request(
-		name: string,
-		options: { mode: 'exclusive'; ifAvailable: true },
-		callback: (lock: unknown | null) => Promise<void>
-	): Promise<void>;
-};
 
 function id(prefix = 'import') {
 	return (
@@ -221,25 +214,7 @@ function persistItem(item: ImportQueueItem) {
 }
 
 async function withImportLock(item: ImportQueueItem, operation: () => Promise<void>) {
-	const lockManager =
-		typeof navigator === 'undefined'
-			? undefined
-			: (navigator as Navigator & { locks?: LockManagerLike }).locks;
-	if (!lockManager) {
-		await operation();
-		return true;
-	}
-	let acquired = false;
-	await lockManager.request(
-		`fichario-import-${item.resumeKey}`,
-		{ mode: 'exclusive', ifAvailable: true },
-		async (lock) => {
-			if (lock === null) return;
-			acquired = true;
-			await operation();
-		}
-	);
-	return acquired;
+	return runBrowserExclusive(`fichario-import-${item.resumeKey}`, operation);
 }
 
 async function processOcr(item: ImportQueueItem, signal?: AbortSignal) {

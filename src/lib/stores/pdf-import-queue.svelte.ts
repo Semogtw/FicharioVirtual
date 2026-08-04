@@ -1,3 +1,4 @@
+import { runBrowserExclusive } from '$lib/import/browser-exclusive';
 import {
 	deleteStoredPdfImport,
 	listStoredPdfImports,
@@ -61,14 +62,6 @@ const itemStores = new Map<string, PdfResumeStore>();
 const restoringUsers = new Set<string>();
 let running = false;
 let importChannel: BroadcastChannel | null = null;
-
-type LockManagerLike = {
-	request(
-		name: string,
-		options: { mode: 'exclusive'; ifAvailable: true },
-		callback: (lock: unknown | null) => Promise<void>
-	): Promise<void>;
-};
 
 function id(prefix = 'pdf') {
 	return (
@@ -226,25 +219,7 @@ function persistItem(item: PdfQueueItem) {
 }
 
 async function withImportLock(item: PdfQueueItem, operation: () => Promise<void>) {
-	const lockManager =
-		typeof navigator === 'undefined'
-			? undefined
-			: (navigator as Navigator & { locks?: LockManagerLike }).locks;
-	if (!lockManager) {
-		await operation();
-		return true;
-	}
-	let acquired = false;
-	await lockManager.request(
-		`fichario-import-${item.resumeKey}`,
-		{ mode: 'exclusive', ifAvailable: true },
-		async (lock) => {
-			if (lock === null) return;
-			acquired = true;
-			await operation();
-		}
-	);
-	return acquired;
+	return runBrowserExclusive(`fichario-import-${item.resumeKey}`, operation);
 }
 
 async function processItem(item: PdfQueueItem) {
