@@ -15,13 +15,43 @@
 	const refreshRequests = new RequestVersion();
 	let rows = $state<readonly DraftRow[]>([]);
 	let loading = $state(true);
+	let locationLoading = $state(false);
+	let locationsReady = $state(false);
 	let error = $state<string | null>(null);
+	let locationError = $state<string | null>(null);
 
 	async function refresh(version = refreshRequests.next()) {
 		loading = true;
+		locationLoading = false;
+		locationsReady = false;
 		error = null;
+		locationError = null;
+
+		let drafts: readonly CorrectionDraft[];
 		try {
-			const drafts = listCorrectionDrafts();
+			drafts = listCorrectionDrafts();
+			if (!refreshRequests.isCurrent(version)) return;
+			const localRows = Object.freeze(
+				drafts.map((draft) => Object.freeze({ draft, location: null }))
+			);
+			rows = localRows;
+			loading = false;
+		} catch (caught) {
+			if (refreshRequests.isCurrent(version)) {
+				error =
+					caught instanceof Error ? caught.message : 'Não foi possível carregar os rascunhos.';
+				loading = false;
+			}
+			return;
+		}
+
+		if (drafts.length === 0) {
+			locationsReady = true;
+			return;
+		}
+
+		locationLoading = true;
+		try {
 			const locations: DraftLocation[] = [];
 			for (let offset = 0; offset < drafts.length; offset += draftLocationBatchSize) {
 				const batch = drafts.slice(offset, offset + draftLocationBatchSize);
@@ -34,13 +64,13 @@
 				drafts.map((draft) => Object.freeze({ draft, location: byPage.get(draft.pageId) ?? null }))
 			);
 			rows = loadedRows;
-		} catch (caught) {
+			locationsReady = true;
+		} catch {
 			if (refreshRequests.isCurrent(version)) {
-				error =
-					caught instanceof Error ? caught.message : 'Não foi possível carregar os rascunhos.';
+				locationError = 'Não foi possível localizar as páginas dos rascunhos.';
 			}
 		} finally {
-			if (refreshRequests.isCurrent(version)) loading = false;
+			if (refreshRequests.isCurrent(version)) locationLoading = false;
 		}
 	}
 
@@ -79,6 +109,17 @@
 		</p>
 	</header>
 
+	{#if locationError}
+		<div class="location-warning" role="status">
+			<p>{locationError}</p>
+			<button type="button" disabled={locationLoading} onclick={() => void refresh()}>
+				{locationLoading ? 'Localizando…' : 'Tentar localizar novamente'}
+			</button>
+		</div>
+	{:else if locationLoading}
+		<p class="location-status" role="status">Localizando as páginas dos rascunhos…</p>
+	{/if}
+
 	{#if loading}
 		<p class="loading" role="status">Localizando rascunhos…</p>
 	{:else if error}
@@ -99,7 +140,10 @@
 						<p class="eyebrow">
 							Atualizado {new Date(row.draft.updatedAt).toLocaleString('pt-BR')}
 						</p>
-						<h2>{row.location?.documentTitle ?? 'Página não encontrada no servidor'}</h2>
+						<h2>
+							{row.location?.documentTitle ??
+								(locationsReady ? 'Página não encontrada no servidor' : 'Localização indisponível')}
+						</h2>
 						{#if row.location}
 							<p>
 								Página {row.location.pageNumber} · {row.draft.text.length.toLocaleString('pt-BR')} caracteres
@@ -109,8 +153,10 @@
 									>O servidor possui uma versão igual ou mais recente; revise antes de salvar.</span
 								>
 							{/if}
-						{:else}
+						{:else if locationsReady}
 							<p>O documento pode ter sido excluído ou o acesso não está mais disponível.</p>
+						{:else}
+							<p>A localização desta página ainda não pôde ser confirmada.</p>
 						{/if}
 						<pre>{row.draft.text.slice(0, 600)}{row.draft.text.length > 600 ? '…' : ''}</pre>
 					</div>
@@ -252,6 +298,7 @@
 		text-align: center;
 	}
 
+	.location-warning,
 	.error {
 		display: flex;
 		align-items: center;
@@ -262,9 +309,36 @@
 		background: rgb(155 63 54 / 7%);
 	}
 
+	.location-warning {
+		border-left-color: var(--accent);
+		background: rgb(166 94 67 / 7%);
+	}
+
+	.location-warning p,
 	.error p {
 		margin: 0;
 		color: var(--danger);
+	}
+
+	.location-warning p {
+		color: var(--accent-strong);
+	}
+
+	.location-warning button {
+		min-height: 2.45rem;
+		padding: 0.55rem 0.75rem;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--radius-sm);
+		background: var(--surface-strong);
+		color: var(--ink);
+		font-weight: 720;
+		cursor: pointer;
+	}
+
+	.location-status {
+		margin: 0;
+		color: var(--muted);
+		font-size: 0.78rem;
 	}
 
 	@media (max-width: 700px) {
