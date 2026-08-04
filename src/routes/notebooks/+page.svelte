@@ -1,11 +1,13 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import Button from '$lib/components/Button.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import NotebookCard from '$lib/components/NotebookCard.svelte';
 	import type { NotebookSummary } from '$lib/domain/notebook';
 	import { createNotebook, listNotebooks } from '$lib/services/notebooks';
+	import { RequestVersion } from '$lib/services/request-version';
 
+	const refreshRequests = new RequestVersion();
 	let notebooks = $state<readonly NotebookSummary[]>([]);
 	let loading = $state(true);
 	let creating = $state(false);
@@ -14,15 +16,19 @@
 	let description = $state('');
 	let error = $state<string | null>(null);
 
-	async function refresh() {
+	async function refresh(version = refreshRequests.next()) {
 		loading = true;
 		error = null;
 		try {
-			notebooks = await listNotebooks();
+			const loaded = await listNotebooks();
+			if (!refreshRequests.isCurrent(version)) return;
+			notebooks = loaded;
 		} catch {
-			error = 'Não foi possível carregar os cadernos agora.';
+			if (refreshRequests.isCurrent(version)) {
+				error = 'Não foi possível carregar os cadernos agora.';
+			}
 		} finally {
-			loading = false;
+			if (refreshRequests.isCurrent(version)) loading = false;
 		}
 	}
 
@@ -33,10 +39,14 @@
 		error = null;
 		try {
 			const notebook = await createNotebook({ name, description });
-			notebooks = Object.freeze([notebook, ...notebooks]);
+			notebooks = Object.freeze([
+				notebook,
+				...notebooks.filter((candidate) => candidate.id !== notebook.id)
+			]);
 			name = '';
 			description = '';
 			showForm = false;
+			await refresh();
 		} catch {
 			error = 'Não foi possível criar o caderno.';
 		} finally {
@@ -46,6 +56,10 @@
 
 	onMount(() => {
 		void refresh();
+	});
+
+	onDestroy(() => {
+		refreshRequests.next();
 	});
 </script>
 
