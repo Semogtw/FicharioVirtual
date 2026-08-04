@@ -109,8 +109,7 @@ export function startSessionTracking(onExternalSignOut?: () => void): () => void
 		queueMicrotask(() => {
 			if (!active || event === 'INITIAL_SESSION') return;
 			if (session === null) {
-				const shouldNotifyExternalSignOut =
-					!explicitSignOutInProgress && sessionState.authorized;
+				const shouldNotifyExternalSignOut = !explicitSignOutInProgress && sessionState.authorized;
 				invalidateOperations();
 				applySession(null);
 				sessionState.loading = false;
