@@ -1,8 +1,10 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import Button from '$lib/components/Button.svelte';
+	import { RequestVersion } from '$lib/services/request-version';
 	import { loadUsageOverview, type UsageOverview } from '$lib/services/usage';
 
+	const refreshRequests = new RequestVersion();
 	let overview = $state<UsageOverview | null>(null);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
@@ -11,20 +13,28 @@
 		overview ? Math.max(1, ...overview.daily.map((day) => day.ocrPages)) : 1
 	);
 
-	async function refresh() {
+	async function refresh(version = refreshRequests.next()) {
 		loading = true;
 		error = null;
 		try {
-			overview = await loadUsageOverview();
+			const loadedOverview = await loadUsageOverview();
+			if (!refreshRequests.isCurrent(version)) return;
+			overview = loadedOverview;
 		} catch (caught) {
-			error = caught instanceof Error ? caught.message : 'Não foi possível carregar o uso.';
+			if (refreshRequests.isCurrent(version)) {
+				error = caught instanceof Error ? caught.message : 'Não foi possível carregar o uso.';
+			}
 		} finally {
-			loading = false;
+			if (refreshRequests.isCurrent(version)) loading = false;
 		}
 	}
 
 	onMount(() => {
 		void refresh();
+	});
+
+	onDestroy(() => {
+		refreshRequests.next();
 	});
 </script>
 
