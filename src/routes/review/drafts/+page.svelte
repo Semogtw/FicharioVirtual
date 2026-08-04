@@ -1,33 +1,40 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import { discardCorrectionDraft, listCorrectionDrafts } from '$lib/review/draft-index';
 	import type { CorrectionDraft } from '$lib/review/drafts';
 	import { resolveDraftLocations, type DraftLocation } from '$lib/services/draft-locations';
+	import { RequestVersion } from '$lib/services/request-version';
 
 	type DraftRow = {
 		draft: CorrectionDraft;
 		location: DraftLocation | null;
 	};
 
+	const refreshRequests = new RequestVersion();
 	let rows = $state<readonly DraftRow[]>([]);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 
-	async function refresh() {
+	async function refresh(version = refreshRequests.next()) {
 		loading = true;
 		error = null;
 		try {
 			const drafts = listCorrectionDrafts();
 			const locations = await resolveDraftLocations(drafts.map((draft) => draft.pageId));
+			if (!refreshRequests.isCurrent(version)) return;
 			const byPage = new Map(locations.map((location) => [location.pageId, location] as const));
-			rows = Object.freeze(
+			const loadedRows = Object.freeze(
 				drafts.map((draft) => Object.freeze({ draft, location: byPage.get(draft.pageId) ?? null }))
 			);
+			rows = loadedRows;
 		} catch (caught) {
-			error = caught instanceof Error ? caught.message : 'Não foi possível carregar os rascunhos.';
+			if (refreshRequests.isCurrent(version)) {
+				error =
+					caught instanceof Error ? caught.message : 'Não foi possível carregar os rascunhos.';
+			}
 		} finally {
-			loading = false;
+			if (refreshRequests.isCurrent(version)) loading = false;
 		}
 	}
 
@@ -45,6 +52,10 @@
 
 	onMount(() => {
 		void refresh();
+	});
+
+	onDestroy(() => {
+		refreshRequests.next();
 	});
 </script>
 
