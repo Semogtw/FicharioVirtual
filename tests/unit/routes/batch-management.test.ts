@@ -71,7 +71,8 @@ describe('batch document management routes', () => {
 		const organization = read('src/routes/library/organize/+page.svelte');
 		const tags = read('src/routes/library/tags/+page.svelte');
 
-		expect(organization.match(/disabled=\{row\.saving\}/g)).toHaveLength(2);
+		expect(organization.match(/disabled=\{row\.saving\}/g)).toHaveLength(1);
+		expect(organization).toContain('disabled={row.saving || !notebookOptionsReady}');
 		expect(tags).toContain('disabled={saving || loadingAssignments || pendingDocumentId !== null}');
 	});
 });
