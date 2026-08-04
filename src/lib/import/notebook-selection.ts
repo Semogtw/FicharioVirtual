@@ -25,6 +25,29 @@ export function resolveRequestedNotebookId(
 		: '';
 }
 
+export type ImportNotebookSelection = Readonly<{
+	notebookId: string;
+	requiresResolution: boolean;
+}>;
+
+export function resolveImportNotebookSelection(
+	requestedNotebookId: string | null,
+	notebooks: readonly NotebookIdentity[],
+	optionsReady: boolean
+): ImportNotebookSelection {
+	if (requestedNotebookId === null) {
+		return Object.freeze({ notebookId: '', requiresResolution: false });
+	}
+	if (!optionsReady) {
+		return Object.freeze({ notebookId: '', requiresResolution: true });
+	}
+	const notebookId = resolveRequestedNotebookId(requestedNotebookId, notebooks);
+	return Object.freeze({
+		notebookId,
+		requiresResolution: notebookId === ''
+	});
+}
+
 export function importSelectionUrl(currentUrl: URL, notebookId: string): URL {
 	const url = new URL(currentUrl);
 	if (notebookId === '') {
