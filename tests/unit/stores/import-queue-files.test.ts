@@ -1,7 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const userId = '11111111-1111-4111-8111-111111111111';
-
 const dependencies = vi.hoisted(() => ({
 	prepareImage: vi.fn(async (file: File) => ({
 		image: new Blob(['prepared'], { type: 'image/webp' }),
