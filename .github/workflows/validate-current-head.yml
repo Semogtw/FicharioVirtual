@@ -91,6 +91,24 @@ jobs:
         continue-on-error: true
         run: pnpm verify
 
+      - name: Prepare Prettier repair patch
+        id: formatting
+        if: steps.frontend.outcome == 'failure'
+        continue-on-error: true
+        run: |
+          pnpm exec prettier --write .
+          git diff --binary -- . > /tmp/prettier-repair.patch
+          test -s /tmp/prettier-repair.patch
+
+      - name: Upload Prettier repair patch
+        if: steps.formatting.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: prettier-repair-${{ github.sha }}
+          path: /tmp/prettier-repair.patch
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Run offline source gates
         id: source
         continue-on-error: true
