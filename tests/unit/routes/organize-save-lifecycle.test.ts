@@ -16,8 +16,6 @@ describe('document organization save lifecycle', () => {
 		expect(source).toMatch(
 			/finally \{[\s\S]*if \(routeLifecycle\.isCurrent\(lifecycleVersion\)\) row\.saving = false;/
 		);
-		expect(source).toMatch(
-			/onDestroy\(\(\) => \{[\s\S]*routeLifecycle\.next\(\);[\s\S]*\}\);/
-		);
+		expect(source).toMatch(/onDestroy\(\(\) => \{[\s\S]*routeLifecycle\.next\(\);[\s\S]*\}\);/);
 	});
 });
