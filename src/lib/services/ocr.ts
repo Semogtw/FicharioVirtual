@@ -14,7 +14,7 @@ export type OcrFunctionClient = {
 	functions: {
 		invoke(
 			name: 'process-ocr',
-			options: { body: { pageId: string } }
+			options: { body: { pageId: string }; signal?: AbortSignal }
 		): Promise<{ data: unknown; error: null | { context?: unknown; message?: string } }>;
 	};
 };
@@ -161,13 +161,23 @@ function parseResult(data: unknown): OcrRunResult {
 	throw new OcrProcessingError('ocr_response_invalid', true);
 }
 
+function abortError() {
+	return new DOMException('OCR request was cancelled', 'AbortError');
+}
+
 export async function processPageOcr(
 	pageId: string,
-	client?: OcrFunctionClient
+	client?: OcrFunctionClient,
+	options: { signal?: AbortSignal } = {}
 ): Promise<OcrRunResult> {
 	if (!UUID.test(pageId)) throw new TypeError('Invalid page identifier');
+	if (options.signal?.aborted) throw abortError();
 	const gateway = client ?? defaultClient();
-	const { data, error } = await gateway.functions.invoke('process-ocr', { body: { pageId } });
+	const { data, error } = await gateway.functions.invoke('process-ocr', {
+		body: { pageId },
+		signal: options.signal
+	});
+	if (options.signal?.aborted) throw abortError();
 	if (error) throw await mappedError(error);
 	return parseResult(data);
 }
