@@ -6,16 +6,25 @@
 	let email = $state('');
 	let password = $state('');
 	let submitting = $state(false);
+	let navigationError = $state<string | null>(null);
 
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
 		if (submitting) return;
 		submitting = true;
+		navigationError = null;
 		try {
-			await authenticate(email, password);
-			await goto('/');
-		} catch {
-			// The store exposes a safe, user-facing error message.
+			try {
+				await authenticate(email, password);
+			} catch {
+				// The store exposes a safe, user-facing authentication error.
+				return;
+			}
+			try {
+				await goto('/');
+			} catch {
+				navigationError = 'Acesso confirmado, mas não foi possível abrir o fichário.';
+			}
 		} finally {
 			submitting = false;
 		}
@@ -64,8 +73,8 @@
 				/>
 			</div>
 
-			{#if sessionState.error}
-				<p class="error" role="alert">{sessionState.error}</p>
+			{#if sessionState.error ?? navigationError}
+				<p class="error" role="alert">{sessionState.error ?? navigationError}</p>
 			{/if}
 
 			<Button
