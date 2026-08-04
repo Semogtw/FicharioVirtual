@@ -151,6 +151,8 @@ describe('session operation ordering', () => {
 		await Promise.resolve();
 		expect(onExternalSignOut).not.toHaveBeenCalled();
 
+		sessionState.user = authenticatedSession.user;
+		sessionState.authorized = true;
 		tracking.callback?.('SIGNED_OUT', null);
 		await Promise.resolve();
 		expect(onExternalSignOut).toHaveBeenCalledOnce();
@@ -161,6 +163,8 @@ describe('session operation ordering', () => {
 	it('does not revalidate routes for the explicit sign-out that already owns navigation', async () => {
 		const onExternalSignOut = vi.fn();
 		const stopTracking = startSessionTracking(onExternalSignOut);
+		sessionState.user = authenticatedSession.user;
+		sessionState.authorized = true;
 		auth.signOut.mockImplementationOnce(async () => {
 			tracking.callback?.('SIGNED_OUT', null);
 			await Promise.resolve();
