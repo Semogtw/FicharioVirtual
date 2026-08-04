@@ -30,6 +30,7 @@
 		if (signingOut || exporting) return;
 		signingOut = true;
 		error = null;
+		message = null;
 		try {
 			await endSession();
 			await goto('/login/');
