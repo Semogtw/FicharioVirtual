@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const userId = '11111111-1111-4111-8111-111111111111';
+
 const dependencies = vi.hoisted(() => ({
 	prepareImage: vi.fn(async (file: File) => ({
 		image: new Blob(['prepared'], { type: 'image/webp' }),
@@ -16,8 +18,8 @@ const dependencies = vi.hoisted(() => ({
 		pageId: crypto.randomUUID(),
 		ocrJobId: crypto.randomUUID(),
 		sha256: 'a'.repeat(64),
-		storagePath: 'user/document/original.webp',
-		thumbnailPath: 'user/document/thumbnail.webp'
+		storagePath: `${userId}/document/original.webp`,
+		thumbnailPath: `${userId}/document/thumbnail.webp`
 	})),
 	recordOcrConsent: vi.fn(async () => undefined),
 	processPageOcr: vi.fn(async () => ({
@@ -44,6 +46,10 @@ vi.mock('$lib/services/ocr', async (importOriginal) => {
 	const original = await importOriginal<typeof import('$lib/services/ocr')>();
 	return { ...original, processPageOcr: dependencies.processPageOcr };
 });
+
+vi.mock('$lib/stores/session.svelte', () => ({
+	sessionState: { user: { id: userId } }
+}));
 
 import { addImages, importQueue, removeImport } from '../../../src/lib/stores/import-queue.svelte';
 
