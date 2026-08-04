@@ -23,8 +23,6 @@ describe('settings logout completion', () => {
 		expect(source).toMatch(
 			/await endSession\(\);[\s\S]*if \(!signOutRequests\.isCurrent\(version\)\) return;[\s\S]*signedOut = true;[\s\S]*await goto\('\/login\/'\);/
 		);
-		expect(source).toMatch(
-			/onDestroy\(\(\) => \{[\s\S]*signOutRequests\.next\(\);[\s\S]*\}\);/
-		);
+		expect(source).toMatch(/onDestroy\(\(\) => \{[\s\S]*signOutRequests\.next\(\);[\s\S]*\}\);/);
 	});
 });
