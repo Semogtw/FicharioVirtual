@@ -147,13 +147,7 @@ export class BrowserExclusiveCoordinator {
 			return true;
 		}
 		if (existing.state === 'invalid') return false;
-		if (
-			existing.state === 'valid' &&
-			existing.lease.ownerId !== this.ownerId &&
-			existing.lease.expiresAt > this.now()
-		) {
-			return false;
-		}
+		if (existing.state === 'valid' && existing.lease.expiresAt > this.now()) return false;
 		if (!this.writeLease(key)) {
 			await task();
 			return true;
