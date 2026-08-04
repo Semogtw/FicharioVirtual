@@ -1,8 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { UploadedPdf } from '../../../src/lib/pdf/upload';
+import type { OcrResumeSummary } from '../../../src/lib/services/ocr-resume';
 
-const resume = vi.hoisted(() => ({
-	resumeDocumentOcr: vi.fn()
+function deferred<T>() {
+	let resolve!: (value: T) => void;
+	const promise = new Promise<T>((next) => {
+		resolve = next;
+	});
+	return { promise, resolve };
+}
+
+const dependencies = vi.hoisted(() => ({
+	resumeDocumentOcr: vi.fn(),
+	saveStoredPdfImport: vi.fn(async () => undefined),
+	deleteStoredPdfImport: vi.fn(async () => undefined),
+	createImportSession: vi.fn(async () => ({
+		id: '22222222-2222-4222-8222-222222222222',
+		userId: '11111111-1111-4111-8111-111111111111'
+	})),
+	updateImportSession: vi.fn(async () => undefined)
 }));
 
 vi.mock('$lib/pdf/upload', async (importOriginal) => {
@@ -10,8 +26,20 @@ vi.mock('$lib/pdf/upload', async (importOriginal) => {
 	return { ...original, uploadPdf: vi.fn() };
 });
 
+vi.mock('$lib/pdf/resume-store', () => ({
+	saveStoredPdfImport: dependencies.saveStoredPdfImport,
+	deleteStoredPdfImport: dependencies.deleteStoredPdfImport,
+	listStoredPdfImports: vi.fn(async () => [])
+}));
+
+vi.mock('$lib/services/import-sessions', () => ({
+	createImportSession: dependencies.createImportSession,
+	updateImportSession: dependencies.updateImportSession,
+	listActiveImportSessions: vi.fn(async () => [])
+}));
+
 vi.mock('$lib/services/ocr-resume', () => ({
-	resumeDocumentOcr: resume.resumeDocumentOcr
+	resumeDocumentOcr: dependencies.resumeDocumentOcr
 }));
 
 import {
@@ -74,17 +102,20 @@ function waitingItem(): PdfQueueItem {
 describe('PDF OCR resume cancellation', () => {
 	beforeEach(() => {
 		for (const item of [...pdfImportQueue.items]) removePdfImport(item.id);
-		resume.resumeDocumentOcr.mockReset();
+		dependencies.resumeDocumentOcr.mockReset();
+		dependencies.saveStoredPdfImport.mockClear();
+		dependencies.deleteStoredPdfImport.mockClear();
+		dependencies.createImportSession.mockClear();
+		dependencies.updateImportSession.mockClear();
 	});
 
-	it('connects the queue cancel action to the active resume signal', async () => {
+	it('preserves a valid completion returned after the active signal was cancelled', async () => {
+		const request = deferred<OcrResumeSummary>();
 		let signal: AbortSignal | undefined;
-		let release: (() => void) | undefined;
-		resume.resumeDocumentOcr.mockImplementation(
-			async (_documentId: string, options?: { signal?: AbortSignal }) => {
+		dependencies.resumeDocumentOcr.mockImplementation(
+			(_documentId: string, options?: { signal?: AbortSignal }) => {
 				signal = options?.signal;
-				await new Promise<void>((resolve) => (release = resolve));
-				return { completed: 2, needsReview: 0, pending: 1, failed: 0 };
+				return request.promise;
 			}
 		);
 		const item = waitingItem();
@@ -95,8 +126,9 @@ describe('PDF OCR resume cancellation', () => {
 		cancelPdfImport(item.id);
 
 		expect(signal?.aborted).toBe(true);
-		release?.();
+		request.resolve({ completed: 2, needsReview: 0, pending: 1, failed: 0 });
 		await retry;
+
 		expect(item.status).toBe('waiting');
 		expect(item.result).toEqual(
 			expect.objectContaining({ ocrCompleted: 2, ocrPending: 1, ocrFailed: 0 })
@@ -104,7 +136,7 @@ describe('PDF OCR resume cancellation', () => {
 	});
 
 	it('reports an aborted resume as cancelled instead of a pending failure', async () => {
-		resume.resumeDocumentOcr.mockImplementation(
+		dependencies.resumeDocumentOcr.mockImplementation(
 			(_documentId: string, options?: { signal?: AbortSignal }) =>
 				new Promise((_resolve, reject) => {
 					options?.signal?.addEventListener(
