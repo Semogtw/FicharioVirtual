@@ -176,4 +176,73 @@ describe('session operation ordering', () => {
 		expect(onExternalSignOut).not.toHaveBeenCalled();
 		stopTracking();
 	});
+
+	it('revalidates routes when an external sign-out supersedes pending initialization', async () => {
+		const initialization = deferred<typeof authenticatedSession>();
+		auth.loadAuthorizedSession.mockReturnValueOnce(initialization.promise);
+		const onExternalSessionChange = vi.fn();
+		const stopTracking = startSessionTracking(onExternalSessionChange);
+
+		const initializing = initializeSession();
+		tracking.callback?.('SIGNED_OUT', null);
+		await Promise.resolve();
+
+		expect(onExternalSessionChange).toHaveBeenCalledOnce();
+		expect(sessionState.authorized).toBe(false);
+		expect(sessionState.loading).toBe(false);
+
+		initialization.resolve(authenticatedSession);
+		await initializing;
+
+		expect(sessionState.authorized).toBe(false);
+		expect(sessionState.user).toBeNull();
+		stopTracking();
+	});
+
+	it('restarts authorization and revalidates after an external sign-in during initialization', async () => {
+		const initialization = deferred<null>();
+		auth.loadAuthorizedSession
+			.mockReturnValueOnce(initialization.promise)
+			.mockResolvedValueOnce(authenticatedSession);
+		const onExternalSessionChange = vi.fn();
+		const stopTracking = startSessionTracking(onExternalSessionChange);
+
+		const initializing = initializeSession();
+		tracking.callback?.('SIGNED_IN', authenticatedSession);
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(auth.loadAuthorizedSession).toHaveBeenCalledTimes(2);
+		expect(sessionState.authorized).toBe(true);
+		expect(sessionState.user?.id).toBe('11111111-1111-4111-8111-111111111111');
+		expect(onExternalSessionChange).toHaveBeenCalledOnce();
+
+		initialization.resolve(null);
+		await initializing;
+
+		expect(sessionState.authorized).toBe(true);
+		expect(sessionState.user?.id).toBe('11111111-1111-4111-8111-111111111111');
+		stopTracking();
+	});
+
+	it('revalidates the current route after an external sign-in but not a same-user token refresh', async () => {
+		auth.loadAuthorizedSession.mockResolvedValue(authenticatedSession);
+		const onExternalSessionChange = vi.fn();
+		const stopTracking = startSessionTracking(onExternalSessionChange);
+
+		tracking.callback?.('SIGNED_IN', authenticatedSession);
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(sessionState.authorized).toBe(true);
+		expect(onExternalSessionChange).toHaveBeenCalledOnce();
+
+		onExternalSessionChange.mockClear();
+		tracking.callback?.('TOKEN_REFRESHED', authenticatedSession);
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(onExternalSessionChange).not.toHaveBeenCalled();
+		stopTracking();
+	});
 });
