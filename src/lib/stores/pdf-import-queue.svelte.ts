@@ -182,8 +182,13 @@ export async function retryPdfImport(itemId: string) {
 				item.error = `${item.result.ocrFailed} página(s) não puderam ser lidas automaticamente.`;
 			}
 		} catch (error) {
-			item.status = 'waiting';
-			item.error = message(error);
+			if (error instanceof DOMException && error.name === 'AbortError') {
+				item.status = 'cancelled';
+				item.error = null;
+			} else {
+				item.status = 'waiting';
+				item.error = message(error);
+			}
 		} finally {
 			if (controllers.get(item.id) === controller) controllers.delete(item.id);
 		}
