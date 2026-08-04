@@ -27,7 +27,6 @@
 	let notebookOptionsReady = $state(false);
 	let notebookLoading = $state(true);
 	let notebookError = $state<string | null>(null);
-	let notebookId = $state('');
 	let mode = $state<ImagePreparationMode>('standard');
 	let consent = $state(false);
 	let dragging = $state(false);
@@ -37,6 +36,7 @@
 	let notebookSelection = $derived(
 		resolveImportNotebookSelection(requestedNotebookId, notebooks, notebookOptionsReady)
 	);
+	let notebookId = $derived(notebookSelection.notebookId);
 	let requestedNotebookUnavailable = $derived(
 		requestedNotebookId !== null && notebookOptionsReady && notebookSelection.requiresResolution
 	);
@@ -136,10 +136,6 @@
 
 	$effect(() => {
 		void loadNotebookOptions();
-	});
-
-	$effect(() => {
-		notebookId = notebookSelection.notebookId;
 	});
 
 	onDestroy(() => {
