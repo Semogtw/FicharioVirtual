@@ -1,11 +1,13 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import Button from '$lib/components/Button.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import { processPageOcr } from '$lib/services/ocr';
+	import { RequestVersion } from '$lib/services/request-version';
 	import { listReviewItems, type ReviewItem } from '$lib/services/review';
 
 	const pageSize = 50;
+	const loadRequests = new RequestVersion();
 	let items = $state<readonly ReviewItem[]>([]);
 	let loading = $state(true);
 	let loadingMore = $state(false);
@@ -20,20 +22,33 @@
 		failed: 'Falha permanente'
 	} as const;
 
-	async function load(reset: boolean) {
+	async function load(
+		reset: boolean,
+		version = reset ? loadRequests.next() : loadRequests.current()
+	) {
 		if (!reset && loadingMore) return;
-		if (reset) loading = true;
-		else loadingMore = true;
+		const offset = reset ? 0 : items.length;
+		if (reset) {
+			loading = true;
+			loadingMore = false;
+		} else {
+			loadingMore = true;
+		}
 		error = null;
 		try {
-			const page = await listReviewItems({ limit: pageSize, offset: reset ? 0 : items.length });
+			const page = await listReviewItems({ limit: pageSize, offset });
+			if (!loadRequests.isCurrent(version)) return;
 			items = reset ? page : Object.freeze([...items, ...page]);
 			hasMore = page.length === pageSize;
 		} catch {
-			error = 'Não foi possível carregar a fila de revisão.';
+			if (loadRequests.isCurrent(version)) {
+				error = 'Não foi possível carregar a fila de revisão.';
+			}
 		} finally {
-			loading = false;
-			loadingMore = false;
+			if (loadRequests.isCurrent(version)) {
+				loading = false;
+				loadingMore = false;
+			}
 		}
 	}
 
@@ -53,6 +68,10 @@
 
 	onMount(() => {
 		void load(true);
+	});
+
+	onDestroy(() => {
+		loadRequests.next();
 	});
 </script>
 
