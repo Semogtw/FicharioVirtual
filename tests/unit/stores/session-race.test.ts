@@ -209,13 +209,13 @@ describe('session operation ordering', () => {
 
 		const initializing = initializeSession();
 		tracking.callback?.('SIGNED_IN', authenticatedSession);
-		await Promise.resolve();
-		await Promise.resolve();
 
-		expect(auth.loadAuthorizedSession).toHaveBeenCalledTimes(2);
-		expect(sessionState.authorized).toBe(true);
-		expect(sessionState.user?.id).toBe('11111111-1111-4111-8111-111111111111');
-		expect(onExternalSessionChange).toHaveBeenCalledOnce();
+		await vi.waitFor(() => {
+			expect(auth.loadAuthorizedSession).toHaveBeenCalledTimes(2);
+			expect(sessionState.authorized).toBe(true);
+			expect(sessionState.user?.id).toBe('11111111-1111-4111-8111-111111111111');
+			expect(onExternalSessionChange).toHaveBeenCalledOnce();
+		});
 
 		initialization.resolve(null);
 		await initializing;
@@ -231,16 +231,14 @@ describe('session operation ordering', () => {
 		const stopTracking = startSessionTracking(onExternalSessionChange);
 
 		tracking.callback?.('SIGNED_IN', authenticatedSession);
-		await Promise.resolve();
-		await Promise.resolve();
-
-		expect(sessionState.authorized).toBe(true);
-		expect(onExternalSessionChange).toHaveBeenCalledOnce();
+		await vi.waitFor(() => {
+			expect(sessionState.authorized).toBe(true);
+			expect(onExternalSessionChange).toHaveBeenCalledOnce();
+		});
 
 		onExternalSessionChange.mockClear();
 		tracking.callback?.('TOKEN_REFRESHED', authenticatedSession);
-		await Promise.resolve();
-		await Promise.resolve();
+		await vi.waitFor(() => expect(auth.loadAuthorizedSession).toHaveBeenCalledTimes(2));
 
 		expect(onExternalSessionChange).not.toHaveBeenCalled();
 		stopTracking();
