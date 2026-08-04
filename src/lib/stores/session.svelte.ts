@@ -9,6 +9,8 @@ type SessionState = {
 	error: string | null;
 };
 
+type SessionAuthorizationListener = (authorized: boolean) => void;
+
 export const sessionState = $state<SessionState>({
 	loading: true,
 	user: null,
@@ -16,6 +18,7 @@ export const sessionState = $state<SessionState>({
 	error: null
 });
 
+const authorizationListeners = new Set<SessionAuthorizationListener>();
 let operationVersion = 0;
 let explicitSignInOperations = 0;
 let explicitSignOutOperations = 0;
@@ -26,10 +29,29 @@ function message(error: unknown): string {
 		: 'Não foi possível confirmar a sessão agora.';
 }
 
+function publishAuthorization(authorized: boolean) {
+	for (const listener of [...authorizationListeners]) {
+		try {
+			listener(authorized);
+		} catch {
+			// Session state remains authoritative when an optional lifecycle consumer fails.
+		}
+	}
+}
+
 function applySession(session: Session | null) {
-	sessionState.user = session?.user ?? null;
+	const previousUserId = sessionState.user?.id ?? null;
+	const previousAuthorization = sessionState.authorized;
+	const nextUser = session?.user ?? null;
+	sessionState.user = nextUser;
 	sessionState.authorized = session !== null;
 	sessionState.error = null;
+	if (
+		previousAuthorization !== sessionState.authorized ||
+		previousUserId !== (nextUser?.id ?? null)
+	) {
+		publishAuthorization(sessionState.authorized);
+	}
 }
 
 function beginOperation() {
@@ -48,6 +70,11 @@ function invalidateOperations() {
 
 function supersededError() {
 	return new DOMException('Session operation was superseded', 'AbortError');
+}
+
+export function subscribeSessionAuthorization(listener: SessionAuthorizationListener): () => void {
+	authorizationListeners.add(listener);
+	return () => authorizationListeners.delete(listener);
 }
 
 export async function initializeSession(): Promise<Session | null> {
