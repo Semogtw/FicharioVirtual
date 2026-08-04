@@ -147,10 +147,12 @@ describe('image import queue restoration', () => {
 			needsReview: false,
 			warningCount: 0
 		});
-		vi.stubGlobal('URL', {
-			createObjectURL: vi.fn(() => 'blob:preview'),
-			revokeObjectURL: vi.fn()
-		});
+		const NativeURL = URL;
+		class MockURL extends NativeURL {
+			static createObjectURL = vi.fn(() => 'blob:preview');
+			static revokeObjectURL = vi.fn();
+		}
+		vi.stubGlobal('URL', MockURL);
 		const queue = await import('../../../src/lib/stores/import-queue.svelte');
 
 		await queue.restoreImageImports(userId, store);
