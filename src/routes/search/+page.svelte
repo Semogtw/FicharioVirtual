@@ -11,10 +11,13 @@
 
 	const pageSize = 30;
 	const requests = new RequestVersion();
+	const notebookRequests = new RequestVersion();
 	let query = $state('');
 	let notebookId = $state('');
 	let results = $state<readonly SearchResult[]>([]);
 	let notebooks = $state<readonly NotebookSummary[]>([]);
+	let notebookLoading = $state(true);
+	let notebookError = $state<string | null>(null);
 	let loading = $state(false);
 	let loadingMore = $state(false);
 	let error = $state<string | null>(null);
@@ -77,16 +80,24 @@
 		timer = setTimeout(() => void run(true, version), 220);
 	}
 
+	async function loadNotebookOptions(version = notebookRequests.next()) {
+		notebookLoading = true;
+		notebookError = null;
+		try {
+			const items = await listNotebooks();
+			if (!notebookRequests.isCurrent(version)) return;
+			notebooks = items;
+		} catch {
+			if (notebookRequests.isCurrent(version)) {
+				notebookError = 'Não foi possível carregar os cadernos para o filtro.';
+			}
+		} finally {
+			if (notebookRequests.isCurrent(version)) notebookLoading = false;
+		}
+	}
+
 	$effect(() => {
-		let active = true;
-		void listNotebooks()
-			.then((items) => {
-				if (active) notebooks = items;
-			})
-			.catch(() => undefined);
-		return () => {
-			active = false;
-		};
+		void loadNotebookOptions();
 	});
 
 	$effect(() => {
@@ -99,6 +110,7 @@
 
 	onDestroy(() => {
 		requests.next();
+		notebookRequests.next();
 		cancelPending();
 	});
 </script>
@@ -130,7 +142,7 @@
 		</label>
 		<label class="notebook-filter">
 			<span class="visually-hidden">Filtrar por caderno</span>
-			<select bind:value={notebookId} onchange={() => void run(true)}>
+			<select bind:value={notebookId} disabled={notebookLoading} onchange={() => void run(true)}>
 				<option value="">Todos os cadernos</option>
 				{#each notebooks as notebook}
 					<option value={notebook.id}>{notebook.name}</option>
@@ -139,6 +151,17 @@
 		</label>
 		<Button label="Pesquisar" onclick={() => void run(true)} />
 	</section>
+
+	{#if notebookError}
+		<div class="filter-warning" role="status">
+			<p>{notebookError}</p>
+			<Button
+				label="Tentar carregar cadernos"
+				variant="secondary"
+				onclick={() => void loadNotebookOptions()}
+			/>
+		</div>
+	{/if}
 
 	{#if error}
 		<div class="error" role="alert">
@@ -331,6 +354,7 @@
 		text-align: center;
 	}
 
+	.filter-warning,
 	.error {
 		display: flex;
 		align-items: center;
@@ -341,8 +365,21 @@
 		background: rgb(155 63 54 / 7%);
 	}
 
+	.filter-warning {
+		border-left-color: var(--accent);
+		background: rgb(166 94 67 / 7%);
+	}
+
+	.filter-warning p,
 	.error p {
 		margin: 0;
+	}
+
+	.filter-warning p {
+		color: var(--accent-strong);
+	}
+
+	.error p {
 		color: var(--danger);
 	}
 
