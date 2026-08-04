@@ -43,9 +43,7 @@ describe('parseRunnableOcrJobs', () => {
 			])
 		).toThrow('Invalid runnable OCR response');
 		expect(() =>
-			parseRunnableOcrJobs([
-				{ page_id: '11111111-1111-4111-8111-111111111111', attempt_count: 3 }
-			])
+			parseRunnableOcrJobs([{ page_id: '11111111-1111-4111-8111-111111111111', attempt_count: 3 }])
 		).toThrow('Invalid runnable OCR response');
 		expect(() =>
 			parseRunnableOcrJobs([
@@ -69,16 +67,11 @@ describe('listRunnableOcrJobsWithGateway', () => {
 	it('recovers stale claims before selecting due work', async () => {
 		const events: string[] = [];
 		const result = await listRunnableOcrJobsWithGateway(
-			gateway(
-				[{ page_id: '11111111-1111-4111-8111-111111111111', attempt_count: 1 }],
-				events
-			),
+			gateway([{ page_id: '11111111-1111-4111-8111-111111111111', attempt_count: 1 }], events),
 			{ selectionAt, limit: 25 }
 		);
 
-		expect(result).toEqual([
-			{ pageId: '11111111-1111-4111-8111-111111111111', attemptCount: 1 }
-		]);
+		expect(result).toEqual([{ pageId: '11111111-1111-4111-8111-111111111111', attemptCount: 1 }]);
 		expect(events).toEqual(['recover', `list:${selectionAt}:25`]);
 	});
 
