@@ -15,9 +15,18 @@ describe('import notebook query selection', () => {
 			expect(source).toContain("import { replaceState } from '$app/navigation';");
 			expect(source).toContain("import { page } from '$app/state';");
 			expect(source).toContain('parseRequestedNotebookId(page.url.searchParams)');
-			expect(source).toContain('resolveRequestedNotebookId(requestedNotebookId, notebooks)');
+			expect(source).toContain('resolveImportNotebookSelection(');
+			expect(source).toContain('let notebookOptionsReady = $state(false);');
+			expect(source).toContain('let notebookError = $state<string | null>(null);');
+			expect(source).toContain('async function loadNotebookOptions');
+			expect(source).toContain('notebookRequests.isCurrent(version)');
+			expect(source).toContain('onclick={() => void loadNotebookOptions()}');
+			expect(source).toContain('if (notebookSelection.requiresResolution)');
+			expect(source).toContain('O caderno solicitado precisa ser confirmado antes da importação.');
+			expect(source).not.toContain('.catch(() => undefined)');
 			expect(source).toContain('replaceState(url, page.state)');
 			expect(source).not.toContain('onMount(() =>');
+			expect(source).toContain('onDestroy(() =>');
 		}
 	);
 
