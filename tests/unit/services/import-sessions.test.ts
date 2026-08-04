@@ -59,12 +59,12 @@ describe('parseImportSession', () => {
 	});
 
 	it('rejects malformed counters, timestamps, ownership and extra keys', () => {
-		expect(() => parseImportSession(row({ uploaded_items: 2 }), { expectedUserId: userId })).toThrow(
-			'Invalid import session response'
-		);
-		expect(() => parseImportSession(row({ updated_at: 'bad' }), { expectedUserId: userId })).toThrow(
-			'Invalid import session response'
-		);
+		expect(() =>
+			parseImportSession(row({ uploaded_items: 2 }), { expectedUserId: userId })
+		).toThrow('Invalid import session response');
+		expect(() =>
+			parseImportSession(row({ updated_at: 'bad' }), { expectedUserId: userId })
+		).toThrow('Invalid import session response');
 		expect(() =>
 			parseImportSession(row({ user_id: '44444444-4444-4444-8444-444444444444' }), {
 				expectedUserId: userId
