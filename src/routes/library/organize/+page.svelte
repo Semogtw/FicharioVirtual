@@ -48,9 +48,7 @@
 		} catch (caught) {
 			if (documentRequests.isCurrent(version)) {
 				error =
-					caught instanceof Error
-						? caught.message
-						: 'Não foi possível carregar a organização.';
+					caught instanceof Error ? caught.message : 'Não foi possível carregar a organização.';
 			}
 		} finally {
 			if (documentRequests.isCurrent(version)) loading = false;
