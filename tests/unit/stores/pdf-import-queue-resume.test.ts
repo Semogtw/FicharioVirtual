@@ -33,9 +33,14 @@ vi.mock('$lib/stores/session.svelte', () => ({
 
 class MemoryStore implements PdfResumeStore {
 	readonly records = new Map<string, StoredPdfImportRecord>();
+	readonly deleted: Promise<void>;
+	private resolveDeleted!: () => void;
 
 	constructor(record: StoredPdfImportRecord) {
 		this.records.set(record.id, record);
+		this.deleted = new Promise<void>((resolve) => {
+			this.resolveDeleted = resolve;
+		});
 	}
 
 	async put(value: StoredPdfImportRecord) {
@@ -48,6 +53,7 @@ class MemoryStore implements PdfResumeStore {
 
 	async delete(id: string) {
 		this.records.delete(id);
+		this.resolveDeleted();
 	}
 }
 
@@ -132,7 +138,8 @@ describe('PDF import queue restoration', () => {
 				onProgress: expect.any(Function)
 			})
 		);
-		await vi.waitFor(() => expect(store.records.size).toBe(0));
+		await store.deleted;
+		expect(store.records.size).toBe(0);
 		expect(dependencies.updateImportSession).toHaveBeenCalledWith(
 			sessionId,
 			expect.objectContaining({
