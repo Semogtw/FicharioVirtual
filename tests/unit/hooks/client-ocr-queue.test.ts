@@ -8,7 +8,9 @@ const session = readFileSync(new URL('src/lib/stores/session.svelte.ts', reposit
 describe('client OCR queue lifecycle', () => {
 	it('restores imports, resumes after authorization and pauses after session loss', () => {
 		expect(hook).toContain("import { pauseQueue, resumeQueue } from '$lib/import/job-runner';");
-		expect(hook).toContain("import { restoreImageImports } from '$lib/stores/import-queue.svelte';");
+		expect(hook).toContain(
+			"import { restoreImageImports } from '$lib/stores/import-queue.svelte';"
+		);
 		expect(hook).toContain('subscribeSessionAuthorization((authorized) => {');
 		expect(hook).toContain('if (authorized) void resumeQueue();');
 		expect(hook).toContain('else pauseQueue();');
