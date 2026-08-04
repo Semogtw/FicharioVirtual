@@ -53,9 +53,7 @@ describe('batch document management routes', () => {
 		expect(tags).toContain(
 			'if (!activeTag || saving || !assignmentsReady || pendingDocumentId) return;'
 		);
-		expect(tags).toContain(
-			'disabled={saving || !assignmentsReady || pendingDocumentId !== null}'
-		);
+		expect(tags).toContain('disabled={saving || !assignmentsReady || pendingDocumentId !== null}');
 		expect(tags).toContain('onclick={() => void loadAssignments(activeTag.id)}');
 	});
 

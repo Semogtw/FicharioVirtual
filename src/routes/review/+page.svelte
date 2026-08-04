@@ -64,8 +64,7 @@
 			await load(true);
 		} catch (caught) {
 			if (retryRequests.isCurrent(version)) {
-				error =
-					caught instanceof Error ? caught.message : 'A página ainda não pôde ser retomada.';
+				error = caught instanceof Error ? caught.message : 'A página ainda não pôde ser retomada.';
 			}
 		} finally {
 			if (retryRequests.isCurrent(version)) processingPageId = null;
