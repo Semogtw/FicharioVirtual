@@ -33,8 +33,6 @@ describe('import queue cross-tab exclusion', () => {
 		expectSharedExclusion(pdfQueue);
 		expect(pdfQueue).toContain('const IMPORT_LOCK_RETRY_MS = 1_000;');
 		expect(pdfQueue).toContain('let lockRetryTimer: ReturnType<typeof setTimeout> | null = null;');
-		expect(pdfQueue).toMatch(
-			/if \(!acquired\) \{\s*schedulePumpRetry\(\);\s*return;\s*\}/
-		);
+		expect(pdfQueue).toMatch(/if \(!acquired\) \{\s*schedulePumpRetry\(\);\s*return;\s*\}/);
 	});
 });
