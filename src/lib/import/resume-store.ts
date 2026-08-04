@@ -11,13 +11,7 @@ const STORE_NAME = 'image-imports';
 const DATABASE_VERSION = 1;
 
 export type StoredImageImportStatus =
-	| 'queued'
-	| 'preparing'
-	| 'uploading'
-	| 'reading'
-	| 'waiting'
-	| 'failed'
-	| 'cancelled';
+	'queued' | 'preparing' | 'uploading' | 'reading' | 'waiting' | 'failed' | 'cancelled';
 
 export type StoredImageImportRecord = Readonly<{
 	version: 1;
@@ -55,11 +49,7 @@ function hasExactKeys(record: Record<string, unknown>, expected: readonly string
 }
 
 function validLocalText(value: string, minimum: number, maximum: number) {
-	return (
-		value.length >= minimum &&
-		value.length <= maximum &&
-		!/[\u0000-\u001f\u007f]/.test(value)
-	);
+	return value.length >= minimum && value.length <= maximum && !/[\u0000-\u001f\u007f]/.test(value);
 }
 
 function parseUploadedPage(data: unknown, userId: string): UploadedPage | null {
@@ -195,8 +185,10 @@ function requestResult<T>(request: IDBRequest<T>): Promise<T> {
 function transactionDone(transaction: IDBTransaction): Promise<void> {
 	return new Promise<void>((resolve, reject) => {
 		transaction.oncomplete = () => resolve();
-		transaction.onerror = () => reject(transaction.error ?? new Error('IndexedDB transaction failed'));
-		transaction.onabort = () => reject(transaction.error ?? new Error('IndexedDB transaction aborted'));
+		transaction.onerror = () =>
+			reject(transaction.error ?? new Error('IndexedDB transaction failed'));
+		transaction.onabort = () =>
+			reject(transaction.error ?? new Error('IndexedDB transaction aborted'));
 	});
 }
 
