@@ -67,12 +67,18 @@ function ensureConsent() {
 	return consentPromise;
 }
 
-async function processOcr(item: ImportQueueItem) {
+function abortError() {
+	return new DOMException('OCR request was cancelled', 'AbortError');
+}
+
+async function processOcr(item: ImportQueueItem, signal?: AbortSignal) {
 	if (!item.result) throw new Error('A página importada não está disponível para leitura.');
 	item.status = 'reading';
 	item.error = null;
 	try {
-		const result = await processPageOcr(item.result.pageId);
+		if (signal?.aborted) throw abortError();
+		const result = await processPageOcr(item.result.pageId, undefined, { signal });
+		if (signal?.aborted) throw abortError();
 		if (result.state === 'complete' || result.state === 'already_complete') {
 			item.status = result.needsReview ? 'needs_review' : 'complete';
 			return;
@@ -83,6 +89,7 @@ async function processOcr(item: ImportQueueItem) {
 				? 'A cota diária foi atingida; o arquivo permanece salvo para continuar depois.'
 				: 'A leitura ficou pendente e poderá ser retomada sem reenviar o arquivo.';
 	} catch (error) {
+		if (error instanceof DOMException && error.name === 'AbortError') throw error;
 		if (error instanceof OcrProcessingError) {
 			item.status = error.retryable || error.code === 'gemini_daily_quota' ? 'waiting' : 'failed';
 			item.error = error.message;
@@ -116,7 +123,7 @@ async function processItem(item: ImportQueueItem) {
 			signal: controller.signal
 		});
 		if (controller.signal.aborted) throw new DOMException('Import cancelled', 'AbortError');
-		await processOcr(item);
+		await processOcr(item, controller.signal);
 	} catch (error) {
 		if (error instanceof DOMException && error.name === 'AbortError') {
 			item.status = item.result ? 'waiting' : 'cancelled';
@@ -167,10 +174,30 @@ export function cancelImport(itemId: string) {
 	if (item?.status === 'queued') item.status = 'cancelled';
 }
 
+async function retryOcr(item: ImportQueueItem) {
+	const controller = new AbortController();
+	controllers.set(item.id, controller);
+	try {
+		await processOcr(item, controller.signal);
+	} catch (error) {
+		if (error instanceof DOMException && error.name === 'AbortError') {
+			if (importQueue.items.includes(item)) {
+				item.status = 'cancelled';
+				item.error = null;
+			}
+		} else if (importQueue.items.includes(item)) {
+			item.status = 'waiting';
+			item.error = message(error);
+		}
+	} finally {
+		if (controllers.get(item.id) === controller) controllers.delete(item.id);
+	}
+}
+
 export function retryImport(itemId: string) {
 	const item = importQueue.items.find((candidate) => candidate.id === itemId);
 	if (!item || !['failed', 'cancelled', 'waiting'].includes(item.status)) return;
-	if (item.result) void processOcr(item);
+	if (item.result) void retryOcr(item);
 	else void processItem(item);
 }
 
