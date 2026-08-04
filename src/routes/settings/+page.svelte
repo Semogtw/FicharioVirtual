@@ -3,7 +3,7 @@
 	import Button from '$lib/components/Button.svelte';
 	import InstallAppButton from '$lib/components/InstallAppButton.svelte';
 	import { createPortableExport, downloadPortableExport } from '$lib/services/export';
-	import { getSupabaseClient } from '$lib/services/supabase';
+	import { endSession, sessionState } from '$lib/stores/session.svelte';
 
 	let exporting = $state(false);
 	let signingOut = $state(false);
@@ -30,13 +30,14 @@
 		if (signingOut) return;
 		signingOut = true;
 		error = null;
-		const { error: signOutError } = await getSupabaseClient().auth.signOut();
-		if (signOutError) {
-			error = 'Não foi possível encerrar a sessão agora.';
+		try {
+			await endSession();
+			await goto('/login/');
+		} catch {
+			error = sessionState.error ?? 'Não foi possível encerrar a sessão agora.';
+		} finally {
 			signingOut = false;
-			return;
 		}
-		await goto('/login/');
 	}
 </script>
 
