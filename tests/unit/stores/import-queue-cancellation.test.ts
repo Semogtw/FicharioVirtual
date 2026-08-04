@@ -98,10 +98,8 @@ describe('image import queue OCR cancellation', () => {
 				pageId: '11111111-1111-4111-8111-111111111111',
 				ocrJobId: '33333333-3333-4333-8333-333333333333',
 				sha256: 'a'.repeat(64),
-				storagePath:
-					'44444444-4444-4444-8444-444444444444/document/original.webp',
-				thumbnailPath:
-					'44444444-4444-4444-8444-444444444444/document/thumbnail.webp'
+				storagePath: '44444444-4444-4444-8444-444444444444/document/original.webp',
+				thumbnailPath: '44444444-4444-4444-8444-444444444444/document/thumbnail.webp'
 			},
 			duplicateDocumentId: null,
 			error: 'A leitura ficou pendente.'
