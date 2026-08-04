@@ -29,6 +29,18 @@ describe('batch document management routes', () => {
 		expect(tags).toContain('onclick={() => void initialize()}');
 	});
 
+	it('ignores stale tag assignments and snapshots the mutation target', () => {
+		const tags = read('src/routes/library/tags/+page.svelte');
+
+		expect(tags).toContain("import { RequestVersion } from '$lib/services/request-version';");
+		expect(tags).toContain('const assignmentRequests = new RequestVersion();');
+		expect(tags).toContain('assignmentRequests.isCurrent(version)');
+		expect(tags).toContain('activeTagId !== tagId');
+		expect(tags).toContain('const tagId = activeTag.id;');
+		expect(tags).toContain('await setTagMembership(tagId, documentId, assigned);');
+		expect(tags).toContain('tag.id === tagId');
+	});
+
 	it('prevents edits from changing context while a save is in flight', () => {
 		const organization = read('src/routes/library/organize/+page.svelte');
 		const tags = read('src/routes/library/tags/+page.svelte');
