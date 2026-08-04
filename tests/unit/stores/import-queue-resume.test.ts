@@ -45,7 +45,7 @@ vi.mock('$lib/services/ocr', async (importOriginal) => {
 });
 
 vi.mock('$lib/stores/session.svelte', () => ({
-	sessionState: { user: { id: userId } }
+	sessionState: { user: { id: '11111111-1111-4111-8111-111111111111' } }
 }));
 
 class MemoryStore implements ImportResumeStore {
