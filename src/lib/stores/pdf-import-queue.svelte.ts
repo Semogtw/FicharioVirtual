@@ -1,11 +1,24 @@
 import {
+	deleteStoredPdfImport,
+	listStoredPdfImports,
+	saveStoredPdfImport,
+	type PdfResumeStore,
+	type StoredPdfImportRecord
+} from '$lib/pdf/resume-store';
+import {
 	DuplicatePdfError,
 	PdfConsentRequiredError,
 	uploadPdf,
 	type PdfUploadProgress,
 	type UploadedPdf
 } from '$lib/pdf/upload';
+import {
+	createImportSession,
+	listActiveImportSessions,
+	updateImportSession
+} from '$lib/services/import-sessions';
 import { resumeDocumentOcr, type OcrResumeSummary } from '$lib/services/ocr-resume';
+import { sessionState } from '$lib/stores/session.svelte';
 
 export type PdfQueueStatus =
 	| 'queued'
@@ -23,11 +36,17 @@ export type PdfQueueStatus =
 
 export type PdfQueueItem = {
 	id: string;
+	userId: string;
+	sessionId: string | null;
+	resumeKey: string;
 	file: File;
 	notebookId: string | null;
 	consentGranted: boolean;
 	status: PdfQueueStatus;
 	progress: PdfUploadProgress | null;
+	inspected: boolean;
+	uploaded: boolean;
+	published: boolean;
 	result: UploadedPdf | null;
 	duplicateDocumentId: string | null;
 	error: string | null;
@@ -37,11 +56,24 @@ export const pdfImportQueue = $state<{ items: PdfQueueItem[] }>({ items: [] });
 
 const controllers = new Map<string, AbortController>();
 const queuedFiles = new WeakSet<File>();
+const persistenceChains = new Map<string, Promise<void>>();
+const itemStores = new Map<string, PdfResumeStore>();
+const restoringUsers = new Set<string>();
 let running = false;
+let importChannel: BroadcastChannel | null = null;
 
-function id() {
+type LockManagerLike = {
+	request(
+		name: string,
+		options: { mode: 'exclusive'; ifAvailable: true },
+		callback: (lock: unknown | null) => Promise<void>
+	): Promise<void>;
+};
+
+function id(prefix = 'pdf') {
 	return (
-		globalThis.crypto?.randomUUID?.() ?? `pdf_${Date.now()}_${Math.random().toString(36).slice(2)}`
+		globalThis.crypto?.randomUUID?.() ??
+		`${prefix}_${Date.now()}_${Math.random().toString(36).slice(2)}`
 	);
 }
 
@@ -80,6 +112,142 @@ function phaseStatus(progress: PdfUploadProgress): PdfQueueStatus {
 	return progress.phase;
 }
 
+function terminalStatus(item: PdfQueueItem) {
+	return ['complete', 'needs_review', 'duplicate', 'cancelled'].includes(item.status);
+}
+
+function storedStatus(item: PdfQueueItem): StoredPdfImportRecord['status'] {
+	if (terminalStatus(item)) return 'cancelled';
+	return item.status;
+}
+
+function storedRecord(item: PdfQueueItem): StoredPdfImportRecord {
+	return {
+		version: 1,
+		id: item.id,
+		userId: item.userId,
+		sessionId: item.sessionId,
+		resumeKey: item.resumeKey,
+		file: item.file,
+		notebookId: item.notebookId,
+		consentGranted: item.consentGranted,
+		status: storedStatus(item),
+		inspected: item.inspected,
+		uploaded: item.uploaded,
+		published: item.published,
+		error: item.error?.slice(0, 500) ?? null,
+		updatedAt: new Date().toISOString()
+	};
+}
+
+async function saveLocalItem(item: PdfQueueItem, store?: PdfResumeStore) {
+	if (store) await saveStoredPdfImport(storedRecord(item), store);
+	else await saveStoredPdfImport(storedRecord(item));
+}
+
+async function deleteLocalItem(item: PdfQueueItem, store?: PdfResumeStore) {
+	if (store) await deleteStoredPdfImport(item.id, store);
+	else await deleteStoredPdfImport(item.id);
+}
+
+function remoteStatus(item: PdfQueueItem) {
+	if (item.published) return 'completed' as const;
+	if (item.status === 'queued') return 'draft' as const;
+	if (item.status === 'inspecting') return 'preparing' as const;
+	if (['uploading', 'rendering', 'publishing'].includes(item.status)) return 'uploading' as const;
+	if (item.status === 'failed') return 'failed' as const;
+	if (item.status === 'cancelled' || item.status === 'duplicate') return 'cancelled' as const;
+	return 'processing' as const;
+}
+
+async function synchronizeItem(item: PdfQueueItem) {
+	const store = itemStores.get(item.id);
+	if (!item.published && !terminalStatus(item)) {
+		try {
+			await saveLocalItem(item, store);
+		} catch {
+			// Remote progress remains available when local persistence is unavailable.
+		}
+	}
+
+	try {
+		if (item.sessionId === null) {
+			const session = await createImportSession({ localResumeKey: item.resumeKey, totalItems: 1 });
+			if (session.userId !== item.userId) return;
+			item.sessionId = session.id;
+			if (!item.published && !terminalStatus(item)) {
+				try {
+					await saveLocalItem(item, store);
+				} catch {
+					// The remote session remains idempotent without local persistence.
+				}
+			}
+		}
+
+		const sessionId = item.sessionId;
+		if (sessionId === null) return;
+		const status = remoteStatus(item);
+		await updateImportSession(sessionId, {
+			status,
+			totalItems: 1,
+			preparedItems: item.inspected ? 1 : 0,
+			uploadedItems: item.uploaded ? 1 : 0,
+			completedItems: item.published ? 1 : 0,
+			lastErrorCode: item.status === 'failed' ? 'pdf_import_failed' : null,
+			finishedAt:
+				status === 'completed' || status === 'cancelled' ? new Date().toISOString() : null
+		});
+	} catch {
+		// A later transition or app opening retries the idempotent session update.
+	}
+
+	if (item.published || terminalStatus(item)) {
+		try {
+			await deleteLocalItem(item, store);
+		} catch {
+			// A later cleanup pass can remove the local record.
+		}
+	}
+	if (typeof BroadcastChannel !== 'undefined') {
+		importChannel ??= new BroadcastChannel('fichario-imports');
+		importChannel.postMessage({ type: 'pdf-import-updated', id: item.id, status: item.status });
+	}
+}
+
+function persistItem(item: PdfQueueItem) {
+	const previous = persistenceChains.get(item.id) ?? Promise.resolve();
+	const next = previous
+		.catch(() => undefined)
+		.then(() => synchronizeItem(item))
+		.finally(() => {
+			if (persistenceChains.get(item.id) === next) persistenceChains.delete(item.id);
+		});
+	persistenceChains.set(item.id, next);
+	return next;
+}
+
+async function withImportLock(item: PdfQueueItem, operation: () => Promise<void>) {
+	const lockManager =
+		typeof navigator === 'undefined'
+			? undefined
+			: (navigator as Navigator & { locks?: LockManagerLike }).locks;
+	if (!lockManager) {
+		await operation();
+		return true;
+	}
+	let acquired = false;
+	await lockManager.request(
+		`fichario-import-${item.resumeKey}`,
+		{ mode: 'exclusive', ifAvailable: true },
+		async (lock) => {
+			if (lock === null) return;
+			acquired = true;
+			await operation();
+		}
+	);
+	return acquired;
+}
+
 async function processItem(item: PdfQueueItem) {
 	const controller = new AbortController();
 	controllers.set(item.id, controller);
@@ -87,6 +255,7 @@ async function processItem(item: PdfQueueItem) {
 	item.result = null;
 	item.duplicateDocumentId = null;
 	item.status = 'inspecting';
+	void persistItem(item);
 	try {
 		item.result = await uploadPdf(item.file, {
 			notebookId: item.notebookId,
@@ -95,16 +264,30 @@ async function processItem(item: PdfQueueItem) {
 			onProgress(progress) {
 				item.progress = progress;
 				item.status = phaseStatus(progress);
+				if (progress.phase === 'inspecting' && progress.completed === progress.total) {
+					item.inspected = true;
+				}
+				if (progress.phase === 'uploading' && progress.completed === progress.total) {
+					item.uploaded = true;
+				}
+				if (progress.phase === 'publishing' && progress.completed === progress.total) {
+					item.published = true;
+				}
+				void persistItem(item);
 			}
 		});
+		item.published = true;
 		item.status = pdfQueueStatusFromResult(item.result);
 		if (item.result.ocrFailed > 0) {
 			item.error = `${item.result.ocrFailed} página(s) não puderam ser lidas automaticamente.`;
 		}
+		void persistItem(item);
 	} catch (error) {
 		if (error instanceof DOMException && error.name === 'AbortError') {
-			item.status = 'cancelled';
-			item.error = null;
+			item.status = item.published ? 'waiting' : 'cancelled';
+			item.error = item.published
+				? 'O PDF já foi salvo; as leituras pendentes continuarão automaticamente.'
+				: null;
 		} else if (error instanceof DuplicatePdfError) {
 			item.status = 'duplicate';
 			item.duplicateDocumentId = error.documentId;
@@ -116,10 +299,15 @@ async function processItem(item: PdfQueueItem) {
 			item.status = 'failed';
 			item.error = message(error);
 		}
+		void persistItem(item);
 	} finally {
 		controllers.delete(item.id);
 		item.progress = null;
 	}
+}
+
+function processItemWithLock(item: PdfQueueItem) {
+	return withImportLock(item, () => processItem(item));
 }
 
 async function pump() {
@@ -129,7 +317,7 @@ async function pump() {
 		while (true) {
 			const next = pdfImportQueue.items.find((item) => item.status === 'queued');
 			if (!next) return;
-			await processItem(next);
+			await processItemWithLock(next);
 		}
 	} finally {
 		running = false;
@@ -140,28 +328,40 @@ export function addPdfs(
 	files: readonly File[],
 	options: { notebookId?: string | null; consentGranted: boolean }
 ) {
+	const userId = sessionState.user?.id;
+	if (!userId) return;
 	for (const file of files) {
 		if (queuedFiles.has(file)) continue;
 		queuedFiles.add(file);
-		pdfImportQueue.items.push({
+		const item: PdfQueueItem = {
 			id: id(),
+			userId,
+			sessionId: null,
+			resumeKey: id('resume'),
 			file,
 			notebookId: options.notebookId ?? null,
 			consentGranted: options.consentGranted,
 			status: 'queued',
 			progress: null,
+			inspected: false,
+			uploaded: false,
+			published: false,
 			result: null,
 			duplicateDocumentId: null,
 			error: null
-		});
+		};
+		pdfImportQueue.items.push(item);
+		void persistItem(item).then(() => pump());
 	}
-	void pump();
 }
 
 export function cancelPdfImport(itemId: string) {
 	controllers.get(itemId)?.abort();
 	const item = pdfImportQueue.items.find((candidate) => candidate.id === itemId);
-	if (item?.status === 'queued') item.status = 'cancelled';
+	if (item?.status === 'queued') {
+		item.status = 'cancelled';
+		void persistItem(item);
+	}
 }
 
 export async function retryPdfImport(itemId: string) {
@@ -191,10 +391,12 @@ export async function retryPdfImport(itemId: string) {
 			}
 		} finally {
 			if (controllers.get(item.id) === controller) controllers.delete(item.id);
+			void persistItem(item);
 		}
 		return;
 	}
 	item.status = 'queued';
+	void persistItem(item);
 	void pump();
 }
 
@@ -203,7 +405,10 @@ export function removePdfImport(itemId: string) {
 	const index = pdfImportQueue.items.findIndex((item) => item.id === itemId);
 	if (index < 0) return;
 	const [item] = pdfImportQueue.items.splice(index, 1);
-	if (item) queuedFiles.delete(item.file);
+	if (!item) return;
+	if (!item.published && !terminalStatus(item)) item.status = 'cancelled';
+	void persistItem(item).finally(() => itemStores.delete(item.id));
+	queuedFiles.delete(item.file);
 }
 
 export function clearFinishedPdfImports() {
@@ -211,5 +416,48 @@ export function clearFinishedPdfImports() {
 		if (['complete', 'needs_review', 'duplicate', 'cancelled'].includes(item.status)) {
 			removePdfImport(item.id);
 		}
+	}
+}
+
+export async function restorePdfImports(userId: string, store?: PdfResumeStore) {
+	if (restoringUsers.has(userId)) return;
+	restoringUsers.add(userId);
+	try {
+		const recordsPromise = store ? listStoredPdfImports(userId, store) : listStoredPdfImports(userId);
+		const [records, remoteSessions] = await Promise.all([
+			recordsPromise,
+			listActiveImportSessions(userId).catch(() => [])
+		]);
+		const sessionsByKey = new Map(
+			remoteSessions
+				.filter((session) => session.localResumeKey !== null)
+				.map((session) => [session.localResumeKey as string, session.id])
+		);
+		for (const record of records) {
+			if (record.published || pdfImportQueue.items.some((item) => item.id === record.id)) continue;
+			const item: PdfQueueItem = {
+				id: record.id,
+				userId: record.userId,
+				sessionId: record.sessionId ?? sessionsByKey.get(record.resumeKey) ?? null,
+				resumeKey: record.resumeKey,
+				file: record.file,
+				notebookId: record.notebookId,
+				consentGranted: record.consentGranted,
+				status: 'queued',
+				progress: null,
+				inspected: record.inspected,
+				uploaded: record.uploaded,
+				published: false,
+				result: null,
+				duplicateDocumentId: null,
+				error: record.error
+			};
+			if (store) itemStores.set(item.id, store);
+			queuedFiles.add(item.file);
+			pdfImportQueue.items.push(item);
+		}
+		void pump();
+	} finally {
+		restoringUsers.delete(userId);
 	}
 }
