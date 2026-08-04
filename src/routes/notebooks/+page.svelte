@@ -8,6 +8,7 @@
 	import { RequestVersion } from '$lib/services/request-version';
 
 	const refreshRequests = new RequestVersion();
+	const createRequests = new RequestVersion();
 	let notebooks = $state<readonly NotebookSummary[]>([]);
 	let loading = $state(true);
 	let creating = $state(false);
@@ -36,10 +37,12 @@
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
 		if (creating || name.trim().length === 0) return;
+		const version = createRequests.next();
 		creating = true;
 		createError = null;
 		try {
 			const notebook = await createNotebook({ name, description });
+			if (!createRequests.isCurrent(version)) return;
 			notebooks = Object.freeze([
 				notebook,
 				...notebooks.filter((candidate) => candidate.id !== notebook.id)
@@ -49,9 +52,11 @@
 			showForm = false;
 			await refresh();
 		} catch {
-			createError = 'Não foi possível criar o caderno.';
+			if (createRequests.isCurrent(version)) {
+				createError = 'Não foi possível criar o caderno.';
+			}
 		} finally {
-			creating = false;
+			if (createRequests.isCurrent(version)) creating = false;
 		}
 	}
 
@@ -61,6 +66,7 @@
 
 	onDestroy(() => {
 		refreshRequests.next();
+		createRequests.next();
 	});
 </script>
 
