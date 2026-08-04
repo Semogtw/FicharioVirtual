@@ -89,6 +89,18 @@ describe('BrowserExclusiveCoordinator', () => {
 		expect(task).not.toHaveBeenCalled();
 	});
 
+	it('rejects a live lease owned by the same coordinator', async () => {
+		const storage = new MemoryStorage();
+		storage.setItem('operation-lease', lease('tab-a', 2_000));
+		const task = vi.fn(async () => undefined);
+
+		const acquired = await coordinator(storage).runExclusive('operation', task);
+
+		expect(acquired).toBe(false);
+		expect(task).not.toHaveBeenCalled();
+		expect(storage.getItem('operation-lease')).toBe(lease('tab-a', 2_000));
+	});
+
 	it('acquires, renews and releases a storage lease', async () => {
 		const storage = new MemoryStorage();
 		let heartbeat: (() => void) | undefined;
