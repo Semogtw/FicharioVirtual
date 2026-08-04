@@ -15,6 +15,7 @@
 		type TagSummary
 	} from '$lib/services/tags';
 
+	const initializeRequests = new RequestVersion();
 	const assignmentRequests = new RequestVersion();
 	let tags = $state<readonly TagSummary[]>([]);
 	let documents = $state<readonly DocumentSummary[]>([]);
@@ -71,7 +72,7 @@
 		}
 	}
 
-	async function initialize() {
+	async function initialize(version = initializeRequests.next()) {
 		loading = true;
 		initialized = false;
 		assignmentsReady = false;
@@ -79,16 +80,19 @@
 		error = null;
 		try {
 			const [loadedTags, loadedDocuments] = await Promise.all([listTags(), listAllDocuments()]);
+			if (!initializeRequests.isCurrent(version)) return;
 			tags = loadedTags;
 			documents = loadedDocuments;
 			activeTagId = tags[0]?.id ?? null;
 			initialized = true;
 			if (activeTagId) await loadAssignments(activeTagId);
 		} catch (caught) {
-			initialized = false;
-			error = caught instanceof Error ? caught.message : 'Não foi possível abrir as tags.';
+			if (initializeRequests.isCurrent(version)) {
+				initialized = false;
+				error = caught instanceof Error ? caught.message : 'Não foi possível abrir as tags.';
+			}
 		} finally {
-			loading = false;
+			if (initializeRequests.isCurrent(version)) loading = false;
 		}
 	}
 
@@ -175,6 +179,7 @@
 	});
 
 	onDestroy(() => {
+		initializeRequests.next();
 		assignmentRequests.next();
 	});
 </script>
@@ -489,7 +494,7 @@
 	.documents input {
 		width: 1.1rem;
 		height: 1.1rem;
-		flex: 0 0 auto;
+		flex: 0 0 aut;
 	}
 
 	.documents label span {
@@ -571,12 +576,10 @@
 		.workspace {
 			grid-template-columns: 1fr;
 		}
-
 		aside ul {
 			display: flex;
 			overflow-x: auto;
 		}
-
 		aside li {
 			min-width: 10rem;
 		}
@@ -586,7 +589,6 @@
 		.create-form {
 			grid-template-columns: 1fr;
 		}
-
 		.assignment-heading,
 		.documents li {
 			align-items: flex-start;
