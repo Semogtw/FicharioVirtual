@@ -18,7 +18,7 @@ describe('notebook detail partial loading', () => {
 	it('offers an independent retry without hiding the notebook header', () => {
 		expect(source).toContain('{#if documentsError}');
 		expect(source).toContain('Tentar carregar documentos');
-		expect(source).toContain('onclick={() => void loadDocuments(notebook.id)}');
+		expect(source).toContain('onclick={() => notebook && void loadDocuments(notebook.id)}');
 		expect(source).toContain('{:else if documentsLoading}');
 	});
 
