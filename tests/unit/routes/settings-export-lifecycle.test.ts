@@ -12,8 +12,6 @@ describe('settings export lifecycle', () => {
 		expect(source).toMatch(
 			/const manifest = await createPortableExport\(\);[\s\S]*if \(!exportRequests\.isCurrent\(version\)\) return;[\s\S]*downloadPortableExport\(manifest\);/
 		);
-		expect(source).toMatch(
-			/onDestroy\(\(\) => \{[\s\S]*exportRequests\.next\(\);[\s\S]*\}\);/
-		);
+		expect(source).toMatch(/onDestroy\(\(\) => \{[\s\S]*exportRequests\.next\(\);[\s\S]*\}\);/);
 	});
 });
