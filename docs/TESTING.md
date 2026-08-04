@@ -36,19 +36,19 @@ A toolchain offline fixa o ambiente de frontend e Edge. Docker e as imagens do S
 
 ## Matriz de gates
 
-| Gate | Executa | Quando usar |
-| :--- | :--- | :--- |
-| `pnpm lint` | Prettier e ESLint | Em todo commit de código ou documentação |
-| `pnpm check` | `svelte-check` e tipos Svelte | Em toda mudança de rota, store ou componente |
-| `pnpm test` | Vitest unitário | Em todo commit de código |
-| `pnpm build` | Prerender e geração do PWA | Antes de merge ou release |
-| `pnpm test:source:offline` | Gates de fonte com rede bloqueada | Antes de merge |
-| `pnpm test:functions:check` | `deno check` das Edge Functions | Antes de merge ou release |
-| `pnpm test:e2e` | Playwright Chromium | Antes de merge ou release |
-| `pnpm test:db:local` | Reset de banco, migrations, RLS e Storage | Antes de release |
-| `pnpm verify` | Lint, tipos, Vitest e build | Em todo checkpoint de desenvolvimento |
-| `pnpm verify:full` | Suíte completa mais banco local | Antes de release ou checkpoint operacional |
-| workflows de staging | Supabase remoto, OCR real e host | Antes de release privada |
+| Gate                        | Executa                                   | Quando usar                                  |
+| :-------------------------- | :---------------------------------------- | :------------------------------------------- |
+| `pnpm lint`                 | Prettier e ESLint                         | Em todo commit de código ou documentação     |
+| `pnpm check`                | `svelte-check` e tipos Svelte             | Em toda mudança de rota, store ou componente |
+| `pnpm test`                 | Vitest unitário                           | Em todo commit de código                     |
+| `pnpm build`                | Prerender e geração do PWA                | Antes de merge ou release                    |
+| `pnpm test:source:offline`  | Gates de fonte com rede bloqueada         | Antes de merge                               |
+| `pnpm test:functions:check` | `deno check` das Edge Functions           | Antes de merge ou release                    |
+| `pnpm test:e2e`             | Playwright Chromium                       | Antes de merge ou release                    |
+| `pnpm test:db:local`        | Reset de banco, migrations, RLS e Storage | Antes de release                             |
+| `pnpm verify`               | Lint, tipos, Vitest e build               | Em todo checkpoint de desenvolvimento        |
+| `pnpm verify:full`          | Suíte completa mais banco local           | Antes de release ou checkpoint operacional   |
+| workflows de staging        | Supabase remoto, OCR real e host          | Antes de release privada                     |
 
 ## Testes unitários
 
