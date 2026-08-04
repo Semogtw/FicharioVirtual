@@ -43,6 +43,7 @@ vi.mock('$lib/services/supabase', () => ({
 
 import {
 	authenticate,
+	endSession,
 	initializeSession,
 	sessionState,
 	startSessionTracking
@@ -140,5 +141,35 @@ describe('session operation ordering', () => {
 		expect(tracking.unsubscribe).toHaveBeenCalledOnce();
 		expect(sessionState.authorized).toBe(true);
 		expect(sessionState.user?.id).toBe('11111111-1111-4111-8111-111111111111');
+	});
+
+	it('requests route revalidation for an external sign-out but not the initial session event', async () => {
+		const onExternalSignOut = vi.fn();
+		const stopTracking = startSessionTracking(onExternalSignOut);
+
+		tracking.callback?.('INITIAL_SESSION', null);
+		await Promise.resolve();
+		expect(onExternalSignOut).not.toHaveBeenCalled();
+
+		tracking.callback?.('SIGNED_OUT', null);
+		await Promise.resolve();
+		expect(onExternalSignOut).toHaveBeenCalledOnce();
+
+		stopTracking();
+	});
+
+	it('does not revalidate routes for the explicit sign-out that already owns navigation', async () => {
+		const onExternalSignOut = vi.fn();
+		const stopTracking = startSessionTracking(onExternalSignOut);
+		auth.signOut.mockImplementationOnce(async () => {
+			tracking.callback?.('SIGNED_OUT', null);
+			await Promise.resolve();
+		});
+
+		await endSession();
+		await Promise.resolve();
+
+		expect(onExternalSignOut).not.toHaveBeenCalled();
+		stopTracking();
 	});
 });
