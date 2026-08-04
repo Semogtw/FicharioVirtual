@@ -99,10 +99,12 @@ export async function endSession(): Promise<void> {
 
 export function startSessionTracking(): () => void {
 	const client = getSupabaseClient();
+	let active = true;
 	const {
 		data: { subscription }
 	} = client.auth.onAuthStateChange((_event, session) => {
 		queueMicrotask(() => {
+			if (!active) return;
 			if (session === null) {
 				invalidateOperations();
 				applySession(null);
@@ -114,5 +116,8 @@ export function startSessionTracking(): () => void {
 		});
 	});
 
-	return () => subscription.unsubscribe();
+	return () => {
+		active = false;
+		subscription.unsubscribe();
+	};
 }
