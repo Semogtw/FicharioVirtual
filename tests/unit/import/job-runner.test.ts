@@ -97,10 +97,7 @@ describe('OcrJobRunner', () => {
 	it('uses the bounded backoff schedule for transient work', async () => {
 		const wait = vi.fn(async () => undefined);
 		const gateway: OcrQueueGateway = {
-			listRunnableJobs: vi
-				.fn()
-				.mockResolvedValueOnce([jobs[0]])
-				.mockResolvedValueOnce([]),
+			listRunnableJobs: vi.fn().mockResolvedValueOnce([jobs[0]]).mockResolvedValueOnce([]),
 			processJob: vi.fn(async () => ({ state: 'retry_later' as const }))
 		};
 		const runner = new OcrJobRunner(gateway, coordinator(), { wait });
@@ -128,10 +125,7 @@ describe('OcrJobRunner', () => {
 
 	it('closes cross-tab resources when disposed', () => {
 		const crossTab = coordinator();
-		const runner = new OcrJobRunner(
-			{ listRunnableJobs: vi.fn(), processJob: vi.fn() },
-			crossTab
-		);
+		const runner = new OcrJobRunner({ listRunnableJobs: vi.fn(), processJob: vi.fn() }, crossTab);
 
 		runner.close();
 
