@@ -1,14 +1,16 @@
 <script lang="ts">
 	import { replaceState } from '$app/navigation';
 	import { page } from '$app/state';
+	import { onDestroy } from 'svelte';
 	import Button from '$lib/components/Button.svelte';
 	import type { NotebookSummary } from '$lib/domain/notebook';
 	import {
 		importSelectionUrl,
 		parseRequestedNotebookId,
-		resolveRequestedNotebookId
+		resolveImportNotebookSelection
 	} from '$lib/import/notebook-selection';
 	import { listNotebooks } from '$lib/services/notebooks';
+	import { RequestVersion } from '$lib/services/request-version';
 	import {
 		addPdfs,
 		cancelPdfImport,
@@ -19,11 +21,23 @@
 		type PdfQueueItem
 	} from '$lib/stores/pdf-import-queue.svelte';
 
+	const notebookRequests = new RequestVersion();
 	let notebooks = $state<readonly NotebookSummary[]>([]);
+	let notebookOptionsReady = $state(false);
+	let notebookLoading = $state(true);
+	let notebookError = $state<string | null>(null);
 	let notebookId = $state('');
 	let consent = $state(false);
 	let error = $state<string | null>(null);
 	let dragging = $state(false);
+
+	let requestedNotebookId = $derived(parseRequestedNotebookId(page.url.searchParams));
+	let notebookSelection = $derived(
+		resolveImportNotebookSelection(requestedNotebookId, notebooks, notebookOptionsReady)
+	);
+	let requestedNotebookUnavailable = $derived(
+		requestedNotebookId !== null && notebookOptionsReady && notebookSelection.requiresResolution
+	);
 
 	const labels = {
 		queued: 'Na fila',
@@ -42,6 +56,10 @@
 
 	function choose(files: readonly File[]) {
 		error = null;
+		if (notebookSelection.requiresResolution) {
+			error = 'O caderno solicitado precisa ser confirmado antes da importação.';
+			return;
+		}
 		const pdfs = files.filter((file) => file.type === 'application/pdf');
 		if (pdfs.length !== files.length) error = 'Selecione somente arquivos PDF.';
 		if (pdfs.length > 0) addPdfs(pdfs, { notebookId: notebookId || null, consentGranted: consent });
@@ -81,21 +99,40 @@
 		replaceState(url, page.state);
 	}
 
+	async function loadNotebookOptions(version = notebookRequests.next()) {
+		notebookLoading = true;
+		notebookOptionsReady = false;
+		notebookError = null;
+		try {
+			const items = await listNotebooks();
+			if (!notebookRequests.isCurrent(version)) return;
+			notebooks = items;
+			notebookOptionsReady = true;
+		} catch {
+			if (notebookRequests.isCurrent(version)) {
+				notebookError = 'Não foi possível carregar os cadernos para a importação.';
+			}
+		} finally {
+			if (notebookRequests.isCurrent(version)) notebookLoading = false;
+		}
+	}
+
+	function clearRequestedNotebook() {
+		notebookId = '';
+		const url = importSelectionUrl(page.url, '');
+		replaceState(url, page.state);
+	}
+
 	$effect(() => {
-		let active = true;
-		void listNotebooks()
-			.then((items) => {
-				if (active) notebooks = items;
-			})
-			.catch(() => undefined);
-		return () => {
-			active = false;
-		};
+		void loadNotebookOptions();
 	});
 
 	$effect(() => {
-		const requestedNotebookId = parseRequestedNotebookId(page.url.searchParams);
-		notebookId = resolveRequestedNotebookId(requestedNotebookId, notebooks);
+		notebookId = notebookSelection.notebookId;
+	});
+
+	onDestroy(() => {
+		notebookRequests.next();
 	});
 </script>
 
@@ -121,7 +158,11 @@
 	<section class="options" aria-label="Opções do PDF">
 		<label>
 			<span>Caderno</span>
-			<select bind:value={notebookId} onchange={selectNotebook}>
+			<select
+				bind:value={notebookId}
+				disabled={notebookLoading || !notebookOptionsReady}
+				onchange={selectNotebook}
+			>
 				<option value="">Sem caderno</option>
 				{#each notebooks as notebook}
 					<option value={notebook.id}>{notebook.name}</option>
@@ -139,6 +180,18 @@
 			</span>
 		</label>
 	</section>
+
+	{#if notebookError}
+		<div class="notebook-warning" role="status">
+			<p>{notebookError}</p>
+			<button type="button" onclick={() => void loadNotebookOptions()}>Tentar novamente</button>
+		</div>
+	{:else if requestedNotebookUnavailable}
+		<div class="notebook-warning" role="alert">
+			<p>O caderno solicitado não está disponível.</p>
+			<button type="button" onclick={clearRequestedNotebook}>Continuar sem caderno</button>
+		</div>
+	{/if}
 
 	<section
 		aria-label="Área para importar PDFs"
@@ -391,6 +444,32 @@
 		width: 1px;
 		height: 1px;
 		opacity: 0;
+	}
+
+	.notebook-warning {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: 0.8rem 1rem;
+		border-left: 0.3rem solid var(--accent);
+		background: rgb(166 94 67 / 7%);
+		color: var(--accent-strong);
+	}
+
+	.notebook-warning p {
+		margin: 0;
+	}
+
+	.notebook-warning button {
+		min-height: 2.35rem;
+		padding: 0.5rem 0.7rem;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--radius-sm);
+		background: var(--surface-strong);
+		color: var(--ink);
+		font-weight: 720;
+		cursor: pointer;
 	}
 
 	.error {
