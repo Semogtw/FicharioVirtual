@@ -2,27 +2,32 @@
 
 Este documento define a cobertura do Fichário Virtual e serve como checklist de prontidão técnica.
 
-## Último checkpoint local integral
+## Último checkpoint integral
 
-Source commit: `788f170409a323adb8d5b45e83d615f7c1f8d31f`  
+Source commit: `dc939f6c6f7932a767296301263cf79a9bf64666`  
+Workflow: `Validate current head`  
+Run: `30928622139`  
 Data: 2026-08-04
 
-Evidência executada no workspace offline:
+Evidência executada no GitHub Actions com o mesmo SHA:
 
 ```text
 Prettier: PASS
 ESLint: PASS
 svelte-check: PASS — 0 erros, 0 warnings
-Vitest: PASS — 460 testes em 102 arquivos
+Vitest: PASS — 475 testes em 111 arquivos
 build estático/PWA: PASS
-5 gates offline de fonte: PASS
-6 módulos Edge via Deno offline: PASS
+gates offline de fonte: PASS
+Edge Functions via Deno: PASS
 Playwright Chromium: PASS — 3/3
+Supabase local: PASS — migrations, RLS, Storage e 54 testes de banco
 ```
 
-Esse resultado pertence somente ao SHA indicado. O HEAD atual deve ser considerado validado apenas quando o recibo `Semogtw/FicharioVirtual#1` registrar sucesso para o mesmo commit.
+Esse resultado pertence somente ao SHA indicado. Commits posteriores devem ser considerados validados apenas quando o recibo `Semogtw/FicharioVirtual#1` registrar sucesso para o mesmo commit.
 
-O recibo `Semogtw/Offline-Toolchains#28` está em falha para o commit `7afe7131af5addd526ee1141b1915200988493ea`; portanto, não deve ser tratado como um bundle aprovado para o checkpoint novo. Banco local, Supabase de staging, OCR real e host publicado continuam sendo gates distintos.
+O workspace offline ainda precisa ser reconstruído para o checkpoint novo. O trigger de `Semogtw/Offline-Toolchains` deve apontar para um SHA do Fichário já verde antes de o recibo `Semogtw/Offline-Toolchains#28` ser tratado como aprovado.
+
+Supabase de staging, OCR real, host publicado e dispositivos físicos continuam sendo gates externos distintos.
 
 ## Ambiente mínimo
 
@@ -183,7 +188,7 @@ Para checkpoint operacional com Docker:
 pnpm verify:full
 ```
 
-O workflow `Validate current head` também executa frontend, source gates, Chromium, Edge Functions e banco local. Quando o frontend falha por formatação, ele publica um artifact `prettier-repair-<sha>` com o patch produzido pela versão travada do projeto.
+O workflow `Validate current head` executa frontend, source gates, Chromium, Edge Functions e banco local. Quando o frontend falha, publica um artifact `frontend-failure-<sha>` com o log integral; se houver diferença de formatação, também publica `prettier-repair-<sha>` com o patch produzido pela versão travada do projeto.
 
 ## Gates externos
 
