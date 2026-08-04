@@ -114,7 +114,12 @@ function validCounters(total: unknown, prepared: unknown, uploaded: unknown, com
 }
 
 function validResumeKey(value: string) {
-	return value.length >= 16 && value.length <= 160 && !/[\u0000-\u001f\u007f]/.test(value);
+	if (value.length < 16 || value.length > 160) return false;
+	for (let index = 0; index < value.length; index += 1) {
+		const code = value.charCodeAt(index);
+		if (code < 32 || code === 127) return false;
+	}
+	return true;
 }
 
 export function parseImportSession(
