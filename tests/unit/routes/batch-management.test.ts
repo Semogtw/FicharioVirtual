@@ -24,8 +24,12 @@ describe('batch document management routes', () => {
 		const tags = read('src/routes/library/tags/+page.svelte');
 
 		expect(tags).toContain('let initialized = $state(false);');
-		expect(tags).toContain('if (!initialized || saving || !newTagName.trim()) return;');
-		expect(tags).toContain('disabled={!initialized || saving || !newTagName.trim()}');
+		expect(tags).toContain(
+			'if (!initialized || saving || pendingDocumentId || !newTagName.trim()) return;'
+		);
+		expect(tags).toContain(
+			'disabled={!initialized || saving || pendingDocumentId !== null || !newTagName.trim()}'
+		);
 		expect(tags).toContain('onclick={() => void initialize()}');
 	});
 
@@ -46,8 +50,12 @@ describe('batch document management routes', () => {
 
 		expect(tags).toContain('let assignmentsReady = $state(false);');
 		expect(tags).toContain('let assignmentError = $state<string | null>(null);');
-		expect(tags).toContain('if (!activeTag || !assignmentsReady || pendingDocumentId) return;');
-		expect(tags).toContain('disabled={!assignmentsReady || pendingDocumentId !== null}');
+		expect(tags).toContain(
+			'if (!activeTag || saving || !assignmentsReady || pendingDocumentId) return;'
+		);
+		expect(tags).toContain(
+			'disabled={saving || !assignmentsReady || pendingDocumentId !== null}'
+		);
 		expect(tags).toContain('onclick={() => void loadAssignments(activeTag.id)}');
 	});
 
