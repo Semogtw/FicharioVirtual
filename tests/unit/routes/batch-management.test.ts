@@ -20,6 +20,15 @@ describe('batch document management routes', () => {
 		}
 	});
 
+	it('blocks tag creation until the complete workspace has loaded', () => {
+		const tags = read('src/routes/library/tags/+page.svelte');
+
+		expect(tags).toContain('let initialized = $state(false);');
+		expect(tags).toContain('if (!initialized || saving || !newTagName.trim()) return;');
+		expect(tags).toContain('disabled={!initialized || saving || !newTagName.trim()}');
+		expect(tags).toContain('onclick={() => void initialize()}');
+	});
+
 	it('prevents edits from changing context while a save is in flight', () => {
 		const organization = read('src/routes/library/organize/+page.svelte');
 		const tags = read('src/routes/library/tags/+page.svelte');
