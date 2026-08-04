@@ -56,7 +56,7 @@
 	}
 
 	async function retryOcr() {
-		if (!detail || retrying) return;
+		if (!detail || retrying || deleting) return;
 		const documentId = detail.id;
 		retrying = true;
 		error = null;
@@ -74,7 +74,7 @@
 	}
 
 	async function removeDocument() {
-		if (!detail || deleting) return;
+		if (!detail || deleting || retrying) return;
 		const documentId = detail.id;
 		if (!window.confirm(`Excluir “${detail.title}” e todos os arquivos associados?`)) return;
 		deleting = true;
@@ -131,7 +131,7 @@
 					<button
 						type="button"
 						class="secondary"
-						disabled={retrying}
+						disabled={retrying || deleting}
 						onclick={() => void retryOcr()}
 					>
 						{retrying ? 'Retomando…' : 'Retomar leitura'}
@@ -140,7 +140,7 @@
 				<button
 					type="button"
 					class="danger"
-					disabled={deleting}
+					disabled={deleting || retrying}
 					onclick={() => void removeDocument()}
 				>
 					{deleting ? 'Excluindo…' : 'Excluir'}
