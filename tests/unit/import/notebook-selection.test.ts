@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	importHref,
 	parseRequestedNotebookId,
+	resolveImportNotebookSelection,
 	resolveRequestedNotebookId
 } from '../../../src/lib/import/notebook-selection';
 
@@ -24,6 +25,25 @@ describe('import notebook selection', () => {
 		expect(resolveRequestedNotebookId(notebookId, [])).toBe('');
 		expect(resolveRequestedNotebookId(notebookId, [{ id: notebookId }])).toBe(notebookId);
 		expect(resolveRequestedNotebookId(null, [{ id: notebookId }])).toBe('');
+	});
+
+	it('does not silently drop a requested notebook before it is confirmed', () => {
+		expect(resolveImportNotebookSelection(notebookId, [], false)).toEqual({
+			notebookId: '',
+			requiresResolution: true
+		});
+		expect(resolveImportNotebookSelection(notebookId, [{ id: notebookId }], true)).toEqual({
+			notebookId,
+			requiresResolution: false
+		});
+		expect(resolveImportNotebookSelection(notebookId, [], true)).toEqual({
+			notebookId: '',
+			requiresResolution: true
+		});
+		expect(resolveImportNotebookSelection(null, [], false)).toEqual({
+			notebookId: '',
+			requiresResolution: false
+		});
 	});
 
 	it('preserves a valid notebook across import tabs and drops invalid values', () => {
