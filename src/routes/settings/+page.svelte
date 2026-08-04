@@ -11,7 +11,7 @@
 	let error = $state<string | null>(null);
 
 	async function exportData() {
-		if (exporting) return;
+		if (exporting || signingOut) return;
 		exporting = true;
 		error = null;
 		message = null;
@@ -27,7 +27,7 @@
 	}
 
 	async function signOut() {
-		if (signingOut) return;
+		if (signingOut || exporting) return;
 		signingOut = true;
 		error = null;
 		try {
@@ -65,7 +65,7 @@
 		</div>
 		<Button
 			label={exporting ? 'Gerando…' : 'Exportar catálogo JSON'}
-			disabled={exporting}
+			disabled={exporting || signingOut}
 			onclick={() => void exportData()}
 		/>
 	</section>
@@ -103,7 +103,7 @@
 			<h2 id="session-title">Sessão atual</h2>
 			<p>Encerre o acesso neste navegador. Os documentos permanecem no arquivo privado.</p>
 		</div>
-		<button type="button" disabled={signingOut} onclick={() => void signOut()}>
+		<button type="button" disabled={signingOut || exporting} onclick={() => void signOut()}>
 			{signingOut ? 'Saindo…' : 'Sair'}
 		</button>
 	</section>
