@@ -61,6 +61,11 @@
 		}
 	}
 
+	function retryInitialize() {
+		const notebookId = page.params.id;
+		if (notebookId) void initialize(notebookId);
+	}
+
 	$effect(() => {
 		const notebookId = page.params.id;
 		notebook = null;
@@ -89,7 +94,10 @@
 	{#if loading}
 		<p class="loading" role="status">Abrindo o caderno…</p>
 	{:else if error}
-		<div class="error" role="alert">{error}</div>
+		<div class="error" role="alert">
+			<p>{error}</p>
+			<button type="button" onclick={retryInitialize}>Tentar novamente</button>
+		</div>
 	{:else if notebook}
 		<header>
 			<div>
@@ -198,10 +206,18 @@
 
 	.documents-error,
 	.error {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
 		padding: 1rem;
 		border-left: 0.3rem solid var(--danger);
 		background: rgb(155 63 54 / 7%);
 		color: var(--danger);
+	}
+
+	.error p {
+		margin: 0;
 	}
 
 	.documents-error {
@@ -218,7 +234,8 @@
 		margin: 0;
 	}
 
-	.documents-error button {
+	.documents-error button,
+	.error button {
 		min-height: 2.45rem;
 		padding: 0.55rem 0.75rem;
 		border: 1px solid var(--line-strong);
