@@ -14,6 +14,7 @@
 	let recentDocuments = $state<readonly DocumentSummary[]>([]);
 	let documentsAvailable = $state(false);
 	let loading = $state(true);
+	let refreshing = $state(false);
 	let error = $state<string | null>(null);
 	let warning = $state<string | null>(null);
 
@@ -22,38 +23,48 @@
 	}
 
 	async function loadDashboard(version = dashboardRequests.next()) {
-		loading = true;
+		const hasContent = usage !== null || documentsAvailable;
+		if (hasContent) refreshing = true;
+		else loading = true;
 		error = null;
-		warning = null;
+		if (!hasContent) warning = null;
 		try {
 			const [usageResult, documentsResult] = await Promise.allSettled([
 				loadUsageOverview(),
 				listDocuments({ limit: 6 })
 			]);
 			if (!dashboardRequests.isCurrent(version)) return;
+			warning = null;
 
 			if (usageResult.status === 'fulfilled') usage = usageResult.value;
-			else usage = null;
 
 			if (documentsResult.status === 'fulfilled') {
 				recentDocuments = documentsResult.value.items;
 				documentsAvailable = true;
-			} else {
-				recentDocuments = [];
-				documentsAvailable = false;
 			}
 
 			if (usageResult.status === 'rejected' && documentsResult.status === 'rejected') {
-				error = 'Não foi possível carregar o resumo do fichário agora.';
+				if (hasContent) {
+					warning = 'Não foi possível atualizar o resumo agora.';
+				} else {
+					error = 'Não foi possível carregar o resumo do fichário agora.';
+				}
 			} else if (usageResult.status === 'rejected' || documentsResult.status === 'rejected') {
 				warning = 'Parte do resumo não pôde ser atualizada.';
 			}
 		} catch {
 			if (dashboardRequests.isCurrent(version)) {
-				error = 'Não foi possível carregar o resumo do fichário agora.';
+				if (hasContent) {
+					warning = 'Não foi possível atualizar o resumo agora.';
+				} else {
+					error = 'Não foi possível carregar o resumo do fichário agora.';
+				}
 			}
 		} finally {
-			if (dashboardRequests.isCurrent(version)) loading = false;
+			if (dashboardRequests.isCurrent(version)) {
+				loading = false;
+				refreshing = false;
+			}
 		}
 	}
 
@@ -82,7 +93,7 @@
 		<a class="primary-action" href="/import/">Importar documento</a>
 	</header>
 
-	<section class="overview" aria-label="Resumo da biblioteca" aria-busy={loading}>
+	<section class="overview" aria-label="Resumo da biblioteca" aria-busy={loading || refreshing}>
 		<article>
 			<span>Documentos</span>
 			<strong>{usage ? usage.totals.documents.toLocaleString('pt-BR') : '—'}</strong>
@@ -100,7 +111,14 @@
 		</article>
 	</section>
 
-	{#if warning}<p class="warning" role="status">{warning}</p>{/if}
+	{#if warning}
+		<div class="warning" role="status">
+			<p>{warning}</p>
+			<button type="button" disabled={loading || refreshing} onclick={() => void loadDashboard()}>
+				{refreshing ? 'Atualizando…' : 'Tentar atualizar novamente'}
+			</button>
+		</div>
+	{/if}
 
 	<section class="recent" aria-labelledby="recent-title">
 		<div class="section-heading">
@@ -277,11 +295,29 @@
 	}
 
 	.warning {
-		margin: 0;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
 		padding: 0.75rem 0.9rem;
 		border-left: 0.3rem solid var(--accent);
 		background: rgb(166 94 67 / 7%);
 		color: var(--accent-strong);
+	}
+
+	.warning p {
+		margin: 0;
+	}
+
+	.warning button {
+		min-height: 2.45rem;
+		padding: 0.55rem 0.75rem;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--radius-sm);
+		background: var(--surface-strong);
+		color: var(--ink);
+		font-weight: 720;
+		cursor: pointer;
 	}
 
 	.error {
