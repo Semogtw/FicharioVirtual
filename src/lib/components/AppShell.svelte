@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import type { Snippet } from 'svelte';
 	import MobileNavigation from './MobileNavigation.svelte';
 	import TopSearch from './TopSearch.svelte';
@@ -9,6 +10,11 @@
 	}
 
 	let { children }: AppShellProps = $props();
+	let searchQuery = $derived(
+		page.url.pathname.startsWith('/search')
+			? (page.url.searchParams.get('q')?.slice(0, 200) ?? '')
+			: ''
+	);
 
 	const navigation = [
 		{ href: '/', label: 'Início', mark: '⌂' },
@@ -19,7 +25,7 @@
 	] as const;
 
 	function search(query: string) {
-		void goto(`/library/?q=${encodeURIComponent(query)}`);
+		void goto(`/search/?q=${encodeURIComponent(query)}`);
 	}
 </script>
 
@@ -52,7 +58,7 @@
 
 	<div class="workspace">
 		<header class="topbar">
-			<TopSearch onSearch={search} />
+			<TopSearch initialValue={searchQuery} onSearch={search} />
 			<a class="profile-link" href="/settings/" aria-label="Abrir configurações">A</a>
 		</header>
 
