@@ -2,27 +2,27 @@
 
 _Atualizado: 2026-08-04_  
 _Branch ativa: `main`_  
-_Último checkpoint de código integralmente validado: `dc939f6c6f7932a767296301263cf79a9bf64666`_  
-_Recibo: workflow `Validate current head`, run `30928622139`, issue `Semogtw/FicharioVirtual#1`_  
+_Último checkpoint de código integralmente validado: `62b7dd03fa23d9adbf0ecdf0bf95110de170028e`_  
+_Recibo: workflow `Validate current head`, run `30930617779`, issue `Semogtw/FicharioVirtual#1`_  
 _Estado: MVP funcional com hardening amplo de contratos, concorrência e recuperação; staging real, OCR externo e host HTTPS continuam pendentes._
 
 ## Resumo executivo
 
 O Fichário Virtual é uma PWA SvelteKit estática para organizar imagens e PDFs privados, preservar texto nativo, executar OCR seletivo no backend e oferecer busca, leitura, revisão, organização e exportação. A aplicação usa Supabase Auth, PostgreSQL, RLS, Storage privado e Edge Functions.
 
-O MVP está implementado. O checkpoint validado mais recente corrigiu a busca global, preservou o controle de fluxo de redirects do SvelteKit, eliminou novas corridas de teardown em componentes e mutações, fortaleceu o rastreamento de sessão e alinhou o cancelamento da retomada de OCR em PDFs.
+O MVP está implementado. O checkpoint validado mais recente corrigiu a busca global, preservou o controle de fluxo de redirects do SvelteKit, eliminou novas corridas de teardown em componentes e mutações, ativou o bootstrap global da sessão no navegador e alinhou o cancelamento da retomada de OCR em PDFs.
 
 A prontidão operacional ainda depende de staging real, host HTTPS, testes em dispositivos e verificação dos limites gratuitos. Percentuais de prontidão, quando necessários, devem ser derivados de `docs/READINESS.md`; este documento registra fatos e evidências.
 
 ## Evidência do checkpoint validado
 
-No SHA `dc939f6c6f7932a767296301263cf79a9bf64666`, o workflow `Validate current head` passou integralmente:
+No SHA `62b7dd03fa23d9adbf0ecdf0bf95110de170028e`, o workflow `Validate current head` passou integralmente:
 
 ```text
 Prettier: PASS
 ESLint: PASS
 svelte-check: PASS — 0 erros, 0 warnings
-Vitest: PASS — 475 testes em 111 arquivos
+Vitest: PASS — 478 testes em 112 arquivos
 build estático/PWA: PASS
 gates offline de fonte: PASS
 Edge Functions com Deno: PASS
@@ -30,7 +30,7 @@ Playwright Chromium: PASS — 3/3 E2E
 Supabase local: PASS — migrations, RLS, Storage e 54 testes de banco
 ```
 
-O recibo persistente está em `Semogtw/FicharioVirtual#1`, associado ao run `30928622139`. O workflow também publica o archive exato do source validado e, quando o frontend falha, artifacts de log e reparo de Prettier.
+O recibo persistente está em `Semogtw/FicharioVirtual#1`, associado ao run `30930617779`. O workflow também publica o archive exato do source validado e, quando o frontend falha, artifacts de log e reparo de Prettier.
 
 Este documento é posterior ao checkpoint acima. O próprio commit documental deve ser considerado validado somente quando o recibo registrar sucesso para seu SHA.
 
@@ -60,7 +60,10 @@ Verificação operacional de billing, backup e rollback: NOT RUN
 - a criação de cadernos possui token separado da recarga da lista;
 - criação, renomeação, exclusão e associação de tags, incluindo `refreshTags`, são invalidadas em conjunto ao sair da rota;
 - saves paralelos da organização em lote continuam independentes, mas usam um token de vida da rota para suprimir conclusões após desmontagem;
-- o rastreador global de sessão ignora eventos já enfileirados em microtask depois que a assinatura é encerrada.
+- o rastreador global de sessão ignora eventos já enfileirados em microtask depois que a assinatura é encerrada;
+- `src/hooks.client.ts` inicializa a sessão e ativa o rastreamento uma única vez no navegador;
+- logout externo invalida os `load` ativos para que o guard global redirecione imediatamente;
+- logout explícito continua dono da própria navegação e não dispara revalidação duplicada.
 
 ### Importação e OCR
 

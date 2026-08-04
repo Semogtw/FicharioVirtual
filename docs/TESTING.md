@@ -4,9 +4,9 @@ Este documento define a cobertura do Fichário Virtual e serve como checklist de
 
 ## Último checkpoint integral
 
-Source commit: `dc939f6c6f7932a767296301263cf79a9bf64666`  
+Source commit: `62b7dd03fa23d9adbf0ecdf0bf95110de170028e`  
 Workflow: `Validate current head`  
-Run: `30928622139`  
+Run: `30930617779`  
 Data: 2026-08-04
 
 Evidência executada no GitHub Actions com o mesmo SHA:
@@ -15,7 +15,7 @@ Evidência executada no GitHub Actions com o mesmo SHA:
 Prettier: PASS
 ESLint: PASS
 svelte-check: PASS — 0 erros, 0 warnings
-Vitest: PASS — 475 testes em 111 arquivos
+Vitest: PASS — 478 testes em 112 arquivos
 build estático/PWA: PASS
 gates offline de fonte: PASS
 Edge Functions via Deno: PASS
@@ -111,7 +111,8 @@ Cobrir por testes comportamentais, de contrato ou componente:
 - carga, associação e mutações de tags;
 - saves paralelos por linha na organização em lote;
 - retry parcial da home;
-- login, logout, exportação e prompt de instalação após teardown.
+- login, logout, exportação e prompt de instalação após teardown;
+- bootstrap cliente da sessão, logout externo e supressão de revalidação no logout explícito.
 
 ## Testes de contrato de banco
 

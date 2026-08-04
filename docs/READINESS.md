@@ -18,6 +18,7 @@ A estimativa total usa aproximadamente 70% de peso para implementação e 30% pa
 
 - aplicação SvelteKit estática e responsiva;
 - autenticação fail-closed por allowlist;
+- bootstrap cliente da sessão com revalidação imediata em logout externo;
 - biblioteca, cadernos, tags e organização em lote;
 - importação otimizada de imagens;
 - inspeção local e roteamento seletivo de PDFs;
@@ -28,7 +29,7 @@ A estimativa total usa aproximadamente 70% de peso para implementação e 30% pa
 - PWA com cache restrito ao shell público;
 - 27 migrations aplicáveis em banco limpo;
 - 54 contratos pgTAP;
-- 475 testes unitários em 111 arquivos no checkpoint `dc939f6c6f7932a767296301263cf79a9bf64666`;
+- 478 testes unitários em 112 arquivos no checkpoint `62b7dd03fa23d9adbf0ecdf0bf95110de170028e`;
 - 3 cenários E2E no Chromium;
 - gate HTTP loopback com 7 cenários de falha OCR;
 - classificação e backoff locais para 429 diário/transitório, 503, payload inválido e timeout;
