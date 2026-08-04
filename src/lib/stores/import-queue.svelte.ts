@@ -1,8 +1,21 @@
 import type { ImagePreparationMode } from '$lib/import/image-types';
 import { prepareImage } from '$lib/import/image-client';
+import {
+	deleteStoredImageImport,
+	listStoredImageImports,
+	saveStoredImageImport,
+	type ImportResumeStore,
+	type StoredImageImportRecord
+} from '$lib/import/resume-store';
 import { DuplicateImageError, uploadPreparedImage, type UploadedPage } from '$lib/import/upload';
+import {
+	createImportSession,
+	listActiveImportSessions,
+	updateImportSession
+} from '$lib/services/import-sessions';
 import { recordOcrConsent } from '$lib/services/ocr-consent';
 import { OcrProcessingError, processPageOcr } from '$lib/services/ocr';
+import { sessionState } from '$lib/stores/session.svelte';
 
 export type ImportQueueStatus =
 	| 'queued'
@@ -18,6 +31,9 @@ export type ImportQueueStatus =
 
 export type ImportQueueItem = {
 	id: string;
+	userId: string;
+	sessionId: string | null;
+	resumeKey: string;
 	file: File;
 	mode: ImagePreparationMode;
 	notebookId: string | null;
@@ -33,12 +49,24 @@ export const importQueue = $state<{ items: ImportQueueItem[] }>({ items: [] });
 
 const controllers = new Map<string, AbortController>();
 const queuedFiles = new WeakSet<File>();
+const persistenceChains = new Map<string, Promise<void>>();
+const itemStores = new Map<string, ImportResumeStore>();
+const restoringUsers = new Set<string>();
 let consentPromise: Promise<void> | null = null;
+let importChannel: BroadcastChannel | null = null;
 
-function id() {
+type LockManagerLike = {
+	request(
+		name: string,
+		options: { mode: 'exclusive'; ifAvailable: true },
+		callback: (lock: unknown | null) => Promise<void>
+	): Promise<void>;
+};
+
+function id(prefix = 'import') {
 	return (
 		globalThis.crypto?.randomUUID?.() ??
-		`import_${Date.now()}_${Math.random().toString(36).slice(2)}`
+		`${prefix}_${Date.now()}_${Math.random().toString(36).slice(2)}`
 	);
 }
 
@@ -71,16 +99,157 @@ function abortError() {
 	return new DOMException('OCR request was cancelled', 'AbortError');
 }
 
+function storedStatus(item: ImportQueueItem): StoredImageImportRecord['status'] {
+	if (item.status === 'needs_review' || item.status === 'complete' || item.status === 'duplicate') {
+		return 'cancelled';
+	}
+	return item.status;
+}
+
+function terminalStatus(item: ImportQueueItem) {
+	return ['needs_review', 'complete', 'duplicate', 'cancelled'].includes(item.status);
+}
+
+function remoteStatus(item: ImportQueueItem) {
+	if (item.status === 'queued') return 'draft' as const;
+	if (item.status === 'preparing') return 'preparing' as const;
+	if (item.status === 'uploading') return 'uploading' as const;
+	if (item.status === 'reading') return 'processing' as const;
+	if (item.status === 'waiting') return 'paused' as const;
+	if (item.status === 'failed') return 'failed' as const;
+	if (item.status === 'complete' || item.status === 'needs_review') return 'completed' as const;
+	return 'cancelled' as const;
+}
+
+function storedRecord(item: ImportQueueItem): StoredImageImportRecord {
+	return {
+		version: 1,
+		id: item.id,
+		userId: item.userId,
+		sessionId: item.sessionId,
+		resumeKey: item.resumeKey,
+		file: item.file,
+		mode: item.mode,
+		notebookId: item.notebookId,
+		status: storedStatus(item),
+		preparedBytes: item.preparedBytes,
+		result: item.result,
+		error: item.error?.slice(0, 500) ?? null,
+		updatedAt: new Date().toISOString()
+	};
+}
+
+async function saveLocalItem(item: ImportQueueItem, store?: ImportResumeStore) {
+	if (store) await saveStoredImageImport(storedRecord(item), store);
+	else await saveStoredImageImport(storedRecord(item));
+}
+
+async function deleteLocalItem(item: ImportQueueItem, store?: ImportResumeStore) {
+	if (store) await deleteStoredImageImport(item.id, store);
+	else await deleteStoredImageImport(item.id);
+}
+
+async function synchronizeItem(item: ImportQueueItem) {
+	const store = itemStores.get(item.id);
+	if (!terminalStatus(item)) {
+		try {
+			await saveLocalItem(item, store);
+		} catch {
+			// Remote progress can still be tracked when this browser does not offer IndexedDB.
+		}
+	}
+
+	try {
+		if (item.sessionId === null) {
+			const session = await createImportSession({ localResumeKey: item.resumeKey, totalItems: 1 });
+			if (session.userId !== item.userId) return;
+			item.sessionId = session.id;
+			if (!terminalStatus(item)) {
+				try {
+					await saveLocalItem(item, store);
+				} catch {
+					// The remote session remains usable without local persistence.
+				}
+			}
+		}
+
+		const sessionId = item.sessionId;
+		if (sessionId === null) return;
+		const completed = item.status === 'complete' || item.status === 'needs_review';
+		const status = remoteStatus(item);
+		await updateImportSession(sessionId, {
+			status,
+			totalItems: 1,
+			preparedItems: item.preparedBytes !== null || item.result !== null ? 1 : 0,
+			uploadedItems: item.result !== null ? 1 : 0,
+			completedItems: completed ? 1 : 0,
+			lastErrorCode:
+				item.status === 'failed' ? 'import_failed' : item.status === 'waiting' ? 'ocr_pending' : null,
+			finishedAt: status === 'completed' || status === 'cancelled' ? new Date().toISOString() : null
+		});
+	} catch {
+		// The next state transition or application opening retries the idempotent session update.
+	}
+
+	if (terminalStatus(item)) {
+		try {
+			await deleteLocalItem(item, store);
+		} catch {
+			// A later cleanup pass can remove the terminal local record.
+		}
+	}
+	if (typeof BroadcastChannel !== 'undefined') {
+		importChannel ??= new BroadcastChannel('fichario-imports');
+		importChannel.postMessage({ type: 'image-import-updated', id: item.id, status: item.status });
+	}
+}
+
+function persistItem(item: ImportQueueItem) {
+	const previous = persistenceChains.get(item.id) ?? Promise.resolve();
+	const next = previous
+		.catch(() => undefined)
+		.then(() => synchronizeItem(item))
+		.finally(() => {
+			if (persistenceChains.get(item.id) === next) persistenceChains.delete(item.id);
+		});
+	persistenceChains.set(item.id, next);
+	return next;
+}
+
+async function withImportLock(item: ImportQueueItem, operation: () => Promise<void>) {
+	const lockManager =
+		typeof navigator === 'undefined'
+			? undefined
+			: (navigator as Navigator & { locks?: LockManagerLike }).locks;
+	if (!lockManager) {
+		await operation();
+		return true;
+	}
+	let acquired = false;
+	await lockManager.request(
+		`fichario-import-${item.resumeKey}`,
+		{ mode: 'exclusive', ifAvailable: true },
+		async (lock) => {
+			if (lock === null) return;
+			acquired = true;
+			await operation();
+		}
+	);
+	return acquired;
+}
+
 async function processOcr(item: ImportQueueItem, signal?: AbortSignal) {
 	if (!item.result) throw new Error('A página importada não está disponível para leitura.');
 	item.status = 'reading';
 	item.error = null;
+	void persistItem(item);
 	try {
 		if (signal?.aborted) throw abortError();
 		const result = await processPageOcr(item.result.pageId, undefined, { signal });
 		if (signal?.aborted) throw abortError();
 		if (result.state === 'complete' || result.state === 'already_complete') {
 			item.status = result.needsReview ? 'needs_review' : 'complete';
+			void persistItem(item);
 			return;
 		}
 		item.status = 'waiting';
@@ -88,15 +257,18 @@ async function processOcr(item: ImportQueueItem, signal?: AbortSignal) {
 			result.state === 'quota_exhausted'
 				? 'A cota diária foi atingida; o arquivo permanece salvo para continuar depois.'
 				: 'A leitura ficou pendente e poderá ser retomada sem reenviar o arquivo.';
+		void persistItem(item);
 	} catch (error) {
 		if (error instanceof DOMException && error.name === 'AbortError') throw error;
 		if (error instanceof OcrProcessingError) {
 			item.status = error.retryable || error.code === 'gemini_daily_quota' ? 'waiting' : 'failed';
 			item.error = error.message;
+			void persistItem(item);
 			return;
 		}
 		item.status = 'waiting';
 		item.error = message(error);
+		void persistItem(item);
 	}
 }
 
@@ -108,6 +280,7 @@ async function processItem(item: ImportQueueItem) {
 	item.result = null;
 	item.duplicateDocumentId = null;
 	item.status = 'preparing';
+	void persistItem(item);
 
 	try {
 		await ensureConsent();
@@ -117,11 +290,13 @@ async function processItem(item: ImportQueueItem) {
 		item.previewUrl = URL.createObjectURL(prepared.thumbnail);
 		item.preparedBytes = prepared.preparedBytes;
 		item.status = 'uploading';
+		void persistItem(item);
 		item.result = await uploadPreparedImage({
 			prepared,
 			notebookId: item.notebookId,
 			signal: controller.signal
 		});
+		void persistItem(item);
 		if (controller.signal.aborted) throw new DOMException('Import cancelled', 'AbortError');
 		await processOcr(item, controller.signal);
 	} catch (error) {
@@ -138,21 +313,31 @@ async function processItem(item: ImportQueueItem) {
 			item.status = 'failed';
 			item.error = message(error);
 		}
+		void persistItem(item);
 	} finally {
 		controllers.delete(item.id);
 	}
+}
+
+function processItemWithLock(item: ImportQueueItem) {
+	return withImportLock(item, () => processItem(item));
 }
 
 export function addImages(
 	files: readonly File[],
 	options: { mode?: ImagePreparationMode; notebookId?: string | null } = {}
 ) {
+	const userId = sessionState.user?.id;
+	if (!userId) return;
 	const mode = options.mode ?? 'standard';
 	for (const file of files) {
 		if (queuedFiles.has(file)) continue;
 		queuedFiles.add(file);
 		const item: ImportQueueItem = {
 			id: id(),
+			userId,
+			sessionId: null,
+			resumeKey: id('resume'),
 			file,
 			mode,
 			notebookId: options.notebookId ?? null,
@@ -164,14 +349,17 @@ export function addImages(
 			error: null
 		};
 		importQueue.items.push(item);
-		void processItem(item);
+		void persistItem(item).then(() => processItemWithLock(item));
 	}
 }
 
 export function cancelImport(itemId: string) {
 	controllers.get(itemId)?.abort();
 	const item = importQueue.items.find((candidate) => candidate.id === itemId);
-	if (item?.status === 'queued') item.status = 'cancelled';
+	if (item?.status === 'queued') {
+		item.status = 'cancelled';
+		void persistItem(item);
+	}
 }
 
 async function retryOcr(item: ImportQueueItem) {
@@ -184,21 +372,27 @@ async function retryOcr(item: ImportQueueItem) {
 			if (importQueue.items.includes(item)) {
 				item.status = 'cancelled';
 				item.error = null;
+				void persistItem(item);
 			}
 		} else if (importQueue.items.includes(item)) {
 			item.status = 'waiting';
 			item.error = message(error);
+			void persistItem(item);
 		}
 	} finally {
 		if (controllers.get(item.id) === controller) controllers.delete(item.id);
 	}
 }
 
+function retryOcrWithLock(item: ImportQueueItem) {
+	return withImportLock(item, () => retryOcr(item));
+}
+
 export function retryImport(itemId: string) {
 	const item = importQueue.items.find((candidate) => candidate.id === itemId);
 	if (!item || !['failed', 'cancelled', 'waiting'].includes(item.status)) return;
-	if (item.result) void retryOcr(item);
-	else void processItem(item);
+	if (item.result) void retryOcrWithLock(item);
+	else void processItemWithLock(item);
 }
 
 export function removeImport(itemId: string) {
@@ -207,6 +401,8 @@ export function removeImport(itemId: string) {
 	if (index < 0) return;
 	const [item] = importQueue.items.splice(index, 1);
 	if (!item) return;
+	if (!terminalStatus(item)) item.status = 'cancelled';
+	void persistItem(item).finally(() => itemStores.delete(item.id));
 	releasePreview(item);
 	queuedFiles.delete(item.file);
 }
@@ -216,5 +412,49 @@ export function clearFinishedImports() {
 		if (['complete', 'needs_review', 'duplicate', 'cancelled'].includes(item.status)) {
 			removeImport(item.id);
 		}
+	}
+}
+
+export async function restoreImageImports(userId: string, store?: ImportResumeStore) {
+	if (restoringUsers.has(userId)) return;
+	restoringUsers.add(userId);
+	try {
+		const recordsPromise = store
+			? listStoredImageImports(userId, store)
+			: listStoredImageImports(userId);
+		const [records, remoteSessions] = await Promise.all([
+			recordsPromise,
+			listActiveImportSessions(userId).catch(() => [])
+		]);
+		const sessionsByKey = new Map(
+			remoteSessions
+				.filter((session) => session.localResumeKey !== null)
+				.map((session) => [session.localResumeKey as string, session.id])
+		);
+		for (const record of records) {
+			if (importQueue.items.some((item) => item.id === record.id)) continue;
+			const item: ImportQueueItem = {
+				id: record.id,
+				userId: record.userId,
+				sessionId: record.sessionId ?? sessionsByKey.get(record.resumeKey) ?? null,
+				resumeKey: record.resumeKey,
+				file: record.file,
+				mode: record.mode,
+				notebookId: record.notebookId,
+				status: record.result ? 'waiting' : 'queued',
+				previewUrl: null,
+				preparedBytes: record.preparedBytes,
+				result: record.result,
+				duplicateDocumentId: null,
+				error: record.error
+			};
+			if (store) itemStores.set(item.id, store);
+			queuedFiles.add(item.file);
+			importQueue.items.push(item);
+			if (item.result) void retryOcrWithLock(item);
+			else void processItemWithLock(item);
+		}
+	} finally {
+		restoringUsers.delete(userId);
 	}
 }
