@@ -105,8 +105,8 @@
 			</form>
 
 			<p class="access-note">
-				Este projeto possui <strong>cadastro público desativado</strong>. Novas contas são adicionadas
-				manualmente pelo proprietário.
+				Este projeto possui <strong>cadastro público desativado</strong>. Novas contas são
+				adicionadas manualmente pelo proprietário.
 			</p>
 		{/if}
 	</section>
