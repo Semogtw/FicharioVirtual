@@ -169,10 +169,7 @@ export class BrowserExclusiveCoordinator {
 			return false;
 		}
 
-		const heartbeat = this.scheduleInterval?.(
-			() => this.renewLease(key),
-			LEASE_HEARTBEAT_MS
-		);
+		const heartbeat = this.scheduleInterval?.(() => this.renewLease(key), LEASE_HEARTBEAT_MS);
 		try {
 			await task();
 			return true;

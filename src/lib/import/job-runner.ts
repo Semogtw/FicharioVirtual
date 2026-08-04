@@ -41,9 +41,7 @@ export type BrowserOcrQueueCoordinatorOptions = BrowserExclusiveCoordinatorOptio
 };
 
 function browserChannel(): OcrQueueChannel | null {
-	return typeof BroadcastChannel === 'undefined'
-		? null
-		: new BroadcastChannel('fichario-imports');
+	return typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('fichario-imports');
 }
 
 export class BrowserOcrQueueCoordinator implements OcrQueueCoordinator {

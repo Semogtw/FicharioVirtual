@@ -12,11 +12,9 @@ const pdfQueue = readFileSync(
 );
 
 function expectSharedExclusion(source: string) {
+	expect(source).toContain("import { runBrowserExclusive } from '$lib/import/browser-exclusive';");
 	expect(source).toContain(
-		"import { runBrowserExclusive } from '$lib/import/browser-exclusive';"
-	);
-	expect(source).toContain(
-		"return runBrowserExclusive(`fichario-import-${item.resumeKey}`, operation);"
+		'return runBrowserExclusive(`fichario-import-${item.resumeKey}`, operation);'
 	);
 	expect(source).not.toContain('type LockManagerLike');
 	expect(source).not.toContain('navigator as Navigator & { locks?:');
