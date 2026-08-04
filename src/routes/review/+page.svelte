@@ -8,6 +8,7 @@
 
 	const pageSize = 50;
 	const loadRequests = new RequestVersion();
+	const retryRequests = new RequestVersion();
 	let items = $state<readonly ReviewItem[]>([]);
 	let loading = $state(true);
 	let loadingMore = $state(false);
@@ -54,15 +55,20 @@
 
 	async function retry(item: ReviewItem) {
 		if (processingPageId) return;
+		const version = retryRequests.next();
 		processingPageId = item.pageId;
 		error = null;
 		try {
 			await processPageOcr(item.pageId);
+			if (!retryRequests.isCurrent(version)) return;
 			await load(true);
 		} catch (caught) {
-			error = caught instanceof Error ? caught.message : 'A página ainda não pôde ser retomada.';
+			if (retryRequests.isCurrent(version)) {
+				error =
+					caught instanceof Error ? caught.message : 'A página ainda não pôde ser retomada.';
+			}
 		} finally {
-			processingPageId = null;
+			if (retryRequests.isCurrent(version)) processingPageId = null;
 		}
 	}
 
@@ -72,6 +78,7 @@
 
 	onDestroy(() => {
 		loadRequests.next();
+		retryRequests.next();
 	});
 </script>
 
