@@ -17,6 +17,7 @@ export const sessionState = $state<SessionState>({
 });
 
 let operationVersion = 0;
+let explicitSignOutInProgress = false;
 
 function message(error: unknown): string {
 	return error instanceof AuthServiceError
@@ -85,6 +86,7 @@ export async function authenticate(email: string, password: string): Promise<Ses
 }
 
 export async function endSession(): Promise<void> {
+	explicitSignOutInProgress = true;
 	const version = beginOperation();
 	try {
 		await signOut();
@@ -94,21 +96,25 @@ export async function endSession(): Promise<void> {
 		throw error;
 	} finally {
 		if (isCurrentOperation(version)) sessionState.loading = false;
+		explicitSignOutInProgress = false;
 	}
 }
 
-export function startSessionTracking(): () => void {
+export function startSessionTracking(onExternalSignOut?: () => void): () => void {
 	const client = getSupabaseClient();
 	let active = true;
 	const {
 		data: { subscription }
-	} = client.auth.onAuthStateChange((_event, session) => {
+	} = client.auth.onAuthStateChange((event, session) => {
 		queueMicrotask(() => {
-			if (!active) return;
+			if (!active || event === 'INITIAL_SESSION') return;
 			if (session === null) {
+				const shouldNotifyExternalSignOut =
+					!explicitSignOutInProgress && sessionState.authorized;
 				invalidateOperations();
 				applySession(null);
 				sessionState.loading = false;
+				if (shouldNotifyExternalSignOut) onExternalSignOut?.();
 				return;
 			}
 			if (sessionState.loading) return;
