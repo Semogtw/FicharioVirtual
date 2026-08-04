@@ -22,10 +22,12 @@
 ### Task 1: Browser fallback lease
 
 **Files:**
+
 - Modify: `src/lib/import/job-runner.ts`
 - Test: `tests/unit/import/job-runner-coordinator.test.ts`
 
 **Interfaces:**
+
 - Produces: exported `BrowserOcrQueueCoordinator` implementing `OcrQueueCoordinator`.
 - Consumes: existing `OcrQueueState` and `OcrQueueCoordinator` contracts.
 
@@ -54,12 +56,14 @@ Commit: `feat: add OCR runner fallback lease`
 ### Task 2: Authorized browser lifecycle
 
 **Files:**
+
 - Create: `src/lib/import/job-runner-lifecycle.ts`
 - Create: `tests/unit/import/job-runner-lifecycle.test.ts`
 - Modify: `src/hooks.client.ts`
 - Modify: `tests/unit/hooks/client-ocr-queue.test.ts`
 
 **Interfaces:**
+
 - Produces: `createOcrQueueLifecycle(resume, options?)` returning `{ start(): void; stop(): void }`.
 - Consumes: `resumeQueue()` and `pauseQueue()` from `job-runner.ts`.
 
@@ -88,12 +92,14 @@ Commit: `feat: resume OCR queue across browser lifecycle`
 ### Task 3: Full verification and documentation
 
 **Files:**
+
 - Modify: `docs/CURRENT_STATUS.md`
 - Modify: `docs/TESTING.md`
 - Modify: `docs/READINESS.md`
 - Modify: `Semogtw/Offline-Toolchains/triggers/fichario-toolchain.json` after a green repository receipt.
 
 **Interfaces:**
+
 - Consumes: final green FicharioVirtual commit SHA and workflow receipt.
 - Produces: canonical status and toolchain pin for the validated source.
 
