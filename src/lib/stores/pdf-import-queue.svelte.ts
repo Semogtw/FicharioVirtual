@@ -1,5 +1,10 @@
 import { runBrowserExclusive } from '$lib/import/browser-exclusive';
 import {
+	publishImportUpdate,
+	subscribeImportUpdates,
+	type ImportBroadcastUpdate
+} from '$lib/import/import-broadcast';
+import {
 	deleteStoredPdfImport,
 	listStoredPdfImports,
 	saveStoredPdfImport,
@@ -61,9 +66,9 @@ const queuedFiles = new WeakSet<File>();
 const persistenceChains = new Map<string, Promise<void>>();
 const itemStores = new Map<string, PdfResumeStore>();
 const restoringUsers = new Set<string>();
+const completedElsewhere = new Set<string>();
 let running = false;
 let lockRetryTimer: ReturnType<typeof setTimeout> | null = null;
-let importChannel: BroadcastChannel | null = null;
 
 function id(prefix = 'pdf') {
 	return (
@@ -164,6 +169,14 @@ function remoteStatus(item: PdfQueueItem) {
 
 async function synchronizeItem(item: PdfQueueItem) {
 	const store = itemStores.get(item.id);
+	if (completedElsewhere.has(item.id)) {
+		try {
+			await deleteLocalItem(item, store);
+		} catch {
+			// The winning tab already owns the terminal remote state.
+		}
+		return;
+	}
 	if (!item.published && !terminalStatus(item)) {
 		try {
 			await saveLocalItem(item, store);
@@ -187,7 +200,7 @@ async function synchronizeItem(item: PdfQueueItem) {
 		}
 
 		const sessionId = item.sessionId;
-		if (sessionId === null) return;
+		if (sessionId === null || completedElsewhere.has(item.id)) return;
 		const status = remoteStatus(item);
 		await updateImportSession(sessionId, {
 			status,
@@ -209,10 +222,7 @@ async function synchronizeItem(item: PdfQueueItem) {
 			// A later cleanup pass can remove the local record.
 		}
 	}
-	if (typeof BroadcastChannel !== 'undefined') {
-		importChannel ??= new BroadcastChannel('fichario-imports');
-		importChannel.postMessage({ type: 'pdf-import-updated', id: item.id, status: item.status });
-	}
+	publishImportUpdate({ type: 'pdf-import-updated', id: item.id, status: item.status });
 }
 
 function persistItem(item: PdfQueueItem) {
@@ -298,6 +308,34 @@ function clearPumpRetry() {
 	clearTimeout(lockRetryTimer);
 	lockRetryTimer = null;
 }
+
+function discardCompletedElsewhere(itemId: string) {
+	const index = pdfImportQueue.items.findIndex((item) => item.id === itemId);
+	if (index < 0) return;
+	const [item] = pdfImportQueue.items.splice(index, 1);
+	if (!item) return;
+	completedElsewhere.add(item.id);
+	controllers.get(item.id)?.abort();
+	queuedFiles.delete(item.file);
+	if (!pdfImportQueue.items.some((candidate) => candidate.status === 'queued')) {
+		clearPumpRetry();
+	}
+	void persistItem(item).finally(() => {
+		completedElsewhere.delete(item.id);
+		itemStores.delete(item.id);
+	});
+}
+
+function handleImportUpdate(update: ImportBroadcastUpdate) {
+	if (
+		update.type === 'pdf-import-updated' &&
+		['complete', 'needs_review', 'duplicate', 'cancelled'].includes(update.status)
+	) {
+		discardCompletedElsewhere(update.id);
+	}
+}
+
+subscribeImportUpdates(handleImportUpdate);
 
 function schedulePumpRetry() {
 	if (lockRetryTimer !== null) return;
