@@ -92,7 +92,7 @@
 	}
 
 	function canCancel(item: ImportQueueItem) {
-		return item.status === 'preparing' || item.status === 'uploading';
+		return ['preparing', 'uploading', 'reading'].includes(item.status);
 	}
 
 	function canRetry(item: ImportQueueItem) {
