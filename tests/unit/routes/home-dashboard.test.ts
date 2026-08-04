@@ -9,7 +9,7 @@ describe('home dashboard', () => {
 		expect(source).toContain("import { listDocuments } from '$lib/services/documents';");
 		expect(source).toContain("import { loadUsageOverview } from '$lib/services/usage';");
 		expect(source).toMatch(
-			/Promise\.all\(\[[\s\S]*loadUsageOverview\(\)[\s\S]*listDocuments\(\{ limit: 6 \}\)[\s\S]*\]\)/
+			/Promise\.allSettled\(\[[\s\S]*loadUsageOverview\(\)[\s\S]*listDocuments\(\{ limit: 6 \}\)[\s\S]*\]\)/
 		);
 		expect(source).toContain('usage.totals.documents');
 		expect(source).toContain('usage.totals.pages');
@@ -17,6 +17,14 @@ describe('home dashboard', () => {
 		expect(source).toContain('{#each recentDocuments as document (document.id)}');
 		expect(source).toContain('<DocumentCard {document} />');
 		expect(source).not.toContain('<strong>0</strong>');
+	});
+
+	it('keeps each dashboard section available when only the other source fails', () => {
+		expect(source).toContain("usageResult.status === 'fulfilled'");
+		expect(source).toContain("documentsResult.status === 'fulfilled'");
+		expect(source).toContain('let documentsAvailable = $state(false);');
+		expect(source).toContain('Parte do resumo não pôde ser atualizada.');
+		expect(source).toContain('Os documentos recentes não puderam ser carregados.');
 	});
 
 	it('ignores stale dashboard loads and offers an explicit retry', () => {
