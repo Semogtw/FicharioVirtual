@@ -13,6 +13,7 @@
 	let message = $state<string | null>(null);
 	let error = $state<string | null>(null);
 	const exportRequests = new RequestVersion();
+	const signOutRequests = new RequestVersion();
 
 	async function exportData() {
 		if (exporting || signingOut) return;
@@ -36,13 +37,16 @@
 	async function signOut() {
 		if (signingOut || exporting) return;
 		if (signedOut) return;
+		const version = signOutRequests.next();
 		signingOut = true;
 		error = null;
 		message = null;
 		try {
 			try {
 				await endSession();
+				if (!signOutRequests.isCurrent(version)) return;
 			} catch {
+				if (!signOutRequests.isCurrent(version)) return;
 				error = sessionState.error ?? 'Não foi possível encerrar a sessão agora.';
 				return;
 			}
@@ -50,15 +54,17 @@
 			try {
 				await goto('/login/');
 			} catch {
+				if (!signOutRequests.isCurrent(version)) return;
 				error = 'Sessão encerrada, mas não foi possível abrir a tela de acesso.';
 			}
 		} finally {
-			signingOut = false;
+			if (signOutRequests.isCurrent(version)) signingOut = false;
 		}
 	}
 
 	onDestroy(() => {
 		exportRequests.next();
+		signOutRequests.next();
 	});
 </script>
 
