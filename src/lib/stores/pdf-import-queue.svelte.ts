@@ -110,8 +110,15 @@ function terminalStatus(item: PdfQueueItem) {
 }
 
 function storedStatus(item: PdfQueueItem): StoredPdfImportRecord['status'] {
-	if (terminalStatus(item)) return 'cancelled';
-	return item.status;
+	switch (item.status) {
+		case 'complete':
+		case 'needs_review':
+		case 'duplicate':
+		case 'cancelled':
+			return 'cancelled';
+		default:
+			return item.status;
+	}
 }
 
 function storedRecord(item: PdfQueueItem): StoredPdfImportRecord {
