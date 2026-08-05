@@ -40,15 +40,31 @@ function browserChannel(): ImportBroadcastChannel | null {
 		: new BroadcastChannel('fichario-imports');
 }
 
+type ImportBroadcastErrorHandler = (error: unknown) => void;
+
+function reportListenerError(error: unknown) {
+	const reporter = (globalThis as { reportError?: ImportBroadcastErrorHandler }).reportError;
+	reporter?.(error);
+}
+
 export class ImportBroadcastCoordinator {
 	private readonly listeners = new Set<(update: ImportBroadcastUpdate) => void>();
 	private readonly onMessage = (event: MessageEvent<unknown>) => {
 		const update = parseUpdate(event.data);
 		if (!update) return;
-		for (const listener of this.listeners) listener(update);
+		for (const listener of this.listeners) {
+			try {
+				listener(update);
+			} catch (error) {
+				this.onListenerError(error);
+			}
+		}
 	};
 
-	constructor(private readonly channel: ImportBroadcastChannel | null = browserChannel()) {
+	constructor(
+		private readonly channel: ImportBroadcastChannel | null = browserChannel(),
+		private readonly onListenerError: ImportBroadcastErrorHandler = reportListenerError
+	) {
 		this.channel?.addEventListener('message', this.onMessage);
 	}
 
