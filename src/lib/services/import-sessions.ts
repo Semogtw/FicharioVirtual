@@ -412,11 +412,7 @@ export async function listImportSessionsByResumeKeys(
 	client?: SupabaseClient<Database>
 ) {
 	try {
-		return await listImportSessionsByResumeKeysWithGateway(
-			gateway(client),
-			userId,
-			resumeKeys
-		);
+		return await listImportSessionsByResumeKeysWithGateway(gateway(client), userId, resumeKeys);
 	} catch (error) {
 		if (error instanceof TypeError) throw error;
 		throw new ImportSessionServiceError();
