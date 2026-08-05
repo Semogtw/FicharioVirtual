@@ -54,8 +54,8 @@ describe('requestGeminiOcr', () => {
 				parts: Array<{ inlineData?: { mimeType: string; data: string }; text?: string }>;
 			}>;
 			generationConfig: {
-				temperature: number;
 				maxOutputTokens: number;
+				[key: string]: unknown;
 				responseFormat: {
 					text: { mimeType: string; schema: { required: string[] } };
 				};
@@ -66,9 +66,11 @@ describe('requestGeminiOcr', () => {
 			data: 'AQID'
 		});
 		expect(body.contents[0]?.parts[1]?.text).toContain('Versão do prompt: 1.');
+		expect(body.generationConfig).not.toHaveProperty('temperature');
+		expect(body.generationConfig).not.toHaveProperty('topP');
+		expect(body.generationConfig).not.toHaveProperty('topK');
 		expect(body.generationConfig).toEqual(
 			expect.objectContaining({
-				temperature: 0,
 				maxOutputTokens: 8192,
 				responseFormat: {
 					text: expect.objectContaining({
