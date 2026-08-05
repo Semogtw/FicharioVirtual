@@ -3,6 +3,7 @@
 	import { onDestroy } from 'svelte';
 	import Button from '$lib/components/Button.svelte';
 	import InstallAppButton from '$lib/components/InstallAppButton.svelte';
+	import ThemePicker from '$lib/components/ThemePicker.svelte';
 	import { createPortableExport, downloadPortableExport } from '$lib/services/export';
 	import { RequestVersion } from '$lib/services/request-version';
 	import { endSession, sessionState } from '$lib/stores/session.svelte';
@@ -88,6 +89,8 @@
 	{:else}
 		{#if error}<p class="error" role="alert">{error}</p>{/if}
 		{#if message}<p class="message" role="status">{message}</p>{/if}
+
+		<ThemePicker />
 
 		<section class="settings-card" aria-labelledby="export-title">
 			<div>
@@ -228,16 +231,16 @@
 		gap: 0.4rem;
 		margin: 0;
 		padding-left: 1.2rem;
-		color: #46504a;
+		color: var(--muted-strong);
 		line-height: 1.5;
 	}
 
 	.danger-zone {
-		border-color: rgb(155 63 54 / 22%);
+		border-color: rgb(var(--danger-rgb) / 22%);
 	}
 
 	.danger-zone button {
-		border-color: rgb(155 63 54 / 35%);
+		border-color: rgb(var(--danger-rgb) / 35%);
 		color: var(--danger);
 		cursor: pointer;
 	}
@@ -276,7 +279,7 @@
 		margin: 0;
 		padding: 0.75rem 0.9rem;
 		border-left: 0.3rem solid var(--danger);
-		background: rgb(155 63 54 / 7%);
+		background: rgb(var(--danger-rgb) / 7%);
 		color: var(--danger);
 	}
 

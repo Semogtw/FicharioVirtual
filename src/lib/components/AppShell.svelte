@@ -110,8 +110,8 @@
 		gap: 0.75rem;
 		min-height: var(--topbar-height);
 		padding: 1rem;
-		border-bottom: 1px solid rgb(221 215 204 / 78%);
-		background: rgb(247 244 238 / 92%);
+		border-bottom: 1px solid rgb(var(--line-rgb) / 78%);
+		background: rgb(var(--paper-rgb) / 92%);
 		backdrop-filter: blur(0.9rem);
 	}
 
