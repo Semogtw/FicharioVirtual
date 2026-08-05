@@ -52,7 +52,8 @@ export class ImportBroadcastCoordinator {
 	private readonly onMessage = (event: MessageEvent<unknown>) => {
 		const update = parseUpdate(event.data);
 		if (!update) return;
-		for (const listener of this.listeners) {
+		for (const listener of [...this.listeners]) {
+			if (!this.listeners.has(listener)) continue;
 			try {
 				listener(update);
 			} catch (error) {
