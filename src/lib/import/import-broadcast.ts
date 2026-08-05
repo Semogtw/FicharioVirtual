@@ -73,7 +73,9 @@ export class ImportBroadcastCoordinator {
 
 	publish(update: ImportBroadcastUpdate) {
 		if (this.closed) return;
-		this.channel?.postMessage(update);
+		const validated = parseUpdate(update);
+		if (!validated) return;
+		this.channel?.postMessage(validated);
 	}
 
 	subscribe(listener: (update: ImportBroadcastUpdate) => void) {
