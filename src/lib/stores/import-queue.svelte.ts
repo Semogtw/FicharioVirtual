@@ -516,7 +516,7 @@ export async function restoreImageImports(userId: string, store?: ImportResumeSt
 			const item: ImportQueueItem = {
 				id: record.id,
 				userId: record.userId,
-				sessionId: record.sessionId ?? remoteSession?.id ?? null,
+				sessionId: remoteSession?.id ?? record.sessionId ?? null,
 				resumeKey: record.resumeKey,
 				file: record.file,
 				mode: record.mode,
