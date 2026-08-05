@@ -31,8 +31,8 @@ describe('import queue cross-tab exclusion', () => {
 
 	it('discards terminal image imports completed in another tab', () => {
 		expect(imageQueue).toContain(
-		"import {\n\tpublishImportUpdate,\n\tsubscribeImportUpdates,\n\ttype ImportBroadcastUpdate\n} from '$lib/import/import-broadcast';"
-	);
+			"import {\n\tpublishImportUpdate,\n\tsubscribeImportUpdates,\n\ttype ImportBroadcastUpdate\n} from '$lib/import/import-broadcast';"
+		);
 		expect(imageQueue).toContain('const completedElsewhere = new Set<string>();');
 		expect(imageQueue).toContain("update.type === 'image-import-updated'");
 		expect(imageQueue).toContain('subscribeImportUpdates(handleImportUpdate);');
