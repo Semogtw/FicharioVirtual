@@ -1,83 +1,74 @@
 # Estado atual do Fichário Virtual
 
-_Atualizado: 2026-08-04_  
+_Atualizado: 2026-08-05_  
 _Branch ativa: `main`_  
-_Último checkpoint de código integralmente validado: `62b7dd03fa23d9adbf0ecdf0bf95110de170028e`_  
-_Recibo: workflow `Validate current head`, run `30930617779`, issue `Semogtw/FicharioVirtual#1`_  
-_Estado: MVP funcional com hardening amplo de contratos, concorrência e recuperação; staging real, OCR externo e host HTTPS continuam pendentes._
+_Último checkpoint de código integralmente validado: `c5aee7b9bfbe553d8f253814cac9c3f67a0faba7`_  
+_Recibo: workflow `Validate current head`, run `30973916483`_  
+_Estado: MVP funcional com hardening amplo de contratos, concorrência, recuperação e retomada; staging real, OCR externo e host HTTPS continuam pendentes._
 
 ## Resumo executivo
 
 O Fichário Virtual é uma PWA SvelteKit estática para organizar imagens e PDFs privados, preservar texto nativo, executar OCR seletivo no backend e oferecer busca, leitura, revisão, organização e exportação. A aplicação usa Supabase Auth, PostgreSQL, RLS, Storage privado e Edge Functions.
 
-O MVP está implementado. O checkpoint validado mais recente corrigiu a busca global, preservou o controle de fluxo de redirects do SvelteKit, eliminou novas corridas de teardown em componentes e mutações, ativou o bootstrap global da sessão no navegador e alinhou o cancelamento da retomada de OCR em PDFs.
+O MVP está implementado. O checkpoint validado mais recente endureceu as filas de importação de imagem e PDF contra concorrência entre abas, mensagens malformadas, falhas de Web Locks, persistências tardias e restaurações locais obsoletas. Uma aba que estava fechada durante a conclusão agora consulta a sessão remota pelo `resumeKey` e não reativa trabalho já concluído ou cancelado.
 
 A prontidão operacional ainda depende de staging real, host HTTPS, testes em dispositivos e verificação dos limites gratuitos. Percentuais de prontidão, quando necessários, devem ser derivados de `docs/READINESS.md`; este documento registra fatos e evidências.
 
 ## Evidência do checkpoint validado
 
-No SHA `62b7dd03fa23d9adbf0ecdf0bf95110de170028e`, o workflow `Validate current head` passou integralmente:
+No SHA `c5aee7b9bfbe553d8f253814cac9c3f67a0faba7`, o workflow `Validate current head` passou integralmente:
 
 ```text
 Prettier: PASS
 ESLint: PASS
-svelte-check: PASS — 0 erros, 0 warnings
-Vitest: PASS — 478 testes em 112 arquivos
+svelte-check: PASS
+Vitest: PASS — 559 testes em 131 arquivos
 build estático/PWA: PASS
 gates offline de fonte: PASS
-Edge Functions com Deno: PASS
 Playwright Chromium: PASS — 3/3 E2E
-Supabase local: PASS — migrations, RLS, Storage e 54 testes de banco
+Edge Functions com Deno: PASS
+Supabase local: PASS — migrations, RLS, Storage e testes de banco
 ```
 
-O recibo persistente está em `Semogtw/FicharioVirtual#1`, associado ao run `30930617779`. O workflow também publica o archive exato do source validado e, quando o frontend falha, artifacts de log e reparo de Prettier.
+O run `30973916483` publicou o archive exato do source e evidência do Playwright, sem artifact de falha de frontend ou reparo de Prettier. O checkpoint detalhado está em `docs/checkpoints/2026-08-05-cross-tab-import-hardening.md`.
 
-Este documento é posterior ao checkpoint acima. O próprio commit documental deve ser considerado validado somente quando o recibo registrar sucesso para seu SHA.
-
-## Gates externos ainda não executados
-
-```text
-Verify Supabase staging: NOT RUN — projeto e credenciais de staging não configurados
-Verify OCR staging: NOT RUN — função e secret do provedor não configurados em staging
-Verify deployed Fichário: NOT RUN — host HTTPS final não publicado
-Testes em tablet e celular físicos: NOT RUN
-Verificação operacional de billing, backup e rollback: NOT RUN
-```
+Este documento é posterior ao checkpoint de código acima. Seu próprio commit deve ser considerado validado somente quando o workflow registrar sucesso para o SHA documental final.
 
 ## Mudanças do checkpoint
 
-### Navegação e busca
+### Coordenação entre abas
 
-- a busca global do `AppShell` navega para `/search/?q=...`, em vez de enviar a consulta para `/library/`, que não consumia o parâmetro;
-- o campo superior reflete o `q` da rota de pesquisa atual;
-- o guard de `+layout.ts` captura somente a consulta de autenticação e mantém `redirect()` fora do `catch`, preservando o controle de fluxo do SvelteKit.
+- as filas de imagem e PDF usam exclusão mútua compartilhada por `resumeKey`;
+- Web Locks continua sendo a primeira opção e cai para lease de `localStorage` somente quando a API falha antes de executar a tarefa;
+- erros da tarefa adquirida são propagados sem retry que possa duplicar upload ou OCR;
+- mensagens de `BroadcastChannel` são validadas estritamente tanto na recepção quanto antes da publicação;
+- uma falha em subscriber ou no reporter da falha não interrompe subscribers seguintes;
+- subscribers adicionados durante um dispatch só recebem a próxima mensagem;
+- coordenadores fechados ficam inertes e encerram o canal nativo uma única vez.
 
-### Teardown e concorrência
+### Conclusão remota e tombstones
 
-- `CorrectionEditor` invalida a conclusão do save remoto ao desmontar e não dispara `onSaved` para uma tela inexistente;
-- `InstallAppButton` invalida a conclusão do prompt, consome cada `beforeinstallprompt` uma única vez e trata rejeições do navegador;
-- login, exportação e logout deixam de publicar estado ou navegar depois do teardown;
-- a criação de cadernos possui token separado da recarga da lista;
-- criação, renomeação, exclusão e associação de tags, incluindo `refreshTags`, são invalidadas em conjunto ao sair da rota;
-- saves paralelos da organização em lote continuam independentes, mas usam um token de vida da rota para suprimir conclusões após desmontagem;
-- o rastreador global de sessão ignora eventos já enfileirados em microtask depois que a assinatura é encerrada;
-- `src/hooks.client.ts` inicializa a sessão e ativa o rastreamento uma única vez no navegador;
-- logout externo invalida os `load` ativos para que o guard global redirecione imediatamente;
-- logout explícito continua dono da própria navegação e não dispara revalidação duplicada.
+- uma atualização terminal de outra aba remove o item perdedor, aborta trabalho ativo e cancela retries;
+- persistências tardias não podem regredir a sessão remota depois que outra aba venceu;
+- tombstones por objeto usam `WeakSet`, sem impedir coleta de lixo;
+- um cache limitado a 512 IDs por 30 minutos cobre mensagens recebidas antes da leitura do IndexedDB;
+- registros locais concluídos em outra aba antes da restauração são apagados sem preparação, upload ou OCR duplicados.
 
-### Importação e OCR
+### Restauração após aba fechada
 
-- o cancelamento de uma retomada de OCR de PDF que rejeita com `AbortError` permanece em `cancelled`, sem ser reclassificado como falha pendente;
-- a fila continua preservando resultados parciais quando o provedor conclui trabalho mesmo após o sinal de cancelamento;
-- os clientes de worker de imagem e PDF encerram worker e listener por tarefa.
+- as filas consultam sessões remotas pelos `resumeKey`, incluindo estados terminais;
+- uma sessão remota `completed` ou `cancelled` elimina o registro local obsoleto mesmo quando a aba não recebeu broadcast;
+- falha de rede preserva o registro local e mantém o caminho offline recuperável;
+- o ID da sessão encontrada pelo servidor prevalece sobre um `sessionId` local antigo;
+- respostas remotas são submetidas aos mesmos contratos estritos de propriedade, UUID, timestamps, contadores, status e unicidade.
 
-### Pipeline e documentação
+### Pipeline e diagnóstico
 
-- o workflow valida também `README.md` e `docs/**`;
-- falhas de frontend geram log persistente;
-- falhas de formatação geram um patch exato produzido pela versão travada do Prettier;
-- o recibo informa outcomes de frontend, source, Chromium, browser, Edge e banco;
-- `docs/TESTING.md` foi reconstruído para refletir os comandos e gates reais do repositório.
+- commits de teste vermelho foram usados antes das correções comportamentais;
+- falhas de frontend continuam gerando logs persistentes;
+- falhas de formatação continuam gerando patch exato produzido pela versão travada do Prettier;
+- o workflow valida frontend, build, gates offline, Chromium, Edge Functions e banco Supabase local;
+- o ambiente desta sessão não resolveu GitHub nem o registry do npm, mas o checkout foi reconstruído a partir do artifact do CI e os gates completos foram executados pelo workflow reproduzível.
 
 ## Produto implementado
 
@@ -100,38 +91,25 @@ Verificação operacional de billing, backup e rollback: NOT RUN
 - estados explícitos de retry, quota, revisão, falha e cancelamento;
 - retomada sem reupload e rollup automático do estado do documento;
 - seleção de caderno preservada entre URL, importação por imagens e PDF;
-- bloqueio de fallback silencioso quando o caderno solicitado não pôde ser confirmado.
+- coordenação entre abas e reconciliação de registros locais com sessões remotas.
 
 ### Busca, revisão e organização
 
 - busca textual reativa a alterações de `?q=` sem remontar a rota;
 - busca global conectada à rota de resultados;
 - cancelamento e versionamento de consultas antigas;
-- filtro de caderno com erro e retry independentes;
 - fila de revisão paginada e protegida contra recargas antigas;
-- retry OCR invalidado ao desmontar a rota;
-- rascunhos locais resolvidos em lotes de até 100 IDs;
-- rascunhos continuam visíveis e descartáveis quando a localização remota falha;
+- rascunhos locais resolvidos em lotes e preservados diante de falhas parciais;
 - tags com carga inicial, associações versionadas, retry específico e mutações serializadas;
 - organização em lote preserva título e caderno quando fontes opcionais falham.
 
 ### Resiliência de rotas
 
-As rotas e componentes assíncronos usam `RequestVersion`, `AbortController` ou cancelamento equivalente para impedir que respostas antigas alterem dados, erros, callbacks ou indicadores depois de uma tentativa mais nova ou do desmontar da tela.
+Rotas e componentes assíncronos usam `RequestVersion`, `AbortController` ou cancelamento equivalente para impedir que respostas antigas alterem dados, erros, callbacks ou indicadores depois de uma tentativa mais nova ou do desmontar da tela.
 
-Foram endurecidos:
+Foram endurecidos home, busca, biblioteca, cadernos, documentos, revisão, rascunhos, tags, organização em lote, importações, login, logout, exportação, editor de correção e instalação do PWA.
 
-- home, busca, biblioteca e painel de uso;
-- lista e detalhe de cadernos;
-- detalhe e exclusão de documentos;
-- fila de revisão e rascunhos locais;
-- tags e organização em lote;
-- importação por imagem e PDF;
-- login, logout, exportação, editor de correção e instalação do PWA.
-
-Falhas parciais preservam conteúdo válido e oferecem retry independente. Operações incompatíveis — como exportar e sair, retomar OCR e excluir, ou alterar associação durante mutação de tag — são mutuamente exclusivas.
-
-Conclusões de domínio também são separadas da navegação: documento excluído, login confirmado ou logout concluído não são reclassificados como falha apenas porque `goto()` falhou.
+Falhas parciais preservam conteúdo válido e oferecem retry independente. Operações incompatíveis são mutuamente exclusivas, e conclusões de domínio não são reclassificadas como falha somente porque uma navegação posterior falhou.
 
 ### Dados e segurança
 
@@ -143,29 +121,21 @@ Conclusões de domínio também são separadas da navegação: documento excluí
 - CSP, HSTS, Permissions Policy e política de cache verificáveis;
 - exportação JSON portátil sem tokens, URLs assinadas ou caminhos internos;
 - exclusão composta e idempotente por Edge Function;
-- parsers estritos para respostas de serviços e RPCs;
+- parsers estritos para respostas de serviços, RPCs e coordenação entre abas;
 - validação de UUIDs, timestamps, filtros, payloads de criação e atualização.
 
-## Workspace offline
+## Gates externos ainda não executados
 
-O repositório `Semogtw/Offline-Toolchains` fabrica um workspace Linux x64 com Node, pnpm/store, Chromium, Deno/cache e Supabase CLI.
+```text
+Verify Supabase staging: NOT RUN — projeto e credenciais de staging não configurados
+Verify OCR staging: NOT RUN — função e secret do provedor não configurados em staging
+Verify deployed Fichário: NOT RUN — host HTTPS final não publicado
+Testes em tablet e celular físicos: NOT RUN
+Verificação operacional de billing, backup e rollback: NOT RUN
+```
 
-O bundle permite instalar dependências com o registry bloqueado, executar frontend, build/PWA, gates de fonte, E2E e `deno check`. Docker e imagens Supabase continuam externos ao archive.
+Também permanecem sem validação externa:
 
-O trigger deve ser movido para um checkpoint novo somente depois que o source estiver estabilizado e o workflow do repositório principal estiver verde. O próximo alvo é o commit documental que preservar este checkpoint verde e também passar pelo workflow.
-
-Ao atualizar o source commit:
-
-1. estabilizar o HEAD e obter o recibo verde do repositório principal;
-2. mover `triggers/fichario-toolchain.json` para o SHA exato;
-3. aguardar o recibo em `Offline-Toolchains#28`;
-4. baixar manifest e partes do run bem-sucedido;
-5. conferir SHA-256 antes de extrair;
-6. usar o novo bundle como base, sem sobrepor um checkout antigo implicitamente.
-
-## Ainda não validado externamente
-
-- migrations, Auth, RLS e Storage no projeto Supabase remoto;
 - expiração de URL assinada no serviço real;
 - modelo Gemini e quota reais;
 - persistência, retomada e cleanup implantados após 429, 503, timeout e payload inválido;
@@ -174,17 +144,33 @@ Ao atualizar o source commit:
 - headers e cache do host final;
 - limites gratuitos, billing desativado, backup e rollback operacionais.
 
+## Workspace offline
+
+O repositório `Semogtw/Offline-Toolchains` fabrica um workspace Linux x64 com Node, pnpm/store, Chromium, Deno/cache e Supabase CLI.
+
+O bundle permite instalar dependências com o registry bloqueado, executar frontend, build/PWA, gates de fonte, E2E e `deno check`. Docker e imagens Supabase continuam externos ao archive.
+
+O trigger deve ser movido somente depois que o commit documental final estiver verde:
+
+1. estabilizar o HEAD e obter o recibo verde do repositório principal;
+2. mover `triggers/fichario-toolchain.json` para o SHA exato;
+3. aguardar o recibo em `Offline-Toolchains#28`;
+4. baixar manifest e partes do run bem-sucedido;
+5. conferir SHA-256 antes de extrair;
+6. usar o novo bundle como base, sem sobrepor um checkout antigo implicitamente.
+
 ## Próximas prioridades
 
-1. validar os commits documentais posteriores ao checkpoint de código;
+1. validar o commit documental final deste checkpoint;
 2. atualizar a toolchain offline para o SHA final estabilizado e obter recibo exato;
-3. criar um projeto Supabase de staging sem dados reais;
-4. aplicar migrations e cadastrar duas contas exclusivas de teste;
-5. executar `Verify Supabase staging` e `Verify OCR staging`;
-6. publicar um host HTTPS e executar `Verify deployed Fichário`;
-7. testar PDFs, cancelamento, retomada e PWA em tablet e celular;
-8. confirmar billing desativado, backup e rollback;
-9. somente então decidir entre staging prolongado e release privada.
+3. adicionar um cenário E2E multiaba quando o harness puder controlar duas páginas com IndexedDB e `BroadcastChannel` compartilhados;
+4. criar um projeto Supabase de staging sem dados reais;
+5. aplicar migrations e cadastrar duas contas exclusivas de teste;
+6. executar `Verify Supabase staging` e `Verify OCR staging`;
+7. publicar um host HTTPS e executar `Verify deployed Fichário`;
+8. testar PDFs, cancelamento, retomada e PWA em tablet e celular;
+9. confirmar billing desativado, backup e rollback;
+10. somente então decidir entre staging prolongado e release privada.
 
 ## Regras de continuidade
 
@@ -194,5 +180,6 @@ Ao atualizar o source commit:
 - não cachear respostas autenticadas;
 - não habilitar billing ou fallback pago silencioso;
 - não adicionar endpoint ou controle de fault injection à função implantada;
+- falha na consulta remota de sessão não deve apagar trabalho local recuperável;
 - manter commits pequenos e documentação alinhada;
 - atribuir `PASS` somente ao SHA em que o gate foi realmente executado.
