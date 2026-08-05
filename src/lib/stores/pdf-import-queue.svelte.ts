@@ -83,6 +83,13 @@ function message(error: unknown) {
 	return error instanceof Error ? error.message : 'Não foi possível importar este PDF.';
 }
 
+function appendPdfImportItem(item: PdfQueueItem) {
+	pdfImportQueue.items.push(item);
+	const appended = pdfImportQueue.items[pdfImportQueue.items.length - 1];
+	if (!appended) throw new Error('The PDF import queue rejected a new item.');
+	return appended;
+}
+
 export function pdfQueueStatusFromResult(result: UploadedPdf): PdfQueueStatus {
 	if (result.ocrPending > 0) return 'waiting';
 	if (result.ocrFailed > 0) return 'failed';
@@ -392,8 +399,8 @@ export function addPdfs(
 			duplicateDocumentId: null,
 			error: null
 		};
-		pdfImportQueue.items.push(item);
-		void persistItem(item).then(() => pump());
+		const queuedItem = appendPdfImportItem(item);
+		void persistItem(queuedItem).then(() => pump());
 	}
 }
 
@@ -522,9 +529,9 @@ export async function restorePdfImports(userId: string, store?: PdfResumeStore) 
 				duplicateDocumentId: null,
 				error: record.error
 			};
-			if (store) itemStores.set(item.id, store);
-			queuedFiles.add(item.file);
-			pdfImportQueue.items.push(item);
+			const queuedItem = appendPdfImportItem(item);
+			if (store) itemStores.set(queuedItem.id, store);
+			queuedFiles.add(queuedItem.file);
 		}
 		void pump();
 	} finally {
