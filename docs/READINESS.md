@@ -6,11 +6,11 @@ Os percentuais abaixo são uma estimativa de engenharia, não uma métrica autom
 
 ## Estimativa atual
 
-| Dimensão                           | Progresso estimado | Interpretação                                                                                                                                                       |
-| ---------------------------------- | -----------------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Escopo codificável conhecido       |           **100%** | O produto, os contratos de segurança, os gates e o runbook externo estão implementados; a auditoria não encontrou uma lacuna de código conhecida ainda pendente.   |
-| Prontidão operacional para release |            **85%** | CI, banco local, navegador, Edge Functions, PWA, retomada e concorrência estão validados; faltam staging, host real, OCR externo e dispositivos físicos.            |
-| Progresso total ponderado do MVP   |            **96%** | Estimativa combinada, atribuindo maior peso à implementação e mantendo peso relevante para evidência remota, operação e comportamento em hardware real.             |
+| Dimensão                           | Progresso estimado | Interpretação                                                                                                                                                    |
+| ---------------------------------- | -----------------: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Escopo codificável conhecido       |           **100%** | O produto, os contratos de segurança, os gates e o runbook externo estão implementados; a auditoria não encontrou uma lacuna de código conhecida ainda pendente. |
+| Prontidão operacional para release |            **85%** | CI, banco local, navegador, Edge Functions, PWA, retomada e concorrência estão validados; faltam staging, host real, OCR externo e dispositivos físicos.         |
+| Progresso total ponderado do MVP   |            **96%** | Estimativa combinada, atribuindo maior peso à implementação e mantendo peso relevante para evidência remota, operação e comportamento em hardware real.          |
 
 A estimativa total usa aproximadamente 70% de peso para implementação e 30% para prontidão operacional. Ela deve cair se staging ou dispositivos revelarem um defeito arquitetural e subir somente quando novas evidências forem executadas, não apenas documentadas.
 
