@@ -51,6 +51,13 @@ describe('import queue cross-tab exclusion', () => {
 		}
 	});
 
+	it('prefers the authoritative remote session found by resume key', () => {
+		for (const source of [imageQueue, pdfQueue]) {
+			expect(source).toContain('sessionId: remoteSession?.id ?? record.sessionId ?? null,');
+			expect(source).not.toContain('sessionId: record.sessionId ?? remoteSession?.id ?? null,');
+		}
+	});
+
 	it('uses the shared browser coordinator without a PDF busy loop', () => {
 		expectSharedExclusion(pdfQueue);
 		expect(pdfQueue).toContain('const IMPORT_LOCK_RETRY_MS = 1_000;');
