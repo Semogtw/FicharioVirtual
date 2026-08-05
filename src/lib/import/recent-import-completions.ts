@@ -22,10 +22,7 @@ export class RecentImportCompletions {
 
 	constructor(options: RecentImportCompletionOptions = {}) {
 		this.ttlMs = positiveInteger(options.ttlMs ?? DEFAULT_TTL_MS, 'ttlMs');
-		this.maxEntries = positiveInteger(
-			options.maxEntries ?? DEFAULT_MAX_ENTRIES,
-			'maxEntries'
-		);
+		this.maxEntries = positiveInteger(options.maxEntries ?? DEFAULT_MAX_ENTRIES, 'maxEntries');
 		this.now = options.now ?? Date.now;
 	}
 
