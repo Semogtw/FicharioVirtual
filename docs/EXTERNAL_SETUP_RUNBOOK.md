@@ -128,12 +128,14 @@ Na CLI ligada ao projeto de staging:
 supabase secrets set \
   APP_ORIGIN=https://staging.seu-dominio.example \
   GEMINI_API_KEY=<secret> \
-  OCR_MODEL_PRIMARY=<model-id-validado> \
+  OCR_MODEL_PRIMARY=gemini-3.6-flash \
   OCR_PROMPT_VERSION=1 \
   OCR_DAILY_HARD_LIMIT=100
 ```
 
-`OCR_MODEL_QUALITY` é opcional. Não o configure como fallback automático nem use um modelo pago sem decisão explícita.
+Use a versão estável explícita `gemini-3.6-flash`. Não use `gemini-flash-latest`, porque o alias pode trocar de versão. O cliente validado não envia `temperature`, `top_p` ou `top_k`; não adicione esses parâmetros, pois foram descontinuados para Gemini 3.6 Flash, Gemini 3.5 Flash-Lite e modelos futuros.
+
+`gemini-3.5-flash-lite` é uma alternativa de menor custo voltada a extração documental e JSON estruturado. Avalie-a somente depois de executar o mesmo smoke test OCR e registrar conscientemente a troca de custo/qualidade. `OCR_MODEL_QUALITY` é opcional, mas não existe fallback automático pago no código atual.
 
 Implante:
 
