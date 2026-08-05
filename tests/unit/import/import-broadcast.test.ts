@@ -39,6 +39,20 @@ describe('ImportBroadcastCoordinator', () => {
 		expect(listener).not.toHaveBeenCalled();
 	});
 
+	it('rejects malformed updates before publishing them', () => {
+		const channel = new FakeChannel();
+		const broadcasts = new ImportBroadcastCoordinator(channel);
+
+		broadcasts.publish(
+			{ type: 'image-import-updated', id: '../item', status: 'complete' } as never
+		);
+		broadcasts.publish(
+			{ type: 'image-import-updated', id: 'item-1', status: 'complete', extra: true } as never
+		);
+
+		expect(channel.postMessage).not.toHaveBeenCalled();
+	});
+
 	it('dispatches only strict import update messages', () => {
 		const channel = new FakeChannel();
 		const listener = vi.fn();
