@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	createImportSessionWithGateway,
+	listImportSessionsByResumeKeysWithGateway,
 	parseImportSession,
 	updateImportSessionWithGateway,
 	type ImportSessionsGateway
@@ -45,6 +46,18 @@ function gateway(events: string[] = []): ImportSessionsGateway {
 		},
 		async listActive() {
 			return [row()];
+		},
+		async listByResumeKeys(resumeKeys) {
+			events.push(`list:${resumeKeys.join(',')}`);
+			return [
+				row({
+					status: 'completed',
+					prepared_items: 1,
+					uploaded_items: 1,
+					completed_items: 1,
+					finished_at: timestamp
+				})
+			];
 		}
 	};
 }
@@ -113,5 +126,41 @@ describe('import session mutations', () => {
 				finishedAt: null
 			})
 		).rejects.toThrow(TypeError);
+	});
+});
+
+describe('import session restoration lookup', () => {
+	it('returns terminal sessions for exact resume keys', async () => {
+		const events: string[] = [];
+
+		const sessions = await listImportSessionsByResumeKeysWithGateway(
+			gateway(events),
+			userId,
+			[resumeKey]
+		);
+
+		expect(sessions).toHaveLength(1);
+		expect(sessions[0]?.status).toBe('completed');
+		expect(sessions[0]?.localResumeKey).toBe(resumeKey);
+		expect(Object.isFrozen(sessions)).toBe(true);
+		expect(events).toEqual([`list:${resumeKey}`]);
+	});
+
+	it('rejects duplicate requests and unexpected resume keys', async () => {
+		await expect(
+			listImportSessionsByResumeKeysWithGateway(gateway(), userId, [resumeKey, resumeKey])
+		).rejects.toThrow(TypeError);
+		await expect(
+			listImportSessionsByResumeKeysWithGateway(
+				{
+					...gateway(),
+					async listByResumeKeys() {
+						return [row({ local_resume_key: '44444444-4444-4444-8444-444444444444' })];
+					}
+				},
+				userId,
+				[resumeKey]
+			)
+		).rejects.toThrow('Invalid import session response');
 	});
 });
