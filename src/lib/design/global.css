@@ -58,7 +58,7 @@ p {
 }
 
 ::selection {
-	background: rgb(166 94 67 / 22%);
+	background: var(--selection);
 }
 
 .visually-hidden {

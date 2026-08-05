@@ -4,6 +4,7 @@ import { pauseQueue, resumeQueue } from '$lib/import/job-runner';
 import { createOcrQueueLifecycle } from '$lib/import/job-runner-lifecycle';
 import { restoreImageImports } from '$lib/stores/import-queue.svelte';
 import { restorePdfImports } from '$lib/stores/pdf-import-queue.svelte';
+import { initializeTheme } from '$lib/theme/theme';
 import {
 	initializeSession,
 	sessionState,
@@ -12,6 +13,7 @@ import {
 } from '$lib/stores/session.svelte';
 
 export const init: ClientInit = () => {
+	initializeTheme();
 	const ocrQueueLifecycle = createOcrQueueLifecycle(() => void resumeQueue());
 	subscribeSessionAuthorization((authorized) => {
 		if (authorized) ocrQueueLifecycle.start();
