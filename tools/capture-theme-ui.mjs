@@ -151,12 +151,16 @@ async function capture(context, path, heading, fileName) {
 	await page.close();
 }
 
-const server = spawn('pnpm', ['preview', '--host', '127.0.0.1', '--port', '4173'], {
-	cwd: process.cwd(),
-	env: process.env,
-	stdio: ['ignore', 'pipe', 'pipe'],
-	detached: process.platform !== 'win32'
-});
+const server = spawn(
+	process.execPath,
+	['node_modules/vite/bin/vite.js', 'preview', '--host', '127.0.0.1', '--port', '4173'],
+	{
+		cwd: process.cwd(),
+		env: process.env,
+		stdio: ['ignore', 'pipe', 'pipe'],
+		detached: process.platform !== 'win32'
+	}
+);
 
 server.stdout.on('data', (chunk) => process.stdout.write(chunk));
 server.stderr.on('data', (chunk) => process.stderr.write(chunk));

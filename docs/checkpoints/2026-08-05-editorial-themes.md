@@ -5,7 +5,7 @@
 - Added four light editorial palettes: Arquivo, Rosa Pastel, Azul Neblina and Lavanda Papel.
 - Added a typed theme catalog with safe local persistence, root `data-theme` application, browser `theme-color` updates and cross-tab synchronization.
 - Added an accessible Settings radio group with real palette swatches and immediate selection.
-- Converted embedded original-palette overlays to semantic CSS color channels so cards, shell, login, import, review and feedback states follow the selected palette.
+- Converted the primary shell, cards, Settings, Home and shared feedback surfaces to semantic CSS color channels; the root palette tokens also propagate across the remaining interface.
 - Added a reproducible Playwright capture script for the Rosa Pastel Settings and Home screens on desktop and mobile.
 
 ## Local verification
