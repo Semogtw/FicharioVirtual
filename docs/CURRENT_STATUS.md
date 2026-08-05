@@ -2,21 +2,21 @@
 
 _Atualizado: 2026-08-05_  
 _Branch ativa: `main`_  
-_Último checkpoint integralmente validado: `2c9ed12bace23412ae35dde0f246d85b9ff97d2c`_  
-_Recibo: workflow `Validate current head`, run `30979143410`, job `92219621128`_  
+_Último checkpoint de código integralmente validado: `09e444d9303415d3a0246f5e87710533e3326afd`_  
+_Recibo: workflow `Validate current head`, run `30980939759`, job `92225026818`_  
 _Estado: escopo codificável conhecido concluído; staging real, OCR externo, host HTTPS, dispositivos físicos e operação continuam pendentes._
 
 ## Resumo executivo
 
 O Fichário Virtual é uma PWA SvelteKit estática para organizar imagens e PDFs privados, preservar texto nativo, executar OCR seletivo no backend e oferecer busca, leitura, revisão, organização e exportação. A aplicação usa Supabase Auth, PostgreSQL, RLS, Storage privado e Edge Functions.
 
-O MVP e os gates necessários para validá-lo estão implementados no repositório. O checkpoint mais recente adicionou uma prova real de navegador com duas abas, encontrou e corrigiu uma falha de reatividade das filas Svelte e consolidou toda a configuração externa restante em `docs/EXTERNAL_SETUP_RUNBOOK.md`.
+O MVP e os gates necessários para validá-lo estão implementados no repositório. Os checkpoints desta continuação adicionaram uma prova real de navegador com duas abas, corrigiram uma falha de reatividade das filas Svelte, consolidaram a configuração externa em `docs/EXTERNAL_SETUP_RUNBOOK.md` e atualizaram o cliente OCR para os modelos Gemini 3.6 sem parâmetros de amostragem descontinuados.
 
 A auditoria final não encontrou `TODO`, `FIXME` ou teste ignorado que representasse uma feature conhecida incompleta. Isso não substitui staging ou testes físicos: a prontidão operacional ainda depende de serviços reais, host HTTPS, OCR externo, dispositivos e controles de billing, backup e rollback.
 
 ## Evidência do checkpoint validado
 
-No SHA `2c9ed12bace23412ae35dde0f246d85b9ff97d2c`, o workflow `Validate current head` passou integralmente:
+No SHA `09e444d9303415d3a0246f5e87710533e3326afd`, o workflow `Validate current head` passou integralmente:
 
 ```text
 Prettier: PASS
@@ -30,9 +30,21 @@ Edge Functions com Deno: PASS
 Supabase local: PASS — 76 testes de banco
 ```
 
-O run `30979143410` publicou o archive exato do source e evidência do Playwright, sem artifact de falha de frontend nem reparo do Prettier. O checkpoint detalhado está em `docs/checkpoints/2026-08-05-multitab-reactivity-and-external-runbook.md`.
+O run `30980939759` publicou o archive exato do source e evidência do Playwright, sem artifact de falha de frontend nem reparo do Prettier. Os checkpoints detalhados estão em:
+
+- `docs/checkpoints/2026-08-05-multitab-reactivity-and-external-runbook.md`;
+- `docs/checkpoints/2026-08-05-gemini-36-compatibility.md`.
 
 ## Mudanças mais recentes
+
+### Compatibilidade Gemini 3.6
+
+- o cliente OCR não envia `temperature`, `top_p` ou `top_k`;
+- a saída estruturada JSON e o schema estrito foram preservados;
+- a chave continua somente no header e nos secrets da Edge Function;
+- staging deve usar a versão estável explícita `gemini-3.6-flash`;
+- aliases `latest` e fallback pago silencioso continuam proibidos;
+- o contrato foi desenvolvido com teste vermelho e validado em 18 testes relacionados a cliente, delegação e falhas OCR.
 
 ### E2E multiaba real
 
@@ -57,6 +69,7 @@ As filas de imagem e PDF agora continuam o processamento usando a referência pr
 - cadastrar duas contas de teste;
 - configurar o environment `staging` no GitHub;
 - implantar Edge Functions e secrets;
+- configurar o modelo OCR estável;
 - construir e publicar o frontend estático em HTTPS;
 - executar os três gates externos;
 - testar celular e tablet;
@@ -84,7 +97,8 @@ As filas de imagem e PDF agora continuam o processamento usando a referência pr
 - retomada sem reupload e rollup automático do estado do documento;
 - seleção de caderno preservada entre URL, importação por imagens e PDF;
 - coordenação entre abas e reconciliação de registros locais com sessões remotas;
-- prova Chromium de que duas abas não duplicam uma retomada de imagem persistida.
+- prova Chromium de que duas abas não duplicam uma retomada de imagem persistida;
+- cliente Gemini compatível com a descontinuação dos parâmetros de amostragem.
 
 ### Busca, revisão e organização
 
@@ -132,7 +146,7 @@ Verificação operacional de billing, backup e rollback: NOT RUN
 Também permanecem sem validação externa:
 
 - expiração de URL assinada no serviço real;
-- modelo Gemini e quota reais;
+- disponibilidade, qualidade, quota e custo reais do Gemini 3.6 Flash;
 - persistência, retomada e cleanup implantados após 429, 503, timeout e payload inválido;
 - PDFs extensos e mistos em dispositivo físico;
 - instalação e atualização da PWA no navegador-alvo;
@@ -143,12 +157,12 @@ Também permanecem sem validação externa:
 
 O repositório `Semogtw/Offline-Toolchains` fabrica um workspace Linux x64 com Node, pnpm/store, Chromium, Deno/cache e Supabase CLI. O bundle permite instalar dependências com o registry bloqueado e executar frontend, build/PWA, gates de fonte, E2E e `deno check`. Docker e imagens Supabase continuam externos ao archive.
 
-O trigger deve apontar somente para um SHA integralmente verde do repositório principal. Depois de estabilizar este checkpoint documental, `triggers/fichario-toolchain.json` deve ser movido para o SHA final e o recibo registrado em `Offline-Toolchains#28`.
+O trigger deve apontar somente para o SHA documental final integralmente verde do repositório principal. Depois desse recibo, `triggers/fichario-toolchain.json` deve ser movido para o SHA exato e o novo recibo registrado em `Offline-Toolchains#28`.
 
 ## Próximas prioridades
 
 1. validar o commit documental final deste checkpoint;
-2. atualizar a toolchain offline para o SHA final verde e obter recibo exato;
+2. atualizar novamente a toolchain offline para o SHA final verde e obter recibo exato;
 3. seguir `docs/EXTERNAL_SETUP_RUNBOOK.md` para criar o Supabase de staging;
 4. executar `Verify Supabase staging`;
 5. implantar Edge Functions e publicar o host HTTPS;
@@ -165,6 +179,7 @@ O trigger deve apontar somente para um SHA integralmente verde do repositório p
 - não cachear respostas autenticadas;
 - não habilitar billing ou fallback pago silencioso;
 - não adicionar endpoint ou controle de fault injection à função implantada;
+- não reintroduzir `temperature`, `top_p` ou `top_k` no cliente Gemini;
 - falha na consulta remota de sessão não deve apagar trabalho local recuperável;
 - manter commits pequenos e documentação alinhada;
 - atribuir `PASS` somente ao SHA em que o gate foi realmente executado.
