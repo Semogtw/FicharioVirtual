@@ -46,7 +46,7 @@ async function mockSupabase(context: BrowserContext, counters: RequestCounters) 
 		prepared_items: 0,
 		uploaded_items: 0,
 		completed_items: 0,
-		last_error_code: null,
+		last_error_code: null as string | null,
 		local_resume_key: resumeKey,
 		created_at: timestamp,
 		updated_at: timestamp,
