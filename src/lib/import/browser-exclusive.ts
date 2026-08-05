@@ -116,22 +116,35 @@ export class BrowserExclusiveCoordinator {
 	}
 
 	async runExclusive(name: string, task: () => Promise<void>): Promise<boolean> {
-		if (this.lockManager) return this.runWithWebLock(name, task);
+		if (this.lockManager) {
+			const acquired = await this.runWithWebLock(name, task);
+			if (acquired !== null) return acquired;
+		}
 		return this.runWithStorageLease(name, task);
 	}
 
-	private async runWithWebLock(name: string, task: () => Promise<void>) {
+	private async runWithWebLock(
+		name: string,
+		task: () => Promise<void>
+	): Promise<boolean | null> {
 		let acquired = false;
-		await this.lockManager?.request(
-			name,
-			{ mode: 'exclusive', ifAvailable: true },
-			async (lock) => {
-				if (lock === null) return;
-				acquired = true;
-				await task();
-			}
-		);
-		return acquired;
+		let taskStarted = false;
+		try {
+			await this.lockManager?.request(
+				name,
+				{ mode: 'exclusive', ifAvailable: true },
+				async (lock) => {
+					if (lock === null) return;
+					acquired = true;
+					taskStarted = true;
+					await task();
+				}
+			);
+			return acquired;
+		} catch (error) {
+			if (taskStarted) throw error;
+			return null;
+		}
 	}
 
 	private async runWithStorageLease(name: string, task: () => Promise<void>) {
