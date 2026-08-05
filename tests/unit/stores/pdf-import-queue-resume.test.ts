@@ -9,7 +9,19 @@ const dependencies = vi.hoisted(() => ({
 	uploadPdf: vi.fn(),
 	listActiveImportSessions: vi.fn(),
 	updateImportSession: vi.fn(async () => undefined),
-	createImportSession: vi.fn()
+	createImportSession: vi.fn(),
+	publishImportUpdate: vi.fn(),
+	subscribeImportUpdates: vi.fn(),
+	importUpdateListener: null as
+		((update: { type: string; id: string; status: string }) => void) | null
+}));
+
+vi.mock('$lib/import/import-broadcast', () => ({
+	publishImportUpdate: dependencies.publishImportUpdate,
+	subscribeImportUpdates: dependencies.subscribeImportUpdates.mockImplementation((listener) => {
+		dependencies.importUpdateListener = listener;
+		return vi.fn();
+	})
 }));
 
 vi.mock('$lib/pdf/upload', async (importOriginal) => {
@@ -114,6 +126,24 @@ describe('PDF import queue restoration', () => {
 		dependencies.updateImportSession.mockClear();
 		dependencies.createImportSession.mockReset();
 		dependencies.createImportSession.mockResolvedValue({ id: sessionId, userId });
+		dependencies.publishImportUpdate.mockClear();
+		dependencies.subscribeImportUpdates.mockClear();
+		dependencies.importUpdateListener = null;
+	});
+
+	it('discards a stored PDF completed remotely before restoration starts', async () => {
+		const store = new MemoryStore(storedRecord());
+		const queue = await import('../../../src/lib/stores/pdf-import-queue.svelte');
+		const listener = dependencies.importUpdateListener;
+		if (!listener) throw new Error('Import broadcast listener was not registered.');
+
+		listener({ type: 'pdf-import-updated', id: 'restored-pdf', status: 'complete' });
+		await queue.restorePdfImports(userId, store);
+
+		expect(queue.pdfImportQueue.items).toHaveLength(0);
+		expect(store.records.size).toBe(0);
+		expect(dependencies.uploadPdf).not.toHaveBeenCalled();
+		expect(dependencies.updateImportSession).not.toHaveBeenCalled();
 	});
 
 	it('restarts an unpublished PDF and removes the local file after publication', async () => {
