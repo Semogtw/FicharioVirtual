@@ -29,6 +29,17 @@ describe('import queue cross-tab exclusion', () => {
 		expect(imageQueue).toContain('clearImportRetry(item.id);');
 	});
 
+	it('discards terminal image imports completed in another tab', () => {
+		expect(imageQueue).toContain(
+		"import {\n\tpublishImportUpdate,\n\tsubscribeImportUpdates,\n\ttype ImportBroadcastUpdate\n} from '$lib/import/import-broadcast';"
+	);
+		expect(imageQueue).toContain('const completedElsewhere = new Set<string>();');
+		expect(imageQueue).toContain("update.type === 'image-import-updated'");
+		expect(imageQueue).toContain('subscribeImportUpdates(handleImportUpdate);');
+		expect(imageQueue).toContain("publishImportUpdate({ type: 'image-import-updated'");
+		expect(imageQueue).not.toContain('let importChannel: BroadcastChannel | null = null;');
+	});
+
 	it('uses the shared browser coordinator without a PDF busy loop', () => {
 		expectSharedExclusion(pdfQueue);
 		expect(pdfQueue).toContain('const IMPORT_LOCK_RETRY_MS = 1_000;');
