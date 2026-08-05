@@ -49,7 +49,9 @@ function reportListenerError(error: unknown) {
 
 export class ImportBroadcastCoordinator {
 	private readonly listeners = new Set<(update: ImportBroadcastUpdate) => void>();
+	private closed = false;
 	private readonly onMessage = (event: MessageEvent<unknown>) => {
+		if (this.closed) return;
 		const update = parseUpdate(event.data);
 		if (!update) return;
 		for (const listener of [...this.listeners]) {
@@ -70,15 +72,19 @@ export class ImportBroadcastCoordinator {
 	}
 
 	publish(update: ImportBroadcastUpdate) {
+		if (this.closed) return;
 		this.channel?.postMessage(update);
 	}
 
 	subscribe(listener: (update: ImportBroadcastUpdate) => void) {
+		if (this.closed) return () => false;
 		this.listeners.add(listener);
 		return () => this.listeners.delete(listener);
 	}
 
 	close() {
+		if (this.closed) return;
+		this.closed = true;
 		this.listeners.clear();
 		this.channel?.removeEventListener('message', this.onMessage);
 		this.channel?.close();
