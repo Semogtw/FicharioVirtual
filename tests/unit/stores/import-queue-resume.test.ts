@@ -18,7 +18,8 @@ const dependencies = vi.hoisted(() => ({
 	createImportSession: vi.fn(),
 	publishImportUpdate: vi.fn(),
 	subscribeImportUpdates: vi.fn(),
-	importUpdateListener: null as ((update: { type: string; id: string; status: string }) => void) | null
+	importUpdateListener: null as
+		((update: { type: string; id: string; status: string }) => void) | null
 }));
 
 vi.mock('$lib/import/image-client', () => ({
