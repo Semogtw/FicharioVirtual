@@ -18,7 +18,7 @@ A estimativa total usa aproximadamente 70% de peso para implementação e 30% pa
 
 ## Evidência local e de CI concluída
 
-O checkpoint `2c9ed12bace23412ae35dde0f246d85b9ff97d2c`, validado pelo run `30979143410`, registra:
+O checkpoint `09e444d9303415d3a0246f5e87710533e3326afd`, validado pelo run `30980939759`, registra:
 
 - aplicação SvelteKit estática e responsiva;
 - autenticação fail-closed por allowlist;
@@ -27,6 +27,8 @@ O checkpoint `2c9ed12bace23412ae35dde0f246d85b9ff97d2c`, validado pelo run `3097
 - importação otimizada de imagens;
 - inspeção local e roteamento seletivo de PDFs;
 - OCR persistente, retomável, concorrente e idempotente;
+- cliente Gemini compatível com 3.6 Flash e sem parâmetros de amostragem descontinuados;
+- saída OCR estruturada por schema estrito, sem segredo na URL;
 - busca, leitor, revisão e rascunhos locais;
 - exportação portátil e painel de uso;
 - RLS, Storage privado e Edge Functions sem segredo no navegador;
@@ -70,7 +72,8 @@ O checkpoint `2c9ed12bace23412ae35dde0f246d85b9ff97d2c`, validado pelo run `3097
 - observar 429 diário/transitório, 503, timeout e payload inválido passando pela função implantada;
 - confirmar `page.status`, `ocr_jobs.status`, `last_error_code`, `next_retry_at` e `finished_at`;
 - confirmar retomada depois do backoff e limpeza somente após terminal válido;
-- verificar que nenhuma falha habilita cobrança, endpoint alternativo ou fallback silencioso.
+- verificar que nenhuma falha habilita cobrança, endpoint alternativo ou fallback silencioso;
+- comprovar disponibilidade, qualidade, quota e custo do modelo estável selecionado.
 
 A classificação, a resposta pública e o cálculo de backoff desses cenários já estão cobertos localmente por HTTP loopback. O item pendente é evidência operacional no Supabase remoto, não ausência do contrato em código.
 
