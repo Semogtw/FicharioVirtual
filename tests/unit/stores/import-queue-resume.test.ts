@@ -15,11 +15,22 @@ const dependencies = vi.hoisted(() => ({
 	processPageOcr: vi.fn(),
 	listActiveImportSessions: vi.fn(),
 	updateImportSession: vi.fn(async () => undefined),
-	createImportSession: vi.fn()
+	createImportSession: vi.fn(),
+	publishImportUpdate: vi.fn(),
+	subscribeImportUpdates: vi.fn(),
+	importUpdateListener: null as ((update: { type: string; id: string; status: string }) => void) | null
 }));
 
 vi.mock('$lib/import/image-client', () => ({
 	prepareImage: dependencies.prepareImage
+}));
+
+vi.mock('$lib/import/import-broadcast', () => ({
+	publishImportUpdate: dependencies.publishImportUpdate,
+	subscribeImportUpdates: dependencies.subscribeImportUpdates.mockImplementation((listener) => {
+		dependencies.importUpdateListener = listener;
+		return vi.fn();
+	})
 }));
 
 vi.mock('$lib/import/upload', () => ({
@@ -108,6 +119,25 @@ describe('image import queue restoration', () => {
 		dependencies.updateImportSession.mockClear();
 		dependencies.createImportSession.mockReset();
 		dependencies.createImportSession.mockResolvedValue({ id: sessionId, userId });
+		dependencies.publishImportUpdate.mockClear();
+		dependencies.subscribeImportUpdates.mockClear();
+		dependencies.importUpdateListener = null;
+	});
+
+	it('discards a stored image completed remotely before restoration starts', async () => {
+		const store = new MemoryStore(storedRecord(null));
+		const queue = await import('../../../src/lib/stores/import-queue.svelte');
+		const listener = dependencies.importUpdateListener;
+		if (!listener) throw new Error('Import broadcast listener was not registered.');
+
+		listener({ type: 'image-import-updated', id: 'restored-image', status: 'complete' });
+		await queue.restoreImageImports(userId, store);
+
+		expect(queue.importQueue.items).toHaveLength(0);
+		expect(store.records.size).toBe(0);
+		expect(dependencies.prepareImage).not.toHaveBeenCalled();
+		expect(dependencies.uploadPreparedImage).not.toHaveBeenCalled();
+		expect(dependencies.processPageOcr).not.toHaveBeenCalled();
 	});
 
 	it('resumes OCR without preparing or uploading an already published page', async () => {
