@@ -20,6 +20,23 @@ function expectSharedExclusion(source: string) {
 	expect(source).not.toContain('navigator as Navigator & { locks?:');
 }
 
+function occurrenceCount(source: string, value: string) {
+	return source.split(value).length - 1;
+}
+
+function expectReactiveQueueAppend(
+	source: string,
+	queueName: 'importQueue' | 'pdfImportQueue',
+	helperName: 'appendImportItem' | 'appendPdfImportItem',
+	itemType: 'ImportQueueItem' | 'PdfQueueItem'
+) {
+	expect(source).toContain(`function ${helperName}(item: ${itemType})`);
+	expect(occurrenceCount(source, `${queueName}.items.push(item);`)).toBe(1);
+	expect(occurrenceCount(source, `${helperName}(item)`)).toBe(2);
+	expect(source).toContain(`const appended = ${queueName}.items[${queueName}.items.length - 1];`);
+	expect(source).toContain('return appended;');
+}
+
 describe('import queue cross-tab exclusion', () => {
 	it('uses the shared browser coordinator and retries image lock contention', () => {
 		expectSharedExclusion(imageQueue);
@@ -56,6 +73,11 @@ describe('import queue cross-tab exclusion', () => {
 			expect(source).toContain('sessionId: remoteSession?.id ?? record.sessionId ?? null,');
 			expect(source).not.toContain('sessionId: record.sessionId ?? remoteSession?.id ?? null,');
 		}
+	});
+
+	it('continues queue work through the proxied item returned by Svelte state', () => {
+		expectReactiveQueueAppend(imageQueue, 'importQueue', 'appendImportItem', 'ImportQueueItem');
+		expectReactiveQueueAppend(pdfQueue, 'pdfImportQueue', 'appendPdfImportItem', 'PdfQueueItem');
 	});
 
 	it('uses the shared browser coordinator without a PDF busy loop', () => {
