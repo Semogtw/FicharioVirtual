@@ -43,12 +43,17 @@ describe('ImportBroadcastCoordinator', () => {
 		const channel = new FakeChannel();
 		const broadcasts = new ImportBroadcastCoordinator(channel);
 
-		broadcasts.publish(
-			{ type: 'image-import-updated', id: '../item', status: 'complete' } as never
-		);
-		broadcasts.publish(
-			{ type: 'image-import-updated', id: 'item-1', status: 'complete', extra: true } as never
-		);
+		broadcasts.publish({
+			type: 'image-import-updated',
+			id: '../item',
+			status: 'complete'
+		} as never);
+		broadcasts.publish({
+			type: 'image-import-updated',
+			id: 'item-1',
+			status: 'complete',
+			extra: true
+		} as never);
 
 		expect(channel.postMessage).not.toHaveBeenCalled();
 	});
