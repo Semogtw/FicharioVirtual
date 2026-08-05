@@ -58,6 +58,29 @@ describe('ImportBroadcastCoordinator', () => {
 		});
 	});
 
+	it('isolates subscriber failures so later listeners still receive the update', () => {
+		const channel = new FakeChannel();
+		const onListenerError = vi.fn();
+		const broadcasts = new ImportBroadcastCoordinator(channel, onListenerError);
+		const error = new Error('subscriber failed');
+		const first = vi.fn(() => {
+			throw error;
+		});
+		const second = vi.fn();
+		broadcasts.subscribe(first);
+		broadcasts.subscribe(second);
+
+		channel.emit({ type: 'image-import-updated', id: 'image_1', status: 'complete' });
+
+		expect(first).toHaveBeenCalledTimes(1);
+		expect(second).toHaveBeenCalledWith({
+			type: 'image-import-updated',
+			id: 'image_1',
+			status: 'complete'
+		});
+		expect(onListenerError).toHaveBeenCalledWith(error);
+	});
+
 	it('unsubscribes and closes the underlying channel', () => {
 		const channel = new FakeChannel();
 		const listener = vi.fn();
