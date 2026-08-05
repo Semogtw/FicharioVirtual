@@ -1,4 +1,9 @@
 import { runBrowserExclusive } from '$lib/import/browser-exclusive';
+import {
+	publishImportUpdate,
+	subscribeImportUpdates,
+	type ImportBroadcastUpdate
+} from '$lib/import/import-broadcast';
 import type { ImagePreparationMode } from '$lib/import/image-types';
 import { prepareImage } from '$lib/import/image-client';
 import {
@@ -54,9 +59,9 @@ const queuedFiles = new WeakSet<File>();
 const persistenceChains = new Map<string, Promise<void>>();
 const itemStores = new Map<string, ImportResumeStore>();
 const restoringUsers = new Set<string>();
+const completedElsewhere = new Set<string>();
 const importRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
 let consentPromise: Promise<void> | null = null;
-let importChannel: BroadcastChannel | null = null;
 
 function id(prefix = 'import') {
 	return (
@@ -150,6 +155,14 @@ async function deleteLocalItem(item: ImportQueueItem, store?: ImportResumeStore)
 
 async function synchronizeItem(item: ImportQueueItem) {
 	const store = itemStores.get(item.id);
+	if (completedElsewhere.has(item.id)) {
+		try {
+			await deleteLocalItem(item, store);
+		} catch {
+			// The winning tab already owns the terminal remote state.
+		}
+		return;
+	}
 	if (!terminalStatus(item)) {
 		try {
 			await saveLocalItem(item, store);
@@ -173,7 +186,7 @@ async function synchronizeItem(item: ImportQueueItem) {
 		}
 
 		const sessionId = item.sessionId;
-		if (sessionId === null) return;
+		if (sessionId === null || completedElsewhere.has(item.id)) return;
 		const completed = item.status === 'complete' || item.status === 'needs_review';
 		const status = remoteStatus(item);
 		await updateImportSession(sessionId, {
@@ -201,10 +214,7 @@ async function synchronizeItem(item: ImportQueueItem) {
 			// A later cleanup pass can remove the terminal local record.
 		}
 	}
-	if (typeof BroadcastChannel !== 'undefined') {
-		importChannel ??= new BroadcastChannel('fichario-imports');
-		importChannel.postMessage({ type: 'image-import-updated', id: item.id, status: item.status });
-	}
+	publishImportUpdate({ type: 'image-import-updated', id: item.id, status: item.status });
 }
 
 function persistItem(item: ImportQueueItem) {
@@ -229,6 +239,33 @@ function clearImportRetry(itemId: string) {
 	clearTimeout(timer);
 	importRetryTimers.delete(itemId);
 }
+
+function discardCompletedElsewhere(itemId: string) {
+	const index = importQueue.items.findIndex((item) => item.id === itemId);
+	if (index < 0) return;
+	const [item] = importQueue.items.splice(index, 1);
+	if (!item) return;
+	completedElsewhere.add(item.id);
+	clearImportRetry(item.id);
+	controllers.get(item.id)?.abort();
+	queuedFiles.delete(item.file);
+	releasePreview(item);
+	void persistItem(item).finally(() => {
+		completedElsewhere.delete(item.id);
+		itemStores.delete(item.id);
+	});
+}
+
+function handleImportUpdate(update: ImportBroadcastUpdate) {
+	if (
+		update.type === 'image-import-updated' &&
+		['complete', 'needs_review', 'duplicate', 'cancelled'].includes(update.status)
+	) {
+		discardCompletedElsewhere(update.id);
+	}
+}
+
+subscribeImportUpdates(handleImportUpdate);
 
 function scheduleImportRetry(
 	item: ImportQueueItem,
