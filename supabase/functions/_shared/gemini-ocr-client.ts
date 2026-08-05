@@ -138,7 +138,6 @@ export async function requestGeminiOcr(request: GeminiOcrRequest): Promise<OcrPa
 						}
 					],
 					generationConfig: {
-						temperature: 0,
 						maxOutputTokens: 8192,
 						responseFormat: {
 							text: { mimeType: 'application/json', schema: responseSchema }
