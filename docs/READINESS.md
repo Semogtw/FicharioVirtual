@@ -1,20 +1,24 @@
 # Prontidão do Fichário Virtual
 
-_Atualizado em 4 de agosto de 2026._
+_Atualizado em 5 de agosto de 2026._
 
-Os percentuais abaixo são uma estimativa de engenharia, não uma métrica automática. Eles separam implementação do produto de validação operacional para evitar que um MVP funcional seja confundido com uma release já pronta para dados reais.
+Os percentuais abaixo são uma estimativa de engenharia, não uma métrica automática. Eles separam implementação codificável de validação operacional para evitar que um produto completo no repositório seja confundido com uma release já comprovada em serviços reais e dispositivos físicos.
 
 ## Estimativa atual
 
-| Dimensão                           | Progresso estimado | Interpretação                                                                                                                                       |
-| ---------------------------------- | -----------------: | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| MVP implementado em código         |            **99%** | Produto, segurança e gates externos principais estão implementados; o restante codificável está concentrado em falhas remotas e operação assistida. |
-| Prontidão operacional para release |            **85%** | CI local, banco, navegador, Edge Functions, PWA e recuperação estão validados; faltam evidências no ambiente remoto e em dispositivos físicos.      |
-| Progresso total ponderado do MVP   |            **95%** | Estimativa combinada, atribuindo maior peso à implementação e mantendo peso relevante para segurança e operação reais.                              |
+| Dimensão                           | Progresso estimado | Interpretação                                                                                                                                                       |
+| ---------------------------------- | -----------------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Escopo codificável conhecido       |           **100%** | O produto, os contratos de segurança, os gates e o runbook externo estão implementados; a auditoria não encontrou uma lacuna de código conhecida ainda pendente.   |
+| Prontidão operacional para release |            **85%** | CI, banco local, navegador, Edge Functions, PWA, retomada e concorrência estão validados; faltam staging, host real, OCR externo e dispositivos físicos.            |
+| Progresso total ponderado do MVP   |            **96%** | Estimativa combinada, atribuindo maior peso à implementação e mantendo peso relevante para evidência remota, operação e comportamento em hardware real.             |
 
-A estimativa total usa aproximadamente 70% de peso para implementação e 30% para prontidão operacional. Ela deve cair se o staging revelar um defeito arquitetural e subir somente quando novas evidências forem executadas, não apenas documentadas.
+A estimativa total usa aproximadamente 70% de peso para implementação e 30% para prontidão operacional. Ela deve cair se staging ou dispositivos revelarem um defeito arquitetural e subir somente quando novas evidências forem executadas, não apenas documentadas.
 
-## O que está concluído
+`100%` do escopo codificável conhecido não significa `100%` de prontidão de release. Novos defeitos ainda podem ser encontrados pelos gates externos.
+
+## Evidência local e de CI concluída
+
+O checkpoint `2c9ed12bace23412ae35dde0f246d85b9ff97d2c`, validado pelo run `30979143410`, registra:
 
 - aplicação SvelteKit estática e responsiva;
 - autenticação fail-closed por allowlist;
@@ -27,10 +31,11 @@ A estimativa total usa aproximadamente 70% de peso para implementação e 30% pa
 - exportação portátil e painel de uso;
 - RLS, Storage privado e Edge Functions sem segredo no navegador;
 - PWA com cache restrito ao shell público;
-- 27 migrations aplicáveis em banco limpo;
-- 54 contratos pgTAP;
-- 478 testes unitários em 112 arquivos no checkpoint `62b7dd03fa23d9adbf0ecdf0bf95110de170028e`;
-- 3 cenários E2E no Chromium;
+- 31 migrations aplicáveis em banco limpo;
+- 76 testes de banco;
+- 560 testes Vitest em 131 arquivos;
+- 4 cenários E2E no Chromium;
+- E2E real com duas abas, IndexedDB, `BroadcastChannel` e exclusão mútua compartilhados;
 - gate HTTP loopback com 7 cenários de falha OCR;
 - classificação e backoff locais para 429 diário/transitório, 503, payload inválido e timeout;
 - parser fail-closed do resultado completo de `claim_ocr_job`;
@@ -45,9 +50,10 @@ A estimativa total usa aproximadamente 70% de peso para implementação e 30% pa
 - workflows manuais protegidos para host, Supabase e OCR;
 - workflow integral para código e documentação, com archive do source, log de falha e patch de Prettier;
 - workspace offline com Node, pnpm/store, Chromium, Deno/cache e Supabase CLI;
+- runbook único de configuração externa em `docs/EXTERNAL_SETUP_RUNBOOK.md`;
 - proteção do repositório de toolchains contra material de chave privada rastreado.
 
-## O que falta para 100% do MVP
+## O que falta para 100% operacional
 
 ### Evidência remota
 
@@ -56,8 +62,8 @@ A estimativa total usa aproximadamente 70% de peso para implementação e 30% pa
 - cadastrar duas contas exclusivas de teste;
 - executar `Verify Supabase staging`;
 - implantar as Edge Functions com secrets exclusivos de staging;
-- executar `Verify OCR staging` com confirmação explícita;
-- publicar um host HTTPS e executar `Verify deployed Fichário`.
+- publicar um host HTTPS e executar `Verify deployed Fichário`;
+- executar `Verify OCR staging` com confirmação explícita.
 
 ### Persistência de falhas OCR em staging
 
@@ -70,15 +76,28 @@ A classificação, a resposta pública e o cálculo de backoff desses cenários 
 
 ### Dispositivos
 
-- instalar, atualizar e remover o PWA no navegador-alvo;
-- testar tablet e celular com PDFs extensos, digitalizados e mistos;
+- instalar, atualizar e remover a PWA no navegador-alvo;
+- testar tablet e celular com imagens e PDFs textuais, digitalizados, mistos e extensos;
+- testar duas abas durante retomada real;
 - medir memória, retomada após encerramento e comportamento com rede instável.
 
 ### Operação
 
 - confirmar limites gratuitos e billing desativado na conta real;
-- registrar procedimento de backup e rollback usado no ambiente escolhido;
+- executar e registrar backup;
+- ensaiar rollback do frontend e das Edge Functions;
 - decidir se o resultado será release privada, staging prolongado ou produção.
+
+## Ordem recomendada
+
+1. seguir `docs/EXTERNAL_SETUP_RUNBOOK.md` para criar o staging;
+2. executar `Verify Supabase staging`;
+3. implantar Edge Functions e publicar o host HTTPS;
+4. executar `Verify deployed Fichário`;
+5. executar `Verify OCR staging`;
+6. concluir a matriz manual em celular e tablet;
+7. registrar billing, backup e rollback;
+8. decidir o destino da release.
 
 ## Critério para alterar os percentuais
 
@@ -86,4 +105,4 @@ A classificação, a resposta pública e o cálculo de backoff desses cenários 
 - Action criada mas não executada aumenta implementação, não evidência remota;
 - teste remoto verde aumenta prontidão;
 - falha descoberta pode reduzir temporariamente a estimativa;
-- 100% exige execução dos gates externos, não apenas ausência de itens no roadmap.
+- `100%` operacional exige execução dos gates externos, não apenas ausência de itens no roadmap.
