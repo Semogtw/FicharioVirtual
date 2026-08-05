@@ -59,7 +59,11 @@ export class ImportBroadcastCoordinator {
 			try {
 				listener(update);
 			} catch (error) {
-				this.onListenerError(error);
+				try {
+					this.onListenerError(error);
+				} catch {
+					// Error reporting must not prevent other subscribers from receiving the update.
+				}
 			}
 		}
 	};
