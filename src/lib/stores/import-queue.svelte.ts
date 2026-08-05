@@ -59,7 +59,7 @@ const queuedFiles = new WeakSet<File>();
 const persistenceChains = new Map<string, Promise<void>>();
 const itemStores = new Map<string, ImportResumeStore>();
 const restoringUsers = new Set<string>();
-const completedElsewhere = new Set<string>();
+const completedElsewhere = new WeakSet<ImportQueueItem>();
 const importRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
 let consentPromise: Promise<void> | null = null;
 
@@ -155,7 +155,7 @@ async function deleteLocalItem(item: ImportQueueItem, store?: ImportResumeStore)
 
 async function synchronizeItem(item: ImportQueueItem) {
 	const store = itemStores.get(item.id);
-	if (completedElsewhere.has(item.id)) {
+	if (completedElsewhere.has(item)) {
 		try {
 			await deleteLocalItem(item, store);
 		} catch {
@@ -186,7 +186,7 @@ async function synchronizeItem(item: ImportQueueItem) {
 		}
 
 		const sessionId = item.sessionId;
-		if (sessionId === null || completedElsewhere.has(item.id)) return;
+		if (sessionId === null || completedElsewhere.has(item)) return;
 		const completed = item.status === 'complete' || item.status === 'needs_review';
 		const status = remoteStatus(item);
 		await updateImportSession(sessionId, {
@@ -245,13 +245,12 @@ function discardCompletedElsewhere(itemId: string) {
 	if (index < 0) return;
 	const [item] = importQueue.items.splice(index, 1);
 	if (!item) return;
-	completedElsewhere.add(item.id);
+	completedElsewhere.add(item);
 	clearImportRetry(item.id);
 	controllers.get(item.id)?.abort();
 	queuedFiles.delete(item.file);
 	releasePreview(item);
 	void persistItem(item).finally(() => {
-		completedElsewhere.delete(item.id);
 		itemStores.delete(item.id);
 	});
 }
