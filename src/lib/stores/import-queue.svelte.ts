@@ -6,6 +6,7 @@ import {
 } from '$lib/import/import-broadcast';
 import type { ImagePreparationMode } from '$lib/import/image-types';
 import { prepareImage } from '$lib/import/image-client';
+import { RecentImportCompletions } from '$lib/import/recent-import-completions';
 import {
 	deleteStoredImageImport,
 	listStoredImageImports,
@@ -60,6 +61,7 @@ const persistenceChains = new Map<string, Promise<void>>();
 const itemStores = new Map<string, ImportResumeStore>();
 const restoringUsers = new Set<string>();
 const completedElsewhere = new WeakSet<ImportQueueItem>();
+const completedBeforeRestore = new RecentImportCompletions();
 const importRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
 let consentPromise: Promise<void> | null = null;
 
@@ -260,6 +262,7 @@ function handleImportUpdate(update: ImportBroadcastUpdate) {
 		update.type === 'image-import-updated' &&
 		['complete', 'needs_review', 'duplicate', 'cancelled'].includes(update.status)
 	) {
+		completedBeforeRestore.remember(update.id);
 		discardCompletedElsewhere(update.id);
 	}
 }
@@ -489,6 +492,16 @@ export async function restoreImageImports(userId: string, store?: ImportResumeSt
 				.map((session) => [session.localResumeKey as string, session.id])
 		);
 		for (const record of records) {
+			if (completedBeforeRestore.has(record.id)) {
+				try {
+					if (store) await deleteStoredImageImport(record.id, store);
+					else await deleteStoredImageImport(record.id);
+					completedBeforeRestore.forget(record.id);
+				} catch {
+					// Keep the tombstone so a later restoration cannot revive the stale record.
+				}
+				continue;
+			}
 			if (importQueue.items.some((item) => item.id === record.id)) continue;
 			const item: ImportQueueItem = {
 				id: record.id,
