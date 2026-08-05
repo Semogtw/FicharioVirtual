@@ -301,7 +301,7 @@
 		gap: 1rem;
 		padding: 0.75rem 0.9rem;
 		border-left: 0.3rem solid var(--accent);
-		background: rgb(166 94 67 / 7%);
+		background: rgb(var(--accent-rgb) / 7%);
 		color: var(--accent-strong);
 	}
 
@@ -323,7 +323,7 @@
 	.error {
 		padding: 1rem;
 		border-left: 0.3rem solid var(--danger);
-		background: rgb(155 63 54 / 7%);
+		background: rgb(var(--danger-rgb) / 7%);
 		color: var(--danger);
 	}
 

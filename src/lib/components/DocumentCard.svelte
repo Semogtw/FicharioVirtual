@@ -82,7 +82,9 @@
 		display: grid;
 		place-items: center;
 		overflow: hidden;
-		background: linear-gradient(135deg, rgb(83 106 91 / 8%), rgb(166 94 67 / 8%)), var(--paper);
+		background:
+			linear-gradient(135deg, rgb(var(--archive-rgb) / 8%), rgb(var(--accent-rgb) / 8%)),
+			var(--paper);
 	}
 
 	img {
@@ -117,11 +119,11 @@
 		right: 0.75rem;
 		padding: 0.3rem 0.5rem;
 		border-radius: 99rem;
-		background: rgb(252 250 246 / 92%);
+		background: rgb(var(--surface-rgb) / 92%);
 		color: var(--muted);
 		font-size: 0.7rem;
 		font-weight: 760;
-		box-shadow: 0 0.2rem 0.8rem rgb(32 33 36 / 8%);
+		box-shadow: 0 0.2rem 0.8rem rgb(var(--ink-rgb) / 8%);
 	}
 
 	.status.ready {

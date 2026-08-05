@@ -41,7 +41,7 @@
 		border: 1px solid var(--line);
 		border-radius: var(--radius-md);
 		background: var(--surface-strong);
-		box-shadow: 0 0.25rem 1rem rgb(32 33 36 / 5%);
+		box-shadow: 0 0.25rem 1rem rgb(var(--ink-rgb) / 5%);
 	}
 
 	svg {
@@ -63,7 +63,7 @@
 	}
 
 	input::placeholder {
-		color: #7a827e;
+		color: var(--muted);
 	}
 
 	button {

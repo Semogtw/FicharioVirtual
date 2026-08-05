@@ -54,7 +54,7 @@
 	}
 
 	.primary:hover:not(:disabled) {
-		background: #415447;
+		background: var(--archive-strong);
 	}
 
 	.secondary {

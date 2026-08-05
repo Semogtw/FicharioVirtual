@@ -33,7 +33,7 @@
 		padding: clamp(2rem, 6vw, 4rem);
 		border: 1px dashed var(--line-strong);
 		border-radius: var(--radius-lg);
-		background: rgb(252 250 246 / 76%);
+		background: rgb(var(--surface-rgb) / 76%);
 		text-align: center;
 	}
 
