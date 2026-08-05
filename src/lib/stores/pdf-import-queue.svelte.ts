@@ -21,7 +21,7 @@ import {
 } from '$lib/pdf/upload';
 import {
 	createImportSession,
-	listActiveImportSessions,
+	listImportSessionsByResumeKeys,
 	updateImportSession
 } from '$lib/services/import-sessions';
 import { resumeDocumentOcr, type OcrResumeSummary } from '$lib/services/ocr-resume';
@@ -471,17 +471,17 @@ export async function restorePdfImports(userId: string, store?: PdfResumeStore) 
 	if (restoringUsers.has(userId)) return;
 	restoringUsers.add(userId);
 	try {
-		const recordsPromise = store
-			? listStoredPdfImports(userId, store)
-			: listStoredPdfImports(userId);
-		const [records, remoteSessions] = await Promise.all([
-			recordsPromise,
-			listActiveImportSessions(userId).catch(() => [])
-		]);
+		const records = store
+			? await listStoredPdfImports(userId, store)
+			: await listStoredPdfImports(userId);
+		const remoteSessions = await listImportSessionsByResumeKeys(
+			userId,
+			records.map((record) => record.resumeKey)
+		).catch(() => []);
 		const sessionsByKey = new Map(
 			remoteSessions
 				.filter((session) => session.localResumeKey !== null)
-				.map((session) => [session.localResumeKey as string, session.id])
+				.map((session) => [session.localResumeKey as string, session])
 		);
 		for (const record of records) {
 			if (completedBeforeRestore.has(record.id)) {
@@ -494,11 +494,21 @@ export async function restorePdfImports(userId: string, store?: PdfResumeStore) 
 				}
 				continue;
 			}
+			const remoteSession = sessionsByKey.get(record.resumeKey);
+			if (remoteSession?.status === 'completed' || remoteSession?.status === 'cancelled') {
+				try {
+					if (store) await deleteStoredPdfImport(record.id, store);
+					else await deleteStoredPdfImport(record.id);
+				} catch {
+					// A future restoration can retry deletion without re-uploading in this session.
+				}
+				continue;
+			}
 			if (record.published || pdfImportQueue.items.some((item) => item.id === record.id)) continue;
 			const item: PdfQueueItem = {
 				id: record.id,
 				userId: record.userId,
-				sessionId: record.sessionId ?? sessionsByKey.get(record.resumeKey) ?? null,
+				sessionId: record.sessionId ?? remoteSession?.id ?? null,
 				resumeKey: record.resumeKey,
 				file: record.file,
 				notebookId: record.notebookId,
