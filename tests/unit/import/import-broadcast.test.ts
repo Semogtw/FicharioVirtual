@@ -81,6 +81,21 @@ describe('ImportBroadcastCoordinator', () => {
 		expect(onListenerError).toHaveBeenCalledWith(error);
 	});
 
+	it('defers subscribers added during dispatch until the next update', () => {
+		const channel = new FakeChannel();
+		const broadcasts = new ImportBroadcastCoordinator(channel);
+		const lateSubscriber = vi.fn();
+		broadcasts.subscribe(() => broadcasts.subscribe(lateSubscriber));
+
+		channel.emit({ type: 'pdf-import-updated', id: 'pdf_1', status: 'complete' });
+
+		expect(lateSubscriber).not.toHaveBeenCalled();
+
+		channel.emit({ type: 'pdf-import-updated', id: 'pdf_1', status: 'complete' });
+
+		expect(lateSubscriber).toHaveBeenCalledOnce();
+	});
+
 	it('unsubscribes and closes the underlying channel', () => {
 		const channel = new FakeChannel();
 		const listener = vi.fn();
