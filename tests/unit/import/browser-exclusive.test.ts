@@ -78,6 +78,41 @@ describe('BrowserExclusiveCoordinator', () => {
 		expect(task).not.toHaveBeenCalled();
 	});
 
+	it('falls back to a storage lease when Web Locks fails before dispatch', async () => {
+		const storage = new MemoryStorage();
+		const request = vi.fn<BrowserExclusiveLockManager['request']>(async () => {
+			throw new Error('Web Locks unavailable');
+		});
+		const task = vi.fn(async () => undefined);
+
+		const acquired = await coordinator(storage, { lockManager: { request } }).runExclusive(
+			'operation',
+			task
+		);
+
+		expect(acquired).toBe(true);
+		expect(task).toHaveBeenCalledOnce();
+		expect(storage.getItem('operation-lease')).toBeNull();
+	});
+
+	it('does not retry a task that fails after acquiring a Web Lock', async () => {
+		const storage = new MemoryStorage();
+		const request = vi.fn<BrowserExclusiveLockManager['request']>(
+			async (_name, _options, callback) => callback({})
+		);
+		const error = new Error('task failed');
+		const task = vi.fn(async () => {
+			throw error;
+		});
+
+		await expect(
+			coordinator(storage, { lockManager: { request } }).runExclusive('operation', task)
+		).rejects.toBe(error);
+
+		expect(task).toHaveBeenCalledOnce();
+		expect(storage.values.size).toBe(0);
+	});
+
 	it('rejects a live foreign storage lease', async () => {
 		const storage = new MemoryStorage();
 		storage.setItem('operation-lease', lease('tab-b', 2_000));
