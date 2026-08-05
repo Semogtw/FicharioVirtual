@@ -13,7 +13,7 @@ const dependencies = vi.hoisted(() => ({
 	prepareImage: vi.fn(),
 	uploadPreparedImage: vi.fn(),
 	processPageOcr: vi.fn(),
-	listActiveImportSessions: vi.fn(),
+	listImportSessionsByResumeKeys: vi.fn(),
 	updateImportSession: vi.fn(async () => undefined),
 	createImportSession: vi.fn(),
 	publishImportUpdate: vi.fn(),
@@ -42,7 +42,7 @@ vi.mock('$lib/import/upload', () => ({
 }));
 
 vi.mock('$lib/services/import-sessions', () => ({
-	listActiveImportSessions: dependencies.listActiveImportSessions,
+	listImportSessionsByResumeKeys: dependencies.listImportSessionsByResumeKeys,
 	updateImportSession: dependencies.updateImportSession,
 	createImportSession: dependencies.createImportSession
 }));
@@ -113,9 +113,9 @@ describe('image import queue restoration', () => {
 		dependencies.prepareImage.mockReset();
 		dependencies.uploadPreparedImage.mockReset();
 		dependencies.processPageOcr.mockReset();
-		dependencies.listActiveImportSessions.mockReset();
-		dependencies.listActiveImportSessions.mockResolvedValue([
-			{ id: sessionId, localResumeKey: resumeKey }
+		dependencies.listImportSessionsByResumeKeys.mockReset();
+		dependencies.listImportSessionsByResumeKeys.mockResolvedValue([
+			{ id: sessionId, localResumeKey: resumeKey, status: 'paused' }
 		]);
 		dependencies.updateImportSession.mockClear();
 		dependencies.createImportSession.mockReset();
@@ -134,6 +134,23 @@ describe('image import queue restoration', () => {
 		listener({ type: 'image-import-updated', id: 'restored-image', status: 'complete' });
 		await queue.restoreImageImports(userId, store);
 
+		expect(queue.importQueue.items).toHaveLength(0);
+		expect(store.records.size).toBe(0);
+		expect(dependencies.prepareImage).not.toHaveBeenCalled();
+		expect(dependencies.uploadPreparedImage).not.toHaveBeenCalled();
+		expect(dependencies.processPageOcr).not.toHaveBeenCalled();
+	});
+
+	it('discards a stored image completed while this tab was closed', async () => {
+		const store = new MemoryStore(storedRecord(null));
+		dependencies.listImportSessionsByResumeKeys.mockResolvedValue([
+			{ id: sessionId, localResumeKey: resumeKey, status: 'completed' }
+		]);
+		const queue = await import('../../../src/lib/stores/import-queue.svelte');
+
+		await queue.restoreImageImports(userId, store);
+
+		expect(dependencies.listImportSessionsByResumeKeys).toHaveBeenCalledWith(userId, [resumeKey]);
 		expect(queue.importQueue.items).toHaveLength(0);
 		expect(store.records.size).toBe(0);
 		expect(dependencies.prepareImage).not.toHaveBeenCalled();
