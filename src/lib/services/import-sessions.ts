@@ -54,6 +54,7 @@ export interface ImportSessionsGateway {
 	create(input: ImportSessionInsert): Promise<unknown>;
 	update(id: string, changes: ImportSessionUpdate): Promise<unknown>;
 	listActive(): Promise<unknown>;
+	listByResumeKeys(resumeKeys: readonly string[]): Promise<unknown>;
 }
 
 export class ImportSessionServiceError extends Error {
@@ -285,6 +286,46 @@ export async function listActiveImportSessionsWithGateway(
 	return Object.freeze(sessions);
 }
 
+export async function listImportSessionsByResumeKeysWithGateway(
+	gateway: ImportSessionsGateway,
+	expectedUserId: string,
+	resumeKeys: readonly string[]
+): Promise<readonly ImportSession[]> {
+	if (!UUID.test(expectedUserId)) throw new TypeError('Invalid user identifier');
+	if (!Array.isArray(resumeKeys) || resumeKeys.length > 1_000) {
+		throw new TypeError('Invalid import resume keys');
+	}
+	const requested = new Set<string>();
+	for (const resumeKey of resumeKeys) {
+		if (typeof resumeKey !== 'string' || !validResumeKey(resumeKey) || requested.has(resumeKey)) {
+			throw new TypeError('Invalid import resume keys');
+		}
+		requested.add(resumeKey);
+	}
+	if (requested.size === 0) return Object.freeze([]);
+
+	const data = await gateway.listByResumeKeys(resumeKeys);
+	if (!Array.isArray(data) || data.length > requested.size) invalidResponse();
+	const ids = new Set<string>();
+	const returnedKeys = new Set<string>();
+	const sessions = data.map((row) => {
+		const session = parseImportSession(row, { expectedUserId });
+		const resumeKey = session.localResumeKey;
+		if (
+			resumeKey === null ||
+			!requested.has(resumeKey) ||
+			ids.has(session.id) ||
+			returnedKeys.has(resumeKey)
+		) {
+			invalidResponse();
+		}
+		ids.add(session.id);
+		returnedKeys.add(resumeKey);
+		return session;
+	});
+	return Object.freeze(sessions);
+}
+
 class SupabaseImportSessionsGateway implements ImportSessionsGateway {
 	constructor(private readonly client: SupabaseClient<Database>) {}
 
@@ -325,6 +366,16 @@ class SupabaseImportSessionsGateway implements ImportSessionsGateway {
 		if (error || data === null) throw new ImportSessionServiceError();
 		return data;
 	}
+
+	async listByResumeKeys(resumeKeys: readonly string[]) {
+		const { data, error } = await this.client
+			.from('import_sessions')
+			.select(SELECT_FIELDS)
+			.in('local_resume_key', [...resumeKeys])
+			.limit(resumeKeys.length);
+		if (error || data === null) throw new ImportSessionServiceError();
+		return data;
+	}
 }
 
 function gateway(client?: SupabaseClient<Database>) {
@@ -349,6 +400,23 @@ export function updateImportSession(
 export async function listActiveImportSessions(userId: string, client?: SupabaseClient<Database>) {
 	try {
 		return await listActiveImportSessionsWithGateway(gateway(client), userId);
+	} catch (error) {
+		if (error instanceof TypeError) throw error;
+		throw new ImportSessionServiceError();
+	}
+}
+
+export async function listImportSessionsByResumeKeys(
+	userId: string,
+	resumeKeys: readonly string[],
+	client?: SupabaseClient<Database>
+) {
+	try {
+		return await listImportSessionsByResumeKeysWithGateway(
+			gateway(client),
+			userId,
+			resumeKeys
+		);
 	} catch (error) {
 		if (error instanceof TypeError) throw error;
 		throw new ImportSessionServiceError();
