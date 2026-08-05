@@ -62,12 +62,14 @@ Secrets obrigatórios:
 supabase secrets set \
   APP_ORIGIN=https://seu-dominio.example \
   GEMINI_API_KEY=<secret> \
-  OCR_MODEL_PRIMARY=<model-id-validado> \
+  OCR_MODEL_PRIMARY=gemini-3.6-flash \
   OCR_PROMPT_VERSION=1 \
   OCR_DAILY_HARD_LIMIT=100
 ```
 
-Opcionalmente configure `OCR_MODEL_QUALITY`, mas não existe fallback automático pago no código atual.
+Use uma versão estável explícita. Não use `gemini-flash-latest`, porque o alias pode trocar de modelo. O cliente OCR não envia `temperature`, `top_p` ou `top_k`; não recoloque esses parâmetros, pois foram descontinuados para Gemini 3.6 Flash, Gemini 3.5 Flash-Lite e lançamentos futuros.
+
+`gemini-3.5-flash-lite` pode ser avaliado como alternativa de menor custo para extração documental, mas somente depois de executar o mesmo smoke test de staging e registrar a decisão de custo/qualidade. Opcionalmente configure `OCR_MODEL_QUALITY`, mas não existe fallback automático pago no código atual.
 
 Implante:
 
