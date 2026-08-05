@@ -508,7 +508,7 @@ export async function restorePdfImports(userId: string, store?: PdfResumeStore) 
 			const item: PdfQueueItem = {
 				id: record.id,
 				userId: record.userId,
-				sessionId: record.sessionId ?? remoteSession?.id ?? null,
+				sessionId: remoteSession?.id ?? record.sessionId ?? null,
 				resumeKey: record.resumeKey,
 				file: record.file,
 				notebookId: record.notebookId,
