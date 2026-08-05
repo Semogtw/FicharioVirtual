@@ -33,11 +33,22 @@ describe('import queue cross-tab exclusion', () => {
 		expect(imageQueue).toContain(
 			"import {\n\tpublishImportUpdate,\n\tsubscribeImportUpdates,\n\ttype ImportBroadcastUpdate\n} from '$lib/import/import-broadcast';"
 		);
-		expect(imageQueue).toContain('const completedElsewhere = new Set<string>();');
 		expect(imageQueue).toContain("update.type === 'image-import-updated'");
 		expect(imageQueue).toContain('subscribeImportUpdates(handleImportUpdate);');
 		expect(imageQueue).toContain("publishImportUpdate({ type: 'image-import-updated'");
 		expect(imageQueue).not.toContain('let importChannel: BroadcastChannel | null = null;');
+	});
+
+	it('retains remote completion tombstones for each discarded item lifetime', () => {
+		for (const [source, itemType] of [
+			[imageQueue, 'ImportQueueItem'],
+			[pdfQueue, 'PdfQueueItem']
+		] as const) {
+			expect(source).toContain(`const completedElsewhere = new WeakSet<${itemType}>();`);
+			expect(source).toContain('completedElsewhere.add(item);');
+			expect(source).toContain('completedElsewhere.has(item)');
+			expect(source).not.toContain('completedElsewhere.delete(');
+		}
 	});
 
 	it('uses the shared browser coordinator without a PDF busy loop', () => {
