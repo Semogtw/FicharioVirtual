@@ -21,10 +21,12 @@
 ### Task 1: Browser-level multi-tab regression
 
 **Files:**
+
 - Modify: the existing Playwright test suite under `tests/e2e/`
 - Modify only when required: Playwright support utilities already used by the suite
 
 **Interfaces:**
+
 - Consumes: the existing image/PDF import queue, IndexedDB persistence, `BroadcastChannel`, and browser-exclusive coordination.
 - Produces: one deterministic Chromium scenario proving that two pages sharing one browser context do not both resume or complete the same persisted import.
 
@@ -38,9 +40,11 @@
 ### Task 2: Offline toolchain alignment
 
 **Files:**
+
 - Modify in `Semogtw/Offline-Toolchains`: `triggers/fichario-toolchain.json`
 
 **Interfaces:**
+
 - Consumes: final green `FicharioVirtual` SHA.
 - Produces: an offline workspace build receipt tied to that exact source revision.
 
@@ -52,11 +56,13 @@
 ### Task 3: Readiness documentation reconciliation
 
 **Files:**
+
 - Modify: `docs/CURRENT_STATUS.md`
 - Modify: `docs/READINESS.md`
 - Create: a checkpoint note for this continuation when code changes are made
 
 **Interfaces:**
+
 - Consumes: exact workflow counts and receipts for the final SHA.
 - Produces: a single consistent statement of implemented, externally pending, and device-only work.
 
@@ -69,10 +75,12 @@
 ### Task 4: Final audit for additional codifiable gaps
 
 **Files:**
+
 - Inspect: workflows, import/OCR services, deployment verification scripts, documentation, and open issues.
 - Modify only files directly tied to a demonstrated gap.
 
 **Interfaces:**
+
 - Consumes: current source tree and validation logs.
 - Produces: either additional tested fixes or an evidence-backed statement that remaining work is external.
 
