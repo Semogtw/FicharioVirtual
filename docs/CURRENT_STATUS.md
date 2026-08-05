@@ -2,73 +2,65 @@
 
 _Atualizado: 2026-08-05_  
 _Branch ativa: `main`_  
-_Último checkpoint de código integralmente validado: `c5aee7b9bfbe553d8f253814cac9c3f67a0faba7`_  
-_Recibo: workflow `Validate current head`, run `30973916483`_  
-_Estado: MVP funcional com hardening amplo de contratos, concorrência, recuperação e retomada; staging real, OCR externo e host HTTPS continuam pendentes._
+_Último checkpoint integralmente validado: `2c9ed12bace23412ae35dde0f246d85b9ff97d2c`_  
+_Recibo: workflow `Validate current head`, run `30979143410`, job `92219621128`_  
+_Estado: escopo codificável conhecido concluído; staging real, OCR externo, host HTTPS, dispositivos físicos e operação continuam pendentes._
 
 ## Resumo executivo
 
 O Fichário Virtual é uma PWA SvelteKit estática para organizar imagens e PDFs privados, preservar texto nativo, executar OCR seletivo no backend e oferecer busca, leitura, revisão, organização e exportação. A aplicação usa Supabase Auth, PostgreSQL, RLS, Storage privado e Edge Functions.
 
-O MVP está implementado. O checkpoint validado mais recente endureceu as filas de importação de imagem e PDF contra concorrência entre abas, mensagens malformadas, falhas de Web Locks, persistências tardias e restaurações locais obsoletas. Uma aba que estava fechada durante a conclusão agora consulta a sessão remota pelo `resumeKey` e não reativa trabalho já concluído ou cancelado.
+O MVP e os gates necessários para validá-lo estão implementados no repositório. O checkpoint mais recente adicionou uma prova real de navegador com duas abas, encontrou e corrigiu uma falha de reatividade das filas Svelte e consolidou toda a configuração externa restante em `docs/EXTERNAL_SETUP_RUNBOOK.md`.
 
-A prontidão operacional ainda depende de staging real, host HTTPS, testes em dispositivos e verificação dos limites gratuitos. Percentuais de prontidão, quando necessários, devem ser derivados de `docs/READINESS.md`; este documento registra fatos e evidências.
+A auditoria final não encontrou `TODO`, `FIXME` ou teste ignorado que representasse uma feature conhecida incompleta. Isso não substitui staging ou testes físicos: a prontidão operacional ainda depende de serviços reais, host HTTPS, OCR externo, dispositivos e controles de billing, backup e rollback.
 
 ## Evidência do checkpoint validado
 
-No SHA `c5aee7b9bfbe553d8f253814cac9c3f67a0faba7`, o workflow `Validate current head` passou integralmente:
+No SHA `2c9ed12bace23412ae35dde0f246d85b9ff97d2c`, o workflow `Validate current head` passou integralmente:
 
 ```text
 Prettier: PASS
 ESLint: PASS
-svelte-check: PASS
-Vitest: PASS — 559 testes em 131 arquivos
+svelte-check: PASS — 0 erros e 0 avisos
+Vitest: PASS — 560 testes em 131 arquivos
 build estático/PWA: PASS
-gates offline de fonte: PASS
-Playwright Chromium: PASS — 3/3 E2E
+gates offline de fonte: PASS — 31 migrations e 13 RPCs frontend
+Playwright Chromium: PASS — 4/4 E2E
 Edge Functions com Deno: PASS
-Supabase local: PASS — migrations, RLS, Storage e testes de banco
+Supabase local: PASS — 76 testes de banco
 ```
 
-O run `30973916483` publicou o archive exato do source e evidência do Playwright, sem artifact de falha de frontend ou reparo de Prettier. O checkpoint detalhado está em `docs/checkpoints/2026-08-05-cross-tab-import-hardening.md`.
+O run `30979143410` publicou o archive exato do source e evidência do Playwright, sem artifact de falha de frontend nem reparo do Prettier. O checkpoint detalhado está em `docs/checkpoints/2026-08-05-multitab-reactivity-and-external-runbook.md`.
 
-Este documento é posterior ao checkpoint de código acima. Seu próprio commit deve ser considerado validado somente quando o workflow registrar sucesso para o SHA documental final.
+## Mudanças mais recentes
 
-## Mudanças do checkpoint
+### E2E multiaba real
 
-### Coordenação entre abas
+- duas páginas compartilham um único `BrowserContext` Chromium;
+- o cenário usa IndexedDB, `BroadcastChannel` e Web Locks reais;
+- somente a fronteira HTTP do Supabase é simulada;
+- o teste exige uma única criação de metadados, uma única chamada OCR, os uploads esperados e uma única conclusão visual;
+- o registro persistido é removido ao final, sem retomada duplicada.
 
-- as filas de imagem e PDF usam exclusão mútua compartilhada por `resumeKey`;
-- Web Locks continua sendo a primeira opção e cai para lease de `localStorage` somente quando a API falha antes de executar a tarefa;
-- erros da tarefa adquirida são propagados sem retry que possa duplicar upload ou OCR;
-- mensagens de `BroadcastChannel` são validadas estritamente tanto na recepção quanto antes da publicação;
-- uma falha em subscriber ou no reporter da falha não interrompe subscribers seguintes;
-- subscribers adicionados durante um dispatch só recebem a próxima mensagem;
-- coordenadores fechados ficam inertes e encerram o canal nativo uma única vez.
+### Reatividade das filas Svelte
 
-### Conclusão remota e tombstones
+O E2E revelou que as filas inseriam um objeto comum em um array `$state` e continuavam a mutar a referência crua. O backend concluía o trabalho, mas a interface podia continuar exibindo `Na fila`.
 
-- uma atualização terminal de outra aba remove o item perdedor, aborta trabalho ativo e cancela retries;
-- persistências tardias não podem regredir a sessão remota depois que outra aba venceu;
-- tombstones por objeto usam `WeakSet`, sem impedir coleta de lixo;
-- um cache limitado a 512 IDs por 30 minutos cobre mensagens recebidas antes da leitura do IndexedDB;
-- registros locais concluídos em outra aba antes da restauração são apagados sem preparação, upload ou OCR duplicados.
+As filas de imagem e PDF agora continuam o processamento usando a referência proxificada realmente armazenada no array reativo. Um contrato unitário estrutural protege inclusão e restauração contra regressão.
 
-### Restauração após aba fechada
+### Configuração externa
 
-- as filas consultam sessões remotas pelos `resumeKey`, incluindo estados terminais;
-- uma sessão remota `completed` ou `cancelled` elimina o registro local obsoleto mesmo quando a aba não recebeu broadcast;
-- falha de rede preserva o registro local e mantém o caminho offline recuperável;
-- o ID da sessão encontrada pelo servidor prevalece sobre um `sessionId` local antigo;
-- respostas remotas são submetidas aos mesmos contratos estritos de propriedade, UUID, timestamps, contadores, status e unicidade.
+`docs/EXTERNAL_SETUP_RUNBOOK.md` descreve a ordem exata para:
 
-### Pipeline e diagnóstico
-
-- commits de teste vermelho foram usados antes das correções comportamentais;
-- falhas de frontend continuam gerando logs persistentes;
-- falhas de formatação continuam gerando patch exato produzido pela versão travada do Prettier;
-- o workflow valida frontend, build, gates offline, Chromium, Edge Functions e banco Supabase local;
-- o ambiente desta sessão não resolveu GitHub nem o registry do npm, mas o checkout foi reconstruído a partir do artifact do CI e os gates completos foram executados pelo workflow reproduzível.
+- criar o Supabase de staging;
+- aplicar migrations e gerar tipos;
+- cadastrar duas contas de teste;
+- configurar o environment `staging` no GitHub;
+- implantar Edge Functions e secrets;
+- construir e publicar o frontend estático em HTTPS;
+- executar os três gates externos;
+- testar celular e tablet;
+- confirmar billing, backup e rollback.
 
 ## Produto implementado
 
@@ -91,7 +83,8 @@ Este documento é posterior ao checkpoint de código acima. Seu próprio commit 
 - estados explícitos de retry, quota, revisão, falha e cancelamento;
 - retomada sem reupload e rollup automático do estado do documento;
 - seleção de caderno preservada entre URL, importação por imagens e PDF;
-- coordenação entre abas e reconciliação de registros locais com sessões remotas.
+- coordenação entre abas e reconciliação de registros locais com sessões remotas;
+- prova Chromium de que duas abas não duplicam uma retomada de imagem persistida.
 
 ### Busca, revisão e organização
 
@@ -103,13 +96,15 @@ Este documento é posterior ao checkpoint de código acima. Seu próprio commit 
 - tags com carga inicial, associações versionadas, retry específico e mutações serializadas;
 - organização em lote preserva título e caderno quando fontes opcionais falham.
 
-### Resiliência de rotas
+### Resiliência e concorrência
 
-Rotas e componentes assíncronos usam `RequestVersion`, `AbortController` ou cancelamento equivalente para impedir que respostas antigas alterem dados, erros, callbacks ou indicadores depois de uma tentativa mais nova ou do desmontar da tela.
-
-Foram endurecidos home, busca, biblioteca, cadernos, documentos, revisão, rascunhos, tags, organização em lote, importações, login, logout, exportação, editor de correção e instalação do PWA.
-
-Falhas parciais preservam conteúdo válido e oferecem retry independente. Operações incompatíveis são mutuamente exclusivas, e conclusões de domínio não são reclassificadas como falha somente porque uma navegação posterior falhou.
+- rotas e componentes assíncronos usam versionamento, abort ou cancelamento equivalente;
+- Web Locks cai para lease de `localStorage` somente antes de a tarefa iniciar;
+- mensagens de `BroadcastChannel` são validadas na entrada e na saída;
+- conclusões de outra aba impedem persistências tardias e retomadas obsoletas;
+- sessões remotas por `resumeKey` reconciliam abas que estavam fechadas;
+- falhas de rede preservam trabalho local recuperável;
+- filas processam a referência reativa observada pela interface.
 
 ### Dados e segurança
 
@@ -128,8 +123,8 @@ Falhas parciais preservam conteúdo válido e oferecem retry independente. Opera
 
 ```text
 Verify Supabase staging: NOT RUN — projeto e credenciais de staging não configurados
-Verify OCR staging: NOT RUN — função e secret do provedor não configurados em staging
 Verify deployed Fichário: NOT RUN — host HTTPS final não publicado
+Verify OCR staging: NOT RUN — função, secret e modelo não configurados em staging
 Testes em tablet e celular físicos: NOT RUN
 Verificação operacional de billing, backup e rollback: NOT RUN
 ```
@@ -140,37 +135,27 @@ Também permanecem sem validação externa:
 - modelo Gemini e quota reais;
 - persistência, retomada e cleanup implantados após 429, 503, timeout e payload inválido;
 - PDFs extensos e mistos em dispositivo físico;
-- instalação e atualização do PWA no navegador-alvo;
+- instalação e atualização da PWA no navegador-alvo;
 - headers e cache do host final;
 - limites gratuitos, billing desativado, backup e rollback operacionais.
 
 ## Workspace offline
 
-O repositório `Semogtw/Offline-Toolchains` fabrica um workspace Linux x64 com Node, pnpm/store, Chromium, Deno/cache e Supabase CLI.
+O repositório `Semogtw/Offline-Toolchains` fabrica um workspace Linux x64 com Node, pnpm/store, Chromium, Deno/cache e Supabase CLI. O bundle permite instalar dependências com o registry bloqueado e executar frontend, build/PWA, gates de fonte, E2E e `deno check`. Docker e imagens Supabase continuam externos ao archive.
 
-O bundle permite instalar dependências com o registry bloqueado, executar frontend, build/PWA, gates de fonte, E2E e `deno check`. Docker e imagens Supabase continuam externos ao archive.
-
-O trigger deve ser movido somente depois que o commit documental final estiver verde:
-
-1. estabilizar o HEAD e obter o recibo verde do repositório principal;
-2. mover `triggers/fichario-toolchain.json` para o SHA exato;
-3. aguardar o recibo em `Offline-Toolchains#28`;
-4. baixar manifest e partes do run bem-sucedido;
-5. conferir SHA-256 antes de extrair;
-6. usar o novo bundle como base, sem sobrepor um checkout antigo implicitamente.
+O trigger deve apontar somente para um SHA integralmente verde do repositório principal. Depois de estabilizar este checkpoint documental, `triggers/fichario-toolchain.json` deve ser movido para o SHA final e o recibo registrado em `Offline-Toolchains#28`.
 
 ## Próximas prioridades
 
 1. validar o commit documental final deste checkpoint;
-2. atualizar a toolchain offline para o SHA final estabilizado e obter recibo exato;
-3. adicionar um cenário E2E multiaba quando o harness puder controlar duas páginas com IndexedDB e `BroadcastChannel` compartilhados;
-4. criar um projeto Supabase de staging sem dados reais;
-5. aplicar migrations e cadastrar duas contas exclusivas de teste;
-6. executar `Verify Supabase staging` e `Verify OCR staging`;
-7. publicar um host HTTPS e executar `Verify deployed Fichário`;
-8. testar PDFs, cancelamento, retomada e PWA em tablet e celular;
-9. confirmar billing desativado, backup e rollback;
-10. somente então decidir entre staging prolongado e release privada.
+2. atualizar a toolchain offline para o SHA final verde e obter recibo exato;
+3. seguir `docs/EXTERNAL_SETUP_RUNBOOK.md` para criar o Supabase de staging;
+4. executar `Verify Supabase staging`;
+5. implantar Edge Functions e publicar o host HTTPS;
+6. executar `Verify deployed Fichário` e `Verify OCR staging`;
+7. testar PDFs, cancelamento, retomada, duas abas e PWA em tablet e celular;
+8. confirmar billing desativado, backup e rollback;
+9. decidir entre staging prolongado, release privada e produção.
 
 ## Regras de continuidade
 
