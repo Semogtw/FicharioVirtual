@@ -76,6 +76,13 @@ function message(error: unknown) {
 	return error instanceof Error ? error.message : 'Não foi possível importar este arquivo.';
 }
 
+function appendImportItem(item: ImportQueueItem) {
+	importQueue.items.push(item);
+	const appended = importQueue.items[importQueue.items.length - 1];
+	if (!appended) throw new Error('The image import queue rejected a new item.');
+	return appended;
+}
+
 function releasePreview(item: ImportQueueItem) {
 	if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
 	item.previewUrl = null;
@@ -400,8 +407,8 @@ export function addImages(
 			duplicateDocumentId: null,
 			error: null
 		};
-		importQueue.items.push(item);
-		void persistItem(item).then(() => processItemWithLock(item));
+		const queuedItem = appendImportItem(item);
+		void persistItem(queuedItem).then(() => processItemWithLock(queuedItem));
 	}
 }
 
@@ -528,11 +535,11 @@ export async function restoreImageImports(userId: string, store?: ImportResumeSt
 				duplicateDocumentId: null,
 				error: record.error
 			};
-			if (store) itemStores.set(item.id, store);
-			queuedFiles.add(item.file);
-			importQueue.items.push(item);
-			if (item.result) void retryOcrWithLock(item);
-			else void processItemWithLock(item);
+			const queuedItem = appendImportItem(item);
+			if (store) itemStores.set(queuedItem.id, store);
+			queuedFiles.add(queuedItem.file);
+			if (queuedItem.result) void retryOcrWithLock(queuedItem);
+			else void processItemWithLock(queuedItem);
 		}
 	} finally {
 		restoringUsers.delete(userId);
