@@ -66,7 +66,7 @@ const queuedFiles = new WeakSet<File>();
 const persistenceChains = new Map<string, Promise<void>>();
 const itemStores = new Map<string, PdfResumeStore>();
 const restoringUsers = new Set<string>();
-const completedElsewhere = new Set<string>();
+const completedElsewhere = new WeakSet<PdfQueueItem>();
 let running = false;
 let lockRetryTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -169,7 +169,7 @@ function remoteStatus(item: PdfQueueItem) {
 
 async function synchronizeItem(item: PdfQueueItem) {
 	const store = itemStores.get(item.id);
-	if (completedElsewhere.has(item.id)) {
+	if (completedElsewhere.has(item)) {
 		try {
 			await deleteLocalItem(item, store);
 		} catch {
@@ -200,7 +200,7 @@ async function synchronizeItem(item: PdfQueueItem) {
 		}
 
 		const sessionId = item.sessionId;
-		if (sessionId === null || completedElsewhere.has(item.id)) return;
+		if (sessionId === null || completedElsewhere.has(item)) return;
 		const status = remoteStatus(item);
 		await updateImportSession(sessionId, {
 			status,
@@ -314,14 +314,13 @@ function discardCompletedElsewhere(itemId: string) {
 	if (index < 0) return;
 	const [item] = pdfImportQueue.items.splice(index, 1);
 	if (!item) return;
-	completedElsewhere.add(item.id);
+	completedElsewhere.add(item);
 	controllers.get(item.id)?.abort();
 	queuedFiles.delete(item.file);
 	if (!pdfImportQueue.items.some((candidate) => candidate.status === 'queued')) {
 		clearPumpRetry();
 	}
 	void persistItem(item).finally(() => {
-		completedElsewhere.delete(item.id);
 		itemStores.delete(item.id);
 	});
 }
