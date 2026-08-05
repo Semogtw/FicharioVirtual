@@ -133,11 +133,9 @@ describe('import session restoration lookup', () => {
 	it('returns terminal sessions for exact resume keys', async () => {
 		const events: string[] = [];
 
-		const sessions = await listImportSessionsByResumeKeysWithGateway(
-			gateway(events),
-			userId,
-			[resumeKey]
-		);
+		const sessions = await listImportSessionsByResumeKeysWithGateway(gateway(events), userId, [
+			resumeKey
+		]);
 
 		expect(sessions).toHaveLength(1);
 		expect(sessions[0]?.status).toBe('completed');
