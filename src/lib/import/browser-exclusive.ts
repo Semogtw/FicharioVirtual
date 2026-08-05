@@ -123,10 +123,7 @@ export class BrowserExclusiveCoordinator {
 		return this.runWithStorageLease(name, task);
 	}
 
-	private async runWithWebLock(
-		name: string,
-		task: () => Promise<void>
-	): Promise<boolean | null> {
+	private async runWithWebLock(name: string, task: () => Promise<void>): Promise<boolean | null> {
 		let acquired = false;
 		let taskStarted = false;
 		try {
