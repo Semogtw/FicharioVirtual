@@ -96,6 +96,22 @@ describe('ImportBroadcastCoordinator', () => {
 		expect(lateSubscriber).toHaveBeenCalledOnce();
 	});
 
+	it('keeps a closed coordinator inert and closes the channel only once', () => {
+		const channel = new FakeChannel();
+		const broadcasts = new ImportBroadcastCoordinator(channel);
+		const listener = vi.fn();
+
+		broadcasts.close();
+		broadcasts.subscribe(listener);
+		broadcasts.publish({ type: 'image-import-updated', id: 'item-1', status: 'complete' });
+		channel.emit({ type: 'image-import-updated', id: 'item-1', status: 'complete' });
+		broadcasts.close();
+
+		expect(listener).not.toHaveBeenCalled();
+		expect(channel.postMessage).not.toHaveBeenCalled();
+		expect(channel.close).toHaveBeenCalledOnce();
+	});
+
 	it('unsubscribes and closes the underlying channel', () => {
 		const channel = new FakeChannel();
 		const listener = vi.fn();
