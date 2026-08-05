@@ -100,6 +100,29 @@ describe('ImportBroadcastCoordinator', () => {
 		expect(onListenerError).toHaveBeenCalledWith(error);
 	});
 
+	it('keeps dispatching when the subscriber error reporter also fails', () => {
+		const channel = new FakeChannel();
+		const onListenerError = vi.fn(() => {
+			throw new Error('reporting failed');
+		});
+		const broadcasts = new ImportBroadcastCoordinator(channel, onListenerError);
+		const second = vi.fn();
+		broadcasts.subscribe(() => {
+			throw new Error('subscriber failed');
+		});
+		broadcasts.subscribe(second);
+
+		expect(() =>
+			channel.emit({ type: 'image-import-updated', id: 'image_1', status: 'complete' })
+		).not.toThrow();
+		expect(second).toHaveBeenCalledWith({
+			type: 'image-import-updated',
+			id: 'image_1',
+			status: 'complete'
+		});
+		expect(onListenerError).toHaveBeenCalledOnce();
+	});
+
 	it('defers subscribers added during dispatch until the next update', () => {
 		const channel = new FakeChannel();
 		const broadcasts = new ImportBroadcastCoordinator(channel);
