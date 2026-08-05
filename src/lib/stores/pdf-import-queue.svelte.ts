@@ -4,6 +4,7 @@ import {
 	subscribeImportUpdates,
 	type ImportBroadcastUpdate
 } from '$lib/import/import-broadcast';
+import { RecentImportCompletions } from '$lib/import/recent-import-completions';
 import {
 	deleteStoredPdfImport,
 	listStoredPdfImports,
@@ -67,6 +68,7 @@ const persistenceChains = new Map<string, Promise<void>>();
 const itemStores = new Map<string, PdfResumeStore>();
 const restoringUsers = new Set<string>();
 const completedElsewhere = new WeakSet<PdfQueueItem>();
+const completedBeforeRestore = new RecentImportCompletions();
 let running = false;
 let lockRetryTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -330,6 +332,7 @@ function handleImportUpdate(update: ImportBroadcastUpdate) {
 		update.type === 'pdf-import-updated' &&
 		['complete', 'needs_review', 'duplicate', 'cancelled'].includes(update.status)
 	) {
+		completedBeforeRestore.remember(update.id);
 		discardCompletedElsewhere(update.id);
 	}
 }
@@ -481,6 +484,16 @@ export async function restorePdfImports(userId: string, store?: PdfResumeStore) 
 				.map((session) => [session.localResumeKey as string, session.id])
 		);
 		for (const record of records) {
+			if (completedBeforeRestore.has(record.id)) {
+				try {
+					if (store) await deleteStoredPdfImport(record.id, store);
+					else await deleteStoredPdfImport(record.id);
+					completedBeforeRestore.forget(record.id);
+				} catch {
+					// Keep the tombstone so a later restoration cannot revive the stale record.
+				}
+				continue;
+			}
 			if (record.published || pdfImportQueue.items.some((item) => item.id === record.id)) continue;
 			const item: PdfQueueItem = {
 				id: record.id,
