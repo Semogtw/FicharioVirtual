@@ -8,8 +8,7 @@ export type DriveConflictKind =
 	| 'local_deleted_remote_changed';
 
 export type DriveApplyOutcome =
-	| { status: 'applied' }
-	| { status: 'conflict'; kind: DriveConflictKind };
+	{ status: 'applied' } | { status: 'conflict'; kind: DriveConflictKind };
 
 export interface DriveSyncGateway {
 	fetchChangePage(pageToken: string): Promise<unknown>;
