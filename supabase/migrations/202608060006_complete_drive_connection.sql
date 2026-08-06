@@ -48,7 +48,7 @@ begin
 end;
 $$;
 
-revoke all on function public.complete_drive_connection(uuid, text, text)
+revoke execute on function public.complete_drive_connection(uuid, text, text)
   from public, anon, authenticated;
 grant execute on function public.complete_drive_connection(uuid, text, text)
   to service_role;
