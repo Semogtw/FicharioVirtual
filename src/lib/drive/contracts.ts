@@ -101,11 +101,9 @@ export function parseDriveChangePage(data: unknown): DriveChangePage {
 			newStartPageToken: pageToken
 		})
 		.strict()
-		.refine(
-			(page) =>
-				(page.nextPageToken === null) !== (page.newStartPageToken === null),
-			{ message: 'exactly one continuation token is required' }
-		)
+		.refine((page) => (page.nextPageToken === null) !== (page.newStartPageToken === null), {
+			message: 'exactly one continuation token is required'
+		})
 		.safeParse(data);
 	if (!result.success) throw new TypeError('Invalid Drive change response');
 
