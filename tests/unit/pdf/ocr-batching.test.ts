@@ -72,6 +72,29 @@ describe('runPdfOcrBatches', () => {
 		expect(result).toEqual({ complete: 4, needsReview: 0, pending: 0, failed: 0 });
 	});
 
+	it('keeps a malformed isolated page pending without retrying the same indivisible batch', async () => {
+		const onlyPage = page(1);
+		const processBatch = vi.fn(async (pageIds: readonly string[]) => ({
+			state: 'partial' as const,
+			completedPageIds: [],
+			reviewPageIds: [],
+			pendingPageIds: pageIds,
+			failedPageIds: [],
+			splitRequiredPageIds: pageIds,
+			unexpectedResultPageIds: []
+		}));
+		const sleep = vi.fn(async () => undefined);
+
+		await expect(runPdfOcrBatches({ pages: [onlyPage], processBatch, sleep })).resolves.toEqual({
+			complete: 0,
+			needsReview: 0,
+			pending: 1,
+			failed: 0
+		});
+		expect(processBatch).toHaveBeenCalledTimes(1);
+		expect(sleep).not.toHaveBeenCalled();
+	});
+
 	it('leaves untouched pages pending after cancellation instead of starting another batch', async () => {
 		const controller = new AbortController();
 		const pages = Array.from({ length: 45 }, (_, index) => page(index + 1));
