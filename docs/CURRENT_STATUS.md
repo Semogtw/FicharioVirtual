@@ -2,7 +2,7 @@
 
 _Atualizado: 2026-08-06_  
 _Branch ativa: `main`_  
-_Estado: integração Google Drive obrigatória em implementação; Cloudflare Pages e OCR desktop aprovados, mas ainda não implementados; release bloqueada._
+_Estado: integração Google Drive obrigatória em implementação; Cloudflare Pages, OCR desktop e processamento automático de PDFs grandes aprovados, mas ainda não implementados; release bloqueada._
 
 ## Resumo executivo
 
@@ -16,6 +16,8 @@ A arquitetura canônica agora possui quatro autoridades ou superfícies distinta
 - **computador confiável:** processamento opcional de manuscritos e páginas difíceis por um worker local.
 
 Gemini continua sendo o mecanismo de OCR geral e imediato. A arquitetura aprovada permite que páginas manuscritas, mistas ou incertas aguardem o computador e sejam processadas por um modelo local mais pesado. O worker consulta a fila por HTTPS de saída; não existe push direto do navegador, porta pública ou Cloudflare Tunnel.
+
+PDFs maiores que o limite de uma única chamada continuam sendo um único documento lógico no Drive. O aplicativo deverá inspecionar, dividir e, quando seguro, comprimir somente cópias temporárias, preservando numeração original e reunindo os resultados por página.
 
 ## Base anterior implementada
 
@@ -34,7 +36,7 @@ Gemini continua sendo o mecanismo de OCR geral e imediato. A arquitetura aprovad
 - testes unitários, E2E, pgTAP e gates de deployment;
 - coordenação real entre duas abas.
 
-Essas capacidades permanecem válidas, mas algumas rotas de importação ainda gravam o original no Supabase e precisam ser migradas para Drive. O OCR atual ainda está acoplado ao Gemini e mantém um único resultado efetivo por página.
+Essas capacidades permanecem válidas, mas algumas rotas de importação ainda gravam o original no Supabase e precisam ser migradas para Drive. O OCR atual ainda está acoplado ao Gemini, mantém um único resultado efetivo por página, processa uma página por chamada, exige limite diário interno e restringe PDFs a 20 MB no fluxo existente.
 
 ## Trabalho Drive incorporado
 
@@ -131,6 +133,37 @@ A decisão está documentada em:
 - usa CPU como fallback obrigatório;
 - trata Vulkan como candidato e ROCm na RX 6600 como experimental até benchmark.
 
+## Decisão de PDFs grandes incorporada
+
+A decisão está documentada em:
+
+- `docs/superpowers/specs/2026-08-06-oversized-pdf-splitting-and-compression-design.md`;
+- `docs/superpowers/specs/2026-08-06-provider-only-ocr-quota-and-adaptive-batching-design.md`.
+
+### Limites e documento lógico
+
+Na verificação de 6 de agosto de 2026, a Gemini informava limite de 50 MB ou 1.000 páginas por PDF enviado. Esse limite pertence ao artefato de uma chamada, não ao PDF original da biblioteca.
+
+- original permanece único e intacto no Drive;
+- o usuário não divide o arquivo manualmente;
+- texto nativo é extraído antes de qualquer OCR;
+- somente páginas necessárias formam lotes temporários;
+- lotes iniciais densos ficam em torno de 20 a 40 páginas;
+- Files API não remove o limite por PDF;
+- o limite de saída pode exigir lotes menores mesmo quando o arquivo cabe na entrada.
+
+### Divisão e compressão
+
+- divisão automática é a estratégia principal;
+- compressão é secundária, conservadora e aplicada somente a derivados temporários;
+- cores semanticamente relevantes, fórmulas e detalhes de manuscrito devem ser preservados;
+- cada lote registra páginas originais, hashes, transformação, rota e tentativa;
+- resposta precisa associar texto ao `page_id`, não apenas à posição;
+- truncamento, omissão, duplicação ou timeout relacionado ao tamanho causa bisseção do lote afetado;
+- páginas já concluídas não são reprocessadas;
+- Gemini e desktop podem processar partes diferentes do mesmo documento;
+- temporários são limpos somente após persistência segura.
+
 ## Pendências imediatas de código
 
 ### Google Drive
@@ -170,6 +203,21 @@ A decisão está documentada em:
 9. testar classificação Gemini sem chamada extra;
 10. executar benchmark de modelos com páginas reais e RX 6600.
 
+### PDFs grandes e lotes adaptativos
+
+1. remover teto diário interno e separar telemetria de bloqueio;
+2. remover o teto de 20 MB como limite arquitetural do documento lógico;
+3. distinguir limite de importação, limite de processamento e limite do provedor;
+4. criar manifesto persistente de páginas e lotes;
+5. implementar extração de subconjuntos de páginas;
+6. implementar compressão temporária versionada e conservadora;
+7. criar planejador adaptativo para Gemini e desktop;
+8. implementar bisseção automática de lote problemático;
+9. validar correspondência exata de páginas em respostas estruturadas;
+10. adaptar progresso, retomada, limpeza e painel;
+11. criar fixtures sintéticas acima de 50 MB e de 1.000 páginas;
+12. testar que hash e bytes do original permanecem inalterados.
+
 ## Pendências externas
 
 - Google Cloud e Drive API;
@@ -186,6 +234,8 @@ A decisão está documentada em:
 - OCR staging;
 - instalação e pareamento do worker no CachyOS;
 - benchmark em CPU, Vulkan e RX 6600;
+- validação de PDFs grandes no tablet e no computador;
+- verificação dos limites oficiais de PDF, entrada e saída na data do deployment;
 - celular e tablet;
 - billing, backup e rollback.
 
@@ -204,4 +254,8 @@ A decisão está documentada em:
 - não tratar ROCm na RX 6600 como suportado sem evidência;
 - não ativar R2, billing ou fallback pago automaticamente;
 - manter resultados de mecanismos diferentes separados;
+- não alterar ou recomprimir o PDF original no Drive;
+- não tratar 50 MB ou 1.000 páginas como limite do documento lógico;
+- não marcar lote com página omitida, duplicada ou truncada como concluído;
+- não reiniciar o documento inteiro por falha de um lote;
 - manter commits pequenos e atribuir `PASS` somente ao SHA realmente validado.
