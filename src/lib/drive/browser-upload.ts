@@ -188,7 +188,11 @@ export function createBrowserDriveUploadGateway({
 	}
 
 	return Object.freeze({
-		async uploadChunk({ sessionUrl, body, contentRange }) {
+		async uploadChunk({
+			sessionUrl,
+			body,
+			contentRange
+		}: Parameters<DriveResumableGateway['uploadChunk']>[0]) {
 			const response = await fetchImpl(validateDriveUploadSessionUrl(sessionUrl), {
 				method: 'PUT',
 				redirect: 'error',
@@ -200,7 +204,10 @@ export function createBrowserDriveUploadGateway({
 			});
 			return responseResult(response);
 		},
-		async queryProgress({ sessionUrl, totalBytes }) {
+		async queryProgress({
+			sessionUrl,
+			totalBytes
+		}: Parameters<DriveResumableGateway['queryProgress']>[0]) {
 			const response = await fetchImpl(validateDriveUploadSessionUrl(sessionUrl), {
 				method: 'PUT',
 				redirect: 'error',
