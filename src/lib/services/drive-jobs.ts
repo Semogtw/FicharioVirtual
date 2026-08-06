@@ -40,7 +40,10 @@ export interface DriveJobReceipt {
 export type DriveJobsClientLike = {
 	from(name: 'drive_sync_jobs'): {
 		select(columns: string): {
-			order(column: 'created_at', options: { ascending: false }): {
+			order(
+				column: 'created_at',
+				options: { ascending: false }
+			): {
 				limit(count: 100): Promise<{ data: unknown; error: unknown }>;
 			};
 		};
