@@ -4,7 +4,8 @@
 	import {
 		beginDriveConnection,
 		isDriveOAuthConfigured,
-		loadDriveConnection
+		loadDriveConnection,
+		synchronizeDriveConnection
 	} from '$lib/services/drive';
 	import Button from './Button.svelte';
 
@@ -12,11 +13,13 @@
 	let connection = $state<DriveConnection | null>(null);
 	let loading = $state(true);
 	let connecting = $state(false);
+	let synchronizing = $state(false);
 	let error = $state<string | null>(null);
+	let syncMessage = $state<string | null>(null);
 	let presentation = $derived(driveConnectionPresentation({ configured, connection }));
 
 	async function refresh() {
-		if (connecting) return;
+		if (connecting || synchronizing) return;
 		loading = true;
 		error = null;
 		try {
@@ -32,9 +35,10 @@
 	}
 
 	async function connect() {
-		if (!configured || loading || connecting || !presentation.canConnect) return;
+		if (!configured || loading || connecting || synchronizing || !presentation.canConnect) return;
 		connecting = true;
 		error = null;
+		syncMessage = null;
 		try {
 			const authorizationUrl = await beginDriveConnection();
 			window.location.assign(authorizationUrl);
@@ -44,6 +48,28 @@
 					? caught.message
 					: 'Não foi possível iniciar a conexão com o Google Drive.';
 			connecting = false;
+		}
+	}
+
+	async function synchronize() {
+		if (loading || connecting || synchronizing || !presentation.canSynchronize) return;
+		synchronizing = true;
+		error = null;
+		syncMessage = null;
+		try {
+			const receipt = await synchronizeDriveConnection();
+			const continuation =
+				receipt.status === 'partial'
+					? ' O limite desta rodada foi atingido; sincronize novamente para continuar.'
+					: '';
+			syncMessage = `${receipt.applied} alterações aplicadas, ${receipt.ignored} ignoradas e ${receipt.conflicts} conflitos isolados em ${receipt.pages} página${receipt.pages === 1 ? '' : 's'}.${continuation}`;
+			synchronizing = false;
+			await refresh();
+		} catch (caught) {
+			error =
+				caught instanceof Error ? caught.message : 'Não foi possível sincronizar o Google Drive.';
+		} finally {
+			synchronizing = false;
 		}
 	}
 
@@ -60,7 +86,7 @@
 				<h2 id="drive-title">Google Drive</h2>
 			</div>
 			<span class="status" aria-live="polite">
-				{loading ? 'Carregando…' : presentation.title}
+				{loading ? 'Carregando…' : synchronizing ? 'Sincronizando…' : presentation.title}
 			</span>
 		</div>
 
@@ -69,6 +95,7 @@
 			O Fichário usa somente <code>drive.file</code>. Refresh tokens ficam no backend; o navegador
 			não os armazena.
 		</p>
+		{#if syncMessage}<p class="sync-message" role="status">{syncMessage}</p>{/if}
 		{#if error}<p class="error" role="alert">{error}</p>{/if}
 	</div>
 
@@ -76,14 +103,21 @@
 		{#if presentation.canConnect}
 			<Button
 				label={connecting ? 'Abrindo Google…' : 'Conectar Google Drive'}
-				disabled={!configured || loading || connecting}
+				disabled={!configured || loading || connecting || synchronizing}
 				onclick={() => void connect()}
+			/>
+		{/if}
+		{#if presentation.canSynchronize}
+			<Button
+				label={synchronizing ? 'Sincronizando…' : 'Sincronizar agora'}
+				disabled={loading || connecting || synchronizing}
+				onclick={() => void synchronize()}
 			/>
 		{/if}
 		<Button
 			label={loading ? 'Atualizando…' : 'Atualizar estado'}
 			variant="secondary"
-			disabled={loading || connecting}
+			disabled={loading || connecting || synchronizing}
 			onclick={() => void refresh()}
 		/>
 	</div>
@@ -173,9 +207,16 @@
 		gap: 0.65rem;
 	}
 
+	.sync-message,
 	.error {
 		padding: 0.65rem 0.75rem;
-		border-left: 0.25rem solid var(--danger);
+		border-left: 0.25rem solid var(--archive);
+		background: var(--archive-soft);
+		color: var(--archive) !important;
+	}
+
+	.error {
+		border-left-color: var(--danger);
 		background: rgb(var(--danger-rgb) / 7%);
 		color: var(--danger) !important;
 	}
