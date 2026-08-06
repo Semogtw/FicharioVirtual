@@ -7,23 +7,32 @@ const valid = {
 };
 
 describe('public environment', () => {
-	it('accepts the required public Supabase settings without Drive configured', () => {
-		expect(parsePublicEnv(valid)).toEqual({ ...valid, PUBLIC_GOOGLE_CLIENT_ID: null });
+	it('accepts required Supabase settings with optional Drive features disabled', () => {
+		expect(parsePublicEnv(valid)).toEqual({
+		...valid,
+		PUBLIC_GOOGLE_CLIENT_ID: null,
+		PUBLIC_GOOGLE_PICKER_API_KEY: null,
+		PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER: null
+	});
 	});
 
-	it('accepts an optional public Google OAuth client identifier', () => {
+	it('accepts optional Google OAuth and Picker public identifiers', () => {
 		expect(
 			parsePublicEnv({
 				...valid,
-				PUBLIC_GOOGLE_CLIENT_ID: '123456789012-example.apps.googleusercontent.com'
+				PUBLIC_GOOGLE_CLIENT_ID: '123456789012-example.apps.googleusercontent.com',
+				PUBLIC_GOOGLE_PICKER_API_KEY: 'AIzaSyExamplePublicPickerKey_1234567890',
+				PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER: '123456789012'
 			})
 		).toEqual({
 			...valid,
-			PUBLIC_GOOGLE_CLIENT_ID: '123456789012-example.apps.googleusercontent.com'
+			PUBLIC_GOOGLE_CLIENT_ID: '123456789012-example.apps.googleusercontent.com',
+			PUBLIC_GOOGLE_PICKER_API_KEY: 'AIzaSyExamplePublicPickerKey_1234567890',
+			PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER: '123456789012'
 		});
 	});
 
-	it('rejects malformed or incomplete settings', () => {
+	it('rejects malformed or partially configured Picker settings', () => {
 		expect(() => parsePublicEnv({ ...valid, PUBLIC_SUPABASE_URL: 'not-a-url' })).toThrow(
 			'Invalid public environment'
 		);
@@ -32,6 +41,20 @@ describe('public environment', () => {
 		);
 		expect(() =>
 			parsePublicEnv({ ...valid, PUBLIC_GOOGLE_CLIENT_ID: 'not a google client id' })
+		).toThrow('Invalid public environment');
+		expect(() =>
+			parsePublicEnv({
+				...valid,
+				PUBLIC_GOOGLE_PICKER_API_KEY: 'AIzaSyExamplePublicPickerKey_1234567890'
+			})
+		).toThrow('Invalid public environment');
+		expect(() =>
+			parsePublicEnv({
+				...valid,
+				PUBLIC_GOOGLE_CLIENT_ID: '123456789012-example.apps.googleusercontent.com',
+				PUBLIC_GOOGLE_PICKER_API_KEY: 'bad key',
+				PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER: '123'
+			})
 		).toThrow('Invalid public environment');
 	});
 });
