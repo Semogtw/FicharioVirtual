@@ -38,10 +38,10 @@ describe('Supabase local configuration', () => {
 	it('allows only the Google OAuth callback through the gateway without a Supabase JWT', () => {
 		const config = read('supabase/config.toml');
 
-		expect(config).toMatch(
-			/\[functions\.drive-oauth-callback\]\s+verify_jwt\s*=\s*false/
-		);
-		const disabledJwtEntries = [...config.matchAll(/\[functions\.([^\]]+)\]\s+verify_jwt\s*=\s*false/g)];
+		expect(config).toMatch(/\[functions\.drive-oauth-callback\]\s+verify_jwt\s*=\s*false/);
+		const disabledJwtEntries = [
+			...config.matchAll(/\[functions\.([^\]]+)\]\s+verify_jwt\s*=\s*false/g)
+		];
 		expect(disabledJwtEntries.map((entry) => entry[1])).toEqual(['drive-oauth-callback']);
 	});
 });
