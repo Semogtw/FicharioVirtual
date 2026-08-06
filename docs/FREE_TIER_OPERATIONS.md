@@ -1,6 +1,6 @@
 # Operação 100% gratuita
 
-**Última verificação das franquias externas:** 2 de agosto de 2026  
+**Última verificação das franquias externas:** 6 de agosto de 2026  
 **Política interna de OCR atualizada:** 6 de agosto de 2026
 
 Este documento define as regras para manter o Fichário Virtual em R$ 0. Valores e franquias externas podem mudar; por isso, a aplicação deve falhar de forma segura quando uma cota termina, nunca migrar automaticamente para cobrança.
@@ -9,37 +9,25 @@ Este documento define as regras para manter o Fichário Virtual em R$ 0. Valores
 
 1. Não vincular faturamento ao projeto da Gemini Developer API.
 2. Manter o Supabase no plano Free.
-3. Manter a Vercel no plano Hobby pessoal e não comercial.
-4. Não iniciar testes gratuitos de planos pagos.
-5. Não cadastrar cartão apenas para aumentar limites.
-6. Não implementar fallback automático para API paga.
-7. Pausar trabalhos ao receber erros de cota do provedor.
-8. Preservar arquivo e estado para retomada posterior.
-9. Não impor uma franquia diária artificial de OCR dentro do Fichário.
-10. Revisar este documento antes de cada implantação relevante.
-11. Exibir no aplicativo um painel informativo de uso e estado das cotas.
+3. Manter Cloudflare Pages no plano Free.
+4. Não ativar Cloudflare R2 por padrão.
+5. Não iniciar testes gratuitos de planos pagos.
+6. Não cadastrar cartão apenas para aumentar limites.
+7. Não implementar fallback automático para API paga.
+8. Pausar trabalhos ao receber erros de cota do provedor.
+9. Preservar arquivo e estado para retomada posterior.
+10. Não impor franquia diária artificial de OCR dentro do Fichário.
+11. Revisar este documento antes de cada implantação relevante.
+12. Exibir no aplicativo um painel informativo de uso e estado das cotas.
+13. Não enviar conteúdo privado para Cloudflare Pages ou host de modelos.
+14. Não obrigar o tablet a baixar modelos destinados ao computador.
+15. Permitir que páginas elegíveis aguardem o computador sem custo de API.
 
 ## 2. Supabase Free
 
 Referência oficial: https://supabase.com/pricing
 
-Na data de verificação, o plano Free inclui:
-
-- 500 MB de banco por projeto;
-- 1 GB de Storage;
-- 5 GB de egress e 5 GB de egress em cache;
-- 500.000 invocações de Edge Functions;
-- até 50 MB por arquivo;
-- dois projetos ativos por organização;
-- pausa após uma semana de inatividade.
-
-Limites relevantes das Edge Functions:
-
-- 256 MB de memória;
-- 150 segundos de duração no plano Free;
-- 2 segundos de CPU por requisição;
-- até 100 funções no projeto;
-- bundle menor quando implantado pela Management API do que pela CLI.
+Na última verificação registrada, o plano Free possuía franquias para banco, Storage, egress e invocações de Edge Functions. Os valores exatos precisam ser consultados novamente antes de cada release.
 
 Referências:
 
@@ -48,24 +36,21 @@ Referências:
 
 ### Regras internas
 
-- A Edge Function somente orquestra autenticação, rede e banco.
-- Renderização de PDF e transformação de imagem ficam no navegador quando necessário.
-- Arquivos importados pelo aplicativo terão limite próprio de 20 MB para PDF e 12 MB para imagem antes da preparação até que os fluxos Drive e OCR por PDF sejam validados para valores maiores.
-- O bucket terá limite de MIME e tamanho explícitos.
-- Avisos de capacidade aparecem em 70%, 85% e 95% do Storage estimado.
-- Ao atingir o limite, novas importações temporárias são bloqueadas até exportação ou limpeza.
-
-### Capacidade aproximada
-
-Com páginas preparadas entre 400 e 900 KB, 1 GB comporta aproximadamente 1.100 a 2.500 imagens temporárias ou persistidas pela arquitetura antiga. PDFs variam muito; o painel deve mostrar os documentos que mais ocupam espaço em vez de prometer um número fixo.
+- Edge Functions orquestram autenticação, rede, validação e banco.
+- Renderização de PDF e transformação de imagem ficam no navegador quando possível.
+- OCR pesado não roda dentro de Edge Function.
+- Arquivos permanentes ficam no Google Drive.
+- Storage Supabase guarda somente temporários, fallback e migração.
+- O bucket possui MIME e tamanho explícitos.
+- Avisos de capacidade aparecem antes de esgotamento.
+- Ao atingir limite, novas importações temporárias são bloqueadas ou aguardam limpeza; não há upgrade automático.
+- Páginas destinadas ao computador permanecem temporárias apenas pelo período necessário ao trabalho.
 
 ### Projeto pausado
 
-O aplicativo deve reconhecer indisponibilidade do Supabase e mostrar:
+O aplicativo deve reconhecer indisponibilidade do Supabase e mostrar mensagem segura. Nenhum dado local pendente deve ser apagado nesse estado.
 
-> O arquivo está temporariamente adormecido por inatividade. Restaure o projeto no painel do Supabase e tente novamente.
-
-Nenhum dado local pendente deve ser apagado nesse estado.
+O worker desktop também entra em espera e não trata projeto pausado como falha permanente de página.
 
 ## 3. Gemini Developer API
 
@@ -75,115 +60,216 @@ Referências oficiais:
 - https://ai.google.dev/gemini-api/docs/billing?hl=pt-BR
 - https://ai.google.dev/gemini-api/docs/rate-limits?hl=pt-br
 
-Na data de verificação:
+Regras:
 
-- contas novas podem começar no nível gratuito;
-- somente determinados modelos ficam disponíveis gratuitamente;
-- os limites variam por modelo e projeto;
-- cotas são avaliadas por RPM, TPM e RPD;
-- conteúdo enviado no nível gratuito pode ser usado para melhorar produtos do Google;
-- vincular uma conta de faturamento ativa muda o projeto para um nível pago.
+- criar projeto sem faturamento vinculado;
+- gerar chave exclusiva;
+- guardar a chave somente no Supabase;
+- configurar modelo por `OCR_MODEL_PRIMARY`;
+- escolher versão estável explicitamente disponível no nível gratuito na data do deployment;
+- registrar modelo e data em `docs/DEPLOYMENT.md`;
+- não usar alias que possa trocar silenciosamente para outra política;
+- não ativar modelo pago como fallback.
 
-### Configuração obrigatória
-
-- Criar o projeto sem faturamento vinculado.
-- Gerar uma chave exclusiva para este aplicativo.
-- Guardar a chave apenas em segredo do Supabase.
-- Configurar o modelo por `OCR_MODEL_PRIMARY`, nunca diretamente no código.
-- Escolher um modelo multimodal rápido explicitamente disponível no nível gratuito no dia da implantação.
-- Registrar a data e o modelo selecionado em `docs/DEPLOYMENT.md`.
-
-### Controles internos permitidos
+### Controles permitidos
 
 ```text
-OCR simultâneo:                 1 ou 2, conforme estabilidade medida
-Intervalo após erro 429:        conforme Retry-After ou política conservadora
+OCR simultâneo Gemini:          1 ou 2, conforme estabilidade medida
+Intervalo após erro 429:        Retry-After ou política conservadora
 Tentativas automáticas extras:  finitas por lote
 Limite diário interno:          nenhum
-Reprocessamento de qualidade:   inativo até benchmark e política explícita
+Reprocessamento desktop:        conforme fila e disponibilidade local
+Fallback pago:                  proibido
 ```
 
-A cota real do projeto Gemini é a única autoridade de capacidade. O Fichário pode contar páginas, lotes, chamadas, tokens estimados e tentativas para telemetria, mas esses contadores não podem bloquear uma chamada que ainda seja aceita pelo provedor.
+A cota real do Gemini é a única autoridade de capacidade do provedor. O Fichário pode contar páginas, lotes, chamadas e tentativas para telemetria, mas esses contadores não podem bloquear uma chamada que ainda seria aceita.
 
-O cliente nunca deve entrar em repetição infinita. O número de tentativas por lote continua finito, mesmo sem franquia diária interna.
+### Economia de chamadas
 
-### PDFs e economia de requisições
-
-- PDF com texto nativo não chama o Gemini.
-- PDF misto envia somente páginas sem texto suficiente.
-- PDF escaneado curto pode ser enviado inteiro quando os limites seguros de entrada, saída, arquivo e tempo permitirem.
-- PDF longo ou denso usa lotes adaptativos, inicialmente em torno de 20 a 40 páginas.
-- O resultado continua persistido por página, mesmo quando várias páginas compartilham a mesma chamada.
-- Páginas omitidas, duplicadas ou truncadas não podem ser tratadas como sucesso integral.
-
-O tamanho do lote não é uma franquia. Ele deve variar para reduzir requisições sem comprometer integridade, retomada ou limite de saída.
-
-### Modelos e manuscritos
-
-`OCR_MODEL_PRIMARY` é o único modelo ativo no fluxo atual e atende texto impresso, manuscrito e conteúdo misto.
-
-`OCR_MODEL_QUALITY` existe como configuração reservada, mas não é lido pela Edge Function `process-ocr` e não representa hoje um OCR especializado em manuscritos. Ele só pode ser ativado após benchmark com páginas reais, teste de staging, política explícita de reprocessamento e confirmação de que não haverá cobrança ou fallback silencioso.
-
-Um modelo especializado em manuscritos só deve ser integrado se superar o Gemini principal em um conjunto representativo da escrita da usuária e continuar compatível com custo zero, privacidade e implantação.
+- PDF com texto nativo não chama Gemini.
+- PDF misto envia somente páginas necessárias.
+- Caderno marcado como manuscrito pode ir direto ao computador.
+- Classificação automática ocorre na mesma resposta da transcrição Gemini.
+- PDF escaneado curto pode usar uma chamada quando seguro.
+- PDF longo ou denso usa lotes adaptativos.
+- Resultado continua persistido por página.
+- Omissão, duplicação ou truncamento não contam como sucesso integral.
 
 ### Estados de cota
 
-- `retryable`: limite curto de minuto ou falha temporária;
-- `blocked_quota`: cota real do provedor ou acesso gratuito indisponível;
-- `needs_review`: respostas inválidas, truncadas ou conteúdo incerto;
-- `failed`: erro permanente de arquivo ou configuração.
+- `retryable`: limite curto ou falha temporária;
+- `blocked_quota`: cota real indisponível;
+- `waiting_desktop`: página aguardando computador, não cota;
+- `needs_review`: resultado incerto;
+- `failed`: erro permanente de arquivo, segurança ou configuração.
 
-## 4. Vercel Hobby
+Quando a cota Gemini termina, o usuário pode:
+
+- aguardar renovação;
+- encaminhar página compatível ao computador;
+- manter resultado preliminar;
+- corrigir manualmente.
+
+Nenhuma dessas ações ativa cobrança.
+
+## 4. Cloudflare Pages Free
 
 Referências oficiais:
 
-- https://vercel.com/docs/plans/hobby
-- https://vercel.com/pricing
+- https://developers.cloudflare.com/pages/platform/limits/
+- https://developers.cloudflare.com/pages/framework-guides/deploy-a-svelte-kit-site/
+- https://developers.cloudflare.com/pages/get-started/direct-upload/
 
-Na data de verificação, Hobby é gratuito para projetos pessoais e não comerciais. Entre os recursos publicados estão CDN, deploy automático, 100 GB mensais de transferência rápida, 1 milhão de Edge Requests e recursos limitados de Functions.
+Na verificação de 6 de agosto de 2026, a documentação do Pages informava, no plano Free:
 
-O Fichário Virtual usará a Vercel principalmente para arquivos estáticos. Banco, OCR e arquivos privados não passam por Vercel Functions.
+- até 500 builds por mês;
+- um build concorrente;
+- timeout de build de 20 minutos;
+- até 20.000 arquivos por site;
+- até 25 MiB por asset;
+- suporte a integração Git e Direct Upload.
 
-### Regras internas
+Esses números são externos e podem mudar. O gate de release precisa revisar a documentação oficial novamente.
 
-- Não ativar Pro Trial.
-- Não usar Vercel Blob para a biblioteca.
-- Não depender de Image Optimization; miniaturas são geradas pelo cliente.
-- Usar build estático.
-- Manter dados privados fora do bundle e dos logs de build.
-- Se o plano Hobby atingir uma franquia, aguardar renovação ou migrar o frontend para outro host gratuito; não fazer upgrade automático.
+### Projeto da PWA
 
-## 5. pdf-inspector e PDF.js
+- integração Git com `main`;
+- build estático em `build/`;
+- somente variáveis públicas;
+- sem Pages Functions para OCR;
+- sem conteúdo autenticado no cache;
+- sem upload de documentos;
+- sem Image Optimization obrigatória;
+- sem add-on pago;
+- previews não usam dados reais de produção.
 
-O `pdf-inspector` tem licença MIT e roda no navegador via WebAssembly. Ele evita OCR quando o PDF já contém texto e identifica páginas específicas que precisam de leitura automática.
+### Projeto dos modelos
 
-Referência: https://github.com/firecrawl/pdf-inspector
+O caminho padrão sem assinatura de cobrança usa outro projeto Pages por Direct Upload.
 
-PDF.js é usado para renderização seletiva, visualização e preparação de páginas quando o fluxo de PDF completo não for adequado. Ambos são carregados sob demanda e não geram custo externo.
+- cada parte de modelo possui até 20 MiB;
+- versões são imutáveis;
+- checksums são obrigatórios;
+- licença e origem são obrigatórias;
+- somente o computador baixa modelos;
+- modelos não entram no Git principal nem no precache da PWA;
+- atualização de modelo é explícita;
+- se Pages deixar de atender ao volume, reavaliar antes de ativar outro produto.
 
-## 6. Painel de uso no aplicativo
+O uso de partes é uma decisão operacional para permanecer abaixo do limite por asset e evitar R2 obrigatório.
+
+## 5. Cloudflare R2
+
+Referências oficiais:
+
+- https://developers.cloudflare.com/r2/pricing/
+- https://developers.cloudflare.com/r2/get-started/
+- https://developers.cloudflare.com/billing/understand/usage-based-billing/
+
+Na verificação de 6 de agosto de 2026, R2 possuía franquia mensal incluída, mas continuava sendo produto de cobrança por uso e exigia ativação de assinatura. Excedentes de armazenamento ou operações podiam gerar cobrança.
+
+Por isso:
+
+- R2 fica desativado no MVP;
+- não criar assinatura apenas para hospedar poucos modelos;
+- não cadastrar método de pagamento em nome da política de custo zero;
+- não armazenar conteúdo privado em R2;
+- não usar R2 como fallback automático do Pages;
+- não afirmar “gratuito sem risco” apenas porque existe franquia incluída.
+
+R2 só pode ser ativado depois de uma decisão explícita que documente:
+
+- necessidade comprovada;
+- consumo esperado;
+- risco de excedente;
+- responsável pelo billing;
+- alertas e revisão;
+- procedimento de desligamento;
+- alternativa caso a assinatura seja suspensa.
+
+Mesmo se ativado, R2 guardará apenas modelos públicos e licenças.
+
+## 6. Google Drive
+
+O Drive é o armazenamento permanente do usuário e pode depender da franquia pessoal da conta Google. O Fichário não compra espaço, não ativa Google One e não cria billing automático.
+
+Regras:
+
+- escopo `drive.file`;
+- somente arquivos criados ou escolhidos explicitamente;
+- refresh token backend;
+- sem leitura ampla da conta;
+- painel de capacidade informa limitações observadas sem prometer franquia;
+- falta de espaço pausa upload e preserva fila;
+- não migrar automaticamente para outro storage pago.
+
+## 7. Worker desktop
+
+O worker usa recursos do computador do usuário e não cria custo de nuvem por inferência.
+
+Regras:
+
+- serviço de usuário, não root;
+- conexão HTTPS de saída;
+- nenhuma porta pública;
+- CPU como fallback obrigatório;
+- concorrência inicial `1`;
+- modelos públicos com licença e checksum;
+- cache local reaproveitado;
+- computador desligado mantém fila aguardando;
+- spool guarda resultado temporário, não imagem permanente;
+- atualização explícita;
+- sem mineração, telemetria externa ou execução de código remoto;
+- sem download automático de modelo no tablet.
+
+### RX 6600
+
+A GPU não é considerada suporte garantido até benchmark real. O projeto não compra GPU em nuvem e não ativa provedor pago se Vulkan ou ROCm falhar.
+
+Caminhos permitidos:
+
+```text
+CPU:               obrigatório
+Vulkan:            candidato após teste
+ROCm experimental: somente teste documentado
+GPU em nuvem:      fora do MVP
+```
+
+## 8. PDF e bibliotecas locais
+
+`@firecrawl/pdf-inspector-wasm` e PDF.js rodam no navegador e evitam OCR desnecessário. O projeto deve preservar licenças e versões fixadas.
+
+O worker pode usar runtime local de inferência e bibliotecas de imagem, desde que:
+
+- licença seja compatível;
+- versão seja fixada;
+- pacote seja reproduzível;
+- modelo e runtime não baixem código arbitrário;
+- CPU continue funcional.
+
+## 9. Painel de uso
 
 A tela Configurações deve mostrar:
 
 - páginas analisadas hoje;
-- lotes e chamadas enviados ao OCR hoje;
-- tentativas e chamadas com erro de cota;
-- trabalhos pendentes e bloqueados pelo provedor;
-- tamanho médio dos lotes;
-- armazenamento estimado;
-- tamanho dos maiores documentos;
-- modelo OCR principal configurado;
-- estado inativo ou ativo do modelo de qualidade;
-- versão do prompt;
-- aviso de privacidade do provedor gratuito;
-- estado de consentimento;
+- lotes e chamadas Gemini;
+- tentativas e erros de cota;
+- trabalhos aguardando computador;
+- dispositivo online ou offline;
+- páginas concluídas localmente;
+- tamanho médio de lote;
+- armazenamento temporário estimado;
+- modelo Gemini configurado;
+- modelo local instalado;
+- backend local ativo;
+- versão do worker;
+- estado da distribuição de modelos;
+- aviso de que R2 está desativado;
 - data da última revisão das franquias.
 
-Os valores são informativos. O painel não deve apresentar um contador local como “páginas restantes”, salvo quando esse número vier de uma cota real e confiável do provedor.
+Os valores são informativos. Não apresentar contador local como “páginas restantes” salvo quando vier de cota real e confiável.
 
-O painel não precisa consultar APIs administrativas privadas dos provedores. Pode combinar contadores internos com limites verificados manualmente no AI Studio, deixando clara a origem de cada valor.
-
-## 7. Variáveis e segredos
+## 10. Variáveis e segredos
 
 ### Frontend público
 
@@ -192,47 +278,64 @@ PUBLIC_SUPABASE_URL
 PUBLIC_SUPABASE_PUBLISHABLE_KEY
 ```
 
-### Supabase Edge Function secrets desejados
+### Supabase secrets
 
 ```text
+APP_ORIGIN
 GEMINI_API_KEY
 OCR_MODEL_PRIMARY
 OCR_MODEL_QUALITY
 OCR_PROMPT_VERSION
+GOOGLE_CLIENT_ID
+GOOGLE_CLIENT_SECRET
 ```
 
-`OCR_MODEL_QUALITY` é opcional e permanece sem efeito enquanto não houver fluxo de qualidade aprovado.
+`OCR_MODEL_QUALITY` continua opcional e sem fallback automático.
 
-### Incompatibilidade transitória da implementação atual
+### Worker
 
-A implementação existente ainda exige `OCR_DAILY_HARD_LIMIT` e bloqueia localmente em `claim_ocr_job`. Isso contradiz a política aprovada neste documento e deve ser removido por migration e alteração da Edge Function antes de declarar a mudança concluída.
+A credencial fica no keyring. O arquivo de configuração contém somente origem, preferência de backend e parâmetros não secretos.
 
-Enquanto essa implementação não for corrigida, não registrar a ausência do limite interno como `PASS` e não tratar um valor artificialmente alto como solução definitiva.
+Nunca expor:
 
-`GEMINI_API_KEY` nunca deve aparecer em `.env.example` como valor real, no frontend, em commits ou em logs.
+```text
+SUPABASE_SERVICE_ROLE_KEY
+DRIVE_REFRESH_TOKEN
+GEMINI_API_KEY
+OCR_WORKER_DEVICE_TOKEN
+```
 
-## 8. Revisão periódica
+### Incompatibilidade transitória
 
-Antes de cada release:
+A implementação atual ainda exige `OCR_DAILY_HARD_LIMIT` e bloqueia localmente em `claim_ocr_job`. Isso contradiz a política aprovada e precisa ser removido antes de registrar ausência de limite interno como `PASS`.
 
-- confirmar que Supabase ainda está em Free;
-- confirmar que Vercel ainda está em Hobby;
-- confirmar que o projeto Gemini não tem billing account;
-- verificar o modelo e os rate limits ativos no AI Studio;
-- confirmar que não existe franquia diária bloqueante criada pelo Fichário;
-- confirmar ausência de secrets no bundle;
-- testar comportamento ao simular `429`, truncamento e falta de Storage;
-- testar integridade de lote com página omitida ou duplicada;
-- atualizar a data no início deste documento.
+## 11. Revisão antes de release
 
-## 9. Plano de saída
+- confirmar Supabase Free;
+- confirmar Cloudflare Pages Free;
+- confirmar que R2 continua desativado;
+- confirmar projeto Gemini sem billing;
+- verificar modelo e rate limits ativos;
+- confirmar ausência de franquia diária interna;
+- confirmar nenhum secret no bundle;
+- testar `429`, truncamento e falta de Storage;
+- testar worker offline, lease expirado e spool;
+- testar que tablet não baixa modelos;
+- revisar limites oficiais de Pages;
+- revisar tamanho e quantidade dos artefatos públicos;
+- confirmar nenhum conteúdo privado em Cloudflare;
+- atualizar a data deste documento.
 
-Se algum serviço deixar de ser gratuito:
+## 12. Plano de saída
 
-- **Vercel:** migrar o build estático para Cloudflare Pages, GitHub Pages ou outro host gratuito compatível.
-- **Supabase:** exportar PostgreSQL e Storage; avaliar outro Postgres/Storage gratuito ou instalação pessoal.
-- **Gemini:** implementar outro `OcrProvider`, mantendo o contrato de resultado por página e o restante do sistema inalterados.
+Se algum serviço deixar de atender gratuitamente:
+
+- **Cloudflare Pages:** mover build estático e partes públicas para outro host gratuito compatível;
+- **projeto de modelos:** usar releases públicos, host autorizado ou instalação manual, preservando checksums;
+- **Supabase:** exportar PostgreSQL e temporários; avaliar outro Postgres ou instalação pessoal;
+- **Gemini:** usar fila desktop ou outro adaptador explicitamente aprovado;
+- **Google Drive:** exportar metadados e originais sem migração automática paga.
 
 Nenhuma migração é automática. O aplicativo continua permitindo visualizar, pesquisar e exportar documentos já processados enquanto o serviço afetado estiver indisponível.
 
-A decisão detalhada está em `docs/superpowers/specs/2026-08-06-provider-only-ocr-quota-and-adaptive-batching-design.md`.
+A arquitetura detalhada está em `docs/superpowers/specs/2026-08-06-cloudflare-pages-and-desktop-ocr-design.md`.
