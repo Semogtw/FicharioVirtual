@@ -1,3 +1,7 @@
+import {
+	parseOcrBatchPayload,
+	type OcrBatchParseOutcome
+} from './ocr-batch-contract.ts';
 import { parseOcrPayload, type OcrPayload } from './ocr-contract.ts';
 
 export class GeminiTransportError extends Error {
@@ -36,11 +40,57 @@ export type GeminiOcrRequest = {
 	fetchImpl?: typeof fetch;
 };
 
+export type GeminiOcrBatchPage = {
+	pageId: string;
+	pageNumber: number;
+	mimeType: string;
+	bytes: Uint8Array;
+};
+
+export type GeminiOcrBatchRequest = {
+	apiKey: string;
+	model: string;
+	pages: readonly GeminiOcrBatchPage[];
+	promptVersion: number;
+	signal?: AbortSignal;
+	fetchImpl?: typeof fetch;
+};
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MIME = /^(?:image\/(?:jpeg|png|webp)|application\/pdf)$/;
+const MAX_BATCH_PAGES = 1_000;
+const MAX_PAGE_BYTES = 14 * 1024 * 1024;
+const MAX_BATCH_BYTES = 48 * 1024 * 1024;
+
 const prompt = `Você é um transcritor literal de anotações acadêmicas.
 Transcreva todo texto visível da imagem em português, preservando ordem de leitura, títulos, listas, quebras relevantes, símbolos e fórmulas em texto quando possível.
 Não resuma, não explique, não complete lacunas e não adivinhe palavras ilegíveis.
 Quando algo não puder ser lido com segurança, mantenha o trecho mais conservador possível e adicione um aviso curto.
 Retorne exclusivamente o objeto JSON exigido pelo schema.`;
+
+const warningSchema = {
+	type: 'array',
+	maxItems: 100,
+	items: {
+		type: 'object',
+		additionalProperties: false,
+		properties: {
+			code: {
+				type: 'string',
+				enum: [
+					'uncertain_text',
+					'illegible_region',
+					'layout_ambiguous',
+					'formula_uncertain',
+					'truncated_content',
+					'empty_page'
+				]
+			},
+			message: { type: 'string', maxLength: 300 }
+		},
+		required: ['code', 'message']
+	}
+} as const;
 
 const responseSchema = {
 	type: 'object',
@@ -50,31 +100,35 @@ const responseSchema = {
 			type: 'string',
 			description: 'Transcrição literal completa, sem comentários externos.'
 		},
-		warnings: {
+		warnings: warningSchema
+	},
+	required: ['text', 'warnings']
+} as const;
+
+const batchResponseSchema = {
+	type: 'object',
+	additionalProperties: false,
+	properties: {
+		pages: {
 			type: 'array',
-			maxItems: 100,
+			maxItems: MAX_BATCH_PAGES,
 			items: {
 				type: 'object',
 				additionalProperties: false,
 				properties: {
-					code: {
+					pageId: { type: 'string', description: 'Identificador UUID fornecido para a página.' },
+					pageNumber: { type: 'integer', minimum: 1 },
+					text: {
 						type: 'string',
-						enum: [
-							'uncertain_text',
-							'illegible_region',
-							'layout_ambiguous',
-							'formula_uncertain',
-							'truncated_content',
-							'empty_page'
-						]
+						description: 'Transcrição literal completa desta página.'
 					},
-					message: { type: 'string', maxLength: 300 }
+					warnings: warningSchema
 				},
-				required: ['code', 'message']
+				required: ['pageId', 'pageNumber', 'text', 'warnings']
 			}
 		}
 	},
-	required: ['text', 'warnings']
+	required: ['pages']
 } as const;
 
 function base64(bytes: Uint8Array) {
@@ -109,7 +163,19 @@ function candidateText(payload: unknown): string | null {
 	return null;
 }
 
-export async function requestGeminiOcr(request: GeminiOcrRequest): Promise<OcrPayload> {
+async function providerJson(response: Response) {
+	if (!response.ok) throw new GeminiHttpError(response.status, await response.text());
+	try {
+		return await response.json();
+	} catch {
+		throw new GeminiResponseError();
+	}
+}
+
+async function execute(
+	request: Pick<GeminiOcrRequest, 'apiKey' | 'model' | 'signal' | 'fetchImpl'>,
+	body: Record<string, unknown>
+) {
 	const fetchImpl = request.fetchImpl ?? fetch;
 	let response: Response;
 	try {
@@ -122,43 +188,110 @@ export async function requestGeminiOcr(request: GeminiOcrRequest): Promise<OcrPa
 					'Content-Type': 'application/json'
 				},
 				signal: request.signal,
-				body: JSON.stringify({
-					contents: [
-						{
-							role: 'user',
-							parts: [
-								{
-									inlineData: {
-										mimeType: request.mimeType,
-										data: base64(request.bytes)
-									}
-								},
-								{ text: `${prompt}\nVersão do prompt: ${request.promptVersion}.` }
-							]
-						}
-					],
-					generationConfig: {
-						maxOutputTokens: 8192,
-						responseFormat: {
-							text: { mimeType: 'application/json', schema: responseSchema }
-						}
-					}
-				})
+				body: JSON.stringify(body)
 			}
 		);
 	} catch (error) {
 		if (error instanceof DOMException && error.name === 'AbortError') throw error;
 		throw new GeminiTransportError();
 	}
+	return providerJson(response);
+}
 
-	if (!response.ok) throw new GeminiHttpError(response.status, await response.text());
+function validateBatchPages(pages: readonly GeminiOcrBatchPage[]) {
+	if (pages.length < 1 || pages.length > MAX_BATCH_PAGES) {
+		throw new TypeError('Invalid Gemini OCR batch');
+	}
+	const ids = new Set<string>();
+	const numbers = new Set<number>();
+	let totalBytes = 0;
+	for (const page of pages) {
+		if (
+			!UUID.test(page.pageId) ||
+			!Number.isInteger(page.pageNumber) ||
+			page.pageNumber < 1 ||
+			page.pageNumber > 1_000_000 ||
+			!MIME.test(page.mimeType) ||
+			!(page.bytes instanceof Uint8Array) ||
+			page.bytes.byteLength < 1 ||
+			page.bytes.byteLength > MAX_PAGE_BYTES ||
+			ids.has(page.pageId) ||
+			numbers.has(page.pageNumber)
+		) {
+			throw new TypeError('Invalid Gemini OCR batch');
+		}
+		ids.add(page.pageId);
+		numbers.add(page.pageNumber);
+		totalBytes += page.bytes.byteLength;
+	}
+	if (totalBytes > MAX_BATCH_BYTES) throw new TypeError('Gemini OCR batch is too large');
+}
 
-	let payload: unknown;
+export async function requestGeminiOcrBatch(
+	request: GeminiOcrBatchRequest
+): Promise<OcrBatchParseOutcome> {
+	validateBatchPages(request.pages);
+	const parts: Array<Record<string, unknown>> = [
+		{
+			text: `${prompt}\nCada imagem é precedida por seu pageId e número original. Não omita, duplique, reordene a identidade nem combine páginas. Retorne um item para cada imagem.\nVersão do prompt: ${request.promptVersion}.`
+		}
+	];
+	for (const page of request.pages) {
+		parts.push({
+			text: `Início da página: pageId=${page.pageId}; página original ${page.pageNumber}.`
+		});
+		parts.push({
+			inlineData: {
+				mimeType: page.mimeType,
+				data: base64(page.bytes)
+			}
+		});
+	}
+
+	const payload = await execute(request, {
+		contents: [{ role: 'user', parts }],
+		generationConfig: {
+			maxOutputTokens: Math.min(65_536, Math.max(8_192, request.pages.length * 2_048)),
+			responseFormat: {
+				text: { mimeType: 'application/json', schema: batchResponseSchema }
+			}
+		}
+	});
+	const text = candidateText(payload);
+	if (text === null) throw new GeminiResponseError();
 	try {
-		payload = await response.json();
+		return parseOcrBatchPayload(
+			text,
+			request.pages.map(({ pageId, pageNumber }) => ({ pageId, pageNumber }))
+		);
 	} catch {
 		throw new GeminiResponseError();
 	}
+}
+
+export async function requestGeminiOcr(request: GeminiOcrRequest): Promise<OcrPayload> {
+	const payload = await execute(request, {
+		contents: [
+			{
+				role: 'user',
+				parts: [
+					{
+						inlineData: {
+							mimeType: request.mimeType,
+							data: base64(request.bytes)
+						}
+					},
+					{ text: `${prompt}\nVersão do prompt: ${request.promptVersion}.` }
+				]
+			}
+		],
+		generationConfig: {
+			maxOutputTokens: 8192,
+			responseFormat: {
+				text: { mimeType: 'application/json', schema: responseSchema }
+			}
+		}
+	});
 	const text = candidateText(payload);
 	if (text === null) throw new GeminiResponseError();
 	try {
