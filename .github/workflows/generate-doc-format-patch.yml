@@ -29,23 +29,27 @@ jobs:
       - name: Format known failures and current review files
         run: |
           pnpm exec prettier --write \
+            docs/DEPLOYMENT.md \
             docs/DESKTOP_OCR_WORKER.md \
             docs/READINESS.md \
             docs/superpowers/plans/2026-08-06-provider-only-ocr-and-large-pdf-implementation.md \
             src/lib/env/private.ts \
             tests/unit/drive/job-runner-edge.test.ts \
             tests/unit/tooling/current-head-workflow.test.ts \
+            tests/unit/tooling/deployment-edge-functions.test.ts \
             tests/unit/tooling/drive-edge-security-gate.test.ts \
             tests/unit/tooling/supabase-config.test.ts \
             tests/unit/tooling/workflow-permissions.test.ts \
             tools/checks/check-source-security.mjs
           git diff --binary -- \
+            docs/DEPLOYMENT.md \
             docs/DESKTOP_OCR_WORKER.md \
             docs/READINESS.md \
             docs/superpowers/plans/2026-08-06-provider-only-ocr-and-large-pdf-implementation.md \
             src/lib/env/private.ts \
             tests/unit/drive/job-runner-edge.test.ts \
             tests/unit/tooling/current-head-workflow.test.ts \
+            tests/unit/tooling/deployment-edge-functions.test.ts \
             tests/unit/tooling/drive-edge-security-gate.test.ts \
             tests/unit/tooling/supabase-config.test.ts \
             tests/unit/tooling/workflow-permissions.test.ts \
