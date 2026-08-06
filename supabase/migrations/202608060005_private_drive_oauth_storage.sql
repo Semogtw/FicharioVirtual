@@ -246,13 +246,13 @@ as $$
   where credential.user_id = target_user_id;
 $$;
 
-revoke all on function public.store_drive_oauth_state(uuid, text, text, timestamptz)
+revoke execute on function public.store_drive_oauth_state(uuid, text, text, timestamptz)
   from public, anon, authenticated;
-revoke all on function public.consume_drive_oauth_state(text, timestamptz)
+revoke execute on function public.consume_drive_oauth_state(text, timestamptz)
   from public, anon, authenticated;
-revoke all on function public.store_drive_credential(uuid, text, text, text, text)
+revoke execute on function public.store_drive_credential(uuid, text, text, text, text)
   from public, anon, authenticated;
-revoke all on function public.get_drive_refresh_token(uuid)
+revoke execute on function public.get_drive_refresh_token(uuid)
   from public, anon, authenticated;
 
 grant execute on function public.store_drive_oauth_state(uuid, text, text, timestamptz)
