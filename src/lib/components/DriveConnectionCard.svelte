@@ -1,9 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import {
-		driveConnectionPresentation,
-		type DriveConnection
-	} from '$lib/drive/connection-state';
+	import { driveConnectionPresentation, type DriveConnection } from '$lib/drive/connection-state';
 	import {
 		beginDriveConnection,
 		isDriveOAuthConfigured,
