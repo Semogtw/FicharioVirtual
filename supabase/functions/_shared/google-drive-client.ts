@@ -41,6 +41,11 @@ function validToken(value: string): string {
 	return value;
 }
 
+function validDriveId(value: string): string {
+	if (!DRIVE_ID.test(value)) throw new TypeError('Invalid Google Drive folder identifier');
+	return value;
+}
+
 function validQuery(value: string): string {
 	if (
 		value.length < 1 ||
@@ -162,12 +167,19 @@ export async function listDriveFolders({
 export async function createDriveFolder({
 	accessToken,
 	name,
+	parentId,
 	fetchImpl = fetch
 }: {
 	accessToken: string;
 	name: string;
+	parentId?: string;
 	fetchImpl?: FetchLike;
 }): Promise<GoogleDriveFolder> {
+	const metadata: Record<string, unknown> = {
+		name: validName(name),
+		mimeType: FOLDER_MIME
+	};
+	if (parentId !== undefined) metadata.parents = [validDriveId(parentId)];
 	const url = new URL('https://www.googleapis.com/drive/v3/files');
 	url.searchParams.set('fields', SINGLE_FILE_FIELDS);
 	const response = await fetchImpl(url.toString(), {
@@ -176,9 +188,43 @@ export async function createDriveFolder({
 			...authorization(accessToken),
 			'Content-Type': 'application/json'
 		},
-		body: JSON.stringify({ name: validName(name), mimeType: FOLDER_MIME })
+		body: JSON.stringify(metadata)
 	});
 	return parseFolder(await jsonResponse(response));
+}
+
+function escapeQueryLiteral(value: string): string {
+	return validName(value).replaceAll('\\', '\\\\').replaceAll("'", "\\'");
+}
+
+export async function ensureDriveFolder({
+	accessToken,
+	name,
+	parentId,
+	fetchImpl = fetch
+}: {
+	accessToken: string;
+	name: string;
+	parentId: string;
+	fetchImpl?: FetchLike;
+}): Promise<GoogleDriveFolder> {
+	const safeName = validName(name);
+	const safeParentId = validDriveId(parentId);
+	const folders = await listDriveFolders({
+		accessToken,
+		query: `name = '${escapeQueryLiteral(safeName)}' and mimeType = '${FOLDER_MIME}' and '${safeParentId}' in parents and trashed = false`,
+		fetchImpl
+	});
+	if (folders.length > 1) throw new Error('Ambiguous Google Drive folder');
+	return (
+		folders[0] ??
+		(await createDriveFolder({
+			accessToken,
+			name: safeName,
+			parentId: safeParentId,
+			fetchImpl
+		}))
+	);
 }
 
 export async function getDriveStartPageToken({
@@ -204,10 +250,6 @@ export async function getDriveStartPageToken({
 		throw new TypeError('Invalid Google Drive start page token response');
 	}
 	return body.startPageToken;
-}
-
-function escapeQueryLiteral(value: string): string {
-	return validName(value).replaceAll('\\', '\\\\').replaceAll("'", "\\'");
 }
 
 export async function bootstrapDriveRoot({
