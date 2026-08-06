@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { parseAppOrigin } from '../_shared/cors.ts';
+import { bootstrapDriveRoot } from '../_shared/google-drive-client.ts';
 import {
 	hashOAuthState,
 	requestInitialGoogleTokens,
@@ -49,7 +50,15 @@ Deno.serve(async (request) => {
 	const clientId = Deno.env.get('GOOGLE_CLIENT_ID');
 	const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET');
 	const redirectUri = Deno.env.get('GOOGLE_DRIVE_REDIRECT_URI');
-	if (!supabaseUrl || !serviceRoleKey || !clientId || !clientSecret || !redirectUri) {
+	const rootFolderName = Deno.env.get('GOOGLE_DRIVE_ROOT_FOLDER_NAME');
+	if (
+		!supabaseUrl ||
+		!serviceRoleKey ||
+		!clientId ||
+		!clientSecret ||
+		!redirectUri ||
+		!rootFolderName
+	) {
 		return redirect(appOrigin, 'error');
 	}
 
@@ -98,6 +107,20 @@ Deno.serve(async (request) => {
 			target_scope: tokens.scopes.join(' ')
 		});
 		if (storeError || stored !== true) return redirect(appOrigin, 'error');
+
+		const bootstrap = await bootstrapDriveRoot({
+			accessToken: tokens.accessToken,
+			rootFolderName
+		});
+		const { data: completed, error: completeError } = await admin.rpc(
+			'complete_drive_connection',
+			{
+				target_user_id: verifiedState.userId,
+				target_root_folder_id: bootstrap.rootFolder.id,
+				target_start_page_token: bootstrap.startPageToken
+			}
+		);
+		if (completeError || completed !== true) return redirect(appOrigin, 'error');
 		return redirect(appOrigin, 'authorized');
 	} catch {
 		return redirect(appOrigin, 'error');
