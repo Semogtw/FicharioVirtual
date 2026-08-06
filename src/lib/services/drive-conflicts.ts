@@ -20,8 +20,14 @@ export interface DriveConflictListItem {
 export type DriveConflictsClientLike = {
 	from(name: 'drive_conflicts'): {
 		select(columns: string): {
-			is(column: 'resolved_at', value: null): {
-				order(column: 'created_at', options: { ascending: false }): {
+			is(
+				column: 'resolved_at',
+				value: null
+			): {
+				order(
+					column: 'created_at',
+					options: { ascending: false }
+				): {
 					limit(count: 100): Promise<{ data: unknown; error: unknown }>;
 				};
 			};
