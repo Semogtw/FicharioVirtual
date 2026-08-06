@@ -19,8 +19,8 @@ export type PrivateEnv = z.infer<typeof privateEnvSchema>;
 
 /**
  * Parses secrets supplied by a trusted backend runtime. This module must not be
- * imported by browser-facing code. Unknown keys are deliberately ignored so a
- * stale OCR_DAILY_HARD_LIMIT secret cannot regain authority over provider use.
+ * imported by browser-facing code. Unknown keys are deliberately ignored so
+ * obsolete deployment variables cannot regain authority over provider use.
  */
 export function parsePrivateEnv(source: Record<string, string | undefined>): PrivateEnv {
 	const result = privateEnvSchema.safeParse({
