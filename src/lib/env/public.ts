@@ -2,7 +2,13 @@ import { z } from 'zod';
 
 const publicEnvSchema = z.object({
 	PUBLIC_SUPABASE_URL: z.url(),
-	PUBLIC_SUPABASE_PUBLISHABLE_KEY: z.string().trim().min(20).max(512)
+	PUBLIC_SUPABASE_PUBLISHABLE_KEY: z.string().trim().min(20).max(512),
+	PUBLIC_GOOGLE_CLIENT_ID: z
+		.string()
+		.trim()
+		.regex(/^\d{6,}-[A-Za-z0-9_-]{10,}\.apps\.googleusercontent\.com$/)
+		.optional()
+		.transform((value) => value ?? null)
 });
 
 export type PublicEnv = z.infer<typeof publicEnvSchema>;
@@ -10,7 +16,8 @@ export type PublicEnv = z.infer<typeof publicEnvSchema>;
 export function parsePublicEnv(source: Record<string, string | undefined>): PublicEnv {
 	const result = publicEnvSchema.safeParse({
 		PUBLIC_SUPABASE_URL: source.PUBLIC_SUPABASE_URL,
-		PUBLIC_SUPABASE_PUBLISHABLE_KEY: source.PUBLIC_SUPABASE_PUBLISHABLE_KEY
+		PUBLIC_SUPABASE_PUBLISHABLE_KEY: source.PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+		PUBLIC_GOOGLE_CLIENT_ID: source.PUBLIC_GOOGLE_CLIENT_ID || undefined
 	});
 
 	if (!result.success) {
