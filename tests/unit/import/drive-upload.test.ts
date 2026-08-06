@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
 	uploadPreparedImageToDriveWithGateway,
-	type DriveImageImportGateway
+	type DriveImageImportGateway,
+	type DriveImageUploadDependencies
 } from '../../../src/lib/import/drive-upload';
 import type { PreparedImage } from '../../../src/lib/import/image-types';
 
@@ -83,16 +84,18 @@ function fixture({ failTemporary = false, failMetadata = false } = {}) {
 	};
 }
 
-const dependencies = {
-	async calculateSha256() {
-		return 'a'.repeat(64);
-	},
-	generateUuid: vi
-		.fn()
-		.mockReturnValueOnce(documentId)
-		.mockReturnValueOnce(pageId)
-		.mockReturnValueOnce(jobId)
-};
+function dependencies(): DriveImageUploadDependencies {
+	return {
+		async calculateSha256() {
+			return 'a'.repeat(64);
+		},
+		generateUuid: vi
+			.fn()
+			.mockReturnValueOnce(documentId)
+			.mockReturnValueOnce(pageId)
+			.mockReturnValueOnce(jobId)
+	};
+}
 
 describe('Drive-first image upload', () => {
 	it('uploads the original only to Drive and publishes strict metadata', async () => {
@@ -101,12 +104,10 @@ describe('Drive-first image upload', () => {
 		const result = await uploadPreparedImageToDriveWithGateway(
 			{ prepared: prepared(), notebookId: null },
 			value.gateway,
-			dependencies
+			dependencies()
 		);
 
-		expect(value.uploadedTemporary).toEqual([
-			`${userId}/${documentId}/thumbnail.jpg`
-		]);
+		expect(value.uploadedTemporary).toEqual([`${userId}/${documentId}/thumbnail.jpg`]);
 		expect(value.publication).toMatchObject({
 			documentId,
 			pageId,
@@ -122,8 +123,7 @@ describe('Drive-first image upload', () => {
 			ocrJobId: jobId,
 			sha256: 'a'.repeat(64),
 			storagePath: `drive:${driveFileId}`,
-			thumbnailPath: `${userId}/${documentId}/thumbnail.jpg`,
-			driveFileId
+			thumbnailPath: `${userId}/${documentId}/thumbnail.jpg`
 		});
 	});
 
@@ -133,14 +133,7 @@ describe('Drive-first image upload', () => {
 			uploadPreparedImageToDriveWithGateway(
 				{ prepared: prepared() },
 				temporary.gateway,
-				{
-					...dependencies,
-					generateUuid: vi
-						.fn()
-						.mockReturnValueOnce(documentId)
-						.mockReturnValueOnce(pageId)
-						.mockReturnValueOnce(jobId)
-				}
+				dependencies()
 			)
 		).rejects.toThrow('temporary failed');
 		expect(temporary.deletedDrive).toEqual([driveFileId]);
@@ -150,14 +143,7 @@ describe('Drive-first image upload', () => {
 			uploadPreparedImageToDriveWithGateway(
 				{ prepared: prepared() },
 				metadata.gateway,
-				{
-					...dependencies,
-					generateUuid: vi
-						.fn()
-						.mockReturnValueOnce(documentId)
-						.mockReturnValueOnce(pageId)
-						.mockReturnValueOnce(jobId)
-				}
+				dependencies()
 			)
 		).rejects.toThrow('metadata failed');
 		expect(metadata.removedTemporary).toEqual([
@@ -176,7 +162,7 @@ describe('Drive-first image upload', () => {
 			uploadPreparedImageToDriveWithGateway(
 				{ prepared: prepared() },
 				value.gateway,
-				dependencies
+				dependencies()
 			)
 		).rejects.toMatchObject({ name: 'DuplicateImageError', documentId });
 		expect(resolve).not.toHaveBeenCalled();
