@@ -53,9 +53,7 @@ describe('Google Drive response contracts', () => {
 
 	it('rejects malformed or extra file fields', () => {
 		expect(() => parseDriveFile(driveFile({ id: '' }))).toThrow('Invalid Drive file response');
-		expect(() => parseDriveFile(driveFile({ version: 7 }))).toThrow(
-			'Invalid Drive file response'
-		);
+		expect(() => parseDriveFile(driveFile({ version: 7 }))).toThrow('Invalid Drive file response');
 		expect(() => parseDriveFile(driveFile({ accessToken: 'must-not-pass' }))).toThrow(
 			'Invalid Drive file response'
 		);
