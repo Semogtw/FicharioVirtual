@@ -130,6 +130,10 @@ export async function runPdfOcrBatches(
 				else eligible.push(page);
 			}
 			if (eligible.length === 0 || input.signal?.aborted) continue;
+			if (eligible.length === 1 && pageIds.length === 1) {
+				finish(eligible[0]!.id, 'pending');
+				continue;
+			}
 			await sleep(2_100);
 			if (input.signal?.aborted) continue;
 			queue.unshift(...splitCandidates(batch, eligible));
