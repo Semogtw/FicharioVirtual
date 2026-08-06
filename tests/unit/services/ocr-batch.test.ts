@@ -89,24 +89,31 @@ describe('processOcrBatch', () => {
 		).rejects.toEqual(expect.objectContaining({ code: 'ocr_response_invalid' }));
 	});
 
-	it('preserves cancellation and safe provider quota classification', async () => {
+	it('preserves cancellation and distinguishes temporary from daily provider quota', async () => {
 		const controller = new AbortController();
 		controller.abort();
 		await expect(
 			processOcrBatch([first], client(null).gateway, { signal: controller.signal })
 		).rejects.toEqual(expect.objectContaining({ name: 'AbortError' }));
 
-		const response = new Response(
+		const temporary = new Response(
+			JSON.stringify({ code: 'gemini_rate_limited', retryable: true }),
+			{ status: 429, headers: { 'Content-Type': 'application/json' } }
+		);
+		await expect(
+			processOcrBatch([first], client(null, { context: temporary }).gateway)
+		).rejects.toEqual(
+			expect.objectContaining({ code: 'gemini_rate_limited', retryable: true })
+		);
+
+		const daily = new Response(
 			JSON.stringify({ code: 'gemini_daily_quota', retryable: false }),
 			{ status: 429, headers: { 'Content-Type': 'application/json' } }
 		);
 		await expect(
-			processOcrBatch([first], client(null, { context: response }).gateway)
+			processOcrBatch([first], client(null, { context: daily }).gateway)
 		).rejects.toEqual(
-			expect.objectContaining({
-				code: 'gemini_daily_quota',
-				retryable: false
-			})
+			expect.objectContaining({ code: 'gemini_daily_quota', retryable: false })
 		);
 	});
 });
