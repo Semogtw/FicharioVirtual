@@ -13,7 +13,7 @@ describe('Drive connection settings', () => {
 		expect(card).toContain('beginDriveConnection');
 		expect(card).toContain('isDriveOAuthConfigured');
 		expect(card).toContain('aria-live="polite"');
-		expect(card).toContain("window.location.assign(authorizationUrl)");
+		expect(card).toContain('window.location.assign(authorizationUrl)');
 		expect(card).not.toContain('localStorage');
 		expect(card).not.toContain('sessionStorage');
 		expect(card).not.toContain('refresh_token');
