@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(5);
+select plan(7);
 
 insert into auth.users (id, email)
 values ('11111111-1111-4111-8111-111111111111', 'batch-manifest@example.test');
@@ -87,6 +87,32 @@ values (
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
 
+select is(
+  public.register_ocr_batch(
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'::uuid,
+    'gemini',
+    array[
+      '10000000-0000-4000-8000-000000000001'::uuid,
+      '10000000-0000-4000-8000-000000000002'::uuid
+    ],
+    array[2, 1],
+    0,
+    2048,
+    0,
+    null,
+    'gemini-test',
+    1,
+    '2026-08-06T12:00:01Z'::timestamptz
+  ),
+  null,
+  'a batch is rejected when page numbers do not match page IDs by ordinal'
+);
+select is(
+  (select count(*)::integer from public.ocr_batches),
+  0,
+  'an order mismatch leaves no partial manifest'
+);
+
 create temporary table valid_manifest (id uuid not null);
 insert into valid_manifest (id)
 select public.register_ocr_batch(
@@ -103,7 +129,7 @@ select public.register_ocr_batch(
   null,
   'gemini-test',
   1,
-  '2026-08-06T12:00:01Z'::timestamptz
+  '2026-08-06T12:00:02Z'::timestamptz
 );
 
 select ok(
