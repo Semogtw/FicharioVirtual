@@ -2,43 +2,50 @@
 
 PWA privada e pesquisável para organizar fotos, capturas de tela e PDFs de anotações manuscritas ou digitadas.
 
-O aplicativo prepara imagens e inspeciona PDFs no próprio dispositivo, preserva texto nativo sem OCR e encaminha somente as páginas que realmente precisam de reconhecimento. Supabase fornece autenticação, PostgreSQL, Storage privado e Edge Functions; a integração Gemini fica isolada no backend e possui consentimento, idempotência, limite diário e recuperação sem reupload.
+O Google Drive é o armazenamento permanente dos arquivos originais. O Supabase fornece autenticação, PostgreSQL, RLS, Edge Functions, OCR e estado de sincronização; seu Storage privado fica restrito a processamento temporário, fallback e migração controlada.
 
 ## Estado atual
 
-O MVP está implementado na branch `main`, sem deployment ou release público. O repositório inclui:
+A base funcional anterior do Fichário está implementada, mas o plano original ainda **não está pronto para release** porque a integração real com Google Drive está em desenvolvimento.
+
+Já existem na `main`:
 
 - autenticação de conta única com allowlist fail-closed;
-- biblioteca privada, cadernos, tags e organização em lote;
-- importação cancelável e retomável de imagens e PDFs;
-- OCR seletivo por página, com quota e backoff explícitos;
-- injeção local segura de 429, 503, payload inválido e timeout por servidor HTTP loopback;
-- busca textual ranqueada e tolerante a acentos/erros pequenos;
-- leitor lado a lado, revisão manual e recuperação de rascunhos locais;
-- painel operacional de uso;
-- exportação JSON portátil e exclusão completa;
-- PWA com cache limitado ao shell e ativos públicos;
-- testes unitários, E2E, pgTAP, gates de segurança e verificações locais de concorrência/idempotência OCR.
+- biblioteca, cadernos, tags, organização em lote, busca e revisão;
+- importação retomável de imagens e PDFs;
+- inspeção local de PDFs e OCR seletivo no backend;
+- PWA com cache limitado ao shell público;
+- exportação portátil sem tokens;
+- contratos estritos da API Google Drive;
+- reconciliação de arquivo disponível/ausente sem apagar OCR e metadados;
+- sincronizador paginado que só avança o token depois de persistir a página;
+- modelo PostgreSQL para conexão, hierarquia de pastas, fila idempotente, conflitos e reconexão;
+- testes unitários e pgTAP da nova arquitetura.
 
-O estado canônico, o último SHA integralmente validado e as evidências de CI ficam em [`docs/CURRENT_STATUS.md`](docs/CURRENT_STATUS.md). Atribua `PASS` somente ao commit exato em que os gates foram executados.
+Ainda faltam OAuth real, cliente Drive implantado, upload retomável conectado às filas de importação, Google Picker, migração dos originais existentes e validação remota.
+
+O estado canônico fica em [`docs/CURRENT_STATUS.md`](docs/CURRENT_STATUS.md). A prontidão real fica em [`docs/READINESS.md`](docs/READINESS.md).
 
 ## Princípios
 
-1. **Recuperar o documento é mais importante que gerar respostas sofisticadas.**
-2. **Texto nativo nunca é enviado ao OCR sem necessidade.**
-3. **Nenhum serviço pode ativar cobrança ou fallback pago automaticamente.**
-4. **Arquivos, transcrições e buscas permanecem privados por padrão.**
-5. **Falha de OCR não implica perda nem novo upload do arquivo.**
-6. **Recursos pesados são carregados apenas quando a tarefa exige.**
-7. **A interface deve parecer um fichário digital profissional, não um chatbot.**
+1. **O arquivo original permanente pertence ao usuário no Google Drive.**
+2. **IDs do Drive são identidade; nomes e caminhos não são.**
+3. **OCR, correções, tags e busca sobrevivem ao desaparecimento do arquivo físico.**
+4. **Texto nativo nunca é enviado ao OCR sem necessidade.**
+5. **Nenhum serviço ativa cobrança ou fallback pago automaticamente.**
+6. **Tokens e secrets nunca entram no navegador persistente, exportações ou cache da PWA.**
+7. **Um conflito bloqueia somente o item relacionado.**
+8. **A interface deve parecer um fichário digital profissional, não um chatbot.**
 
 ## Arquitetura
 
-- **Frontend/PWA:** SvelteKit 5 + TypeScript, build estático e Web Workers.
-- **Backend:** Supabase Auth, PostgreSQL, RLS, Storage privado e Edge Functions.
+- **Frontend/PWA:** SvelteKit 5, TypeScript, build estático e Web Workers.
+- **Originais permanentes:** Google Drive API v3 com OAuth `drive.file`.
+- **Backend:** Supabase Auth, PostgreSQL, RLS e Edge Functions.
+- **Storage Supabase:** artefatos temporários, fallback e migração.
 - **OCR:** Gemini Developer API por adaptador backend substituível.
-- **PDFs:** `@firecrawl/pdf-inspector-wasm` para classificação/texto e PDF.js somente para páginas sem texto.
-- **Busca:** PostgreSQL FTS, `unaccent` e `pg_trgm`; sem banco vetorial no MVP.
+- **PDFs:** `@firecrawl/pdf-inspector-wasm` e PDF.js apenas quando necessário.
+- **Busca:** PostgreSQL FTS, `unaccent` e `pg_trgm`.
 
 ## Desenvolvimento
 
@@ -49,13 +56,6 @@ corepack enable
 pnpm install --frozen-lockfile
 pnpm exec playwright install chromium
 pnpm verify
-```
-
-O `pnpm-lock.yaml` é versionado na raiz e deve acompanhar toda alteração de dependências.
-
-Validação completa local, incluindo E2E, análise offline, Edge Functions e banco Supabase:
-
-```bash
 pnpm verify:full
 ```
 
@@ -66,36 +66,32 @@ pnpm test:source:offline
 pnpm test:functions:check
 pnpm test:db:local
 pnpm test:ocr:faults:local
-pnpm test:deployment:artifact -- /caminho/para/fichario-deploy
 pnpm test:deployment -- https://host.example
 pnpm test:staging:supabase
 pnpm test:staging:ocr
 ```
 
-`test:db:local` inicia/reutiliza a stack Supabase, recria o banco, executa pgTAP e roda os testes reais de concorrência, idempotência e virada UTC do OCR. `test:ocr:faults:local` usa somente um servidor HTTP em `127.0.0.1`; ele prova transporte, classificação e backoff sem adicionar controles de falha à Edge Function implantada.
-
 ## Documentação
 
-- [Estado atual canônico](docs/CURRENT_STATUS.md)
-- [Checkpoint de hardening de contratos em 2026-08-03](docs/checkpoints/2026-08-03-contract-hardening.md)
-- [Especificação do produto e arquitetura](docs/PROJECT_SPEC.md)
-- [Plano detalhado de implementação](docs/IMPLEMENTATION_PLAN.md)
-- [Estratégia de testes e evidência](docs/TESTING.md)
-- [Prontidão e percentual de progresso](docs/READINESS.md)
-- [Validação Supabase remota](docs/SUPABASE_STAGING.md)
-- [Validação de OCR real em staging](docs/OCR_STAGING.md)
-- [Matriz segura de falhas OCR](docs/OCR_FAILURE_MATRIX.md)
+- [Estado atual](docs/CURRENT_STATUS.md)
+- [Prontidão](docs/READINESS.md)
+- [Especificação canônica](docs/PROJECT_SPEC.md)
+- [Design Google Drive](docs/superpowers/specs/2026-08-06-google-drive-primary-storage-design.md)
+- [Plano Google Drive](docs/superpowers/plans/2026-08-06-google-drive-primary-storage.md)
+- [Configuração externa Google Drive](docs/GOOGLE_DRIVE_SETUP.md)
+- [Estratégia de testes](docs/TESTING.md)
 - [Deployment e rollback](docs/DEPLOYMENT.md)
-- [Operação sem custos e limites](docs/FREE_TIER_OPERATIONS.md)
+- [Operação gratuita](docs/FREE_TIER_OPERATIONS.md)
 - [Privacidade](docs/PRIVACY.md)
 - [Recuperação](docs/RECOVERY.md)
 
 ## Antes de uma release
 
-Ainda é necessário validar em staging e dispositivo real:
+É obrigatório concluir e validar:
 
-- executar os gates preparados de Auth, RLS, Storage e expiração de URLs assinadas no projeto Supabase remoto;
-- executar o smoke OCR sintético e observar no ambiente implantado a persistência e a retomada das falhas já classificadas localmente;
-- PDFs textuais, digitalizados e mistos em tablet/celular;
-- instalação/atualização do PWA e headers no host final;
-- limites gratuitos e ausência de billing habilitado.
+- OAuth Web com `drive.file` e refresh token somente no backend;
+- pasta `Fichário Digital` e pastas aninhadas dos cadernos;
+- upload retomável e importação explícita pelo Drive;
+- feed de mudanças, arquivo ausente, reconexão e conflitos;
+- migração idempotente dos originais atuais;
+- Supabase, OCR, host HTTPS, celular/tablet, billing, backup e rollback.
