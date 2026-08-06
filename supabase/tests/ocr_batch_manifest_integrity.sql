@@ -1,7 +1,18 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(7);
+select plan(8);
+
+select is(
+  (
+    select constraint_record.confdeltype::text
+    from pg_catalog.pg_constraint constraint_record
+    where constraint_record.conname = 'ocr_jobs_batch_id_fkey'
+      and constraint_record.conrelid = 'public.ocr_jobs'::regclass
+  ),
+  'r',
+  'OCR jobs restrict deletion of referenced immutable batch manifests'
+);
 
 insert into auth.users (id, email)
 values ('11111111-1111-4111-8111-111111111111', 'batch-manifest@example.test');
