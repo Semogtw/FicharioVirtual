@@ -162,10 +162,22 @@
 							<span>{statusLabels[job.status]}</span>
 						</div>
 						<dl>
-							<div><dt>Tentativa</dt><dd>{job.attemptCount}</dd></div>
-							<div><dt>Criado</dt><dd>{formatDate(job.createdAt)}</dd></div>
-							<div><dt>Próxima tentativa</dt><dd>{formatDate(job.nextRetryAt)}</dd></div>
-							<div><dt>Finalizado</dt><dd>{formatDate(job.finishedAt)}</dd></div>
+							<div>
+								<dt>Tentativa</dt>
+								<dd>{job.attemptCount}</dd>
+							</div>
+							<div>
+								<dt>Criado</dt>
+								<dd>{formatDate(job.createdAt)}</dd>
+							</div>
+							<div>
+								<dt>Próxima tentativa</dt>
+								<dd>{formatDate(job.nextRetryAt)}</dd>
+							</div>
+							<div>
+								<dt>Finalizado</dt>
+								<dd>{formatDate(job.finishedAt)}</dd>
+							</div>
 						</dl>
 						{#if job.lastErrorMessage}
 							<p class="job-error">{job.lastErrorMessage}</p>
