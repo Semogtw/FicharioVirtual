@@ -442,10 +442,20 @@ class SupabasePdfGateway implements PdfImportGateway {
 	}
 }
 
-export function uploadPdf(
+export function uploadPdfToSupabase(
 	file: File,
 	options: PdfUploadOptions,
 	client: SupabaseClient<Database> = getSupabaseClient()
 ) {
 	return uploadPdfWithGateway(file, options, new SupabasePdfGateway(client));
+}
+
+export async function uploadPdf(
+	file: File,
+	options: PdfUploadOptions,
+	client?: SupabaseClient<Database>
+): Promise<UploadedPdf> {
+	if (client !== undefined) return uploadPdfToSupabase(file, options, client);
+	const { uploadPdfToDrive } = await import('./drive-upload');
+	return uploadPdfToDrive(file, options);
 }
