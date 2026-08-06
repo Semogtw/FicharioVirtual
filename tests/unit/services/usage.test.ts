@@ -11,6 +11,10 @@ const payload = {
 	today: {
 		date: '2026-08-02',
 		ocrPages: 12,
+		ocrBatches: 3,
+		ocrCalls: 3,
+		ocrAttempts: 13,
+		averageBatchSize: 4,
 		quotaErrors: 1
 	},
 	totals: {
@@ -18,13 +22,30 @@ const payload = {
 		documents: 18,
 		pages: 72,
 		pendingPages: 3,
+		blockedQuotaPages: 1,
 		reviewPages: 2,
 		failedPages: 1,
 		manualReviews: 9
 	},
 	daily: [
-		{ date: '2026-08-01', ocrPages: 8, quotaErrors: 0 },
-		{ date: '2026-08-02', ocrPages: 12, quotaErrors: 1 }
+		{
+			date: '2026-08-01',
+			ocrPages: 8,
+			ocrBatches: 2,
+			ocrCalls: 2,
+			ocrAttempts: 8,
+			averageBatchSize: 4,
+			quotaErrors: 0
+		},
+		{
+			date: '2026-08-02',
+			ocrPages: 12,
+			ocrBatches: 3,
+			ocrCalls: 3,
+			ocrAttempts: 13,
+			averageBatchSize: 4,
+			quotaErrors: 1
+		}
 	]
 };
 
@@ -32,11 +53,15 @@ describe('usage overview', () => {
 	it('parses a bounded content-free operational snapshot', () => {
 		expect(parseUsageOverview(payload)).toEqual(payload);
 		expect(JSON.stringify(parseUsageOverview(payload))).not.toContain('text');
+		expect(JSON.stringify(parseUsageOverview(payload))).not.toContain('remaining');
 	});
 
-	it('rejects negative counters and unexpected fields', () => {
+	it('rejects negative counters, impossible averages and unexpected fields', () => {
 		expect(() =>
 			parseUsageOverview({ ...payload, today: { ...payload.today, ocrPages: -1 } })
+		).toThrow('Invalid usage overview');
+		expect(() =>
+			parseUsageOverview({ ...payload, today: { ...payload.today, averageBatchSize: -1 } })
 		).toThrow('Invalid usage overview');
 		expect(() => parseUsageOverview({ ...payload, privateContent: 'no' })).toThrow(
 			'Invalid usage overview'
@@ -46,12 +71,6 @@ describe('usage overview', () => {
 		).toThrow('Invalid usage overview');
 		expect(() =>
 			parseUsageOverview({ ...payload, today: { ...payload.today, date: '2026-02-30' } })
-		).toThrow('Invalid usage overview');
-		expect(() =>
-			parseUsageOverview({
-				...payload,
-				daily: [{ date: '2026-02-30', ocrPages: 1, quotaErrors: 0 }]
-			})
 		).toThrow('Invalid usage overview');
 	});
 
