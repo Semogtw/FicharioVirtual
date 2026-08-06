@@ -36,3 +36,6 @@ minimum_password_length = 10
 enable_signup = false
 double_confirm_changes = true
 enable_confirmations = true
+
+[functions.drive-oauth-callback]
+verify_jwt = false
