@@ -21,7 +21,8 @@
 		{ href: '/library/', label: 'Biblioteca', mark: '▤' },
 		{ href: '/notebooks/', label: 'Cadernos', mark: '▥' },
 		{ href: '/import/', label: 'Importar', mark: '＋' },
-		{ href: '/review/', label: 'Revisar', mark: '✓' }
+		{ href: '/review/', label: 'Revisar', mark: '✓' },
+		{ href: '/drive/', label: 'Drive', mark: '☁' }
 	] as const;
 
 	function search(query: string) {
