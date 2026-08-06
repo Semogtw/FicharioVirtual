@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(8);
+select plan(12);
 
 select is(
   (
@@ -164,6 +164,60 @@ select is(
   ),
   array[1, 2],
   'job ordinals preserve the requested page order'
+);
+
+select ok(
+  public.finish_ocr_batch(
+    (select id from valid_manifest),
+    'retryable',
+    'ocr_batch_split_required',
+    'Retry the affected subset.',
+    '2026-08-06T12:05:00Z'::timestamptz,
+    '2026-08-06T12:00:03Z'::timestamptz
+  ),
+  'a parent batch can become retryable before a split'
+);
+
+create temporary table child_manifest (id uuid not null);
+insert into child_manifest (id)
+select public.register_ocr_batch(
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'::uuid,
+  'gemini',
+  array[
+    '10000000-0000-4000-8000-000000000001'::uuid,
+    '10000000-0000-4000-8000-000000000002'::uuid
+  ],
+  array[1, 2],
+  0,
+  2048,
+  1,
+  null,
+  'gemini-test',
+  1,
+  '2026-08-06T12:05:01Z'::timestamptz
+);
+
+select ok(
+  (select id is not null from child_manifest),
+  'retryable jobs can be linked to a child batch'
+);
+select is(
+  (
+    select b.parent_batch_id
+    from public.ocr_batches b
+    where b.id = (select id from child_manifest)
+  ),
+  (select id from valid_manifest),
+  'a single prior retryable batch is inferred as the child parent'
+);
+select is(
+  (
+    select count(*)::integer
+    from public.ocr_jobs j
+    where j.batch_id = (select id from child_manifest)
+  ),
+  2,
+  'retryable jobs are relinked to the child manifest'
 );
 
 select * from finish();
