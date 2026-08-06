@@ -143,9 +143,11 @@ describe('browser Drive chunk gateway', () => {
 				contentRange: 'bytes 0-262143/524288'
 			})
 		).resolves.toEqual({ status: 308, range: 'bytes=0-262143', body: null });
-		await expect(
-			gateway.queryProgress({ sessionUrl, totalBytes: 524288 })
-		).resolves.toEqual({ status: 200, range: null, body: finalFile() });
+		await expect(gateway.queryProgress({ sessionUrl, totalBytes: 524288 })).resolves.toEqual({
+			status: 200,
+			range: null,
+			body: finalFile()
+		});
 
 		expect(fetchImpl.mock.calls[0][1]).toMatchObject({
 			method: 'PUT',
@@ -158,10 +160,10 @@ describe('browser Drive chunk gateway', () => {
 			method: 'PUT',
 			headers: {
 				Authorization: `Bearer ${accessToken}`,
-				'Content-Length': '0',
 				'Content-Range': 'bytes */524288'
 			}
 		});
+		expect(fetchImpl.mock.calls[1][1].headers).not.toHaveProperty('Content-Length');
 	});
 });
 
@@ -170,9 +172,7 @@ describe('browser Drive upload orchestration', () => {
 		const invoke = vi.fn().mockResolvedValue({ data: { accessToken, expiresAt }, error: null });
 		const fetchImpl = vi
 			.fn()
-			.mockResolvedValueOnce(
-				new Response(null, { status: 200, headers: { Location: sessionUrl } })
-			)
+			.mockResolvedValueOnce(new Response(null, { status: 200, headers: { Location: sessionUrl } }))
 			.mockResolvedValueOnce(
 				new Response(JSON.stringify(finalFile()), {
 					status: 200,
