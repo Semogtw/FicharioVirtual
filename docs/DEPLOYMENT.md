@@ -14,17 +14,17 @@ Google Drive
 
 Supabase
 ├── Auth
-├── PostgreSQL
-├── Row Level Security
+├── PostgreSQL + RLS
 ├── Storage privado temporário
 ├── Edge Functions Drive e Gemini
-└── fila e API restrita do worker desktop
+├── manifestos e filas OCR
+└── API restrita do worker desktop
 
 Computador confiável
 └── Fichário Desktop OCR Worker
 ```
 
-Cloudflare não recebe documentos privados. O Gemini continua isolado no backend. O worker local inicia conexões HTTPS de saída e não exige porta pública.
+Cloudflare não recebe documentos privados. O Gemini permanece isolado no backend. O worker local inicia somente conexões HTTPS de saída e não exige porta pública.
 
 Runbooks complementares:
 
@@ -36,13 +36,30 @@ Runbooks complementares:
 
 ## 1. Preparar o Supabase
 
-Crie um projeto e aplique as migrations em ordem:
+Crie o projeto e aplique as migrations em ordem:
 
 ```bash
 supabase link --project-ref <project-ref>
 supabase db push
 supabase test db
 ```
+
+O rollout de OCR em lotes depende, no mínimo, de:
+
+```text
+202608060014_provider_only_ocr_batches.sql
+202608060015_ocr_batch_usage_and_hardening.sql
+202608060016_harden_ocr_batch_transitions.sql
+```
+
+Essas migrations:
+
+- removem a assinatura com limite diário do aplicativo;
+- criam `ocr_batches` e vínculos ordenados em `ocr_jobs`;
+- mantêm páginas, lotes, chamadas e tentativas como telemetria;
+- restringem escrita de manifestos aos RPCs validados;
+- tornam transições terminais idempotentes;
+- preservam `blocked_quota` somente para quota real do provedor.
 
 Depois regenere os tipos:
 
@@ -51,38 +68,38 @@ supabase gen types typescript --linked > src/lib/types/database.ts
 pnpm format src/lib/types/database.ts
 ```
 
-Revise o diff antes de publicar. Casts temporárias dos serviços devem ser removidas quando as RPCs aparecerem nos tipos gerados.
+O arquivo versionado é um espelho provisório. Não promova a release sem comparar os tipos gerados com o schema implantado.
 
-As migrations futuras do worker precisam ser aplicadas antes das respectivas Edge Functions. Um worker novo nunca deve ser liberado contra schema antigo incompatível.
+Migrations são forward-only. Corrija por nova migration; não edite uma migration já aplicada.
 
 ## 2. Configurar usuário autorizado
 
-Crie a conta no Supabase Auth e adicione o UUID correspondente em `public.app_users`:
+Crie a conta no Supabase Auth e adicione o UUID em `public.app_users`:
 
 ```sql
 insert into public.app_users (user_id, is_active)
 values ('<auth-user-uuid>', true);
 ```
 
-Não use email como chave de autorização nas políticas. `auth.uid()` e a allowlist são a fonte de acesso para a PWA.
+Email não é chave de autorização nas políticas. A PWA usa `auth.uid()` e allowlist fail-closed.
 
-Credenciais de dispositivos desktop usam tabelas e Edge Functions próprias. Elas não substituem a sessão Supabase e não recebem acesso SQL direto.
+Credenciais do worker desktop usam tabelas e funções próprias. Elas não substituem a sessão Supabase e não recebem SQL direto.
 
 ## 3. Configurar Storage
 
-A migration cria o bucket privado `documents` e políticas por prefixo do usuário.
-
 Confirme:
 
-- bucket não público;
+- bucket `documents` privado;
 - uploads somente em `<auth.uid()>/<document-id>/...`;
-- download direto negado sem sessão;
-- URL assinada com validade curta;
+- download negado sem sessão;
+- URL assinada curta;
 - remoção recusada para outro usuário;
-- página temporária preservada enquanto existir rota Gemini ou desktop pendente;
-- limpeza somente depois de conclusão ou cancelamento de todas as rotas necessárias.
+- temporário preservado enquanto existir rota pendente;
+- limpeza somente depois de persistência segura ou cancelamento confirmado.
 
-Depois da migração Drive, o Storage permanece apenas para temporários, fallback e migração controlada.
+O original permanente fica no Google Drive. O Storage Supabase contém páginas derivadas, fallback transitório e migração controlada.
+
+A migration eleva o teto transitório do bucket para permitir artefatos de até 50 MiB. Esse valor não é limite do documento lógico; originais maiores seguem por upload retomável ao Drive.
 
 ## 4. Configurar Google Drive
 
@@ -99,11 +116,15 @@ Requisitos:
 - ausência, reconexão e conflitos;
 - migração com rollback.
 
-A troca do host público exige atualizar apenas a origem do aplicativo e links de retorno. O callback OAuth continua na Edge Function do Supabase.
+Uploads locais grandes usam sessão retomável do Drive. O download direto do Picker no navegador aceita até 50 MiB; acima disso o arquivo precisa permanecer ou ser copiado dentro do fluxo Drive-first, sem ser baixado integralmente pelo navegador.
 
-## 5. Configurar Edge Functions
+A troca do host público altera a origem da aplicação e os retornos autorizados. O callback OAuth continua em Edge Function do Supabase.
 
-Secrets obrigatórios atuais:
+## 5. Configurar Gemini e Edge Functions
+
+Crie projeto Gemini sem billing vinculado e escolha versão estável disponível no nível gratuito na data do deployment.
+
+Secrets obrigatórios:
 
 ```bash
 supabase secrets set \
@@ -113,42 +134,91 @@ supabase secrets set \
   OCR_PROMPT_VERSION=1
 ```
 
-A implementação atual ainda exige `OCR_DAILY_HARD_LIMIT`; essa exigência é incompatibilidade transitória e precisa ser removida antes de declarar a política de ausência de limite interno como concluída.
+Controles técnicos opcionais:
 
-Secrets Drive são configurados conforme o runbook específico. Nunca prefixe secrets com `PUBLIC_`.
+```bash
+supabase secrets set \
+  OCR_BATCH_MAX_PAGES=40 \
+  OCR_BATCH_MAX_BYTES=12582912 \
+  OCR_REQUEST_TIMEOUT_MS=120000
+```
 
-Implantação atual:
+Esses controles protegem memória, tamanho e duração; não são franquia diária. Valores padrão em código:
+
+```text
+páginas por lote: 40
+bytes derivados por chamada: 12 MiB
+prazo da chamada: 120 segundos
+```
+
+Limites absolutos da Edge Function:
+
+```text
+até 100 páginas por invocação
+até 48 MiB de derivados por chamada
+até 14 MiB por página derivada
+```
+
+Remova o segredo obsoleto depois da implantação:
+
+```bash
+supabase secrets unset OCR_DAILY_HARD_LIMIT
+```
+
+A função não lê esse valor. Mantê-lo no painel não bloqueia o código novo, mas removê-lo evita confusão operacional.
+
+Implante:
 
 ```bash
 supabase functions deploy process-ocr
 supabase functions deploy delete-document
 ```
 
-Implantação futura do worker:
+Não use `--no-verify-jwt` nas funções da PWA. Funções futuras do worker precisam de autenticação de dispositivo explícita e fail-closed.
 
-```text
-desktop-worker-pair
-desktop-ocr-claim
-desktop-ocr-source
-desktop-ocr-heartbeat
-desktop-ocr-complete
-desktop-ocr-fail
+## 6. Contrato de OCR implantado
+
+`process-ocr` aceita:
+
+```json
+{ "pageId": "<uuid>" }
 ```
 
-Essas funções devem ser implantadas somente depois das migrations correspondentes e dos testes locais. Elas validam credencial de dispositivo própria, não JWT público como substituto improvisado.
+para compatibilidade, ou:
 
-Não usar `--no-verify-jwt` em funções voltadas à PWA. Funções de dispositivo precisam de autenticação explícita e fail-closed definida no design, nunca de endpoint anônimo com confiança no payload.
+```json
+{ "pageIds": ["<uuid>", "<uuid>"] }
+```
 
-## 6. Variáveis públicas do frontend
+Um `batchId` persistido pode acompanhar a lista quando o chamador já possui manifesto.
+
+A função:
+
+1. valida páginas únicas de um único documento;
+2. reivindica cada trabalho sem teto diário local;
+3. baixa derivados sequencialmente;
+4. respeita limite agregado;
+5. registra um manifesto e uma chamada;
+6. envia várias imagens em uma única requisição Gemini;
+7. exige retorno associado por `pageId` e número original;
+8. persiste páginas válidas independentemente;
+9. marca omissões, duplicações e truncamento para divisão;
+10. limpa somente temporários concluídos;
+11. preserva quota real e falhas transitórias para retomada.
+
+O original não é reescrito ou comprimido. A compressão significa apenas uma segunda renderização temporária conservadora quando uma página derivada ultrapassa 12 MiB.
+
+## 7. Variáveis públicas do frontend
 
 ```text
 PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
 PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_<valor>
+PUBLIC_GOOGLE_CLIENT_ID=<quando o Picker estiver habilitado>
+PUBLIC_GOOGLE_PICKER_API_KEY=<chave pública restrita>
+PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER=<número do projeto>
 ```
 
-Essas são as únicas variáveis do build do Cloudflare Pages.
-
-Não cadastrar no Pages:
+Nunca cadastrar no Cloudflare Pages:
 
 ```text
 GEMINI_API_KEY
@@ -158,7 +228,7 @@ DRIVE_REFRESH_TOKEN
 OCR_WORKER_DEVICE_TOKEN
 ```
 
-## 7. Construir o frontend
+## 8. Construir o frontend
 
 ```bash
 corepack enable
@@ -168,29 +238,7 @@ pnpm verify
 
 O output estático fica em `build/`.
 
-### Artifact implantável reproduzível
-
-O workflow manual `Build deployable Fichário artifact` fabrica o mesmo output usando a configuração pública armazenada em environment protegido do GitHub.
-
-Escolha `staging` ou `production`. O environment selecionado precisa fornecer:
-
-```text
-PUBLIC_SUPABASE_URL
-PUBLIC_SUPABASE_PUBLISHABLE_KEY
-```
-
-A Action:
-
-- aceita somente origem Supabase HTTPS sem credentials, caminho, query ou fragmento;
-- aceita somente chave com prefixo `sb_publishable_`;
-- executa `pnpm verify` antes de empacotar;
-- confirma que URL e chave escolhidas foram incorporadas ao build;
-- rejeita placeholders locais usados pelos E2E;
-- publica artifact por sete dias;
-- inclui manifest, checksums e snapshots de `package.json` e `pnpm-lock.yaml`;
-- não aplica migrations, não implanta Edge Functions e não publica em host.
-
-Depois de baixar e extrair:
+O workflow manual `Build deployable Fichário artifact` usa environment protegido e executa `pnpm verify` antes de empacotar. Depois de baixar:
 
 ```bash
 cd fichario-deploy
@@ -198,19 +246,17 @@ sha256sum -c SHA256SUMS
 cat DEPLOYMENT-MANIFEST.txt
 ```
 
-A partir de checkout da mesma versão:
+Do checkout do mesmo SHA:
 
 ```bash
 pnpm test:deployment:artifact -- /caminho/para/fichario-deploy
 ```
 
-Sirva somente `fichario-deploy/site/` como raiz pública. Manifest, checksums e snapshots ficam fora da raiz.
+Sirva somente `fichario-deploy/site/` como raiz pública.
 
-## 8. Hospedar no Cloudflare Pages
+## 9. Hospedar no Cloudflare Pages
 
-O projeto continua usando `@sveltejs/adapter-static`; não trocar para adapter de funções enquanto não existir requisito real de SSR.
-
-Configuração:
+O projeto usa `@sveltejs/adapter-static`.
 
 ```text
 Production branch: main
@@ -220,200 +266,153 @@ Build directory: build
 
 O host precisa:
 
-- servir `build/` como raiz pública;
+- servir `build/`;
 - usar `200.html` como fallback de SPA;
 - preservar `static/_headers`;
-- usar HTTPS;
-- redirecionar HTTP para a mesma origem HTTPS;
-- não reescrever `/assets/*` para `200.html`;
-- servir `sw.js`, `registerSW.js` e manifesto com tipos corretos;
-- usar uma única origem canônica de produção;
-- redirecionar ou restringir `*.pages.dev`;
+- usar HTTPS e origem canônica única;
+- não reescrever `/assets/*` para HTML;
+- servir service worker e manifesto com tipos corretos;
 - nunca receber conteúdo privado.
 
-Siga `docs/CLOUDFLARE_SETUP.md` para a configuração completa.
+Siga `docs/CLOUDFLARE_SETUP.md`.
 
-## 9. Distribuir modelos do worker
-
-O caminho padrão usa outro projeto Cloudflare Pages com Direct Upload.
-
-Artefatos:
-
-```text
-index.json
-models/<model-id>/<version>/manifest.json
-models/<model-id>/<version>/part-000.bin
-models/<model-id>/<version>/part-001.bin
-models/<model-id>/<version>/LICENSE.txt
-models/<model-id>/<version>/NOTICE.txt
-```
-
-Regras:
-
-- partes com no máximo 20 MiB;
-- versão imutável;
-- SHA-256 por parte e total;
-- licença e origem obrigatórias;
-- nenhuma página ou documento privado;
-- nenhum modelo no precache da PWA;
-- tablet não baixa modelos ao abrir o site.
-
-Publicação planejada:
-
-```bash
-npx wrangler pages deploy model-dist --project-name=fichario-models --branch=main
-```
-
-Cloudflare R2 permanece opcional e desativado por padrão. Ele só pode substituir partes após decisão explícita sobre cobrança por uso e atualização de `docs/FREE_TIER_OPERATIONS.md`.
-
-## 10. Implantar o worker desktop
+## 10. Distribuir e implantar o worker desktop
 
 Siga `docs/DESKTOP_OCR_WORKER.md`.
 
-Ordem:
+Modelos públicos ficam em projeto Pages separado, fragmentados em partes de até 20 MiB, com licença e SHA-256. O tablet não baixa esses modelos.
+
+Ordem do worker:
 
 1. migrations de dispositivos, resultados e fila;
-2. Edge Functions do worker;
+2. Edge Functions exclusivas;
 3. UI de pareamento e revogação;
-4. pacote do worker CPU-first;
+4. pacote CPU-first;
 5. serviço systemd de usuário;
 6. instalação de modelo com checksums;
-7. pareamento de dispositivo de staging;
-8. teste de claim, lease, heartbeat e conclusão;
-9. teste de queda e retomada;
-10. benchmark Vulkan e RX 6600;
-11. promoção do mesmo conjunto compatível.
+7. claim, lease, heartbeat e conclusão;
+8. queda, spool e retomada;
+9. benchmark Vulkan e RX 6600.
 
-O worker nunca recebe service-role, chave Gemini ou refresh token do Drive.
+O worker nunca recebe service-role, chave Gemini ou refresh token do Drive. Esta funcionalidade continua separada do rollout de lotes Gemini.
 
-## 11. Validação automática pós-deployment
+## 11. Gates pré-release
 
-Execute contra a origem HTTPS, sem caminho adicional:
+No mesmo SHA que será implantado:
+
+```bash
+pnpm format:check
+pnpm check
+pnpm lint
+pnpm test:unit
+pnpm check:edge
+pnpm check:offline
+pnpm test:db
+pnpm build
+pnpm test:e2e
+```
+
+Gates específicos de OCR:
+
+- `supabase/tests/ocr_batches.sql`;
+- `supabase/tests/ocr_batch_transitions.sql`;
+- `tools/checks/test-ocr-claim-contracts.sh`;
+- `tools/checks/test-ocr-claim-concurrency.sh`;
+- `tools/checks/test-ocr-idempotency.sh`;
+- `tools/checks/check-provider-only-ocr.mjs`.
+
+Não use um SHA verde antigo para aprovar um SHA novo. Artifacts de reparo ou passos E2E pulados impedem `PASS`.
+
+## 12. Validação de staging
+
+Siga `docs/OCR_STAGING.md`.
+
+A promoção exige:
+
+- smoke real de imagem;
+- PDF textual com zero chamadas;
+- PDF visual multipágina com menos chamadas do que páginas;
+- omissão, duplicação e JSON truncado sem perda;
+- cancelamento e retomada sem repetir páginas concluídas;
+- contador local elevado sem bloqueio;
+- `429` temporário e quota diária real preservados;
+- fixtures acima de 50 MB e 1.000 páginas;
+- hash do original inalterado;
+- confirmação administrativa de billing desativado.
+
+## 13. Validação pós-deployment
+
+Execute:
 
 ```bash
 pnpm test:deployment -- https://app.example.com
 ```
 
-O comando deve falhar se encontrar:
+Valide ainda:
 
-- URL sem HTTPS, com credentials, query, fragmento ou subcaminho;
-- ausência de redirect HTTP para a mesma origem HTTPS;
-- headers de CSP, HSTS, referrer, framing, MIME, permissions ou isolamento inconsistentes;
-- HTML raiz ou fallback sem manifesto e registrador externo adiado;
-- manifesto sem modo `standalone`, `start_url` raiz ou ícone válido;
-- `registerSW.js` ou `sw.js` com cache longo;
-- service worker mencionando Supabase privado ou modelos desktop;
-- asset inexistente recebendo HTML indevidamente.
+### Autenticação e dados
 
-Esse gate valida host e assets públicos. Ele não substitui RLS, Drive, Gemini ou worker real.
-
-## 12. Validação funcional pós-deployment
-
-### Autenticação
-
-- usuário autorizado entra;
-- usuário fora da allowlist recebe bloqueio;
-- logout remove acesso;
-- refresh em rota privada preserva sessão válida;
-- sessão expirada volta ao login;
-- origem `pages.dev` não cria sessão paralela de produção.
-
-### Dados privados
-
-- outra conta não lista documentos;
+- allowlist funciona;
+- outra conta não lista dados;
 - URL assinada expira;
-- caminho de Storage não aparece na UI ou exportação;
-- PWA offline não revela documentos vistos anteriormente;
-- Cloudflare não recebe requests de documentos ou páginas temporárias.
+- PWA offline não revela documentos;
+- Cloudflare não recebe documentos privados.
 
 ### Importação e Drive
 
-- imagem preparada e deduplicada;
+- original fica no Drive;
 - PDF textual não chama OCR;
-- PDF misto marca somente páginas necessárias;
-- cancelamento mantém estado coerente;
-- reload retoma páginas persistidas sem reupload;
-- original permanente fica no Drive;
+- PDF misto envia somente páginas necessárias;
+- PDF grande não é rejeitado por teto de 20 MB;
+- cancelamento preserva estado;
+- reload retoma páginas persistidas;
 - ausência preserva OCR e metadados.
 
-### Gemini
+### OCR Gemini
 
 - consentimento obrigatório;
-- segredo ausente retorna configuração indisponível;
-- 429 do provedor preserva trabalho;
-- 503 entra em retry com backoff;
-- resposta classifica `printed`, `handwritten`, `mixed` ou `unknown`;
-- caderno manuscrito pode pular chamada Gemini;
-- resultado preliminar não apaga resultado aceito.
+- segredo ausente falha fechado;
+- lotes aparecem no painel;
+- páginas, chamadas e tentativas são coerentes;
+- 429 preserva trabalho;
+- resposta parcial divide somente afetados;
+- correção manual permanece autoridade final.
 
 ### Worker desktop
 
-- pareamento é de uso único;
+- executar somente depois da implementação e dos gates próprios;
+- computador offline mantém fila;
 - credencial revogada deixa de reivindicar;
-- computador offline mantém `waiting_desktop`;
-- claim concorrente é recusado;
-- heartbeat prolonga lease dentro dos limites;
-- lease expirado permite retomada;
-- URL expirada é recusada;
-- hash divergente impede processamento;
 - conclusão é idempotente;
-- queda de rede preserva spool;
 - logs não contêm texto;
-- CPU funciona sem GPU;
-- RX 6600 recebe evidência ou limitação registrada.
+- CPU funciona sem GPU.
 
-### Busca e revisão
-
-- correção manual substitui resultado automático na busca;
-- resultado desktop e Gemini permanecem comparáveis;
-- realce não interpreta HTML;
-- fila de revisão abre a página correta;
-- exportação JSON valida o schema ativo.
-
-## 13. Rollback
+## 14. Rollback
 
 ### Frontend
 
-- selecionar deployment anterior no Cloudflare Pages;
-- preservar banco e Drive;
-- coordenar `APP_ORIGIN` e redirects se a origem mudar;
-- reexecutar o gate pós-deployment.
+Selecione deployment anterior no Cloudflare, preserve banco e Drive e reexecute os gates do host.
 
 ### Banco
 
-- migrations são forward-only;
-- criar migration corretiva, não editar migration aplicada;
-- antes de mudança destrutiva, exportar manifest e fazer backup.
+Use migration corretiva. Não remova `ocr_batches` nem volte à assinatura diária de `claim_ocr_job`; versões antigas incompatíveis devem falhar fechado.
 
 ### Edge Functions
 
-- manter commit anterior disponível;
-- funções antigas precisam tolerar estados persistidos ou falhar fechado;
-- rollback de função não reverte tabela automaticamente.
+Mantenha commit anterior disponível. Um rollback precisa compreender o schema implantado ou recusar inicialização sem corromper estado.
 
-### Modelos
+### Modelos e worker
 
-- alterar a versão recomendada no índice;
-- nunca substituir bytes de versão publicada;
-- preservar última versão válida instalada;
-- não reprocessar páginas automaticamente.
+Nunca substitua bytes de versão publicada. Preserve spool e última versão compatível. Não reprocese páginas automaticamente.
 
-### Worker
+## 15. Proibições
 
-- preservar compatibilidade de schema ou recusar inicialização;
-- manter spool ao voltar para versão anterior compatível;
-- revogar versões comprometidas explicitamente;
-- não perder trabalhos no servidor durante reinstalação.
-
-## 14. Proibições
-
-- não publicar chave Gemini, service-role ou segredo Google;
-- não tornar bucket privado do Supabase público;
+- não publicar secrets;
+- não tornar bucket privado público;
 - não cachear endpoints autenticados;
-- não colocar documentos no Cloudflare Pages ou projeto de modelos;
-- não ativar R2 automaticamente;
+- não colocar documentos no Cloudflare;
+- não ativar R2 ou billing automaticamente;
 - não abrir porta doméstica para o worker;
-- não colocar token do worker em arquivo de configuração;
-- não declarar RX 6600 suportada sem benchmark;
+- não reinserir teto diário interno;
 - não inserir fallback pago silencioso;
-- não declarar release pronta sem gates locais, remotos e em dispositivo.
+- não declarar release pronta sem gates locais, CI, staging e dispositivo no mesmo SHA.
