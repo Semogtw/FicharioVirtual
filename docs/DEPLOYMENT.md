@@ -99,7 +99,7 @@ Confirme:
 
 O original permanente fica no Google Drive. O Storage Supabase contém páginas derivadas, fallback transitório e migração controlada.
 
-A configuração local mantém `file_size_limit = "20MiB"`. Esse teto não limita o documento lógico nem o upload normal do original: o original segue diretamente ao Drive, enquanto páginas temporárias acima de 12 MiB recebem uma segunda renderização conservadora antes do envio ao Storage. Não existe migration que eleve o bucket a 50 MiB, e o deployment não deve depender dessa suposição.
+O `supabase/config.toml` mantém `file_size_limit = "20MiB"` para o ambiente local. Já a migration `202608060014_provider_only_ocr_batches.sql` eleva o bucket remoto `documents` para pelo menos 50 MiB como compatibilidade transitória durante a migração Drive-first. Esse valor não é o limite arquitetural do documento: o fluxo normal envia o original diretamente ao Drive, enquanto páginas temporárias acima de 12 MiB recebem uma segunda renderização conservadora antes do envio ao Storage. Não aumente o bucket além disso sem necessidade e não trate os 50 MiB transitórios como autorização para guardar originais permanentemente no Supabase.
 
 ## 4. Configurar Google Drive
 
