@@ -19,9 +19,7 @@ import {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export type DriveUploadedPage = UploadedPage & {
-	driveFileId: string;
-};
+export type DriveUploadedPage = UploadedPage;
 
 export type DriveImageCreateImportInput = {
 	documentId: string;
@@ -129,6 +127,9 @@ export async function uploadPreparedImageToDriveWithGateway(
 			`${defaultTitle(input.prepared.originalName)}.${extension(input.prepared.image)}`,
 			parentFolderId
 		);
+		if (driveFile.parents.length !== 1 || driveFile.parents[0] !== parentFolderId) {
+			throw new ImageUploadError('upload_failed');
+		}
 		if (input.signal?.aborted) throw abortError();
 		await gateway.uploadTemporary(thumbnailPath, input.prepared.thumbnail);
 		temporaryPaths.push(thumbnailPath);
@@ -150,8 +151,7 @@ export async function uploadPreparedImageToDriveWithGateway(
 			...imported,
 			sha256,
 			storagePath: `drive:${driveFile.id}`,
-			thumbnailPath,
-			driveFileId: driveFile.id
+			thumbnailPath
 		});
 	} catch (error) {
 		await cleanup(gateway, driveFile?.id ?? null, temporaryPaths);
