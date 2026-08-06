@@ -2,7 +2,7 @@ name: Generate review formatting patch once
 
 on:
   workflow_run:
-    workflows: [Validate current head]
+    workflows: [Validate current head, Validate documentation]
     types: [completed]
 
 permissions:
