@@ -1,111 +1,132 @@
 # Prontidão do Fichário Virtual
 
-_Atualizado em 5 de agosto de 2026._
+_Atualizado em 6 de agosto de 2026._
 
-Os percentuais abaixo são uma estimativa de engenharia, não uma métrica automática. Eles separam implementação codificável de validação operacional para evitar que um produto completo no repositório seja confundido com uma release já comprovada em serviços reais e dispositivos físicos.
+Os percentuais antigos de `100%` do escopo codificável e `96%` do MVP foram retirados porque não incluíam o requisito original de Google Drive como armazenamento permanente. Esta página só volta a publicar uma porcentagem global quando o novo escopo possuir evidência suficiente para que o número não esconda uma lacuna arquitetural.
 
-## Estimativa atual
+## Situação atual
 
-| Dimensão                           | Progresso estimado | Interpretação                                                                                                                                                    |
-| ---------------------------------- | -----------------: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Escopo codificável conhecido       |           **100%** | O produto, os contratos de segurança, os gates e o runbook externo estão implementados; a auditoria não encontrou uma lacuna de código conhecida ainda pendente. |
-| Prontidão operacional para release |            **85%** | CI, banco local, navegador, Edge Functions, PWA, retomada e concorrência estão validados; faltam staging, host real, OCR externo e dispositivos físicos.         |
-| Progresso total ponderado do MVP   |            **96%** | Estimativa combinada, atribuindo maior peso à implementação e mantendo peso relevante para evidência remota, operação e comportamento em hardware real.          |
+| Dimensão | Estado | Interpretação |
+| --- | --- | --- |
+| Produto sem Drive | Avançado | Interface, busca, OCR, importação, revisão, PWA, segurança e testes locais já possuem ampla implementação. |
+| Fundação Drive em código | Em desenvolvimento | Design, plano, contratos, reconciliação, sincronizador e modelo de banco estão sendo implementados. |
+| Drive real | Não validado | OAuth, API implantada, upload, Picker, feed remoto e migração ainda não foram comprovados. |
+| Release privada de uma pessoa | Bloqueada | Não deve ser promovida como plano original enquanto os originais permanentes continuarem dependentes do Supabase Storage. |
 
-A estimativa total usa aproximadamente 70% de peso para implementação e 30% para prontidão operacional. Ela deve cair se staging ou dispositivos revelarem um defeito arquitetural e subir somente quando novas evidências forem executadas, não apenas documentadas.
+## Evidência anterior preservada
 
-`100%` do escopo codificável conhecido não significa `100%` de prontidão de release. Novos defeitos ainda podem ser encontrados pelos gates externos.
-
-## Evidência local e de CI concluída
-
-O checkpoint `09e444d9303415d3a0246f5e87710533e3326afd`, validado pelo run `30980939759`, registra:
+Antes da correção de escopo, o projeto já havia validado:
 
 - aplicação SvelteKit estática e responsiva;
 - autenticação fail-closed por allowlist;
-- bootstrap cliente da sessão com revalidação imediata em logout externo;
-- biblioteca, cadernos, tags e organização em lote;
-- importação otimizada de imagens;
-- inspeção local e roteamento seletivo de PDFs;
-- OCR persistente, retomável, concorrente e idempotente;
-- cliente Gemini compatível com 3.6 Flash e sem parâmetros de amostragem descontinuados;
-- saída OCR estruturada por schema estrito, sem segredo na URL;
-- busca, leitor, revisão e rascunhos locais;
-- exportação portátil e painel de uso;
-- RLS, Storage privado e Edge Functions sem segredo no navegador;
+- biblioteca, cadernos, tags, organização em lote, busca e revisão;
+- importação de imagens e PDFs, preparação local e deduplicação;
+- OCR persistente, concorrente, retomável e idempotente;
+- cliente Gemini com saída estruturada;
+- RLS, Storage privado e Edge Functions;
 - PWA com cache restrito ao shell público;
-- 31 migrations aplicáveis em banco limpo;
-- 76 testes de banco;
-- 560 testes Vitest em 131 arquivos;
-- 4 cenários E2E no Chromium;
-- E2E real com duas abas, IndexedDB, `BroadcastChannel` e exclusão mútua compartilhados;
-- gate HTTP loopback com 7 cenários de falha OCR;
-- classificação e backoff locais para 429 diário/transitório, 503, payload inválido e timeout;
-- parser fail-closed do resultado completo de `claim_ocr_job`;
-- validação exata de estados, chaves, UUIDs, timestamps e contadores de claim;
-- provas PostgreSQL das formas simples, concorrentes, agendadas, completas e não-retryable;
-- gate anti-backdoor contra endpoint alternativo, transporte injetado ou fault control no OCR implantado;
+- migrations e testes pgTAP anteriores;
+- centenas de testes Vitest e cenários E2E Chromium;
+- coordenação real entre duas abas;
 - gates de fonte, tipos, lint, build, PWA, Deno e banco;
-- verificador automático do host HTTPS e dos headers;
-- verificador remoto com duas contas, sentinela RLS e Storage privado;
-- verificação de URL assinada antes e depois da expiração;
-- verificador de OCR real com imagem sintética e cleanup por Edge Function;
-- workflows manuais protegidos para host, Supabase e OCR;
-- workflow integral para código e documentação, com archive do source, log de falha e patch de Prettier;
-- workspace offline com Node, pnpm/store, Chromium, Deno/cache e Supabase CLI;
-- runbook único de configuração externa em `docs/EXTERNAL_SETUP_RUNBOOK.md`;
-- proteção do repositório de toolchains contra material de chave privada rastreado.
+- scripts de verificação remota para Supabase, host e OCR.
 
-## O que falta para 100% operacional
+Essa evidência continua útil, mas não prova o novo requisito Drive.
 
-### Evidência remota
+## Implementação Drive já adicionada
 
-- criar o projeto Supabase de staging;
-- aplicar migrations remotamente;
-- cadastrar duas contas exclusivas de teste;
-- executar `Verify Supabase staging`;
-- implantar as Edge Functions com secrets exclusivos de staging;
-- publicar um host HTTPS e executar `Verify deployed Fichário`;
-- executar `Verify OCR staging` com confirmação explícita.
+- especificação canônica e plano executável;
+- escopo obrigatório `drive.file`;
+- contratos estritos para arquivos, listagens e páginas de mudanças;
+- rejeição de campos extras, IDs duplicados e respostas malformadas;
+- reconciliação de arquivo removido sem apagar título, caderno, tags, OCR ou correções;
+- reconexão pelo mesmo `drive_file_id`;
+- isolamento de conflito de identidade;
+- consultas seguras para pasta raiz e pastas-filhas;
+- sincronizador paginado que persiste o checkpoint somente após aplicar toda a página;
+- conflito isolado sem bloquear mudanças independentes;
+- schema PostgreSQL para conexão, pastas aninhadas, documentos, fila idempotente e conflitos;
+- RLS e RPCs para ausência, reconexão e claim de jobs;
+- estado público de conexão que rejeita tokens/secrets;
+- runbook externo de Google Cloud e OAuth.
 
-### Persistência de falhas OCR em staging
+## O que falta em código
 
-- observar 429 diário/transitório, 503, timeout e payload inválido passando pela função implantada;
-- confirmar `page.status`, `ocr_jobs.status`, `last_error_code`, `next_retry_at` e `finished_at`;
-- confirmar retomada depois do backoff e limpeza somente após terminal válido;
-- verificar que nenhuma falha habilita cobrança, endpoint alternativo ou fallback silencioso;
-- comprovar disponibilidade, qualidade, quota e custo do modelo estável selecionado.
+### OAuth e credenciais
 
-A classificação, a resposta pública e o cálculo de backoff desses cenários já estão cobertos localmente por HTTP loopback. O item pendente é evidência operacional no Supabase remoto, não ausência do contrato em código.
+- Edge Functions `drive-oauth-start`, `drive-oauth-callback` e `drive-access-token`;
+- state de uso único e expiração;
+- troca de código e armazenamento backend do refresh token;
+- revogação e reconexão;
+- cliente Drive estrito usando access token efêmero.
 
-### Dispositivos
+### Arquivos e pastas
 
-- instalar, atualizar e remover a PWA no navegador-alvo;
-- testar tablet e celular com imagens e PDFs textuais, digitalizados, mistos e extensos;
-- testar duas abas durante retomada real;
-- medir memória, retomada após encerramento e comportamento com rede instável.
+- criar/reconectar `Fichário Digital` pela API real;
+- criar, renomear e mover pastas de cadernos/subcadernos;
+- integrar `drive_file_id` e `drive_folder_id` aos serviços atuais;
+- upload retomável conectado às filas de imagem e PDF;
+- Google Picker e cópia explícita para a pasta controlada;
+- tela de arquivos ausentes e conflitos.
 
-### Operação
+### Sincronização
 
-- confirmar limites gratuitos e billing desativado na conta real;
-- executar e registrar backup;
-- ensaiar rollback do frontend e das Edge Functions;
-- decidir se o resultado será release privada, staging prolongado ou produção.
+- gateway real para `changes.getStartPageToken` e `changes.list`;
+- worker/runner de jobs com lease, retry e cleanup;
+- aplicação remota de rename/move/delete/reconnect;
+- reconciliação automática ao abrir o aplicativo;
+- migração idempotente dos originais existentes no Supabase Storage.
+
+### Tipos e compatibilidade
+
+- gerar `src/lib/types/database.ts` a partir do schema final;
+- adaptar serviços legados para `storage_path` opcional;
+- preservar fallback até confirmação do Drive e rollback.
+
+## O que falta externamente
+
+- criar/configurar projeto Google Cloud;
+- habilitar Google Drive API;
+- configurar consentimento e cliente OAuth Web;
+- cadastrar redirect URI exata da Edge Function;
+- definir secrets somente no Supabase;
+- executar OAuth com a conta autorizada;
+- validar pasta raiz, upload, feed, remoção, reconexão e Picker;
+- aplicar as novas migrations no staging;
+- concluir gates remotos de Supabase, OCR e host HTTPS;
+- testar em celular e tablet;
+- confirmar billing desativado, backup e rollback.
 
 ## Ordem recomendada
 
-1. seguir `docs/EXTERNAL_SETUP_RUNBOOK.md` para criar o staging;
-2. executar `Verify Supabase staging`;
-3. implantar Edge Functions e publicar o host HTTPS;
-4. executar `Verify deployed Fichário`;
-5. executar `Verify OCR staging`;
-6. concluir a matriz manual em celular e tablet;
-7. registrar billing, backup e rollback;
-8. decidir o destino da release.
+1. tornar a nova base Drive integralmente verde no CI;
+2. aplicar migrations no staging e gerar tipos;
+3. concluir Edge Functions OAuth e cliente Drive;
+4. integrar pastas e upload retomável;
+5. integrar feed de mudanças e UI de conflitos/ausentes;
+6. migrar originais existentes com fallback preservado;
+7. executar todos os gates remotos e físicos;
+8. somente então decidir release privada ou produção.
 
-## Critério para alterar os percentuais
+## Critério para declarar o plano original pronto
 
-- código novo sem teste não aumenta prontidão;
-- Action criada mas não executada aumenta implementação, não evidência remota;
-- teste remoto verde aumenta prontidão;
-- falha descoberta pode reduzir temporariamente a estimativa;
-- `100%` operacional exige execução dos gates externos, não apenas ausência de itens no roadmap.
+```text
+Validate current head: PASS
+Drive schema local/remoto: PASS
+OAuth drive.file: PASS
+Pasta Fichário Digital: PASS
+Cadernos/subcadernos no Drive: PASS
+Upload retomável: PASS
+Importar do Drive: PASS
+Feed de mudanças: PASS
+Missing/reconnect: PASS
+Conflitos isolados: PASS
+Migração de originais: PASS
+Verify Supabase staging: PASS
+Verify deployed Fichário: PASS
+Verify OCR staging: PASS
+Celular/tablet: PASS ou riscos registrados
+Billing, backup e rollback: PASS
+```
+
+A ausência de defeitos conhecidos não substitui esses recibos.
