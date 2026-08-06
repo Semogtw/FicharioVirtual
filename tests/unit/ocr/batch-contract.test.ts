@@ -47,19 +47,24 @@ describe('parseOcrBatchPayload', () => {
 		expect(parsed.missingPageIds).toEqual([second.pageId]);
 	});
 
-	it('rejects a mismatched original page number and extra fields', () => {
-		expect(() =>
-			parseOcrBatchPayload(
-				JSON.stringify({ pages: [{ ...result(first), pageNumber: 9 }] }),
-				[first]
-			)
-		).toThrow('Invalid OCR batch response');
-		expect(() =>
-			parseOcrBatchPayload(
-				JSON.stringify({ pages: [{ ...result(first), commentary: 'extra' }] }),
-				[first]
-			)
-		).toThrow('Invalid OCR batch response');
+	it('turns malformed, mismatched or extended provider output into missing-page retry data', () => {
+		for (const payload of [
+			'{',
+			JSON.stringify({ pages: [{ ...result(first), pageNumber: 9 }] }),
+			JSON.stringify({ pages: [{ ...result(first), commentary: 'extra' }] })
+		]) {
+			expect(parseOcrBatchPayload(payload, [first])).toEqual({
+				valid: false,
+				pages: [],
+				missingPageIds: [first.pageId],
+				duplicatePageIds: [],
+				unexpectedPageIds: []
+			});
+		}
+	});
+
+	it('still rejects an invalid request manifest before provider parsing', () => {
+		expect(() => parseOcrBatchPayload('{}', [first, first])).toThrow('Invalid OCR batch request');
 	});
 
 	it('derives per-page review state from conservative warnings', () => {
