@@ -2,11 +2,19 @@
 
 PWA privada e pesquisável para organizar fotos, capturas de tela e PDFs de anotações manuscritas ou digitadas.
 
-O Google Drive é o armazenamento permanente dos arquivos originais. O Supabase fornece autenticação, PostgreSQL, RLS, Edge Functions, OCR e estado de sincronização; seu Storage privado fica restrito a processamento temporário, fallback e migração controlada.
+O Google Drive é o armazenamento permanente dos arquivos originais. O Supabase fornece autenticação, PostgreSQL, RLS, Edge Functions, busca, filas, resultados de OCR e estado de sincronização; seu Storage privado fica restrito a processamento temporário, fallback e migração controlada.
 
 ## Estado atual
 
-A base funcional anterior do Fichário está implementada, mas o plano original ainda **não está pronto para release** porque a integração real com Google Drive está em desenvolvimento.
+A base funcional anterior do Fichário está implementada, mas o plano original ainda **não está pronto para release** porque a integração real com Google Drive continua em desenvolvimento.
+
+Também foi aprovada uma evolução arquitetural ainda não implementada:
+
+- Cloudflare Pages como host preferencial da PWA estática;
+- projeto Pages separado para artefatos públicos e fragmentados de modelos;
+- Gemini para OCR geral e transcrição imediata;
+- fila opcional para manuscritos e páginas difíceis;
+- worker no computador do usuário, sem porta pública, que consulta a fila, processa localmente e devolve o resultado ao Supabase.
 
 Já existem na `main`:
 
@@ -22,7 +30,7 @@ Já existem na `main`:
 - modelo PostgreSQL para conexão, hierarquia de pastas, fila idempotente, conflitos e reconexão;
 - testes unitários e pgTAP da nova arquitetura.
 
-Ainda faltam OAuth real, cliente Drive implantado, upload retomável conectado às filas de importação, Google Picker, migração dos originais existentes e validação remota.
+Ainda faltam OAuth real, cliente Drive implantado, upload retomável conectado às filas de importação, Google Picker, migração dos originais existentes, migração do host, fila desktop, worker local e validação remota.
 
 O estado canônico fica em [`docs/CURRENT_STATUS.md`](docs/CURRENT_STATUS.md). A prontidão real fica em [`docs/READINESS.md`](docs/READINESS.md).
 
@@ -35,15 +43,21 @@ O estado canônico fica em [`docs/CURRENT_STATUS.md`](docs/CURRENT_STATUS.md). A
 5. **Nenhum serviço ativa cobrança ou fallback pago automaticamente.**
 6. **Tokens e secrets nunca entram no navegador persistente, exportações ou cache da PWA.**
 7. **Um conflito bloqueia somente o item relacionado.**
-8. **A interface deve parecer um fichário digital profissional, não um chatbot.**
+8. **Cloudflare recebe somente assets públicos; nenhum documento privado passa por ela.**
+9. **O worker do computador inicia conexões de saída e nunca exige porta pública.**
+10. **Correção manual permanece a autoridade final do texto.**
+11. **A interface deve parecer um fichário digital profissional, não um chatbot.**
 
 ## Arquitetura
 
-- **Frontend/PWA:** SvelteKit 5, TypeScript, build estático e Web Workers.
+- **Frontend/PWA:** SvelteKit 5, TypeScript, `adapter-static`, build em `build/` e Web Workers.
+- **Host público aprovado:** Cloudflare Pages; migração ainda pendente.
+- **Artefatos de modelos:** projeto Pages separado com partes verificadas por SHA-256; R2 apenas como opção explícita e não obrigatória.
 - **Originais permanentes:** Google Drive API v3 com OAuth `drive.file`.
 - **Backend:** Supabase Auth, PostgreSQL, RLS e Edge Functions.
 - **Storage Supabase:** artefatos temporários, fallback e migração.
-- **OCR:** Gemini Developer API por adaptador backend substituível.
+- **OCR geral:** Gemini Developer API no backend.
+- **OCR local aprovado:** worker no computador para manuscritos, conteúdo misto e reprocessamento de qualidade; implementação pendente.
 - **PDFs:** `@firecrawl/pdf-inspector-wasm` e PDF.js apenas quando necessário.
 - **Busca:** PostgreSQL FTS, `unaccent` e `pg_trgm`.
 
@@ -78,12 +92,13 @@ pnpm test:staging:ocr
 - [Especificação canônica](docs/PROJECT_SPEC.md)
 - [Design Google Drive](docs/superpowers/specs/2026-08-06-google-drive-primary-storage-design.md)
 - [Plano Google Drive](docs/superpowers/plans/2026-08-06-google-drive-primary-storage.md)
+- [Design Cloudflare e OCR desktop](docs/superpowers/specs/2026-08-06-cloudflare-pages-and-desktop-ocr-design.md)
+- [Configuração Cloudflare](docs/CLOUDFLARE_SETUP.md)
+- [Worker local de OCR](docs/DESKTOP_OCR_WORKER.md)
 - [Configuração externa Google Drive](docs/GOOGLE_DRIVE_SETUP.md)
 - [Estratégia de testes](docs/TESTING.md)
 - [Deployment e rollback](docs/DEPLOYMENT.md)
 - [Operação gratuita](docs/FREE_TIER_OPERATIONS.md)
-- [Privacidade](docs/PRIVACY.md)
-- [Recuperação](docs/RECOVERY.md)
 
 ## Antes de uma release
 
@@ -94,4 +109,6 @@ pnpm test:staging:ocr
 - upload retomável e importação explícita pelo Drive;
 - feed de mudanças, arquivo ausente, reconexão e conflitos;
 - migração idempotente dos originais atuais;
-- Supabase, OCR, host HTTPS, celular/tablet, billing, backup e rollback.
+- Cloudflare Pages, origem canônica, headers e rollback;
+- roteamento Gemini/desktop, pareamento, lease, retomada e revogação do worker;
+- Supabase, OCR, celular/tablet, billing, backup e rollback.
