@@ -86,7 +86,9 @@ describe('Google Drive item mutations', () => {
 	});
 
 	it('supports rename-only and move-only updates without broad metadata', async () => {
-		const renameFetch = vi.fn().mockResolvedValue(json(file({ name: 'Novo nome.pdf', version: '6' })));
+		const renameFetch = vi
+			.fn()
+			.mockResolvedValue(json(file({ name: 'Novo nome.pdf', version: '6' })));
 		await updateGoogleDriveItem({
 			accessToken,
 			fileId,
@@ -96,9 +98,9 @@ describe('Google Drive item mutations', () => {
 		expect(new URL(renameFetch.mock.calls[0][0]).searchParams.has('addParents')).toBe(false);
 		expect(JSON.parse(renameFetch.mock.calls[0][1].body)).toEqual({ name: 'Novo nome.pdf' });
 
-		const moveFetch = vi.fn().mockResolvedValue(
-			json(file({ parents: [newParentId], version: '6' }))
-		);
+		const moveFetch = vi
+			.fn()
+			.mockResolvedValue(json(file({ parents: [newParentId], version: '6' })));
 		await updateGoogleDriveItem({
 			accessToken,
 			fileId,
