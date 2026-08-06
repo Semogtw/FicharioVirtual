@@ -22,8 +22,7 @@ describe('GitHub workflow permissions', () => {
 			.filter((name) => {
 				const source = readFileSync(join(workflowsDirectory, name), 'utf8');
 				return (
-					source.includes('actions/checkout@') &&
-					!source.includes('persist-credentials: false')
+					source.includes('actions/checkout@') && !source.includes('persist-credentials: false')
 				);
 			});
 
