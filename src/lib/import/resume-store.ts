@@ -4,6 +4,7 @@ import { isIsoTimestamp } from '$lib/validation/iso-timestamp';
 import { createResumeStore, type ResumeObjectStore } from './resume-database';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const DRIVE_ID = /^[A-Za-z0-9_-]{10,256}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
 const LOCAL_ID = /^[A-Za-z0-9_-]{1,160}$/;
 const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
@@ -51,6 +52,12 @@ function validLocalText(value: string, minimum: number, maximum: number) {
 	return true;
 }
 
+function validOriginalReference(value: string, userId: string): boolean {
+	if (value.startsWith(`${userId}/`)) return validLocalText(value, 3, 1024);
+	if (!value.startsWith('drive:')) return false;
+	return DRIVE_ID.test(value.slice('drive:'.length));
+}
+
 function parseUploadedPage(data: unknown, userId: string): UploadedPage | null {
 	if (data === null) return null;
 	if (typeof data !== 'object' || Array.isArray(data)) invalidRecord();
@@ -78,8 +85,7 @@ function parseUploadedPage(data: unknown, userId: string): UploadedPage | null {
 		typeof sha256 !== 'string' ||
 		!SHA256.test(sha256) ||
 		typeof storagePath !== 'string' ||
-		!storagePath.startsWith(`${userId}/`) ||
-		!validLocalText(storagePath, 3, 1024) ||
+		!validOriginalReference(storagePath, userId) ||
 		typeof thumbnailPath !== 'string' ||
 		!thumbnailPath.startsWith(`${userId}/`) ||
 		!validLocalText(thumbnailPath, 3, 1024)
