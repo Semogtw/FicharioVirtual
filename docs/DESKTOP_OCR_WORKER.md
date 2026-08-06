@@ -173,14 +173,14 @@ Contrato planejado de `config.json`:
 
 ```json
 {
-  "schemaVersion": 1,
-  "appOrigin": "https://app.example.com",
-  "backendPreference": ["vulkan", "cpu"],
-  "maxConcurrency": 1,
-  "pollIntervalSeconds": 30,
-  "idlePollIntervalSeconds": 300,
-  "modelChannel": "stable",
-  "keepCompletedSpoolHours": 24
+	"schemaVersion": 1,
+	"appOrigin": "https://app.example.com",
+	"backendPreference": ["vulkan", "cpu"],
+	"maxConcurrency": 1,
+	"pollIntervalSeconds": 30,
+	"idlePollIntervalSeconds": 300,
+	"modelChannel": "stable",
+	"keepCompletedSpoolHours": 24
 }
 ```
 
@@ -337,19 +337,19 @@ Payload mínimo:
 
 ```json
 {
-  "jobId": "uuid",
-  "claimNonce": "valor-opaco",
-  "sourceSha256": "hash",
-  "engine": "desktop",
-  "backend": "vulkan",
-  "modelId": "modelo-estavel",
-  "modelVersion": "versao-imutavel",
-  "text": "transcricao",
-  "warnings": [],
-  "contentType": "handwritten",
-  "needsReview": true,
-  "processingStartedAt": "timestamp",
-  "processingFinishedAt": "timestamp"
+	"jobId": "uuid",
+	"claimNonce": "valor-opaco",
+	"sourceSha256": "hash",
+	"engine": "desktop",
+	"backend": "vulkan",
+	"modelId": "modelo-estavel",
+	"modelVersion": "versao-imutavel",
+	"text": "transcricao",
+	"warnings": [],
+	"contentType": "handwritten",
+	"needsReview": true,
+	"processingStartedAt": "timestamp",
+	"processingFinishedAt": "timestamp"
 }
 ```
 
@@ -412,19 +412,19 @@ Logs proibidos:
 
 ## 16. Falhas
 
-| Falha | Comportamento |
-| --- | --- |
-| Sem rede | mantém trabalho ou spool e repete com backoff |
-| Computador desligado | fila permanece aguardando |
-| Modelo ausente | instala modelo antes do claim ou informa incompatibilidade |
-| Checksum inválido | apaga download, bloqueia versão e não processa |
-| Falta de memória | reduz backend/tamanho quando permitido ou devolve retry seguro |
-| GPU falha | tenta CPU somente se a política do trabalho permitir |
-| Lease expira | solicita novo claim antes de concluir |
-| Origem mudou | descarta resultado obsoleto e limpa temporário |
-| Credencial revogada | para novos trabalhos e remove token local |
-| Resultado rejeitado | preserva spool e registra motivo seguro |
-| Processo cai | systemd reinicia; lease expira se necessário |
+| Falha                | Comportamento                                                  |
+| -------------------- | -------------------------------------------------------------- |
+| Sem rede             | mantém trabalho ou spool e repete com backoff                  |
+| Computador desligado | fila permanece aguardando                                      |
+| Modelo ausente       | instala modelo antes do claim ou informa incompatibilidade     |
+| Checksum inválido    | apaga download, bloqueia versão e não processa                 |
+| Falta de memória     | reduz backend/tamanho quando permitido ou devolve retry seguro |
+| GPU falha            | tenta CPU somente se a política do trabalho permitir           |
+| Lease expira         | solicita novo claim antes de concluir                          |
+| Origem mudou         | descarta resultado obsoleto e limpa temporário                 |
+| Credencial revogada  | para novos trabalhos e remove token local                      |
+| Resultado rejeitado  | preserva spool e registra motivo seguro                        |
+| Processo cai         | systemd reinicia; lease expira se necessário                   |
 
 Nenhuma falha ativa API paga automaticamente.
 
