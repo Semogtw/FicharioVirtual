@@ -84,7 +84,11 @@ describe('Google Drive API client', () => {
 			.mockResolvedValueOnce(json({ startPageToken: 'initial-change-token' }));
 
 		await expect(
-			bootstrapDriveRoot({ accessToken, rootFolderName: 'Fichário Digital', fetchImpl: createFetch })
+			bootstrapDriveRoot({
+				accessToken,
+				rootFolderName: 'Fichário Digital',
+				fetchImpl: createFetch
+			})
 		).resolves.toEqual({ rootFolder: folder(), startPageToken: 'initial-change-token' });
 		const [createUrl, createInit] = createFetch.mock.calls[1];
 		expect(createUrl).toContain('/drive/v3/files?');
@@ -94,9 +98,9 @@ describe('Google Drive API client', () => {
 			mimeType: 'application/vnd.google-apps.folder'
 		});
 
-		const duplicateFetch = vi.fn().mockResolvedValue(
-			json({ files: [folder(), folder('0ASecondRootFolderId_123456789')] })
-		);
+		const duplicateFetch = vi
+			.fn()
+			.mockResolvedValue(json({ files: [folder(), folder('0ASecondRootFolderId_123456789')] }));
 		await expect(
 			bootstrapDriveRoot({
 				accessToken,
