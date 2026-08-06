@@ -199,10 +199,8 @@ Excluir no Fichário não deve apagar silenciosamente um arquivo externo não co
 O frontend usa:
 
 ```text
-@svleltejs/adapter-static
+@sveltejs/adapter-static
 ```
-
-O identificador correto em dependência e código continua sendo `@sveltejs/adapter-static`; a grafia acima não deve ser copiada para implementação.
 
 Configuração canônica:
 
