@@ -147,9 +147,7 @@ export async function listDriveFolders({
 	url.searchParams.set('pageSize', '10');
 	url.searchParams.set('fields', FILE_FIELDS);
 	const body = record(
-		await jsonResponse(
-			await fetchImpl(url.toString(), { headers: authorization(accessToken) })
-		)
+		await jsonResponse(await fetchImpl(url.toString(), { headers: authorization(accessToken) }))
 	);
 	if (!body || !exactKeys(body, ['files', 'nextPageToken']) || !Array.isArray(body.files)) {
 		throw new TypeError('Invalid Google Drive folder list response');
@@ -194,9 +192,7 @@ export async function getDriveStartPageToken({
 	const url = new URL('https://www.googleapis.com/drive/v3/changes/startPageToken');
 	url.searchParams.set('supportsAllDrives', 'false');
 	const body = record(
-		await jsonResponse(
-			await fetchImpl(url.toString(), { headers: authorization(accessToken) })
-		)
+		await jsonResponse(await fetchImpl(url.toString(), { headers: authorization(accessToken) }))
 	);
 	if (
 		!body ||
