@@ -77,6 +77,7 @@ export async function runPdfOcrBatches(
 				density: page.density,
 				route: 'gemini' as const
 			}))
+		)
 	];
 	const sleep = input.sleep ?? defaultSleep;
 	const finalized = new Set<string>();
