@@ -42,9 +42,7 @@ describe('Drive notebook folder chain', () => {
 	});
 
 	it('rejects duplicate IDs, extra fields, cycles, and missing parents', () => {
-		expect(() => parseDriveNotebookRows([row(), row()])).toThrow(
-			'Invalid Drive notebook response'
-		);
+		expect(() => parseDriveNotebookRows([row(), row()])).toThrow('Invalid Drive notebook response');
 		expect(() => parseDriveNotebookRows([row({ token: 'must-not-pass' })])).toThrow(
 			'Invalid Drive notebook response'
 		);
