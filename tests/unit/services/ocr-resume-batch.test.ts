@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
 	resumeDocumentOcrWithGateway,
 	type OcrResumeGateway
@@ -48,6 +48,49 @@ describe('batched OCR resume', () => {
 
 		expect(calls.map((call) => call.length)).toEqual([40, 40, 5]);
 		expect(result).toEqual({ completed: 85, needsReview: 0, pending: 0, failed: 0 });
+	});
+
+	it('retries only the split-required subset and keeps accepted pages complete', async () => {
+		const items = pages(4);
+		const calls: string[][] = [];
+		const sleep = vi.fn(async () => undefined);
+		const result = await resumeDocumentOcrWithGateway(
+			documentId,
+			gateway(items),
+			async () => ({ state: 'busy' }),
+			{
+				sleep,
+				batchProcessor: async (pageIds) => {
+					calls.push([...pageIds]);
+					if (calls.length === 1) {
+						return {
+							state: 'partial',
+							completedPageIds: pageIds.slice(0, 2),
+							reviewPageIds: [],
+							pendingPageIds: pageIds.slice(2),
+							failedPageIds: [],
+							splitRequiredPageIds: pageIds.slice(2),
+							unexpectedResultPageIds: []
+						};
+					}
+					return {
+						state: 'complete',
+						completedPageIds: pageIds,
+						reviewPageIds: [],
+						pendingPageIds: [],
+						failedPageIds: [],
+						splitRequiredPageIds: [],
+						unexpectedResultPageIds: []
+					};
+				}
+			}
+		);
+
+		expect(calls[0]).toEqual(items.map((item) => item.id));
+		expect(calls.slice(1).flat()).toEqual([items[2]!.id, items[3]!.id]);
+		expect(calls.slice(1).flat()).not.toContain(items[0]!.id);
+		expect(sleep).toHaveBeenCalledTimes(1);
+		expect(result).toEqual({ completed: 4, needsReview: 0, pending: 0, failed: 0 });
 	});
 
 	it('does not start the next batch after cancellation', async () => {
