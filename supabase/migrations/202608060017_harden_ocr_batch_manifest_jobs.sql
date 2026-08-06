@@ -32,7 +32,10 @@ declare
   matched_pages integer;
   matched_jobs integer;
   linked_jobs integer;
-  parent_is_valid boolean := true;
+  unsafe_jobs integer;
+  prior_parent_count integer;
+  inferred_parent_batch_id uuid;
+  effective_parent_batch_id uuid := target_parent_batch_id;
 begin
   if current_user_id is null
     or not (select public.is_authorized_user())
@@ -74,22 +77,10 @@ begin
    and p.document_id = target_document_id;
   if matched_pages <> item_count then return null; end if;
 
-  if target_parent_batch_id is not null then
-    select exists (
-      select 1
-      from public.ocr_batches b
-      where b.id = target_parent_batch_id
-        and b.user_id = current_user_id
-        and b.document_id = target_document_id
-    ) into parent_is_valid;
-  end if;
-  if not parent_is_valid then return null; end if;
-
   perform 1
   from public.ocr_jobs j
   where j.user_id = current_user_id
     and j.page_id = any(target_page_ids)
-    and j.batch_id is null
   order by j.page_id
   for update;
 
@@ -97,16 +88,63 @@ begin
   into matched_jobs
   from public.ocr_jobs j
   where j.user_id = current_user_id
-    and j.page_id = any(target_page_ids)
-    and j.batch_id is null;
+    and j.page_id = any(target_page_ids);
   if matched_jobs <> item_count then return null; end if;
+
+  select count(*)
+  into unsafe_jobs
+  from public.ocr_jobs j
+  join public.ocr_batches b on b.id = j.batch_id
+  where j.user_id = current_user_id
+    and j.page_id = any(target_page_ids)
+    and (
+      b.user_id <> current_user_id
+      or b.document_id <> target_document_id
+      or b.status not in ('retryable', 'blocked_quota')
+    );
+  if unsafe_jobs > 0 then return null; end if;
+
+  select
+    count(distinct j.batch_id),
+    (array_agg(distinct j.batch_id) filter (where j.batch_id is not null))[1]
+  into prior_parent_count, inferred_parent_batch_id
+  from public.ocr_jobs j
+  where j.user_id = current_user_id
+    and j.page_id = any(target_page_ids);
+
+  if target_parent_batch_id is not null then
+    if not exists (
+      select 1
+      from public.ocr_batches b
+      where b.id = target_parent_batch_id
+        and b.user_id = current_user_id
+        and b.document_id = target_document_id
+        and b.status in ('retryable', 'blocked_quota')
+    ) then
+      return null;
+    end if;
+    if exists (
+      select 1
+      from public.ocr_jobs j
+      where j.user_id = current_user_id
+        and j.page_id = any(target_page_ids)
+        and j.batch_id is not null
+        and j.batch_id <> target_parent_batch_id
+    ) then
+      return null;
+    end if;
+  elsif prior_parent_count = 1 then
+    effective_parent_batch_id := inferred_parent_batch_id;
+  else
+    effective_parent_batch_id := null;
+  end if;
 
   insert into public.ocr_batches (
     id, user_id, document_id, parent_batch_id, route, status,
     page_ids, page_numbers, source_bytes, derived_bytes, split_depth,
     model, prompt_version, created_at, updated_at
   ) values (
-    new_batch_id, current_user_id, target_document_id, target_parent_batch_id,
+    new_batch_id, current_user_id, target_document_id, effective_parent_batch_id,
     target_route, 'pending', target_page_ids, target_page_numbers,
     target_source_bytes, target_derived_bytes, target_split_depth,
     target_model, target_prompt_version, registered_at, registered_at
@@ -119,8 +157,7 @@ begin
       updated_at = registered_at
   from unnest(target_page_ids) with ordinality as ordered(page_id, ordinality)
   where j.user_id = current_user_id
-    and j.page_id = ordered.page_id
-    and j.batch_id is null;
+    and j.page_id = ordered.page_id;
   get diagnostics linked_jobs = row_count;
 
   if linked_jobs <> item_count then
