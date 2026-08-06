@@ -2,6 +2,7 @@ import { getSupabaseClient } from './supabase';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ERROR_CODE = /^[a-z][a-z0-9_]{1,63}$/;
+const MAX_BATCH_PAGES = 100;
 
 export type OcrRunResult =
 	| { state: 'complete'; needsReview: boolean; warningCount: number }
@@ -10,11 +11,25 @@ export type OcrRunResult =
 	| { state: 'retry_later' }
 	| { state: 'quota_exhausted' };
 
+export type OcrBatchRunResult = {
+	state: 'complete' | 'partial';
+	completedPageIds: readonly string[];
+	reviewPageIds: readonly string[];
+	pendingPageIds: readonly string[];
+	failedPageIds: readonly string[];
+	splitRequiredPageIds: readonly string[];
+	unexpectedResultPageIds: readonly string[];
+};
+
+type OcrFunctionBody =
+	| { pageId: string }
+	| { pageIds: readonly string[]; batchId?: string };
+
 export type OcrFunctionClient = {
 	functions: {
 		invoke(
 			name: 'process-ocr',
-			options: { body: { pageId: string }; signal?: AbortSignal }
+			options: { body: OcrFunctionBody; signal?: AbortSignal }
 		): Promise<{ data: unknown; error: null | { context?: unknown; message?: string } }>;
 	};
 };
@@ -88,7 +103,7 @@ async function mappedError(error: { context?: unknown; message?: string }) {
 		return new OcrProcessingError(
 			'ocr_transport_failed',
 			true,
-			'Não foi possível alcançar o serviço de leitura. A página continuará pendente.'
+			'Não foi possível alcançar o serviço de leitura. As páginas continuarão pendentes.'
 		);
 	}
 
@@ -113,28 +128,30 @@ async function mappedError(error: { context?: unknown; message?: string }) {
 	const code = parseErrorCode(body) ?? `ocr_http_${status}`;
 	const retryable = status === 408 || status === 425 || status >= 500;
 	const messages: Record<string, string> = {
-		gemini_daily_quota: 'A cota diária de leitura foi atingida. As páginas continuarão pendentes.',
+		gemini_daily_quota: 'A cota real do provedor foi atingida. As páginas continuarão pendentes.',
 		gemini_rate_limited: 'O provedor limitou temporariamente as leituras.',
 		ocr_source_unavailable: 'A página não pôde ser carregada do armazenamento.',
-		ocr_not_configured: 'A leitura automática ainda não foi configurada.'
+		ocr_not_configured: 'A leitura automática ainda não foi configurada.',
+		ocr_batch_too_many_pages: 'O lote precisa ser dividido em partes menores.'
 	};
 	return new OcrProcessingError(code, retryable, messages[code]);
 }
 
-function parseResult(data: unknown): OcrRunResult {
-	if (data === null || typeof data !== 'object' || Array.isArray(data)) {
-		throw new OcrProcessingError('ocr_response_invalid', true);
-	}
+function invalidResponse(): never {
+	throw new OcrProcessingError('ocr_response_invalid', true);
+}
+
+function parseLegacyResult(data: unknown): OcrRunResult | null {
+	if (data === null || typeof data !== 'object' || Array.isArray(data)) return null;
 	const value = data as Record<string, unknown>;
-	if (value.state === 'complete') {
+	if (value.state === 'complete' && hasExactKeys(value, ['state', 'needsReview', 'warningCount'])) {
 		if (
-			!hasExactKeys(value, ['state', 'needsReview', 'warningCount']) ||
 			typeof value.needsReview !== 'boolean' ||
 			!Number.isInteger(value.warningCount) ||
 			(value.warningCount as number) < 0 ||
 			(value.warningCount as number) > 100
 		) {
-			throw new OcrProcessingError('ocr_response_invalid', true);
+			invalidResponse();
 		}
 		return Object.freeze({
 			state: 'complete',
@@ -144,7 +161,7 @@ function parseResult(data: unknown): OcrRunResult {
 	}
 	if (value.state === 'already_complete') {
 		if (!hasExactKeys(value, ['state', 'needsReview']) || typeof value.needsReview !== 'boolean') {
-			throw new OcrProcessingError('ocr_response_invalid', true);
+			invalidResponse();
 		}
 		return Object.freeze({ state: 'already_complete', needsReview: value.needsReview });
 	}
@@ -153,16 +170,116 @@ function parseResult(data: unknown): OcrRunResult {
 		value.state === 'retry_later' ||
 		value.state === 'quota_exhausted'
 	) {
-		if (!hasExactKeys(value, ['state'])) {
-			throw new OcrProcessingError('ocr_response_invalid', true);
-		}
+		if (!hasExactKeys(value, ['state'])) invalidResponse();
 		return Object.freeze({ state: value.state });
 	}
-	throw new OcrProcessingError('ocr_response_invalid', true);
+	return null;
+}
+
+function parseIdArray(value: unknown): readonly string[] {
+	if (
+		!Array.isArray(value) ||
+		value.length > MAX_BATCH_PAGES ||
+		value.some((entry) => typeof entry !== 'string' || !UUID.test(entry)) ||
+		new Set(value).size !== value.length
+	) {
+		invalidResponse();
+	}
+	return Object.freeze([...(value as string[])]);
+}
+
+function parseBatchResult(data: unknown, requestedPageIds: readonly string[]): OcrBatchRunResult {
+	if (data === null || typeof data !== 'object' || Array.isArray(data)) invalidResponse();
+	const value = data as Record<string, unknown>;
+	if (
+		!hasExactKeys(value, [
+			'completedPageIds',
+			'failedPageIds',
+			'pendingPageIds',
+			'reviewPageIds',
+			'splitRequiredPageIds',
+			'state',
+			'unexpectedResultPageIds'
+		]) ||
+		(value.state !== 'complete' && value.state !== 'partial')
+	) {
+		invalidResponse();
+	}
+
+	const completedPageIds = parseIdArray(value.completedPageIds);
+	const reviewPageIds = parseIdArray(value.reviewPageIds);
+	const pendingPageIds = parseIdArray(value.pendingPageIds);
+	const failedPageIds = parseIdArray(value.failedPageIds);
+	const splitRequiredPageIds = parseIdArray(value.splitRequiredPageIds);
+	const unexpectedResultPageIds = parseIdArray(value.unexpectedResultPageIds);
+	const requested = new Set(requestedPageIds);
+	const completed = new Set(completedPageIds);
+	const pending = new Set(pendingPageIds);
+	const failed = new Set(failedPageIds);
+
+	if (
+		[...completedPageIds, ...pendingPageIds, ...failedPageIds].some((pageId) => !requested.has(pageId)) ||
+		reviewPageIds.some((pageId) => !completed.has(pageId)) ||
+		splitRequiredPageIds.some((pageId) => !pending.has(pageId)) ||
+		unexpectedResultPageIds.some((pageId) => requested.has(pageId)) ||
+		completedPageIds.some((pageId) => pending.has(pageId) || failed.has(pageId)) ||
+		pendingPageIds.some((pageId) => failed.has(pageId)) ||
+		requestedPageIds.some(
+			(pageId) => !completed.has(pageId) && !pending.has(pageId) && !failed.has(pageId)
+		) ||
+		(value.state === 'complete' && (pendingPageIds.length > 0 || failedPageIds.length > 0)) ||
+		(value.state === 'partial' && pendingPageIds.length === 0 && failedPageIds.length === 0)
+	) {
+		invalidResponse();
+	}
+
+	return Object.freeze({
+		state: value.state,
+		completedPageIds,
+		reviewPageIds,
+		pendingPageIds,
+		failedPageIds,
+		splitRequiredPageIds,
+		unexpectedResultPageIds
+	});
 }
 
 function abortError() {
 	return new DOMException('OCR request was cancelled', 'AbortError');
+}
+
+function validatePageIds(pageIds: readonly string[]) {
+	if (
+		pageIds.length < 1 ||
+		pageIds.length > MAX_BATCH_PAGES ||
+		pageIds.some((pageId) => !UUID.test(pageId)) ||
+		new Set(pageIds).size !== pageIds.length
+	) {
+		throw new TypeError('Invalid page identifiers');
+	}
+}
+
+export async function processOcrBatch(
+	pageIds: readonly string[],
+	client?: OcrFunctionClient,
+	options: { batchId?: string; signal?: AbortSignal } = {}
+): Promise<OcrBatchRunResult> {
+	validatePageIds(pageIds);
+	if (options.batchId !== undefined && !UUID.test(options.batchId)) {
+		throw new TypeError('Invalid OCR batch identifier');
+	}
+	if (options.signal?.aborted) throw abortError();
+	const gateway = client ?? defaultClient();
+	const body: OcrFunctionBody = options.batchId
+		? { pageIds: Object.freeze([...pageIds]), batchId: options.batchId }
+		: { pageIds: Object.freeze([...pageIds]) };
+	const { data, error } = await gateway.functions.invoke('process-ocr', {
+		body,
+		signal: options.signal
+	});
+	if (options.signal?.aborted) throw abortError();
+	if (error) throw await mappedError(error);
+	return parseBatchResult(data, pageIds);
 }
 
 export async function processPageOcr(
@@ -179,5 +296,15 @@ export async function processPageOcr(
 	});
 	if (options.signal?.aborted) throw abortError();
 	if (error) throw await mappedError(error);
-	return parseResult(data);
+	const legacy = parseLegacyResult(data);
+	if (legacy) return legacy;
+	const batch = parseBatchResult(data, [pageId]);
+	if (batch.completedPageIds.includes(pageId)) {
+		return Object.freeze({
+			state: 'already_complete',
+			needsReview: batch.reviewPageIds.includes(pageId)
+		});
+	}
+	if (batch.pendingPageIds.includes(pageId)) return Object.freeze({ state: 'retry_later' });
+	throw new OcrProcessingError('ocr_not_retryable', false);
 }
