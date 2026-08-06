@@ -80,10 +80,10 @@ begin
     else null
   end;
 
-  select status, last_error_code, last_error_message, next_retry_at, finished_at
+  select b.status, b.last_error_code, b.last_error_message, b.next_retry_at, b.finished_at
   into current_batch
-  from public.ocr_batches
-  where id = target_batch_id and user_id = current_user_id
+  from public.ocr_batches b
+  where b.id = target_batch_id and b.user_id = current_user_id
   for update;
 
   if not found then return false; end if;
