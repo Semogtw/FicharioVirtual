@@ -18,15 +18,19 @@ describe('Drive OAuth Edge Function boundaries', () => {
 		expect(source).not.toContain('access_token');
 	});
 
-	it('consumes state before token exchange and stores refresh tokens only through service role RPC', () => {
+	it('consumes state, stores credentials, and bootstraps Drive before completing OAuth', () => {
 		const source = readFileSync(callbackPath, 'utf8');
 		const consumeIndex = source.indexOf("rpc('consume_drive_oauth_state'");
 		const exchangeIndex = source.indexOf('requestInitialGoogleTokens');
+		const bootstrapIndex = source.indexOf('bootstrapDriveRoot');
+		const completeIndex = source.indexOf("rpc('complete_drive_connection'");
 
 		expect(consumeIndex).toBeGreaterThan(0);
 		expect(exchangeIndex).toBeGreaterThan(consumeIndex);
 		expect(source).toContain("rpc('store_drive_credential'");
 		expect(source).toContain('verifyGoogleIdToken');
+		expect(bootstrapIndex).toBeGreaterThan(exchangeIndex);
+		expect(completeIndex).toBeGreaterThan(bootstrapIndex);
 		expect(source).toContain("'Cache-Control': 'no-store'");
 		expect(source).not.toContain('JSON.stringify(tokens)');
 		expect(source).not.toContain('JSON.stringify(token)');
