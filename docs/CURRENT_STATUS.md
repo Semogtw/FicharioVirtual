@@ -23,33 +23,29 @@ O Gemini usa chamadas multipágina com persistência por página, lotes adaptati
 
 - conta única com allowlist fail-closed;
 - interface responsiva para desktop, tablet e celular;
-- biblioteca, cadernos, tags e organização em lote;
+- biblioteca, cadernos, tags, busca, revisão e exportação;
 - RLS e Storage privado;
 - PWA sem cache de conteúdo autenticado;
-- busca textual, leitor lado a lado e correção manual;
-- exportação JSON portátil sem tokens;
-- coordenação entre abas;
 - URLs assinadas curtas;
-- Edge Functions autenticadas com política JWT explícita;
+- Edge Functions com política JWT explícita;
 - CORS fail-closed compartilhado nas APIs do navegador;
-- callback OAuth separado, sem JWT de gateway, protegido por origem, `state` de uso único e PKCE;
-- gates que impedem workflows versionados com `contents: write` ou checkout autenticado.
+- callback OAuth sem JWT de gateway, protegido por origem, `state` de uso único e PKCE;
+- gates que impedem workflows versionados com `contents: write` ou checkout autenticado;
+- scanner de secrets sem expressões regulares globais reutilizadas entre arquivos.
 
-### Importação e PDFs
+### Importação, Storage e PDFs
 
 - importação cancelável e retomável de imagens e PDFs;
 - preparação local, miniaturas, SHA-256 e deduplicação;
-- inspeção local de PDFs;
 - texto nativo preservado sem OCR;
 - PDF misto envia somente páginas sem texto suficiente;
-- teto artificial de 20 MB removido da importação local;
 - upload retomável do original diretamente ao Drive;
 - renderização separada das páginas visuais;
 - segunda renderização conservadora quando um derivado ultrapassa 12 MiB;
 - original nunca é recomprimido ou substituído;
 - Google Picker com validação antecipada e download direto de até 50 MiB.
 
-O `file_size_limit = "20MiB"` do Storage local limita apenas temporários e o caminho legado injetável. No fluxo normal, o original vai ao Drive e os derivados são mantidos abaixo de 12 MiB. Não existe migration que eleve o bucket a 50 MiB.
+O `supabase/config.toml` mantém `file_size_limit = "20MiB"` para desenvolvimento local. A migration `202608060014_provider_only_ocr_batches.sql` eleva o bucket remoto `documents` para pelo menos 50 MiB como compatibilidade transitória da migração Drive-first. No fluxo normal, o original vai ao Drive e os derivados permanecem abaixo de 12 MiB. Os 50 MiB do bucket remoto não são o limite arquitetural do documento nem autorização para manter originais permanentemente no Supabase.
 
 ### OCR por lotes e quota real
 
@@ -81,117 +77,74 @@ A implementação inclui:
 - distinção entre rate limit temporário e quota diária real;
 - painel com páginas, lotes, chamadas, tentativas, média por chamada e bloqueios reais.
 
-Documentação detalhada:
-
-- `docs/checkpoints/2026-08-06-provider-only-ocr-large-pdf-implementation.md`;
-- `docs/superpowers/specs/2026-08-06-provider-only-ocr-quota-and-adaptive-batching-design.md`;
-- `docs/superpowers/specs/2026-08-06-oversized-pdf-splitting-and-compression-design.md`.
-
 ### Google Drive-first
 
 Já estão implementados:
 
 - OAuth start e callback;
-- armazenamento privado do refresh token no backend;
-- token de acesso efêmero para operações permitidas;
+- refresh token privado no backend e token efêmero;
 - escopo `drive.file`;
-- criação e resolução da pasta `Fichário Digital`;
-- upload retomável do original;
+- pasta `Fichário Digital` e pastas aninhadas;
+- upload retomável;
 - Google Picker explícito;
-- importação local para Drive;
 - feed paginado de mudanças;
-- checkpoint somente depois de persistência;
+- checkpoint depois da persistência;
 - identidade por IDs remotos;
-- reconexão de documento ausente;
-- filas de sincronização e leases;
+- ausência e reconexão sem perda de OCR;
+- fila idempotente, lease, retry e conflito;
 - executor de criação, atualização, movimento e exclusão;
-- retries e conflitos persistidos;
-- interfaces de conexão, jobs, conflitos e migração;
-- migração dos originais legados com rollback;
-- contratos TypeScript, migrations, pgTAP e testes unitários;
-- type-check Deno do runner e dos helpers de mutação;
-- gates CORS e cache para as funções Drive.
+- telas de conexão, jobs, conflitos e migração;
+- migração de originais legados com rollback;
+- migrations, pgTAP, contratos TypeScript e testes unitários;
+- type-check Deno e gates de segurança das funções Drive.
 
 Isso ainda precisa ser validado em uma conta Google real. A existência do código não substitui OAuth, Picker, upload, mudanças, conflitos e migração executados no ambiente final.
 
-## Pendência funcional de maior porte
+## Pendências funcionais
 
 ### Arquivo já existente no Drive acima de 50 MiB
 
 O Picker recusa antes do download integral arquivos maiores que 50 MiB. Copiar o arquivo dentro do Drive não resolve sozinho a inspeção, a detecção de texto nem a renderização seletiva, pois o pipeline atual recebe um `File` local.
 
-A solução correta exige uma arquitetura de leitura remota por intervalos ou processamento equivalente, capaz de:
+A solução correta exige leitura remota por intervalos ou processamento equivalente para:
 
 1. preservar ou copiar o arquivo dentro do escopo `drive.file`;
 2. inspecionar o PDF sem download integral no navegador;
 3. renderizar somente páginas necessárias;
-4. manter autenticação e URLs fora de logs e cache;
+4. manter tokens e URLs fora de logs e cache;
 5. retomar intervalos sem duplicar derivados;
-6. preservar o hash e a identidade do original.
+6. preservar identidade e hash do original.
 
-Essa é a única limitação de tamanho relevante que permanece no importador Drive externo. Uploads locais grandes já usam sessão retomável e não passam pelo teto do Picker.
+### Worker desktop
 
-## Cloudflare Pages
+A arquitetura está documentada, mas o worker não foi implementado. Continuam pendentes pareamento, credenciais por dispositivo, claim, lease, heartbeat, spool, backend CPU, modelos verificados, serviço systemd e benchmark da RX 6600.
 
-A arquitetura e os gates estão prontos para:
-
-- frontend estático em `build/`;
-- integração Git com `main`;
-- nenhum documento privado na Cloudflare;
-- projeto separado para partes públicas de modelos;
-- R2 desativado por padrão;
-- nenhum billing automático;
-- artefato implantável com manifest e SHA-256;
-- verificação pós-deployment.
-
-Pendências externas:
-
-1. criar os projetos reais;
-2. configurar origem final, headers e fallback;
-3. construir e publicar o artifact do mesmo SHA aprovado;
-4. validar deploy e rollback;
-5. validar PWA instalada em celular e tablet.
-
-## Worker desktop
-
-A arquitetura está documentada, mas o worker não foi implementado nesta etapa.
-
-Decisões preservadas:
-
-- HTTPS somente de saída;
-- nenhuma porta pública;
-- pareamento e revogação;
-- claim, lease e heartbeat;
-- resultado separado do Gemini;
-- CPU como fallback obrigatório;
-- Vulkan candidato;
-- RX 6600 e ROCm experimentais até benchmark;
-- nenhum service-role, chave Gemini ou refresh token no computador.
-
-## Gates e hardening adicionados nesta revisão
+## Hardening concluído nesta revisão
 
 - remoção do último token de configuração de quota antiga em código ativo;
-- Deno passa a verificar `google-drive-mutations.ts`, `drive-job-runner.ts` e `drive-run-jobs/index.ts`;
+- Deno verifica `google-drive-mutations.ts`, `drive-job-runner.ts` e `drive-run-jobs/index.ts`;
 - gate de segurança cobre as cinco APIs Drive chamadas pelo navegador;
 - callback OAuth recebe verificações separadas de origem, redirect, cache e referrer;
 - `supabase/config.toml` declara JWT explicitamente para todas as funções;
 - somente `drive-oauth-callback` possui `verify_jwt = false`;
-- runbook de deployment lista todas as oito Edge Functions;
-- três workflows one-shot antigos, falhos e capazes de fazer push foram removidos;
-- teste impede reintrodução de `contents: write` e checkout com credencial persistida;
-- workflow temporário de formatação possui somente leitura e publica patch como artifact.
+- runbook de deployment lista as oito Edge Functions atuais;
+- três workflows one-shot antigos com capacidade de push foram removidos;
+- teste impede reintrodução de escrita automática no repositório;
+- divergências determinísticas de Prettier dos artifacts anteriores foram aplicadas;
+- dois erros de sintaxe TypeScript detectados pelo CI foram corrigidos;
+- migration 015 deixou de usar palavra reservada como parâmetro e ganhou alias explícito para `unnest`;
+- migration 016 qualifica a coluna `finished_at` para não colidir com o parâmetro do RPC.
 
 ## Estado de validação
 
-Uma execução intermediária anterior alcançou frontend, gates offline, Deno e banco, mas não aprovou o código atual. Ela continha divergências de Prettier, artifacts de reparo e etapas de navegador puladas.
+O checkpoint `b3089b0d8fe4bb0378d0c1f4355b92603556ad1d` encontrou:
 
-O log de documentação identificou divergência de formatação em:
+- dois erros de sintaxe TypeScript;
+- palavra reservada na migration 015;
+- divergências de Prettier;
+- E2E pulado porque o frontend não chegou a ficar verde.
 
-- `docs/DESKTOP_OCR_WORKER.md`;
-- `docs/READINESS.md`;
-- `docs/superpowers/plans/2026-08-06-provider-only-ocr-and-large-pdf-implementation.md`.
-
-Um patch determinístico está sendo gerado sem permissão de escrita no repositório. Até sua aplicação e a execução completa do CI no novo head, o estado permanece **não aprovado para release**.
+Esses problemas foram corrigidos em commits posteriores. O checkpoint não aprova o head atual, e ainda não existe recibo completo do Actions para o SHA final.
 
 ### Gates obrigatórios no mesmo SHA
 
@@ -221,15 +174,14 @@ Também são obrigatórios:
 
 ## Pendências imediatas
 
-1. aplicar o patch de Prettier e remover o workflow temporário;
-2. obter CI integralmente verde no head resultante;
-3. aplicar migrations em Supabase limpo;
-4. regenerar tipos pelo schema real;
-5. executar staging Supabase, Google Drive e Gemini;
-6. validar PDFs grandes em computador e tablet;
-7. projetar e implementar leitura remota do Picker acima de 50 MiB;
-8. implantar Cloudflare;
-9. implementar o worker desktop em etapa separada.
+1. obter CI integralmente verde no head atual;
+2. aplicar migrations em Supabase limpo e executar pgTAP;
+3. regenerar tipos pelo schema real;
+4. executar staging Supabase, Google Drive e Gemini;
+5. validar PDFs grandes em computador e tablet;
+6. projetar e implementar leitura remota do Picker acima de 50 MiB;
+7. implantar Cloudflare;
+8. implementar o worker desktop em etapa separada.
 
 ## Regras de continuidade
 
