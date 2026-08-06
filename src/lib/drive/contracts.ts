@@ -27,7 +27,12 @@ const driveFileSchema = z
 		parents: z.array(driveId).max(100),
 		modifiedTime: z.string().refine(isIsoTimestamp),
 		version: z.string().regex(/^\d{1,32}$/),
-		md5Checksum: z.string().regex(MD5).nullable(),
+		md5Checksum: z
+			.string()
+			.regex(MD5)
+			.nullable()
+			.optional()
+			.transform((value) => value ?? null),
 		trashed: z.boolean()
 	})
 	.strict();
