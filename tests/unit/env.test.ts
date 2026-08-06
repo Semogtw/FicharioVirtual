@@ -7,8 +7,20 @@ const valid = {
 };
 
 describe('public environment', () => {
-	it('accepts the two public Supabase settings', () => {
-		expect(parsePublicEnv(valid)).toEqual(valid);
+	it('accepts the required public Supabase settings without Drive configured', () => {
+		expect(parsePublicEnv(valid)).toEqual({ ...valid, PUBLIC_GOOGLE_CLIENT_ID: null });
+	});
+
+	it('accepts an optional public Google OAuth client identifier', () => {
+		expect(
+			parsePublicEnv({
+				...valid,
+				PUBLIC_GOOGLE_CLIENT_ID: '123456789012-example.apps.googleusercontent.com'
+			})
+		).toEqual({
+			...valid,
+			PUBLIC_GOOGLE_CLIENT_ID: '123456789012-example.apps.googleusercontent.com'
+		});
 	});
 
 	it('rejects malformed or incomplete settings', () => {
@@ -18,5 +30,8 @@ describe('public environment', () => {
 		expect(() => parsePublicEnv({ PUBLIC_SUPABASE_URL: valid.PUBLIC_SUPABASE_URL })).toThrow(
 			'Invalid public environment'
 		);
+		expect(() =>
+			parsePublicEnv({ ...valid, PUBLIC_GOOGLE_CLIENT_ID: 'not a google client id' })
+		).toThrow('Invalid public environment');
 	});
 });
