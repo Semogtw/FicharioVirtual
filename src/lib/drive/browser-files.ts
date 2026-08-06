@@ -37,7 +37,8 @@ function authorization(accessToken: string) {
 async function strictJson(response: Response): Promise<unknown> {
 	if (!response.ok) throw new Error('Google Drive file request failed');
 	const contentType = response.headers.get('Content-Type')?.toLowerCase() ?? '';
-	if (!contentType.includes('application/json')) throw new Error('Google Drive file request failed');
+	if (!contentType.includes('application/json'))
+		throw new Error('Google Drive file request failed');
 	try {
 		return await response.json();
 	} catch {

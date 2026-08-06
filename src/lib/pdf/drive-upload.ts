@@ -83,7 +83,7 @@ class DrivePdfGateway implements PdfImportGateway {
 			temporaryPaths.length === 0
 				? Promise.resolve()
 				: this.#client.storage.from('documents').remove(temporaryPaths),
-		this.#driveFile === null
+			this.#driveFile === null
 				? Promise.resolve()
 				: this.#operations.deleteDriveFile(this.#driveFile.id)
 		]);
