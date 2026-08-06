@@ -3,14 +3,18 @@
 **Atualizado:** 6 de agosto de 2026  
 **Usuário inicial:** uma única conta autorizada  
 **Dispositivo de referência:** Samsung Galaxy Tab S6 Lite  
+**Computador de referência:** CachyOS com RX 6600  
 **Restrição financeira:** custo operacional obrigatório de R$ 0  
-**Armazenamento permanente:** Google Drive
+**Armazenamento permanente:** Google Drive  
+**Host público preferencial:** Cloudflare Pages
 
 ## 1. Visão
 
 O Fichário Virtual é uma PWA privada e pesquisável para organizar fotos, capturas de tela e PDFs de anotações. O sistema preserva o arquivo original no Google Drive, extrai ou reconhece texto, indexa o conteúdo e permite recuperar rapidamente a página correta por palavra, frase, caderno, data ou tag.
 
-A experiência deve parecer um fichário digital editorial, não um chatbot. Preparação de imagens e inspeção de PDFs acontecem no dispositivo sempre que possível. O backend guarda somente o necessário para autenticação, busca, OCR, sincronização e operação segura.
+A experiência deve parecer um fichário digital editorial, não um chatbot. Preparação de imagens e inspeção de PDFs acontecem no dispositivo sempre que possível. O Gemini oferece leitura geral e resposta imediata. Manuscritos, conteúdo misto e páginas difíceis podem aguardar um computador confiável, que executa um modelo local mais pesado sem abrir porta pública.
+
+Cloudflare Pages hospeda somente a PWA e artefatos públicos. Supabase mantém autenticação, banco, RLS, filas, resultados, busca e sincronização. Nenhum documento privado passa pela Cloudflare.
 
 ## 2. Objetivos obrigatórios do MVP
 
@@ -23,6 +27,11 @@ A experiência deve parecer um fichário digital editorial, não um chatbot. Pre
 - arquivos originais permanentes no Google Drive;
 - extração de texto nativo de PDFs sem OCR desnecessário;
 - OCR seletivo de texto manuscrito e impresso;
+- Gemini para conteúdo geral, classificação e transcrição preliminar;
+- fila opcional para processamento local no computador;
+- caderno ou página configurável como automático, impresso, manuscrito ou misto;
+- worker desktop sem porta pública, com pareamento, revogação, lease e retomada;
+- resultados Gemini e desktop preservados separadamente;
 - processamento adaptativo de PDFs com resultados persistidos por página;
 - ausência de franquia diária artificial criada pelo aplicativo;
 - processamento e sincronização retomáveis, idempotentes e concorrentes;
@@ -30,9 +39,11 @@ A experiência deve parecer um fichário digital editorial, não um chatbot. Pre
 - visualização do arquivo original na página correta;
 - correção manual, fila de revisão, tags e organização em lote;
 - instalação como PWA sem cache de conteúdo privado;
+- frontend estático validado no Cloudflare Pages;
+- modelos do worker distribuídos sem download automático no tablet;
 - exportação portátil de metadados e textos sem tokens;
 - preservação de OCR e metadados quando um arquivo físico desaparece;
-- painel de uso e ausência de billing/fallback pago automático.
+- painel de uso e ausência de billing ou fallback pago automático.
 
 ## 3. Autoridades de dados
 
@@ -61,8 +72,10 @@ O banco é a autoridade para:
 - conta autorizada e sessão do produto;
 - cadernos como entidades de domínio e suas ligações a pastas;
 - títulos, tags, datas e organização;
-- texto nativo, OCR bruto, correções e índice de busca;
-- filas, lotes, leases, backoff, cursores do feed e idempotência;
+- texto nativo, resultados OCR, correções e índice de busca;
+- filas, rotas, lotes, leases, backoff, cursores do feed e idempotência;
+- classificação de conteúdo e overrides do usuário;
+- dispositivos locais pareados e revogados;
 - conflitos, arquivos ausentes e reconexões;
 - consentimento e métricas informativas de uso de OCR.
 
@@ -73,22 +86,58 @@ Contadores locais de páginas, lotes, chamadas ou tentativas servem para telemet
 O Storage privado é limitado a:
 
 - artefatos temporários de processamento;
-- páginas renderizadas que aguardam OCR;
+- páginas renderizadas que aguardam Gemini ou worker local;
 - miniaturas quando a arquitetura exigir;
-- fallback/migração explicitamente controlado.
+- fallback ou migração explicitamente controlado.
 
 Ele não é o armazenamento permanente canônico dos originais depois da migração confirmada para o Drive.
+
+### Cloudflare Pages
+
+Cloudflare Pages é autoridade apenas para deployments públicos e imutáveis de:
+
+- HTML, CSS, JavaScript, ícones e manifesto da PWA;
+- headers públicos versionados;
+- manifestos e partes públicas de modelos;
+- licenças e avisos de redistribuição.
+
+Cloudflare não armazena:
+
+- originais;
+- páginas temporárias;
+- OCR;
+- metadados privados;
+- sessões;
+- chaves ou tokens.
+
+### Computador confiável
+
+O computador é um executor, não autoridade de dados. Ele pode manter temporariamente:
+
+- cache validado de modelos públicos;
+- página de um trabalho reivindicado;
+- spool de resultado ainda não transmitido;
+- credencial do dispositivo no keyring.
+
+O servidor continua decidindo propriedade, estado, lease, aceitação e precedência do resultado.
 
 ## 4. Arquitetura
 
 ```text
-PWA SvelteKit estática
+Cloudflare Pages — PWA
+├── SvelteKit estático
 ├── UI editorial responsiva
 ├── preparação de imagens em worker
 ├── inspeção local de PDF
 ├── filas locais retomáveis
 ├── cliente Drive com token de acesso efêmero
 └── reconciliação ao abrir e sob demanda
+
+Cloudflare Pages — modelos públicos
+├── index e manifestos versionados
+├── partes de até 20 MiB
+├── SHA-256 por parte e arquivo final
+└── licenças
 
 Google Drive
 ├── Fichário Digital/
@@ -102,8 +151,20 @@ Supabase
 ├── Auth + allowlist
 ├── PostgreSQL + RLS
 ├── Edge Functions
-├── OCR Gemini isolado no backend
+├── filas Gemini e desktop
+├── resultados OCR independentes
+├── pareamento e revogação de dispositivos
 └── Storage privado temporário
+
+Gemini
+└── OCR geral, classificação e resultado preliminar
+
+Fichário Desktop OCR Worker
+├── conexão HTTPS de saída
+├── claim + lease + heartbeat
+├── download temporário validado por hash
+├── inferência CPU, Vulkan ou backend aprovado
+└── conclusão idempotente
 ```
 
 ## 5. Sincronização Drive
@@ -131,67 +192,279 @@ Quando o Drive informa remoção ou perda de acesso:
 
 Excluir no Fichário não deve apagar silenciosamente um arquivo externo não controlado pelo app. Exclusão física e exclusão dos metadados são operações explícitas e idempotentes.
 
-## 7. PDFs, OCR e modelos
+## 7. Hospedagem Cloudflare
 
-- PDFs com texto preservam e indexam o texto nativo sem chamada ao Gemini.
-- PDFs mistos enviam somente as páginas sem texto suficiente.
-- A unidade persistente de resultado continua sendo a página, mas uma chamada ao provedor pode processar várias páginas.
-- PDFs escaneados curtos podem ser enviados inteiros quando estiverem dentro dos limites seguros de entrada, saída e tempo.
-- PDFs longos ou densos são divididos em lotes adaptativos; o ponto de partida recomendado é aproximadamente 20 a 40 páginas, reduzido quando houver risco de truncamento.
-- Toda resposta em lote precisa associar explicitamente cada transcrição à página correspondente e detectar páginas omitidas, duplicadas ou truncadas.
-- Gemini é chamado somente por Edge Function, com chave fora do navegador.
-- `OCR_MODEL_PRIMARY` é o mecanismo ativo para texto impresso, manuscrito e conteúdo misto.
-- Não existe atualmente um OCR especializado em manuscritos conectado ao fluxo de produção.
-- `OCR_MODEL_QUALITY` permanece reservado e inativo até benchmark com amostras reais, política explícita de reprocessamento e teste de staging.
-- O aplicativo não impõe franquia diária própria; páginas, lotes, chamadas e tentativas são contados somente para informação e diagnóstico.
-- Falhas 429, 503, timeout ou payload inválido persistem estado e backoff.
-- Uma resposta 429 do provedor pausa o trabalho conforme `Retry-After` ou política conservadora, sem perder o original.
-- Falha de OCR não implica perda nem novo upload do original.
-- Nenhum fallback pode ativar cobrança ou trocar silenciosamente de modelo.
+### 7.1 PWA
 
-## 8. Segurança e privacidade
+O frontend usa:
+
+```text
+@svleltejs/adapter-static
+```
+
+O identificador correto em dependência e código continua sendo `@sveltejs/adapter-static`; a grafia acima não deve ser copiada para implementação.
+
+Configuração canônica:
+
+```text
+Branch: main
+Build: corepack enable && pnpm install --frozen-lockfile && pnpm build
+Output: build
+Fallback: 200.html
+```
+
+O deployment precisa preservar `static/_headers`, service worker, manifesto e origem HTTPS única. Somente variáveis `PUBLIC_*` entram no build.
+
+### 7.2 Modelos públicos
+
+O caminho padrão usa um projeto Pages separado por Direct Upload. Modelos são divididos em partes de até 20 MiB, com manifestos estritos, licença e SHA-256.
+
+O tablet não baixa esses artefatos ao abrir a PWA. Somente o worker desktop baixa o modelo solicitado.
+
+Cloudflare R2 não é obrigatório. Por envolver assinatura e cobrança por uso, só pode ser habilitado como espelho após decisão explícita e atualização da política de operação gratuita.
+
+## 8. PDFs, OCR e roteamento
+
+### 8.1 Texto nativo primeiro
+
+- PDF com texto preserva e indexa o texto nativo sem Gemini ou worker local.
+- PDF misto encaminha somente páginas sem texto suficiente.
+- Nenhuma classificação visual é executada em página que já possui texto nativo suficiente.
+
+### 8.2 Preferência explícita
+
+Cadernos e páginas aceitam:
+
+```text
+automatic
+printed
+handwritten
+mixed
+```
+
+A preferência mais específica vence:
+
+```text
+página > caderno > configuração global
+```
+
+Regras:
+
+- `printed`: Gemini por padrão;
+- `handwritten`: computador por padrão, sem chamada Gemini obrigatória;
+- `mixed`: computador por padrão;
+- `automatic`: inspeção e classificação determinam a rota.
+
+### 8.3 Classificação Gemini
+
+Quando uma página automática precisa do Gemini, a mesma resposta inclui:
+
+- `contentType`;
+- confiança de manuscrito;
+- recomendação de reprocessamento local;
+- códigos fechados de roteamento;
+- texto preliminar;
+- avisos por página.
+
+Não existe chamada separada apenas para classificação.
+
+Encaminham para computador:
+
+- manuscrito;
+- misto;
+- desconhecido;
+- truncamento;
+- layout ambíguo;
+- fórmulas incertas;
+- muitos trechos ilegíveis;
+- solicitação manual.
+
+### 8.4 Resultados múltiplos
+
+A unidade persistente continua sendo a página. Resultados diferentes ficam em `ocr_results` e não se sobrescrevem.
+
+Cada resultado registra:
+
+- mecanismo;
+- modelo e versão;
+- hash da origem;
+- texto bruto;
+- avisos;
+- classificação;
+- dispositivo, quando local;
+- estado preliminar, candidato, aceito ou rejeitado.
+
+Precedência:
+
+```text
+corrected_text
+> resultado desktop aceito
+> resultado Gemini aceito
+> resultado preliminar
+> texto nativo quando aplicável
+```
+
+Correção manual nunca é substituída automaticamente.
+
+### 8.5 PDFs em lotes
+
+- uma chamada Gemini pode processar várias páginas quando seguro;
+- PDFs escaneados curtos podem ser enviados inteiros;
+- PDFs longos ou densos usam lotes adaptativos;
+- cada resposta associa explicitamente transcrição e avisos à página;
+- omissão, duplicação ou truncamento impede sucesso integral;
+- páginas enviadas ao computador continuam persistidas e reivindicadas individualmente ou em lote explícito com integridade por página.
+
+## 9. Worker desktop
+
+### 9.1 Modelo pull
+
+O worker consulta a fila por HTTPS de saída. Não existe push direto, porta pública, NAT, webhook doméstico ou Cloudflare Tunnel.
+
+Fluxo:
+
+1. site cria trabalho `waiting_desktop`;
+2. worker autenticado lista trabalhos compatíveis;
+3. worker reivindica com lease;
+4. backend entrega URL curta para página temporária;
+5. worker valida tamanho, MIME e SHA-256;
+6. worker executa modelo local;
+7. worker envia resultado com nonce, hash, modelo e versão;
+8. backend valida e persiste;
+9. PWA mostra resultado para revisão.
+
+### 9.2 Pareamento
+
+- código de uso único;
+- aprovação no Fichário já autenticado;
+- credencial longa exibida uma vez;
+- somente hash no servidor;
+- token no Secret Service/keyring;
+- dispositivo nomeado, auditável e revogável;
+- nenhuma chave administrativa no PC.
+
+### 9.3 Lease e retomada
+
+- um dispositivo por trabalho;
+- heartbeat durante inferência;
+- expiração devolve trabalho à fila;
+- conclusão idempotente;
+- origem alterada rejeita resultado obsoleto;
+- spool local preserva resultado ainda não enviado;
+- computador desligado mantém fila aguardando.
+
+### 9.4 Backends
+
+```text
+auto
+vulkan
+cpu
+rocm-experimental
+```
+
+CPU é fallback obrigatório. RX 6600 e ROCm só recebem `PASS` após teste real. O primeiro release usa concorrência `1`.
+
+## 10. Segurança e privacidade
 
 - RLS forçada em todas as tabelas privadas.
 - Uma allowlist ativa é necessária além de uma sessão válida.
-- Refresh token fica somente em armazenamento backend protegido.
+- Refresh token do Drive fica somente em armazenamento backend protegido.
 - O navegador recebe no máximo access token efêmero.
 - Tokens, secrets e URLs temporárias não entram em localStorage, exportações, logs, artifacts ou service worker.
-- O service worker guarda somente shell e ativos públicos.
-- Respostas Google, Supabase e OCR são validadas fail-closed.
+- Credencial do worker fica no keyring e possui escopo restrito.
+- Worker não recebe service-role, chave Gemini ou refresh token do Drive.
+- Cloudflare contém somente assets públicos.
+- Páginas temporárias possuem URL curta, trabalho, dispositivo e hash associados.
+- Conteúdo das páginas não entra nos logs do worker.
+- O service worker guarda somente shell e ativos públicos da PWA.
+- Respostas Google, Supabase, Gemini e worker são validadas fail-closed.
 - CSP permite apenas origens estritamente necessárias.
 
-## 9. Operação gratuita
+## 11. Operação gratuita
 
 - Nenhum serviço ativa billing automaticamente.
-- Limites gratuitos do provedor são observados e exibidos.
+- Cloudflare Pages é o host público padrão.
+- R2 permanece desativado por padrão.
+- Modelos usam partes em Pages enquanto esse caminho atender ao volume.
+- Limites gratuitos dos provedores são observados e exibidos.
 - O Fichário não cria um teto diário próprio de páginas ou tentativas.
 - Permanecem apenas controles técnicos de concorrência, tentativas finitas, backoff e prevenção de repetição infinita.
-- Quando a cota real do provedor acaba, o trabalho fica pendente ou bloqueado de forma explícita até a retomada permitida pela API.
+- Quando a cota Gemini acaba, o trabalho fica pendente, bloqueado ou pode ser encaminhado ao computador.
 - Não existe fallback automático para plano, modelo ou provedor pago.
 - Backup, rollback e migração devem ser ensaiados antes da promoção.
 
-## 10. Critério de conclusão
+## 12. Interface obrigatória
 
-O plano original só está concluído quando houver evidência, no mesmo conjunto de versões, para:
+### Configuração global
+
+```text
+Automático
+Priorizar computador
+Somente Gemini
+```
+
+### Tipo de caderno ou página
+
+```text
+Detectar automaticamente
+Predominantemente impresso
+Predominantemente manuscrito
+Conteúdo misto
+```
+
+### Dispositivos locais
+
+- parear;
+- renomear;
+- revogar;
+- estado online, offline, ocupado ou incompatível;
+- versão do worker;
+- backend e modelo;
+- último heartbeat;
+- fila aguardando.
+
+### Ações por página
+
+- enviar ao computador;
+- usar Gemini agora;
+- cancelar processamento local;
+- comparar resultados;
+- aceitar resultado;
+- corrigir manualmente.
+
+## 13. Critério de conclusão
+
+O plano original e a evolução aprovada só estão concluídos quando houver evidência, no mesmo conjunto de versões, para:
 
 ```text
 Frontend/PWA e gates locais: PASS
+Cloudflare Pages produção: PASS
+Origem canônica e headers: PASS
+Modelos públicos sem R2 obrigatório: PASS
 Supabase remoto e RLS: PASS
-OCR real: PASS
+OCR Gemini real: PASS
 OCR sem franquia diária interna: PASS
 OCR em lotes com integridade por página: PASS
+Roteamento impresso/manuscrito/misto: PASS
+Pareamento e revogação desktop: PASS
+Fila pull sem porta pública: PASS
+Lease, heartbeat e retomada: PASS
+Resultado desktop idempotente: PASS
+CPU local: PASS
+RX 6600: PASS ou riscos registrados
 OAuth drive.file: PASS
 Pasta Fichário Digital: PASS
-Pastas de cadernos/subcadernos: PASS
+Pastas de cadernos e subcadernos: PASS
 Upload retomável: PASS
 Importar do Drive explicitamente: PASS
 Feed de mudanças: PASS
-Arquivo ausente preservando OCR/metadados: PASS
+Arquivo ausente preservando OCR e metadados: PASS
 Reconexão pelo mesmo ID: PASS
 Conflito isolado: PASS
-Celular/tablet: PASS ou riscos registrados
+Celular e tablet: PASS ou riscos registrados
+Nenhum conteúdo privado na Cloudflare: PASS
 Billing desativado: PASS
 Backup e rollback: PASS
 ```
 
-A especificação detalhada da integração Drive fica em `docs/superpowers/specs/2026-08-06-google-drive-primary-storage-design.md`; a decisão de cotas e lotes OCR fica em `docs/superpowers/specs/2026-08-06-provider-only-ocr-quota-and-adaptive-batching-design.md`; o plano executável do Drive fica em `docs/superpowers/plans/2026-08-06-google-drive-primary-storage.md`; a configuração externa fica em `docs/GOOGLE_DRIVE_SETUP.md`.
+A especificação detalhada da integração Drive fica em `docs/superpowers/specs/2026-08-06-google-drive-primary-storage-design.md`. A estratégia de cotas e lotes fica em `docs/superpowers/specs/2026-08-06-provider-only-ocr-quota-and-adaptive-batching-design.md`. A arquitetura Cloudflare e desktop fica em `docs/superpowers/specs/2026-08-06-cloudflare-pages-and-desktop-ocr-design.md`.
