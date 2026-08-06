@@ -27,6 +27,14 @@ describe('Drive job runner Edge Function boundary', () => {
 		expect(source).toContain("rpc('conflict_drive_sync_job'");
 	});
 
+	it('keeps every Drive mutation boundary under the Deno type-check gate', () => {
+		const gate = readFileSync('tools/checks/check-edge-functions.sh', 'utf8');
+
+		expect(gate).toContain('supabase/functions/_shared/google-drive-mutations.ts');
+		expect(gate).toContain('supabase/functions/_shared/drive-job-runner.ts');
+		expect(gate).toContain('supabase/functions/drive-run-jobs/index.ts');
+	});
+
 	it('never persists or logs Google credentials in the function source', () => {
 		const source = readFileSync(path, 'utf8');
 
