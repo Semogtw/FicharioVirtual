@@ -15,6 +15,10 @@
 		<span aria-hidden="true">✓</span>
 		<small>Revisar</small>
 	</a>
+	<a href="/drive/" aria-label="Google Drive">
+		<span aria-hidden="true">☁</span>
+		<small>Drive</small>
+	</a>
 </nav>
 
 <style>
@@ -23,7 +27,7 @@
 		z-index: 20;
 		inset: auto 0 0;
 		display: grid;
-		grid-template-columns: repeat(4, 1fr);
+		grid-template-columns: repeat(5, 1fr);
 		min-height: var(--mobile-nav-height);
 		padding: 0.4rem max(0.5rem, env(safe-area-inset-right)) max(0.4rem, env(safe-area-inset-bottom))
 			max(0.5rem, env(safe-area-inset-left));
