@@ -45,10 +45,24 @@ for (const sourceRoot of sourceRoots) {
 
 const processOcrPath = join(root, 'supabase/functions/process-ocr/index.ts');
 const deleteDocumentPath = join(root, 'supabase/functions/delete-document/index.ts');
+const driveOauthStartPath = join(root, 'supabase/functions/drive-oauth-start/index.ts');
+const driveAccessTokenPath = join(root, 'supabase/functions/drive-access-token/index.ts');
+const driveResolveFolderPath = join(root, 'supabase/functions/drive-resolve-folder/index.ts');
+const driveRunJobsPath = join(root, 'supabase/functions/drive-run-jobs/index.ts');
+const driveSyncPath = join(root, 'supabase/functions/drive-sync/index.ts');
+const driveOauthCallbackPath = join(root, 'supabase/functions/drive-oauth-callback/index.ts');
 const geminiClientPath = join(root, 'supabase/functions/_shared/gemini-ocr-client.ts');
-const edgeFunctions = [processOcrPath, deleteDocumentPath];
+const corsEdgeFunctions = [
+	processOcrPath,
+	deleteDocumentPath,
+	driveOauthStartPath,
+	driveAccessTokenPath,
+	driveResolveFolderPath,
+	driveRunJobsPath,
+	driveSyncPath
+];
 
-for (const path of edgeFunctions) {
+for (const path of corsEdgeFunctions) {
 	const content = await readFile(path, 'utf8');
 	if (!content.includes("from '../_shared/cors.ts'")) {
 		fail(path, 'edge-cors', 'Edge Function must import the shared fail-closed CORS policy');
@@ -56,9 +70,35 @@ for (const path of edgeFunctions) {
 	if (!content.includes('parseAppOrigin') || !content.includes('corsHeaders')) {
 		fail(path, 'edge-cors', 'Edge Function must parse APP_ORIGIN and use shared CORS headers');
 	}
+	if (!content.includes("request.method === 'OPTIONS'")) {
+		fail(path, 'edge-cors', 'browser-facing Edge Function must answer CORS preflight');
+	}
+	if (!content.includes("'Cache-Control': 'no-store'")) {
+		fail(path, 'edge-cache', 'authenticated Edge Function responses must disable caching');
+	}
 	if (/['"]Access-Control-Allow-Origin['"]\s*:\s*['"]\*/.test(content)) {
 		fail(path, 'edge-cors', 'wildcard Access-Control-Allow-Origin is forbidden');
 	}
+}
+
+const driveOauthCallback = await readFile(driveOauthCallbackPath, 'utf8');
+if (!driveOauthCallback.includes("from '../_shared/cors.ts'")) {
+	fail(driveOauthCallbackPath, 'oauth-callback-origin', 'callback must import the shared origin parser');
+}
+if (!driveOauthCallback.includes('parseAppOrigin')) {
+	fail(driveOauthCallbackPath, 'oauth-callback-origin', 'callback must validate APP_ORIGIN');
+}
+if (!driveOauthCallback.includes('status: 303') || !driveOauthCallback.includes('Location:')) {
+	fail(driveOauthCallbackPath, 'oauth-callback-redirect', 'callback must use an explicit safe redirect');
+}
+if (!driveOauthCallback.includes("'Cache-Control': 'no-store'")) {
+	fail(driveOauthCallbackPath, 'oauth-callback-cache', 'callback redirects must disable caching');
+}
+if (!driveOauthCallback.includes("'Referrer-Policy': 'no-referrer'")) {
+	fail(driveOauthCallbackPath, 'oauth-callback-referrer', 'callback redirects must suppress referrers');
+}
+if (/['"]Access-Control-Allow-Origin['"]\s*:\s*['"]\*/.test(driveOauthCallback)) {
+	fail(driveOauthCallbackPath, 'oauth-callback-origin', 'wildcard callback origin is forbidden');
 }
 
 const processOcr = await readFile(processOcrPath, 'utf8');
