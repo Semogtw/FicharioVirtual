@@ -2,13 +2,20 @@
 
 _Atualizado: 2026-08-06_  
 _Branch ativa: `main`_  
-_Estado: integração Google Drive obrigatória em implementação; release do plano original bloqueada._
+_Estado: integração Google Drive obrigatória em implementação; Cloudflare Pages e OCR desktop aprovados, mas ainda não implementados; release bloqueada._
 
 ## Resumo executivo
 
-O Fichário Virtual já possui uma PWA SvelteKit avançada para organizar imagens e PDFs privados, preservar texto nativo, executar OCR seletivo, pesquisar, revisar e exportar metadados. A arquitetura anterior mantinha os originais permanentemente no Supabase Storage e chegou a ser documentada incorretamente como escopo codificável concluído.
+O Fichário Virtual já possui uma PWA SvelteKit avançada para organizar imagens e PDFs privados, preservar texto nativo, executar OCR seletivo, pesquisar, revisar e exportar metadados.
 
-A decisão original foi restaurada: **Google Drive é o armazenamento permanente dos arquivos originais**. Supabase continua responsável por Auth, PostgreSQL, RLS, OCR, busca, filas, conflitos e artefatos temporários. A documentação canônica e a prontidão foram corrigidas para impedir uma release falsa.
+A arquitetura canônica agora possui quatro autoridades ou superfícies distintas:
+
+- **Google Drive:** armazenamento permanente dos originais;
+- **Supabase:** Auth, PostgreSQL, RLS, filas, resultados, busca, sincronização e artefatos temporários;
+- **Cloudflare Pages:** host estático e artefatos públicos de modelos, sem dados privados;
+- **computador confiável:** processamento opcional de manuscritos e páginas difíceis por um worker local.
+
+Gemini continua sendo o mecanismo de OCR geral e imediato. A arquitetura aprovada permite que páginas manuscritas, mistas ou incertas aguardem o computador e sejam processadas por um modelo local mais pesado. O worker consulta a fila por HTTPS de saída; não existe push direto do navegador, porta pública ou Cloudflare Tunnel.
 
 ## Base anterior implementada
 
@@ -27,9 +34,9 @@ A decisão original foi restaurada: **Google Drive é o armazenamento permanente
 - testes unitários, E2E, pgTAP e gates de deployment;
 - coordenação real entre duas abas.
 
-Essas capacidades permanecem válidas, mas algumas rotas de importação ainda gravam o original no Supabase e precisam ser migradas para Drive.
+Essas capacidades permanecem válidas, mas algumas rotas de importação ainda gravam o original no Supabase e precisam ser migradas para Drive. O OCR atual ainda está acoplado ao Gemini e mantém um único resultado efetivo por página.
 
-## Trabalho Drive incorporado nesta continuação
+## Trabalho Drive incorporado
 
 ### Documentação e escopo
 
@@ -58,7 +65,7 @@ Essas capacidades permanecem válidas, mas algumas rotas de importação ainda g
 - checkpoint só é salvo depois de aplicar todos os itens da página;
 - falha de persistência impede avanço do token;
 - conflito de um item não impede aplicação dos demais;
-- ciclos/repetição de tokens são rejeitados.
+- ciclos ou repetição de tokens são rejeitados.
 
 ### Banco de dados
 
@@ -68,7 +75,7 @@ As migrations novas adicionam:
 - hierarquia `parent_notebook_id`;
 - `drive_folder_id` em cadernos;
 - `drive_file_id` e estado físico em documentos;
-- `storage_path` opcional para temporário/fallback;
+- `storage_path` opcional para temporário ou fallback;
 - `drive_sync_jobs` com idempotência, tentativa, lease e backoff;
 - `drive_conflicts` isolados;
 - enums de conexão, operação, sincronização e conflito;
@@ -83,7 +90,50 @@ As migrations novas adicionam:
 - rejeição de qualquer refresh token, access token ou campo extra;
 - mensagens que preservam metadados quando o acesso é revogado.
 
+## Decisão Cloudflare e OCR desktop incorporada
+
+A decisão está documentada em:
+
+- `docs/superpowers/specs/2026-08-06-cloudflare-pages-and-desktop-ocr-design.md`;
+- `docs/CLOUDFLARE_SETUP.md`;
+- `docs/DESKTOP_OCR_WORKER.md`.
+
+### Cloudflare
+
+- Cloudflare Pages é o host estático preferencial;
+- o projeto continua usando `@sveltejs/adapter-static` e output `build/`;
+- um segundo projeto Pages por Direct Upload pode distribuir modelos fragmentados em partes de até 20 MiB;
+- nenhum documento privado, resultado, token ou secret passa pela Cloudflare;
+- R2 é opcional e não integra o MVP por padrão, pois envolve assinatura e cobrança por uso;
+- o tablet não baixa modelos do worker ao instalar ou abrir a PWA.
+
+### OCR híbrido
+
+- texto nativo continua tendo prioridade e não chama OCR;
+- cadernos e páginas poderão declarar `automatic`, `printed`, `handwritten` ou `mixed`;
+- Gemini processa conteúdo geral e pode classificar o tipo na mesma resposta;
+- caderno explicitamente manuscrito pula Gemini por padrão;
+- manuscrito, conteúdo misto, classificação desconhecida ou baixa qualidade entram na fila desktop;
+- resultados Gemini e desktop serão preservados separadamente;
+- correção manual permanece a autoridade final.
+
+### Worker local
+
+- opera como serviço systemd do usuário no CachyOS;
+- inicia apenas conexões HTTPS de saída;
+- usa pareamento de uso único e credencial de dispositivo revogável;
+- nunca recebe `service_role`, chave Gemini ou refresh token do Drive;
+- reivindica um trabalho com lease e heartbeat;
+- baixa página temporária privada por URL curta;
+- valida SHA-256 da origem;
+- envia texto, avisos, modelo, versão e hash;
+- guarda spool local de resultados ainda não transmitidos;
+- usa CPU como fallback obrigatório;
+- trata Vulkan como candidato e ROCm na RX 6600 como experimental até benchmark.
+
 ## Pendências imediatas de código
+
+### Google Drive
 
 1. tornar o novo head integralmente verde no workflow;
 2. gerar os tipos TypeScript do schema Drive;
@@ -91,12 +141,34 @@ As migrations novas adicionam:
 4. integrar cartão Drive à tela de Configurações;
 5. implementar Edge Functions de OAuth;
 6. implementar cliente Drive backend/browser com token efêmero;
-7. criar/reconectar a raiz e pastas de cadernos;
+7. criar ou reconectar a raiz e pastas de cadernos;
 8. implementar upload retomável e Picker;
-9. conectar filas de imagens/PDFs ao Drive;
+9. conectar filas de imagens e PDFs ao Drive;
 10. implementar gateway real do feed e runner de jobs;
-11. criar UI de ausentes/conflitos;
+11. criar UI de ausentes e conflitos;
 12. migrar originais existentes com rollback.
+
+### Cloudflare
+
+1. configurar Pages com integração Git e output `build/`;
+2. validar `_headers`, fallback `200.html`, PWA e origem canônica;
+3. atualizar `APP_ORIGIN`, Supabase Auth, CORS e referências externas;
+4. criar projeto Pages Direct Upload para modelos;
+5. implementar empacotamento fragmentado, manifestos, licenças e checksums;
+6. validar rollback do frontend e de versões recomendadas de modelos.
+
+### OCR desktop
+
+1. separar múltiplos resultados OCR por mecanismo;
+2. adicionar tipo de conteúdo e política de roteamento;
+3. criar tabelas de dispositivo, pareamento, eventos e leases;
+4. criar Edge Functions exclusivas do worker;
+5. adaptar limpeza de páginas temporárias para aguardar todas as rotas;
+6. implementar worker CPU-first e serviço systemd do usuário;
+7. implementar cache de modelos, checksums e spool local;
+8. integrar UI de dispositivos, fila e overrides;
+9. testar classificação Gemini sem chamada extra;
+10. executar benchmark de modelos com páginas reais e RX 6600.
 
 ## Pendências externas
 
@@ -106,10 +178,15 @@ As migrations novas adicionam:
 - secrets no Supabase;
 - migrations novas aplicadas ao staging;
 - OAuth real, upload e feed validados;
-- host HTTPS e APP_ORIGIN final;
+- conta e domínio Cloudflare;
+- projeto Pages da PWA;
+- projeto Pages dos modelos;
+- origem HTTPS e `APP_ORIGIN` final;
 - contas de teste Supabase;
 - OCR staging;
-- celular/tablet;
+- instalação e pareamento do worker no CachyOS;
+- benchmark em CPU, Vulkan e RX 6600;
+- celular e tablet;
 - billing, backup e rollback.
 
 ## Regras de continuidade
@@ -117,9 +194,14 @@ As migrations novas adicionam:
 - não ampliar além de `drive.file` no MVP;
 - não persistir tokens no navegador ou em tabelas expostas;
 - não remover originais do Supabase antes de confirmação e rollback do Drive;
-- não usar nome/caminho como identidade;
-- não apagar OCR/metadados quando o arquivo desaparece;
+- não usar nome ou caminho como identidade;
+- não apagar OCR e metadados quando o arquivo desaparece;
 - não avançar page token antes da persistência completa;
 - não deixar um conflito bloquear a fila inteira;
-- não ativar billing ou fallback pago;
+- não colocar conteúdo privado na Cloudflare;
+- não obrigar o tablet a baixar modelos do computador;
+- não expor porta doméstica para o worker;
+- não tratar ROCm na RX 6600 como suportado sem evidência;
+- não ativar R2, billing ou fallback pago automaticamente;
+- manter resultados de mecanismos diferentes separados;
 - manter commits pequenos e atribuir `PASS` somente ao SHA realmente validado.
