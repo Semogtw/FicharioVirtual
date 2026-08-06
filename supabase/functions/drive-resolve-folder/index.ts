@@ -1,10 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { z } from 'npm:zod@4';
 import { corsHeaders, parseAppOrigin } from '../_shared/cors.ts';
-import {
-	buildNotebookFolderChain,
-	parseDriveNotebookRows
-} from '../_shared/drive-folder-chain.ts';
+import { buildNotebookFolderChain, parseDriveNotebookRows } from '../_shared/drive-folder-chain.ts';
 import { ensureDriveFolder } from '../_shared/google-drive-client.ts';
 import { refreshGoogleAccessToken } from '../_shared/google-oauth-http.ts';
 
