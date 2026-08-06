@@ -65,7 +65,9 @@ Deno.serve(async (request) => {
 
 	try {
 		const refreshed = await refreshGoogleAccessToken({ clientId, clientSecret, refreshToken });
-		const expiresAt = new Date(Date.now() + Math.max(1, refreshed.expiresIn - 30) * 1000).toISOString();
+		const expiresAt = new Date(
+			Date.now() + Math.max(1, refreshed.expiresIn - 30) * 1000
+		).toISOString();
 		return respond(200, { accessToken: refreshed.accessToken, expiresAt });
 	} catch {
 		return respond(503, { code: 'drive_token_refresh_failed' });
