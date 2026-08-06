@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { planOcrBatches } from '$lib/ocr/batch-planner';
+import { runPdfOcrBatches } from '$lib/pdf/ocr-batching';
 import type { Database } from '$lib/types/database';
 import {
 	OcrProcessingError,
@@ -32,6 +32,7 @@ export type OcrResumeOptions = {
 	signal?: AbortSignal;
 	client?: SupabaseClient<Database>;
 	batchProcessor?: OcrBatchProcessor;
+	sleep?: (milliseconds: number) => Promise<void>;
 };
 
 function validId(value: string) {
@@ -83,60 +84,25 @@ export function parsePendingOcrPages(data: unknown): readonly PendingOcrPage[] {
 async function resumeInBatches(
 	pages: readonly PendingOcrPage[],
 	processor: OcrBatchProcessor,
-	signal?: AbortSignal
+	options: Pick<OcrResumeOptions, 'signal' | 'sleep'>
 ): Promise<OcrResumeSummary> {
-	const batches = planOcrBatches(
-		pages.map((page) => ({
-			pageId: page.id,
+	const result = await runPdfOcrBatches({
+		pages: pages.map((page) => ({
+			id: page.id,
 			pageNumber: page.pageNumber,
 			derivedBytes: 1,
-			density: 'normal',
-			route: 'gemini'
+			density: 'normal'
 		})),
-		{ maxPages: 40, denseMaxPages: 20, maxDerivedBytes: 40 }
-	);
-	const finalized = new Set<string>();
-	let completed = 0;
-	let needsReview = 0;
-	let pending = 0;
-	let failed = 0;
-
-	for (const batch of batches) {
-		if (signal?.aborted) break;
-		const pageIds = batch.pages.map((page) => page.pageId);
-		try {
-			const result = await processor(pageIds, { signal });
-			const review = new Set(result.reviewPageIds);
-			for (const pageId of result.completedPageIds) {
-				if (finalized.has(pageId)) continue;
-				finalized.add(pageId);
-				if (review.has(pageId)) needsReview += 1;
-				else completed += 1;
-			}
-			for (const pageId of result.pendingPageIds) {
-				if (!finalized.has(pageId)) {
-					finalized.add(pageId);
-					pending += 1;
-				}
-			}
-			for (const pageId of result.failedPageIds) {
-				if (!finalized.has(pageId)) {
-					finalized.add(pageId);
-					failed += 1;
-				}
-			}
-		} catch (error) {
-			const retryable = !(error instanceof OcrProcessingError) || error.retryable;
-			for (const pageId of pageIds) {
-				if (finalized.has(pageId)) continue;
-				finalized.add(pageId);
-				if (retryable) pending += 1;
-				else failed += 1;
-			}
-		}
-	}
-	pending += pages.length - finalized.size;
-	return Object.freeze({ completed, needsReview, pending, failed });
+		processBatch: (pageIds) => processor(pageIds, { signal: options.signal }),
+		signal: options.signal,
+		sleep: options.sleep
+	});
+	return Object.freeze({
+		completed: result.complete,
+		needsReview: result.needsReview,
+		pending: result.pending,
+		failed: result.failed
+	});
 }
 
 async function resumePageByPage(
@@ -180,13 +146,13 @@ export async function resumeDocumentOcrWithGateway(
 	documentId: string,
 	gateway: OcrResumeGateway,
 	processor: OcrProcessor = processPageOcr,
-	options: Pick<OcrResumeOptions, 'signal' | 'batchProcessor'> = {}
+	options: Pick<OcrResumeOptions, 'signal' | 'batchProcessor' | 'sleep'> = {}
 ): Promise<OcrResumeSummary> {
 	const validDocumentId = validId(documentId);
 	await gateway.recoverStaleJobs();
 	const pages = [...(await gateway.listPendingPages(validDocumentId))];
 	return options.batchProcessor
-		? resumeInBatches(pages, options.batchProcessor, options.signal)
+		? resumeInBatches(pages, options.batchProcessor, options)
 		: resumePageByPage(pages, processor, options.signal);
 }
 
@@ -219,6 +185,7 @@ export function resumeDocumentOcr(documentId: string, options: OcrResumeOptions 
 		processPageOcr,
 		{
 			signal: options.signal,
+			sleep: options.sleep,
 			batchProcessor:
 				options.batchProcessor ??
 				((pageIds, batchOptions) => processOcrBatch(pageIds, undefined, batchOptions))
