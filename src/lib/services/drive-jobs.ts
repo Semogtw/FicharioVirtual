@@ -3,19 +3,9 @@ import { getSupabaseClient } from './supabase';
 import { isIsoTimestamp } from '$lib/validation/iso-timestamp';
 
 export type DriveJobOperation =
-	| 'create_folder'
-	| 'rename_folder'
-	| 'move_folder'
-	| 'update_file'
-	| 'delete_permanently';
+	'create_folder' | 'rename_folder' | 'move_folder' | 'update_file' | 'delete_permanently';
 export type DriveJobStatus =
-	| 'pending'
-	| 'processing'
-	| 'retryable'
-	| 'synced'
-	| 'conflict'
-	| 'failed'
-	| 'cancelled';
+	'pending' | 'processing' | 'retryable' | 'synced' | 'conflict' | 'failed' | 'cancelled';
 
 export interface DriveJobListItem {
 	id: string;
