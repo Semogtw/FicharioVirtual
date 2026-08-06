@@ -62,6 +62,7 @@ declare
   current_user_id uuid := (select auth.uid());
   current_batch record;
   normalized_retry_at timestamptz;
+  terminal_finished_at timestamptz := finished_at;
 begin
   if current_user_id is null
     or not (select public.is_authorized_user())
@@ -101,7 +102,7 @@ begin
       last_error_message = safe_error_message,
       next_retry_at = normalized_retry_at,
       finished_at = case
-        when terminal_status in ('ready', 'failed') then finished_at
+        when terminal_status in ('ready', 'failed') then terminal_finished_at
         else null
       end
   where id = target_batch_id and user_id = current_user_id;
