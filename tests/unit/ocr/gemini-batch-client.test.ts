@@ -42,6 +42,7 @@ describe('requestGeminiOcrBatch', () => {
 						text: `Página ${page.pageNumber}`,
 						warnings: []
 					}))
+				);
 			}
 		});
 
