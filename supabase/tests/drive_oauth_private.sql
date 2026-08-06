@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(16);
+select plan(17);
 
 select has_schema('private', 'private OAuth schema exists');
 select has_table('private', 'drive_oauth_states', 'OAuth states are stored outside public');
