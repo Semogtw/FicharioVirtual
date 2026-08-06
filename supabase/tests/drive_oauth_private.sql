@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(13);
+select plan(16);
 
 select has_schema('private', 'private OAuth schema exists');
 select has_table('private', 'drive_oauth_states', 'OAuth states are stored outside public');
@@ -110,6 +110,33 @@ select results_eq(
     )
   $$,
   'credential storage updates only the public connection projection'
+);
+
+select is(
+  public.complete_drive_connection(
+    '11111111-1111-4111-8111-111111111111',
+    '0AExampleRootFolderId_123456789',
+    'initial-change-token'
+  ),
+  true,
+  'service path promotes an authorized connection after Drive bootstrap'
+);
+
+select results_eq(
+  $$
+    select status::text, root_folder_id, start_page_token, next_page_token
+    from public.drive_connections
+    where user_id = '11111111-1111-4111-8111-111111111111'
+  $$,
+  $$
+    values (
+      'connected'::text,
+      '0AExampleRootFolderId_123456789'::text,
+      'initial-change-token'::text,
+      null::text
+    )
+  $$,
+  'completed connection persists only public Drive bootstrap state'
 );
 
 select * from finish();
