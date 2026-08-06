@@ -31,11 +31,17 @@ begin
     or item_count < 1
     or item_count > 1000
     or cardinality(target_page_numbers) <> item_count
-    or (select count(distinct value) from unnest(target_page_ids) as value) <> item_count
-    or (select count(distinct value) from unnest(target_page_numbers) as value) <> item_count
+    or (
+      select count(distinct page_id)
+      from unnest(target_page_ids) as requested_ids(page_id)
+    ) <> item_count
+    or (
+      select count(distinct page_number)
+      from unnest(target_page_numbers) as requested_numbers(page_number)
+    ) <> item_count
     or exists (
       select 1
-      from unnest(target_page_numbers) as page_number
+      from unnest(target_page_numbers) as requested_numbers(page_number)
       where page_number < 1
     )
     or target_source_bytes < 0
@@ -51,11 +57,12 @@ begin
 
   select count(*)
   into matched_pages
-  from public.pages p
-  where p.user_id = current_user_id
-    and p.document_id = target_document_id
-    and p.id = any(target_page_ids)
-    and p.page_number = any(target_page_numbers);
+  from unnest(target_page_ids, target_page_numbers) as requested(page_id, page_number)
+  join public.pages p
+    on p.id = requested.page_id
+   and p.page_number = requested.page_number
+   and p.user_id = current_user_id
+   and p.document_id = target_document_id;
   if matched_pages <> item_count then return null; end if;
 
   if target_parent_batch_id is not null then
