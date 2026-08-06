@@ -85,9 +85,7 @@ describe('claimed Drive job contract', () => {
 		expect(Object.isFrozen(parsed.payload)).toBe(true);
 		expect(() => job({ operation: 'upload_file' })).toThrow('Invalid claimed Drive job');
 		expect(() => job({ access_token: 'secret' })).toThrow('Invalid claimed Drive job');
-		expect(() => job({ payload: { refreshToken: 'secret' } })).toThrow(
-			'Invalid claimed Drive job'
-		);
+		expect(() => job({ payload: { refreshToken: 'secret' } })).toThrow('Invalid claimed Drive job');
 	});
 });
 
@@ -123,7 +121,10 @@ describe('Drive job executor', () => {
 		const renameJob = job({ operation: 'rename_folder', payload: { name: 'Nome antigo' } });
 
 		await expect(executeDriveJob(renameJob, value)).resolves.toBe('synced');
-		expect(value.updateItem).toHaveBeenCalledWith({ fileId: folderId, name: 'Ciências Biológicas' });
+		expect(value.updateItem).toHaveBeenCalledWith({
+			fileId: folderId,
+			name: 'Ciências Biológicas'
+		});
 		expect(value.complete).toHaveBeenCalledWith(
 			renameJob,
 			expect.objectContaining({ name: 'Ciências Biológicas' }),
