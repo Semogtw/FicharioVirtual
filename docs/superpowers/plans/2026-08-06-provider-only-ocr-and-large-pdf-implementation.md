@@ -15,6 +15,7 @@
 ## Task 1: Adaptive batch planner and result integrity
 
 **Files:**
+
 - Create: `src/lib/ocr/batch-planner.ts`
 - Test: `tests/unit/ocr/batch-planner.test.ts`
 
@@ -29,6 +30,7 @@
 ## Task 2: Batch structured-output contract and Gemini client
 
 **Files:**
+
 - Modify: `supabase/functions/_shared/ocr-contract.ts`
 - Modify: `supabase/functions/_shared/gemini-ocr-client.ts`
 - Modify: `tests/unit/ocr/contract.test.ts`
@@ -46,6 +48,7 @@
 ## Task 3: Remove local quota authority and persist batch telemetry
 
 **Files:**
+
 - Create: `supabase/migrations/202608060014_provider_only_ocr_batches.sql`
 - Modify: `supabase/tests/runnable_ocr_queue.sql`
 - Modify: `supabase/tests/security_rls.sql`
@@ -64,6 +67,7 @@
 ## Task 4: Batched Edge Function execution with partial retry
 
 **Files:**
+
 - Modify: `supabase/functions/process-ocr/index.ts`
 - Modify: `supabase/functions/_shared/ocr-failure.ts`
 - Modify: `tests/unit/ocr/process-ocr-delegation.test.ts`
@@ -85,6 +89,7 @@
 ## Task 5: Browser service and import pipeline batching
 
 **Files:**
+
 - Modify: `src/lib/services/ocr.ts`
 - Modify: `src/lib/pdf/import-plan.ts`
 - Modify: `src/lib/pdf/upload.ts`
@@ -107,6 +112,7 @@
 ## Task 6: Environment, usage metrics and settings UI
 
 **Files:**
+
 - Modify: `.env.example`
 - Modify: `src/lib/env/private.ts`
 - Modify: `tests/unit/env/private.test.ts`
@@ -125,6 +131,7 @@
 ## Task 7: Resume runner and cleanup integrity
 
 **Files:**
+
 - Modify: `src/lib/services/ocr-resume.ts`
 - Modify: `tests/unit/services/ocr-resume.test.ts`
 - Modify: `src/lib/stores/pdf-import-queue.svelte.ts`
@@ -139,6 +146,7 @@
 ## Task 8: Complete documentation and deployment gates
 
 **Files:**
+
 - Modify: `docs/CURRENT_STATUS.md`
 - Modify: `docs/PROJECT_SPEC.md`
 - Modify: `docs/FREE_TIER_OPERATIONS.md`
