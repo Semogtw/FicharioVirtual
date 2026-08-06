@@ -93,13 +93,21 @@ if (!driveOauthCallback.includes('parseAppOrigin')) {
 	fail(driveOauthCallbackPath, 'oauth-callback-origin', 'callback must validate APP_ORIGIN');
 }
 if (!driveOauthCallback.includes('status: 303') || !driveOauthCallback.includes('Location:')) {
-	fail(driveOauthCallbackPath, 'oauth-callback-redirect', 'callback must use an explicit safe redirect');
+	fail(
+		driveOauthCallbackPath,
+		'oauth-callback-redirect',
+		'callback must use an explicit safe redirect'
+	);
 }
 if (!driveOauthCallback.includes("'Cache-Control': 'no-store'")) {
 	fail(driveOauthCallbackPath, 'oauth-callback-cache', 'callback redirects must disable caching');
 }
 if (!driveOauthCallback.includes("'Referrer-Policy': 'no-referrer'")) {
-	fail(driveOauthCallbackPath, 'oauth-callback-referrer', 'callback redirects must suppress referrers');
+	fail(
+		driveOauthCallbackPath,
+		'oauth-callback-referrer',
+		'callback redirects must suppress referrers'
+	);
 }
 if (/['"]Access-Control-Allow-Origin['"]\s*:\s*['"]\*/.test(driveOauthCallback)) {
 	fail(driveOauthCallbackPath, 'oauth-callback-origin', 'wildcard callback origin is forbidden');
