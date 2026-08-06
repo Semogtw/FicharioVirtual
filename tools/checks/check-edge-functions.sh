@@ -15,6 +15,7 @@ deno check --no-config supabase/functions/_shared/gemini-ocr-client.ts
 deno check --no-config supabase/functions/_shared/ocr-failure.ts
 deno check --no-config supabase/functions/_shared/google-oauth.ts
 deno check --no-config supabase/functions/_shared/google-oauth-http.ts
+deno check --no-config supabase/functions/_shared/google-drive-client.ts
 deno check --no-config supabase/functions/process-ocr/index.ts
 deno check --no-config supabase/functions/delete-document/index.ts
 deno check --no-config supabase/functions/drive-oauth-start/index.ts
