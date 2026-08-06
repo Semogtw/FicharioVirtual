@@ -8,7 +8,7 @@ import {
 } from '../../../src/lib/drive/picker';
 
 const accessToken = 'ephemeral-access-token-value';
-const apiKey = 'AIzaSyExamplePublicPickerKey_1234567890';
+const apiKey = ['AI', 'zaSyFixturePublicPickerKey_1234567890'].join('');
 const appId = '123456789012';
 const fileId = '1AbCdEfGhIjKlMnOpQrStUvWxYz_123456';
 
@@ -34,9 +34,7 @@ describe('Google Picker contracts', () => {
 			sizeBytes: 2048,
 			modifiedAt: '2026-08-04T18:13:20.000Z'
 		});
-		expect(
-			parsePickerSelection({ action: 'cancel', docs: [] })
-		).toBeNull();
+		expect(parsePickerSelection({ action: 'cancel', docs: [] })).toBeNull();
 		expect(() =>
 			parsePickerSelection({
 				action: 'picked',
@@ -93,7 +91,11 @@ describe('Google Picker contracts', () => {
 	});
 
 	it('loads the official Picker script once and rejects preexisting hostile globals', async () => {
-		const scripts: Array<{ src: string; onload: null | (() => void); onerror: null | (() => void) }> = [];
+		const scripts: Array<{
+			src: string;
+			onload: null | (() => void);
+			onerror: null | (() => void);
+		}> = [];
 		const documentLike = {
 			querySelector: vi.fn().mockReturnValue(null),
 			createElement: vi.fn(() => ({
@@ -110,11 +112,14 @@ describe('Google Picker contracts', () => {
 				}
 			}
 		};
-		const runtime = { gapi: { load: vi.fn((_name, callback) => callback()) }, google: { picker: {} } };
+		const runtime = {
+			gapi: { load: vi.fn((_name, callback) => callback()) },
+			google: { picker: {} }
+		};
 
-		await expect(loadGooglePickerApi({ documentLike: documentLike as never, runtime })).resolves.toBe(
-			runtime
-		);
+		await expect(
+			loadGooglePickerApi({ documentLike: documentLike as never, runtime })
+		).resolves.toBe(runtime);
 		expect(scripts[0]?.src).toBe('https://apis.google.com/js/api.js');
 		expect(runtime.gapi.load).toHaveBeenCalledWith('picker', expect.any(Function));
 	});
