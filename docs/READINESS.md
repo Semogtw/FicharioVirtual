@@ -2,209 +2,193 @@
 
 _Atualizado em 6 de agosto de 2026._
 
-Os percentuais antigos de `100%` do escopo codificável e `96%` do MVP foram retirados porque não incluíam Google Drive como armazenamento permanente. A arquitetura aprovada também adiciona Cloudflare Pages e OCR desktop. Esta página só volta a publicar porcentagem global quando todos esses eixos possuírem evidência suficiente.
+Esta página não publica porcentagem global. Prontidão significa evidência reproduzível no mesmo SHA, não quantidade de arquivos implementados.
 
-## Situação atual
+## Matriz atual
 
-| Dimensão | Estado | Interpretação |
-| --- | --- | --- |
-| Produto sem Drive | Avançado | Interface, busca, OCR, importação, revisão, PWA, segurança e testes locais possuem ampla implementação. |
-| Fundação Drive em código | Em desenvolvimento | Design, plano, contratos, reconciliação, sincronizador e modelo de banco estão sendo implementados. |
-| Drive real | Não validado | OAuth, API implantada, upload, Picker, feed remoto e migração ainda não foram comprovados. |
-| Cloudflare Pages | Documentado | Host alvo e runbook existem, mas nenhum deployment foi validado. |
-| Distribuição de modelos | Documentada | Projeto Pages separado, partes e checksums foram definidos, mas empacotador e host não existem. |
-| OCR desktop | Documentado | Roteamento, pareamento, lease, worker e segurança foram definidos, mas não implementados. |
-| RX 6600 | Não validada | Vulkan, CPU e modelos locais ainda precisam de benchmark real; ROCm permanece experimental. |
-| Release privada de uma pessoa | Bloqueada | Drive, host e fluxos OCR aprovados ainda não possuem recibos completos. |
+| Dimensão | Código | Evidência externa | Estado |
+| --- | --- | --- | --- |
+| Produto privado | Implementado | CI atual e dispositivos pendentes | Bloqueado para release |
+| OCR Gemini por lotes | Implementado | Staging real pendente | Não promovido |
+| Quota exclusiva do provedor | Implementada | `429` real pendente | Não promovida |
+| Google Drive-first | Implementado | Conta Google real pendente | Não promovido |
+| Picker até 50 MiB | Implementado | Navegadores reais pendentes | Não promovido |
+| Picker acima de 50 MiB | Não implementado | Arquitetura remota pendente | Lacuna funcional |
+| Cloudflare Pages | Runbook e gates implementados | Deployment real pendente | Não implantado |
+| Worker desktop | Somente arquitetura | Implementação e hardware pendentes | Não iniciado |
+| RX 6600 | Não implementada | Benchmark pendente | Não validada |
 
-## Evidência anterior preservada
+## Evidência presente no repositório
 
-Antes da correção de escopo, o projeto já havia validado:
+### Produto e segurança
 
-- aplicação SvelteKit estática e responsiva;
-- autenticação fail-closed por allowlist;
-- biblioteca, cadernos, tags, organização em lote, busca e revisão;
-- importação de imagens e PDFs, preparação local e deduplicação;
-- OCR persistente, concorrente, retomável e idempotente;
-- cliente Gemini com saída estruturada;
-- RLS, Storage privado e Edge Functions;
+- SvelteKit estático e responsivo;
+- autenticação por allowlist fail-closed;
+- biblioteca, cadernos, tags, busca, revisão e exportação;
+- RLS e Storage privado;
 - PWA com cache restrito ao shell público;
-- migrations e testes pgTAP anteriores;
-- centenas de testes Vitest e cenários E2E Chromium;
-- coordenação real entre duas abas;
-- gates de fonte, tipos, lint, build, PWA, Deno e banco;
-- scripts de verificação remota para Supabase, host e OCR.
+- URLs assinadas curtas;
+- Edge Functions com CORS fail-closed e `Cache-Control: no-store`;
+- JWT explícito em `supabase/config.toml`;
+- somente o callback OAuth sem JWT de gateway;
+- callback protegido por origem, `state` de uso único e PKCE;
+- gates que proíbem secrets no frontend e workflows com escrita automática no repositório.
 
-Essa evidência continua útil, mas não prova Drive, Cloudflare ou worker local.
+### Importação e OCR
 
-## Implementação Drive já adicionada
+- importação cancelável e retomável de imagens e PDFs;
+- SHA-256, miniaturas, preparação local e deduplicação;
+- texto nativo preservado sem OCR;
+- PDF misto envia somente páginas visuais;
+- original local enviado ao Drive por upload retomável;
+- derivados mantidos abaixo de 12 MiB por rerenderização conservadora;
+- lotes Gemini multipágina;
+- persistência por página;
+- divisão seletiva para omissão, duplicação e truncamento;
+- retomada sem repetir páginas aceitas;
+- contador local sem autoridade de bloqueio;
+- telemetria de páginas, lotes, chamadas e tentativas;
+- compatibilidade com chamada unitária antiga.
 
-- especificação canônica e plano executável;
-- escopo obrigatório `drive.file`;
-- contratos estritos para arquivos, listagens e páginas de mudanças;
-- rejeição de campos extras, IDs duplicados e respostas malformadas;
-- reconciliação de arquivo removido sem apagar título, caderno, tags, OCR ou correções;
-- reconexão pelo mesmo `drive_file_id`;
-- isolamento de conflito de identidade;
-- consultas seguras para pasta raiz e pastas-filhas;
-- sincronizador paginado que persiste o checkpoint somente após aplicar toda a página;
-- conflito isolado sem bloquear mudanças independentes;
-- schema PostgreSQL para conexão, pastas aninhadas, documentos, fila idempotente e conflitos;
-- RLS e RPCs para ausência, reconexão e claim de jobs;
-- estado público de conexão que rejeita tokens e secrets;
-- runbook externo de Google Cloud e OAuth.
+### Google Drive-first
 
-## Decisões Cloudflare e desktop já documentadas
+- OAuth start, callback e token efêmero;
+- refresh token armazenado somente no backend;
+- escopo `drive.file`;
+- pasta `Fichário Digital` e pastas aninhadas;
+- upload retomável;
+- Google Picker explícito;
+- download direto com limite técnico de 50 MiB;
+- feed paginado de mudanças;
+- checkpoint depois da persistência;
+- ausência e reconexão sem perda de OCR;
+- fila idempotente, lease, retry e conflito;
+- executor de criação, atualização, movimento e exclusão;
+- telas de conexão, jobs, conflitos e migração;
+- migração de originais legados com rollback;
+- migrations, pgTAP, contratos TypeScript e testes unitários;
+- gates Deno e de segurança para as funções Drive.
 
-- design em `docs/superpowers/specs/2026-08-06-cloudflare-pages-and-desktop-ocr-design.md`;
-- runbook Cloudflare em `docs/CLOUDFLARE_SETUP.md`;
-- runbook do worker em `docs/DESKTOP_OCR_WORKER.md`;
-- Cloudflare Pages como host estático preferencial;
-- projeto Pages Direct Upload separado para modelos públicos fragmentados;
-- R2 desativado por padrão por envolver cobrança por uso;
-- nenhum conteúdo privado na Cloudflare;
-- Gemini geral com classificação na mesma chamada;
-- caderno manuscrito capaz de pular Gemini;
-- fila desktop em modelo pull;
-- pareamento revogável e sem service-role no computador;
-- lease, heartbeat, hash de origem e conclusão idempotente;
-- CPU como fallback obrigatório e RX 6600 condicionada a benchmark.
+### Cloudflare e artifacts
 
-Documentação aprovada não equivale a implementação.
+- adapter estático;
+- `_headers` versionado;
+- fallback SPA documentado;
+- artifact implantável com manifest e checksums;
+- verificador pós-deployment;
+- projeto separado de modelos documentado;
+- R2 desativado por padrão;
+- nenhum documento privado destinado à Cloudflare.
 
-## O que falta em código
+## Pendência funcional em código
 
-### OAuth e credenciais Drive
+### Importar arquivo externo do Drive acima de 50 MiB
 
-- Edge Functions `drive-oauth-start`, `drive-oauth-callback` e `drive-access-token`;
-- state de uso único e expiração;
-- troca de código e armazenamento backend do refresh token;
-- revogação e reconexão;
-- cliente Drive estrito usando access token efêmero.
+O fluxo atual do Picker materializa um `File` local antes da inspeção. Aumentar o teto de download apenas transfere o problema para memória, tempo e rede do navegador.
 
-### Arquivos, pastas e sincronização
+A próxima arquitetura precisa oferecer leitura remota por intervalos ou mecanismo equivalente para:
 
-- criar ou reconectar `Fichário Digital` pela API real;
-- criar, renomear e mover pastas de cadernos e subcadernos;
-- integrar `drive_file_id` e `drive_folder_id` aos serviços atuais;
-- upload retomável conectado às filas de imagem e PDF;
-- Google Picker e cópia explícita para a pasta controlada;
-- gateway real para `changes.getStartPageToken` e `changes.list`;
-- worker de jobs Drive com lease, retry e cleanup;
-- tela de arquivos ausentes e conflitos;
-- migração idempotente dos originais existentes no Supabase Storage.
+1. manter o arquivo dentro do escopo `drive.file`;
+2. inspecionar estrutura e texto sem download integral;
+3. renderizar somente páginas necessárias;
+4. retomar intervalos interrompidos;
+5. impedir cache e vazamento de tokens;
+6. preservar identidade e hash do original.
 
-### Cloudflare
-
-- configuração do projeto Pages e variáveis públicas;
-- deploy de preview e produção;
-- origem canônica e redirect de `pages.dev`;
-- validação real de `_headers`, fallback e PWA;
-- atualização coordenada de Supabase Auth e `APP_ORIGIN`;
-- empacotador de modelo em partes de até 20 MiB;
-- schema e verificador de manifesto;
-- projeto Pages Direct Upload de modelos;
-- rollback ensaiado.
-
-### OCR híbrido
-
-- tabela de múltiplos resultados;
-- tipo de conteúdo e override por página ou caderno;
-- resposta Gemini com classificação e roteamento;
-- precedência entre resultado preliminar, Gemini, desktop e correção manual;
-- novos estados de fila desktop;
-- retenção de página temporária enquanto a rota local aguarda.
+Uma simples cópia server-side no Drive não satisfaz esses requisitos.
 
 ### Worker desktop
 
+Ainda faltam:
+
 - tabelas de dispositivos, pareamento e eventos;
-- Edge Functions `desktop-worker-pair`, `desktop-ocr-claim`, `desktop-ocr-source`, `desktop-ocr-heartbeat`, `desktop-ocr-complete` e `desktop-ocr-fail`;
+- Edge Functions de claim, source, heartbeat, complete e fail;
 - credencial por hash no servidor e keyring local;
-- claim exclusivo, lease e heartbeat;
 - serviço systemd do usuário;
-- download com tamanho, MIME e hash;
-- cache de modelos e validação de licença;
 - backend CPU funcional;
-- Vulkan validado;
+- cache e verificação de modelos;
 - spool local e retomada;
 - UI de dispositivos e fila;
-- benchmark na RX 6600.
+- benchmark Vulkan e RX 6600.
 
-### Tipos e compatibilidade
+O worker nunca deve receber service-role, chave Gemini ou refresh token do Drive.
 
-- gerar `src/lib/types/database.ts` a partir do schema final;
-- adaptar serviços legados para `storage_path` opcional;
-- preservar fallback até confirmação do Drive e rollback;
-- versionar contratos entre PWA, Edge Functions e worker;
-- rejeitar worker incompatível fail-closed.
+## Pendências de evidência
 
-## O que falta externamente
+### CI do mesmo SHA
 
-- criar ou configurar projeto Google Cloud;
-- habilitar Google Drive API;
-- configurar consentimento e cliente OAuth Web;
-- cadastrar redirect URI exata da Edge Function;
-- definir secrets somente no Supabase;
-- executar OAuth com a conta autorizada;
-- validar pasta raiz, upload, feed, remoção, reconexão e Picker;
-- aplicar migrations no staging;
-- criar conta e domínio Cloudflare;
-- criar projeto Pages da PWA;
-- criar projeto Pages dos modelos;
-- configurar domínio canônico e redirects;
-- instalar worker no CachyOS;
-- parear e revogar computador real;
-- baixar e validar modelo licenciado;
-- concluir gates remotos de Supabase, OCR e host HTTPS;
-- testar em celular e tablet;
-- confirmar billing desativado, backup e rollback.
-
-## Ordem recomendada
-
-1. tornar a base Drive integralmente verde no CI;
-2. aplicar migrations no staging e gerar tipos;
-3. concluir Edge Functions OAuth e cliente Drive;
-4. integrar pastas, upload retomável e feed;
-5. migrar originais existentes com fallback preservado;
-6. migrar e validar a PWA no Cloudflare Pages;
-7. criar distribuição fragmentada de modelos sem R2 obrigatório;
-8. separar resultados OCR e adicionar roteamento;
-9. implementar pareamento, fila e worker CPU-first;
-10. validar Vulkan e modelos de manuscrito;
-11. executar benchmark na RX 6600;
-12. executar todos os gates remotos e físicos;
-13. somente então decidir release privada ou produção.
-
-## Critério para declarar a arquitetura pronta
+Obrigatório:
 
 ```text
-Validate current head: PASS
-Drive schema local e remoto: PASS
-OAuth drive.file: PASS
-Pasta Fichário Digital: PASS
-Cadernos e subcadernos no Drive: PASS
-Upload retomável: PASS
-Importar do Drive: PASS
-Feed de mudanças: PASS
-Missing e reconnect: PASS
-Conflitos isolados: PASS
-Migração de originais: PASS
-Cloudflare Pages produção: PASS
-Origem canônica e headers: PASS
-Distribuição de modelo sem R2 obrigatório: PASS
-Roteamento Gemini e desktop: PASS
-Pareamento e revogação: PASS
-Fila pull sem porta pública: PASS
-Lease, heartbeat e retomada: PASS
-Resultado desktop idempotente: PASS
-CPU local: PASS
-RX 6600: PASS ou riscos registrados
-Verify Supabase staging: PASS
-Verify deployed Fichário: PASS
-Verify OCR staging: PASS
-Celular e tablet: PASS ou riscos registrados
-Nenhum conteúdo privado na Cloudflare: PASS
-Billing, backup e rollback: PASS
+format:check
+Svelte/TypeScript
+ESLint
+Vitest
+Deno
+source gates
+Supabase local + pgTAP
+build
+Chromium E2E
 ```
 
-A ausência de defeitos conhecidos não substitui esses recibos.
+O último recibo intermediário não aprova o head atual. Ele detectou divergências de Prettier e pulou navegador. Um patch de formatação somente leitura está sendo preparado.
+
+### Supabase
+
+- aplicar todas as migrations em banco limpo;
+- executar pgTAP completo;
+- regenerar `src/lib/types/database.ts` pelo schema implantado;
+- comparar o tipo gerado com o espelho versionado;
+- verificar bucket, RLS e funções no projeto real.
+
+### Google Drive
+
+- configurar projeto Google Cloud e redirect URI final;
+- executar OAuth com a conta autorizada;
+- validar criação ou reconexão da raiz;
+- testar upload retomável, Picker, mudanças, ausência e conflito;
+- executar migração e rollback com originais reais;
+- confirmar que tokens não aparecem em logs, URL ou navegador.
+
+### Gemini
+
+- smoke real de imagem sintética;
+- lote visual multipágina;
+- PDF textual com zero chamadas;
+- omissão, duplicação e truncamento;
+- rate limit temporário e quota diária real;
+- cancelamento e retomada;
+- confirmação administrativa de billing desativado.
+
+### Cloudflare e dispositivos
+
+- criar projetos Pages;
+- configurar origem canônica e redirects;
+- validar headers, fallback, PWA e rollback;
+- instalar em celular e tablet;
+- testar PDF grande em hardware real;
+- manter conteúdo privado fora da Cloudflare.
+
+## Critérios de promoção
+
+```text
+Validate current head no SHA final: PASS
+Supabase limpo e pgTAP: PASS
+Tipos gerados pelo schema implantado: PASS
+OAuth drive.file real: PASS
+Pasta Fichário Digital: PASS
+Upload retomável: PASS
+Picker até 50 MiB: PASS
+Feed de mudanças: PASS
+Ausência, reconexão e conflitos: PASS
+Migração e rollback: PASS
+OCR Gemini multipágina real: PASS
+Quota temporária e diária: PASS
+Cloudflare produção: PASS
+Headers, fallback e PWA: PASS
+Celular e tablet: PASS ou risco registrado
+Nenhum conteúdo privado na Cloudflare: PASS
+Billing desativado, backup e rollback: PASS
+```
+
+A importação externa acima de 50 MiB e o worker desktop podem ser tratados como marcos posteriores somente se a release declarar explicitamente essas limitações. A ausência de defeitos conhecidos não substitui os recibos acima.
