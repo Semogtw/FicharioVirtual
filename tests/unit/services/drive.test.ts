@@ -50,7 +50,9 @@ describe('Drive service', () => {
 	});
 
 	it('returns null when no connection exists and rejects malformed data', async () => {
-		await expect(loadDriveConnection(queryClient({ data: null, error: null }).client)).resolves.toBeNull();
+		await expect(
+			loadDriveConnection(queryClient({ data: null, error: null }).client)
+		).resolves.toBeNull();
 		await expect(
 			loadDriveConnection(
 				queryClient({ data: { ...connection, refresh_token: 'secret' }, error: null }).client
