@@ -65,9 +65,9 @@ describe('Drive conflict service', () => {
 		await expect(
 			listOpenDriveConflicts(query([{ ...conflict, refresh_token: 'secret' }]) as never)
 		).rejects.toThrow('Não foi possível carregar os conflitos do Google Drive.');
-		await expect(resolveDriveConflict('bad-id', 'retry_local', { rpc: vi.fn() } as never)).rejects.toThrow(
-			'Não foi possível resolver o conflito do Google Drive.'
-		);
+		await expect(
+			resolveDriveConflict('bad-id', 'retry_local', { rpc: vi.fn() } as never)
+		).rejects.toThrow('Não foi possível resolver o conflito do Google Drive.');
 		await expect(
 			resolveDriveConflict(conflictId, 'retry_local', {
 				rpc: vi.fn().mockResolvedValue({ data: false, error: null })
