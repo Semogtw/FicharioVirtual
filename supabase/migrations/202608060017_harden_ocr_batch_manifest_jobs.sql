@@ -1,3 +1,12 @@
+alter table public.ocr_jobs
+  drop constraint ocr_jobs_batch_id_fkey;
+
+alter table public.ocr_jobs
+  add constraint ocr_jobs_batch_id_fkey
+  foreign key (batch_id)
+  references public.ocr_batches(id)
+  on delete restrict;
+
 create or replace function public.register_ocr_batch(
   target_document_id uuid,
   target_route text,
@@ -115,9 +124,8 @@ begin
   get diagnostics linked_jobs = row_count;
 
   if linked_jobs <> item_count then
-    delete from public.ocr_batches
-    where id = new_batch_id and user_id = current_user_id;
-    return null;
+    raise exception 'OCR batch manifest linkage changed during registration'
+      using errcode = '40001';
   end if;
 
   insert into public.usage_daily (user_id, usage_date, ocr_batches, updated_at)
