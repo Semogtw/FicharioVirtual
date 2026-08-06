@@ -55,15 +55,23 @@ Migrations principais:
 202608060014_provider_only_ocr_batches.sql
 202608060015_ocr_batch_usage_and_hardening.sql
 202608060016_harden_ocr_batch_transitions.sql
+202608060017_harden_ocr_batch_manifest_jobs.sql
+202608060018_recover_stale_ocr_batches.sql
 ```
 
 A implementação inclui:
 
 - `ocr_batches` com páginas, números originais, rota, bytes, modelo, tentativas e chamadas;
-- vínculo ordenado em `ocr_jobs`;
+- vínculo ordenado e imutável em `ocr_jobs`;
 - métricas informativas de páginas, lotes, chamadas e tentativas;
 - `claim_ocr_job` sem argumento de limite diário;
 - RLS e escrita de manifestos somente por RPCs validados;
+- registro atômico apenas quando todas as páginas possuem jobs vinculáveis;
+- validação ordinal dos pares `pageId` e número original;
+- referências de jobs com `ON DELETE RESTRICT` para preservar manifestos históricos;
+- lotes-filhos seguros para páginas vindas de um único pai `retryable` ou `blocked_quota`;
+- reagrupamento de múltiplos pais terminais sem inventar uma linhagem falsa;
+- recuperação após interrupção que libera job, página e manifesto depois de 15 minutos;
 - transições terminais idempotentes;
 - `blocked_quota` reservado para quota real do provedor;
 - planejamento de até 40 páginas, reduzido para conteúdo denso;
@@ -133,7 +141,9 @@ A arquitetura está documentada, mas o worker não foi implementado. Continuam p
 - divergências determinísticas de Prettier dos artifacts anteriores foram aplicadas;
 - dois erros de sintaxe TypeScript detectados pelo CI foram corrigidos;
 - migration 015 deixou de usar palavra reservada como parâmetro e ganhou alias explícito para `unnest`;
-- migration 016 qualifica a coluna `finished_at` para não colidir com o parâmetro do RPC.
+- migration 016 qualifica a coluna `finished_at` para não colidir com o parâmetro do RPC;
+- migration 017 preserva integridade, ordem, imutabilidade e linhagem dos manifestos;
+- migration 018 recupera atomicamente jobs, páginas e lotes interrompidos.
 
 ## Estado de validação
 
