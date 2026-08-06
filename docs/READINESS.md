@@ -6,12 +6,12 @@ Os percentuais antigos de `100%` do escopo codificável e `96%` do MVP foram ret
 
 ## Situação atual
 
-| Dimensão | Estado | Interpretação |
-| --- | --- | --- |
-| Produto sem Drive | Avançado | Interface, busca, OCR, importação, revisão, PWA, segurança e testes locais já possuem ampla implementação. |
-| Fundação Drive em código | Em desenvolvimento | Design, plano, contratos, reconciliação, sincronizador e modelo de banco estão sendo implementados. |
-| Drive real | Não validado | OAuth, API implantada, upload, Picker, feed remoto e migração ainda não foram comprovados. |
-| Release privada de uma pessoa | Bloqueada | Não deve ser promovida como plano original enquanto os originais permanentes continuarem dependentes do Supabase Storage. |
+| Dimensão                      | Estado             | Interpretação                                                                                                             |
+| ----------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| Produto sem Drive             | Avançado           | Interface, busca, OCR, importação, revisão, PWA, segurança e testes locais já possuem ampla implementação.                |
+| Fundação Drive em código      | Em desenvolvimento | Design, plano, contratos, reconciliação, sincronizador e modelo de banco estão sendo implementados.                       |
+| Drive real                    | Não validado       | OAuth, API implantada, upload, Picker, feed remoto e migração ainda não foram comprovados.                                |
+| Release privada de uma pessoa | Bloqueada          | Não deve ser promovida como plano original enquanto os originais permanentes continuarem dependentes do Supabase Storage. |
 
 ## Evidência anterior preservada
 
