@@ -1,11 +1,7 @@
 import type { GoogleDriveItem } from './google-drive-mutations.ts';
 
 export type ClaimedDriveOperation =
-	| 'create_folder'
-	| 'rename_folder'
-	| 'move_folder'
-	| 'update_file'
-	| 'delete_permanently';
+	'create_folder' | 'rename_folder' | 'move_folder' | 'update_file' | 'delete_permanently';
 
 export interface ClaimedDriveJob {
 	id: string;
@@ -159,9 +155,12 @@ export function parseClaimedDriveJob(value: unknown): ClaimedDriveJob {
 
 	const operation = row.operation as ClaimedDriveOperation;
 	if (
-		((operation === 'create_folder' || operation === 'rename_folder' || operation === 'move_folder') &&
+		((operation === 'create_folder' ||
+			operation === 'rename_folder' ||
+			operation === 'move_folder') &&
 			row.notebook_id === null) ||
-		((operation === 'rename_folder' || operation === 'move_folder') && row.drive_file_id === null) ||
+		((operation === 'rename_folder' || operation === 'move_folder') &&
+			row.drive_file_id === null) ||
 		(operation === 'update_file' && (row.document_id === null || row.drive_file_id === null)) ||
 		(operation === 'delete_permanently' && row.drive_file_id === null)
 	) {
@@ -212,10 +211,7 @@ function remoteSnapshot(item: GoogleDriveItem): Readonly<Record<string, unknown>
 	});
 }
 
-async function resolveFolder(
-	gateway: DriveJobGateway,
-	notebookId: string | null
-): Promise<string> {
+async function resolveFolder(gateway: DriveJobGateway, notebookId: string | null): Promise<string> {
 	try {
 		return await gateway.resolveFolder(notebookId);
 	} catch {
@@ -228,7 +224,9 @@ function folderIdentityIsValid(item: GoogleDriveItem): boolean {
 }
 
 function documentIdentityIsValid(item: GoogleDriveItem, document: DriveJobDocument): boolean {
-	return item.id === document.driveFileId && item.mimeType === document.driveMimeType && !item.trashed;
+	return (
+		item.id === document.driveFileId && item.mimeType === document.driveMimeType && !item.trashed
+	);
 }
 
 async function conflict(
@@ -251,7 +249,11 @@ export async function executeDriveJob(
 			const notebook = await gateway.loadNotebook(job.notebookId as string);
 			const parentFolderId = await resolveFolder(gateway, notebook.parentNotebookId);
 			const created = await gateway.ensureFolder(notebook.name, parentFolderId);
-			if (!folderIdentityIsValid(created) || created.parents.length !== 1 || created.parents[0] !== parentFolderId) {
+			if (
+				!folderIdentityIsValid(created) ||
+				created.parents.length !== 1 ||
+				created.parents[0] !== parentFolderId
+			) {
 				return conflict(
 					gateway,
 					job,
