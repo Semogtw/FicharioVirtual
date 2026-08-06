@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(12);
+select plan(13);
 
 select is(
   (
@@ -190,7 +190,7 @@ select public.register_ocr_batch(
   array[1, 2],
   0,
   2048,
-  1,
+  0,
   null,
   'gemini-test',
   1,
@@ -209,6 +209,15 @@ select is(
   ),
   (select id from valid_manifest),
   'a single prior retryable batch is inferred as the child parent'
+);
+select is(
+  (
+    select b.split_depth
+    from public.ocr_batches b
+    where b.id = (select id from child_manifest)
+  ),
+  1,
+  'child split depth is derived when the caller still sends zero'
 );
 select is(
   (
