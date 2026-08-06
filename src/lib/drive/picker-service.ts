@@ -12,6 +12,8 @@ import {
 	type GooglePickerSelection
 } from './picker';
 
+export const MAX_DIRECT_PICKER_DOWNLOAD_BYTES = 50 * 1024 * 1024;
+
 export interface GooglePickerServiceDependencies {
 	requestAccess(client: DriveTokenClientLike): Promise<{ accessToken: string; expiresAt: string }>;
 	loadPicker(): Promise<GooglePickerRuntime>;
@@ -141,12 +143,21 @@ export async function selectAndDownloadGoogleDriveFile({
 	client?: DriveTokenClientLike;
 	dependencies?: GooglePickerDownloadDependencies;
 }): Promise<File | null> {
-	if (!Number.isSafeInteger(maximumBytes) || maximumBytes < 1 || maximumBytes > 20 * 1024 * 1024) {
+	if (
+		!Number.isSafeInteger(maximumBytes) ||
+		maximumBytes < 1 ||
+		maximumBytes > MAX_DIRECT_PICKER_DOWNLOAD_BYTES
+	) {
 		throw new TypeError('Invalid Google Drive download limit');
 	}
 	const safeMimeTypes = validateMimeTypes(mimeTypes);
 	const selection = await dependencies.select({ mimeTypes: safeMimeTypes, source, client });
 	if (selection === null) return null;
+	if (selection.sizeBytes > maximumBytes) {
+		throw new Error(
+			'O arquivo selecionado excede o caminho de download direto. Preserve-o no Drive e importe por referência quando esse fluxo estiver disponível.'
+		);
+	}
 	const blob = await dependencies.download({
 		client,
 		fileId: selection.id,
