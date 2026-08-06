@@ -58,8 +58,8 @@ describe('parseStoredImageImport', () => {
 		expect(Object.isFrozen(result)).toBe(true);
 	});
 
-	it('accepts a published page so OCR can resume without another upload', () => {
-		const result = parseStoredImageImport(
+	it('accepts legacy and Drive published pages so OCR resumes without another upload', () => {
+		const legacy = parseStoredImageImport(
 			record({
 				status: 'waiting',
 				result: {
@@ -72,8 +72,22 @@ describe('parseStoredImageImport', () => {
 				}
 			})
 		);
+		const drive = parseStoredImageImport(
+			record({
+				status: 'waiting',
+				result: {
+					documentId: '50000000-0000-4000-8000-000000000011',
+					pageId: '50000000-0000-4000-8000-000000000012',
+					ocrJobId: '50000000-0000-4000-8000-000000000013',
+					sha256: 'b'.repeat(64),
+					storagePath: 'drive:1AbCdEfGhIjKlMnOpQrStUvWxYz_123456',
+					thumbnailPath: `${userId}/document/thumbnail.webp`
+				}
+			})
+		);
 
-		expect(result.result?.pageId).toBe('50000000-0000-4000-8000-000000000002');
+		expect(legacy.result?.pageId).toBe('50000000-0000-4000-8000-000000000002');
+		expect(drive.result?.storagePath).toBe('drive:1AbCdEfGhIjKlMnOpQrStUvWxYz_123456');
 	});
 
 	it('rejects unsupported versions, unsafe files, extra keys and malformed results', () => {
@@ -91,6 +105,20 @@ describe('parseStoredImageImport', () => {
 				...record(),
 				result: { pageId: 'bad' }
 			})
+		).toThrow('Invalid stored image import');
+		expect(() =>
+			parseStoredImageImport(
+				record({
+					result: {
+						documentId: '50000000-0000-4000-8000-000000000011',
+						pageId: '50000000-0000-4000-8000-000000000012',
+						ocrJobId: '50000000-0000-4000-8000-000000000013',
+						sha256: 'b'.repeat(64),
+						storagePath: 'drive:bad id',
+						thumbnailPath: `${userId}/document/thumbnail.webp`
+					}
+				})
+			)
 		).toThrow('Invalid stored image import');
 	});
 });
