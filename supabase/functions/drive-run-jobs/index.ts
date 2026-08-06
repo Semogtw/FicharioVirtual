@@ -205,9 +205,7 @@ Deno.serve(async (request) => {
 		async loadDocument(documentId) {
 			const { data, error } = await admin
 				.from('documents')
-				.select(
-					'id,kind,notebook_id,drive_file_id,drive_parent_folder_id,drive_mime_type'
-				)
+				.select('id,kind,notebook_id,drive_file_id,drive_parent_folder_id,drive_mime_type')
 				.eq('id', documentId)
 				.eq('user_id', user.id)
 				.maybeSingle();
