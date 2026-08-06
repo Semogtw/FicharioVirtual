@@ -9,8 +9,12 @@ describe('Drive conflict resolution page', () => {
 
 		expect(source).toContain('listOpenDriveConflicts');
 		expect(source).toContain('resolveDriveConflict');
-		expect(source).toContain("label={busyId === conflict.id ? 'Reenfileirando…' : 'Tentar estado local'}");
-		expect(source).toContain("label={busyId === conflict.id ? 'Aplicando…' : 'Aceitar ausência física'}");
+		expect(source).toContain(
+			"label={busyId === conflict.id ? 'Reenfileirando…' : 'Tentar estado local'}"
+		);
+		expect(source).toContain(
+			"label={busyId === conflict.id ? 'Aplicando…' : 'Aceitar ausência física'}"
+		);
 		expect(source).toContain("conflict.kind === 'remote_deleted_local_changed'");
 	});
 
