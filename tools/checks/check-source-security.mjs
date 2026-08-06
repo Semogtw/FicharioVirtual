@@ -27,10 +27,10 @@ for (const sourceRoot of sourceRoots) {
 	for (const path of await files(directory)) {
 		const content = await readFile(path, 'utf8');
 		for (const pattern of [
-			/GEMINI_API_KEY\s*=/g,
-			/SUPABASE_SERVICE_ROLE/g,
-			/service_role\s*[:=]/gi,
-			/AIza[0-9A-Za-z_-]{20,}/g
+			/GEMINI_API_KEY\s*=/,
+			/SUPABASE_SERVICE_ROLE/,
+			/service_role\s*[:=]/i,
+			/AIza[0-9A-Za-z_-]{20,}/
 		]) {
 			if (pattern.test(content)) fail(path, 'secret-boundary', `matched ${pattern}`);
 		}
@@ -83,7 +83,11 @@ for (const path of corsEdgeFunctions) {
 
 const driveOauthCallback = await readFile(driveOauthCallbackPath, 'utf8');
 if (!driveOauthCallback.includes("from '../_shared/cors.ts'")) {
-	fail(driveOauthCallbackPath, 'oauth-callback-origin', 'callback must import the shared origin parser');
+	fail(
+		driveOauthCallbackPath,
+		'oauth-callback-origin',
+		'callback must import the shared origin parser'
+	);
 }
 if (!driveOauthCallback.includes('parseAppOrigin')) {
 	fail(driveOauthCallbackPath, 'oauth-callback-origin', 'callback must validate APP_ORIGIN');
@@ -179,8 +183,9 @@ for (const required of [
 	"script-src 'self' 'wasm-unsafe-eval'",
 	"connect-src 'self' https://*.supabase.co wss://*.supabase.co"
 ]) {
-	if (!headers.includes(required))
+	if (!headers.includes(required)) {
 		fail(join(root, 'static/_headers'), 'headers', `missing ${required}`);
+	}
 }
 
 if (failures.length > 0) {
