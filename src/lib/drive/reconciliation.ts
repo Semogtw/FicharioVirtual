@@ -1,8 +1,4 @@
-import type {
-	DriveChange,
-	DriveDocumentSnapshot,
-	ReconciledDriveDocument
-} from './types';
+import type { DriveChange, DriveDocumentSnapshot, ReconciledDriveDocument } from './types';
 
 function freezeResult(
 	document: DriveDocumentSnapshot,
