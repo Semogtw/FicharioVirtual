@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(13);
+select plan(14);
 
 select has_table('public', 'ocr_batches', 'OCR batch manifests are persisted');
 select has_function(
