@@ -62,9 +62,9 @@ describe('Drive notebook folders', () => {
 	});
 
 	it('rejects duplicate child folders instead of guessing by name', async () => {
-		const fetchImpl = vi.fn().mockResolvedValue(
-			json({ files: [folder(), folder('0ASecondChildFolderId_123456789')] })
-		);
+		const fetchImpl = vi
+			.fn()
+			.mockResolvedValue(json({ files: [folder(), folder('0ASecondChildFolderId_123456789')] }));
 
 		await expect(
 			ensureDriveFolder({ accessToken, name: 'Genética', parentId, fetchImpl })
