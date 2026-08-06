@@ -9,10 +9,9 @@ create table public.ocr_batches (
   id uuid primary key default extensions.gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   document_id uuid not null,
-  route text not null default 'gemini'
-    check (route in ('gemini', 'desktop')),
+  route text not null default 'gemini' check (route in ('gemini', 'desktop')),
   status public.processing_status not null default 'pending',
-  page_ids uuid[] not null,
+  page_ids uuid[] not null check (cardinality(page_ids) between 1 and 1000),
   page_numbers integer[] not null,
   source_bytes bigint not null default 0 check (source_bytes >= 0),
   derived_bytes bigint not null default 0 check (derived_bytes >= 0),
@@ -20,8 +19,8 @@ create table public.ocr_batches (
   parent_batch_id uuid,
   model text check (model is null or char_length(model) between 1 and 128),
   prompt_version integer not null default 1 check (prompt_version between 1 and 10000),
-  attempt_count integer not null default 0 check (attempt_count between 0 and 1000),
-  provider_call_count integer not null default 0 check (provider_call_count between 0 and 1000),
+  attempt_count integer not null default 0 check (attempt_count between 0 and 1000000),
+  provider_call_count integer not null default 0 check (provider_call_count between 0 and 10000),
   last_error_code text check (
     last_error_code is null or last_error_code ~ '^[a-z0-9_]{1,64}$'
   ),
@@ -37,13 +36,14 @@ create table public.ocr_batches (
   foreign key (document_id, user_id)
     references public.documents(id, user_id)
     on delete cascade,
-  foreign key (parent_batch_id, user_id)
-    references public.ocr_batches(id, user_id)
-    on delete set null,
-  check (cardinality(page_ids) between 1 and 1000),
-  check (cardinality(page_numbers) = cardinality(page_ids)),
-  check (0 not in (select unnest(page_numbers)))
+  check (cardinality(page_numbers) = cardinality(page_ids))
 );
+
+alter table public.ocr_batches
+  add constraint ocr_batches_parent_fkey
+  foreign key (parent_batch_id)
+  references public.ocr_batches(id)
+  on delete set null;
 
 create index ocr_batches_user_state_idx
   on public.ocr_batches (user_id, status, next_retry_at, created_at);
@@ -58,14 +58,8 @@ before update on public.ocr_batches
 for each row execute function public.set_updated_at();
 
 alter table public.ocr_jobs
-  add column if not exists batch_id uuid,
+  add column if not exists batch_id uuid references public.ocr_batches(id) on delete set null,
   add column if not exists batch_ordinal integer check (batch_ordinal is null or batch_ordinal >= 0);
-
-alter table public.ocr_jobs
-  add constraint ocr_jobs_batch_owner_fkey
-  foreign key (batch_id, user_id)
-  references public.ocr_batches(id, user_id)
-  on delete set null;
 
 create index ocr_jobs_batch_idx
   on public.ocr_jobs (batch_id, batch_ordinal)
@@ -118,7 +112,8 @@ begin
   ) then
     return jsonb_build_object('state', 'consent_required');
   end if;
-  if target_model is null or char_length(target_model) not between 3 and 128
+  if target_model is null
+    or char_length(target_model) not between 3 and 128
     or target_model !~ '^[A-Za-z0-9._-]+$'
   then
     return jsonb_build_object('state', 'invalid_configuration');
@@ -176,17 +171,9 @@ begin
   where id = target_page_id and user_id = current_user_id;
 
   insert into public.usage_daily (
-    user_id,
-    usage_date,
-    ocr_pages,
-    ocr_attempts,
-    updated_at
+    user_id, usage_date, ocr_pages, ocr_attempts, updated_at
   ) values (
-    current_user_id,
-    (claimed_at at time zone 'utc')::date,
-    1,
-    1,
-    claimed_at
+    current_user_id, (claimed_at at time zone 'utc')::date, 1, 1, claimed_at
   )
   on conflict (user_id, usage_date) do update
   set ocr_pages = public.usage_daily.ocr_pages + 1,
@@ -233,6 +220,8 @@ begin
     or target_route not in ('gemini', 'desktop')
     or item_count is null or item_count < 1 or item_count > 1000
     or cardinality(target_page_numbers) <> item_count
+    or array_position(target_page_ids, null) is not null
+    or array_position(target_page_numbers, null) is not null
     or target_source_bytes < 0 or target_derived_bytes < 0
     or target_split_depth not between 0 and 32
     or target_prompt_version not between 1 and 10000
@@ -244,26 +233,24 @@ begin
     return null;
   end if;
 
-  if exists (
-    select 1
-    from unnest(target_page_ids) value
-    group by value
-    having count(*) > 1
-  ) or exists (
-    select 1
-    from unnest(target_page_numbers) value
-    group by value
-    having count(*) > 1
-  ) then
+  if exists (select 1 from unnest(target_page_numbers) n where n < 1)
+    or exists (
+      select 1 from unnest(target_page_ids) value group by value having count(*) > 1
+    )
+    or exists (
+      select 1 from unnest(target_page_numbers) value group by value having count(*) > 1
+    )
+  then
     return null;
   end if;
 
   select count(*) into matched_pages
-  from public.pages p
+  from unnest(target_page_ids, target_page_numbers) requested(page_id, page_number)
+  join public.pages p
+    on p.id = requested.page_id
+   and p.page_number = requested.page_number
   where p.user_id = current_user_id
-    and p.document_id = target_document_id
-    and p.id = any(target_page_ids)
-    and p.page_number = any(target_page_numbers);
+    and p.document_id = target_document_id;
   if matched_pages <> item_count then return null; end if;
 
   if target_parent_batch_id is not null and not exists (
@@ -314,9 +301,7 @@ declare
   current_user_id uuid := (select auth.uid());
   changed_rows integer;
 begin
-  if current_user_id is null
-    or attempted_pages < 1 or attempted_pages > 1000
-  then
+  if current_user_id is null or attempted_pages < 1 or attempted_pages > 1000 then
     return false;
   end if;
 
