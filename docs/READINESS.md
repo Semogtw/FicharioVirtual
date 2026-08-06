@@ -6,17 +6,17 @@ Esta página não publica porcentagem global. Prontidão significa evidência re
 
 ## Matriz atual
 
-| Dimensão | Código | Evidência externa | Estado |
-| --- | --- | --- | --- |
-| Produto privado | Implementado | CI atual e dispositivos pendentes | Bloqueado para release |
-| OCR Gemini por lotes | Implementado | Staging real pendente | Não promovido |
-| Quota exclusiva do provedor | Implementada | `429` real pendente | Não promovida |
-| Google Drive-first | Implementado | Conta Google real pendente | Não promovido |
-| Picker até 50 MiB | Implementado | Navegadores reais pendentes | Não promovido |
-| Picker acima de 50 MiB | Não implementado | Arquitetura remota pendente | Lacuna funcional |
-| Cloudflare Pages | Runbook e gates implementados | Deployment real pendente | Não implantado |
-| Worker desktop | Somente arquitetura | Implementação e hardware pendentes | Não iniciado |
-| RX 6600 | Não implementada | Benchmark pendente | Não validada |
+| Dimensão                    | Código                        | Evidência externa                  | Estado                 |
+| --------------------------- | ----------------------------- | ---------------------------------- | ---------------------- |
+| Produto privado             | Implementado                  | CI atual e dispositivos pendentes  | Bloqueado para release |
+| OCR Gemini por lotes        | Implementado                  | Staging real pendente               | Não promovido           |
+| Quota exclusiva do provedor | Implementada                  | `429` real pendente                 | Não promovida           |
+| Google Drive-first          | Implementado                  | Conta Google real pendente          | Não promovido           |
+| Picker até 50 MiB           | Implementado                  | Navegadores reais pendentes         | Não promovido           |
+| Picker acima de 50 MiB      | Não implementado              | Arquitetura remota pendente         | Lacuna funcional        |
+| Cloudflare Pages            | Runbook e gates implementados | Deployment real pendente            | Não implantado          |
+| Worker desktop              | Somente arquitetura           | Implementação e hardware pendentes | Não iniciado            |
+| RX 6600                     | Não implementada              | Benchmark pendente                  | Não validada            |
 
 ## Evidência presente no repositório
 
@@ -131,7 +131,7 @@ build
 Chromium E2E
 ```
 
-O último recibo intermediário não aprova o head atual. Ele detectou divergências de Prettier e pulou navegador. Um patch de formatação somente leitura está sendo preparado.
+Os reparos determinísticos de Prettier identificados pelos artifacts anteriores foram aplicados, inclusive ao runner do Drive, aos documentos históricos e aos testes afetados. Ainda falta um `Validate current head` completo no SHA final; recibos intermediários não aprovam os commits posteriores.
 
 ### Supabase
 
