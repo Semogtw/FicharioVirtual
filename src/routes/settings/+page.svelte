@@ -78,7 +78,9 @@
 	<header>
 		<p class="eyebrow">Conta e propriedade dos dados</p>
 		<h1 id="page-title">Configurações</h1>
-		<p>Controle Google Drive, exportação, instalação e sessão sem expor tokens ou caminhos privados.</p>
+		<p>
+			Controle Google Drive, exportação, instalação e sessão sem expor tokens ou caminhos privados.
+		</p>
 	</header>
 
 	{#if signedOut}
