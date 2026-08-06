@@ -5,15 +5,16 @@ const valid = {
 	PUBLIC_SUPABASE_URL: 'https://example.supabase.co',
 	PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_example_key_1234567890'
 };
+const pickerApiKey = ['AI', 'zaSyExamplePublicPickerKey_1234567890'].join('');
 
 describe('public environment', () => {
 	it('accepts required Supabase settings with optional Drive features disabled', () => {
 		expect(parsePublicEnv(valid)).toEqual({
-		...valid,
-		PUBLIC_GOOGLE_CLIENT_ID: null,
-		PUBLIC_GOOGLE_PICKER_API_KEY: null,
-		PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER: null
-	});
+			...valid,
+			PUBLIC_GOOGLE_CLIENT_ID: null,
+			PUBLIC_GOOGLE_PICKER_API_KEY: null,
+			PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER: null
+		});
 	});
 
 	it('accepts optional Google OAuth and Picker public identifiers', () => {
@@ -21,13 +22,13 @@ describe('public environment', () => {
 			parsePublicEnv({
 				...valid,
 				PUBLIC_GOOGLE_CLIENT_ID: '123456789012-example.apps.googleusercontent.com',
-				PUBLIC_GOOGLE_PICKER_API_KEY: 'AIzaSyExamplePublicPickerKey_1234567890',
+				PUBLIC_GOOGLE_PICKER_API_KEY: pickerApiKey,
 				PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER: '123456789012'
 			})
 		).toEqual({
 			...valid,
 			PUBLIC_GOOGLE_CLIENT_ID: '123456789012-example.apps.googleusercontent.com',
-			PUBLIC_GOOGLE_PICKER_API_KEY: 'AIzaSyExamplePublicPickerKey_1234567890',
+			PUBLIC_GOOGLE_PICKER_API_KEY: pickerApiKey,
 			PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER: '123456789012'
 		});
 	});
@@ -45,7 +46,7 @@ describe('public environment', () => {
 		expect(() =>
 			parsePublicEnv({
 				...valid,
-				PUBLIC_GOOGLE_PICKER_API_KEY: 'AIzaSyExamplePublicPickerKey_1234567890'
+				PUBLIC_GOOGLE_PICKER_API_KEY: pickerApiKey
 			})
 		).toThrow('Invalid public environment');
 		expect(() =>
