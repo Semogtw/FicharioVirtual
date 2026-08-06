@@ -5,9 +5,21 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 
 export type DocumentKind = 'image' | 'pdf';
 export type DocumentStatus =
-	'uploading' | 'pending' | 'processing' | 'ready' | 'partially_ready' | 'needs_review' | 'failed';
+	| 'uploading'
+	| 'pending'
+	| 'processing'
+	| 'ready'
+	| 'partially_ready'
+	| 'needs_review'
+	| 'failed';
 export type ProcessingStatus =
-	'pending' | 'processing' | 'ready' | 'retryable' | 'blocked_quota' | 'needs_review' | 'failed';
+	| 'pending'
+	| 'processing'
+	| 'ready'
+	| 'retryable'
+	| 'blocked_quota'
+	| 'needs_review'
+	| 'failed';
 export type ExtractionSource = 'native_pdf' | 'ocr' | 'manual';
 export type ImportStatus =
 	| 'draft'
@@ -18,6 +30,7 @@ export type ImportStatus =
 	| 'paused'
 	| 'failed'
 	| 'cancelled';
+export type OcrRoute = 'gemini' | 'desktop';
 
 type TableDefinition<Row, Insert, Update> = {
 	Row: Row;
@@ -81,10 +94,37 @@ type PageRow = {
 	updated_at: string;
 };
 
+type OcrBatchRow = {
+	id: string;
+	user_id: string;
+	document_id: string;
+	route: OcrRoute;
+	status: ProcessingStatus;
+	page_ids: string[];
+	page_numbers: number[];
+	source_bytes: number;
+	derived_bytes: number;
+	split_depth: number;
+	parent_batch_id: string | null;
+	model: string | null;
+	prompt_version: number;
+	attempt_count: number;
+	provider_call_count: number;
+	last_error_code: string | null;
+	last_error_message: string | null;
+	next_retry_at: string | null;
+	started_at: string | null;
+	finished_at: string | null;
+	created_at: string;
+	updated_at: string;
+};
+
 type OcrJobRow = {
 	id: string;
 	user_id: string;
 	page_id: string;
+	batch_id: string | null;
+	batch_ordinal: number | null;
 	provider: string;
 	model: string | null;
 	prompt_version: number;
@@ -135,6 +175,9 @@ type UsageDailyRow = {
 	user_id: string;
 	usage_date: string;
 	ocr_pages: number;
+	ocr_batches: number;
+	ocr_calls: number;
+	ocr_attempts: number;
 	quality_reprocess_pages: number;
 	quota_errors: number;
 	failed_pages: number;
@@ -211,12 +254,42 @@ export type Database = {
 				},
 				Partial<Omit<PageRow, 'id' | 'user_id' | 'document_id' | 'search_vector'>>
 			>;
+			ocr_batches: TableDefinition<
+				OcrBatchRow,
+				{
+					id?: string;
+					user_id: string;
+					document_id: string;
+					route?: OcrRoute;
+					status?: ProcessingStatus;
+					page_ids: string[];
+					page_numbers: number[];
+					source_bytes?: number;
+					derived_bytes?: number;
+					split_depth?: number;
+					parent_batch_id?: string | null;
+					model?: string | null;
+					prompt_version?: number;
+					attempt_count?: number;
+					provider_call_count?: number;
+					last_error_code?: string | null;
+					last_error_message?: string | null;
+					next_retry_at?: string | null;
+					started_at?: string | null;
+					finished_at?: string | null;
+					created_at?: string;
+					updated_at?: string;
+				},
+				Partial<Omit<OcrBatchRow, 'id' | 'user_id' | 'document_id' | 'page_ids' | 'page_numbers'>>
+			>;
 			ocr_jobs: TableDefinition<
 				OcrJobRow,
 				{
 					id?: string;
 					user_id: string;
 					page_id: string;
+					batch_id?: string | null;
+					batch_ordinal?: number | null;
 					provider?: string;
 					model?: string | null;
 					prompt_version?: number;
@@ -274,6 +347,9 @@ export type Database = {
 					user_id: string;
 					usage_date?: string;
 					ocr_pages?: number;
+					ocr_batches?: number;
+					ocr_calls?: number;
+					ocr_attempts?: number;
 					quality_reprocess_pages?: number;
 					quota_errors?: number;
 					failed_pages?: number;
@@ -286,6 +362,20 @@ export type Database = {
 		};
 		Views: Record<string, never>;
 		Functions: {
+			claim_ocr_job: {
+				Args: { target_page_id: string; target_model: string; claimed_at: string };
+				Returns: Json;
+			};
+			complete_ocr_job: {
+				Args: {
+					target_page_id: string;
+					extracted_text: string;
+					extraction_warnings: Json;
+					terminal_status: 'ready' | 'needs_review';
+					completed_at: string;
+				};
+				Returns: boolean;
+			};
 			create_image_import: {
 				Args: {
 					target_document_id: string;
@@ -320,6 +410,17 @@ export type Database = {
 			delete_notebook: { Args: { target_notebook_id: string }; Returns: boolean };
 			delete_tag: { Args: { target_tag_id: string }; Returns: boolean };
 			export_portable_manifest: { Args: Record<string, never>; Returns: Json };
+			finish_ocr_batch: {
+				Args: {
+					target_batch_id: string;
+					terminal_status: 'ready' | 'retryable' | 'blocked_quota' | 'failed';
+					error_code: string | null;
+					safe_error_message: string | null;
+					retry_at: string | null;
+					finished_at: string;
+				};
+				Returns: boolean;
+			};
 			get_usage_overview: { Args: Record<string, never>; Returns: Json };
 			is_authorized_user: { Args: Record<string, never>; Returns: boolean };
 			list_notebooks: {
@@ -370,8 +471,28 @@ export type Database = {
 					updated_at: string;
 				}>;
 			};
+			record_ocr_batch_call: {
+				Args: { target_batch_id: string; attempted_pages: number; called_at: string };
+				Returns: boolean;
+			};
 			record_ocr_consent: { Args: { consent_version?: number }; Returns: boolean };
 			recover_stale_ocr_jobs: { Args: Record<string, never>; Returns: number };
+			register_ocr_batch: {
+				Args: {
+					target_document_id: string;
+					target_route: OcrRoute;
+					target_page_ids: string[];
+					target_page_numbers: number[];
+					target_source_bytes: number;
+					target_derived_bytes: number;
+					target_split_depth: number;
+					target_parent_batch_id: string | null;
+					target_model: string | null;
+					target_prompt_version: number;
+					registered_at: string;
+				};
+				Returns: string | null;
+			};
 			rename_tag: {
 				Args: { target_tag_id: string; tag_name: string };
 				Returns: boolean;
