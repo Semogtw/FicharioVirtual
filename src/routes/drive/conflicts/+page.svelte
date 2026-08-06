@@ -97,7 +97,9 @@
 	<section class="policy" aria-labelledby="policy-title">
 		<h2 id="policy-title">Escolhas disponíveis</h2>
 		<ul>
-			<li><strong>Tentar estado local:</strong> cria jobs novos a partir do caderno e documento atuais.</li>
+			<li>
+				<strong>Tentar estado local:</strong> cria jobs novos a partir do caderno e documento atuais.
+			</li>
 			<li>
 				<strong>Aceitar ausência física:</strong> disponível apenas quando o Drive informou remoção do
 				original; texto e organização permanecem pesquisáveis.
