@@ -15,10 +15,7 @@ export interface DriveResumableGateway {
 		body: Blob;
 		contentRange: string;
 	}): Promise<DriveUploadResponse>;
-	queryProgress(input: {
-		sessionUrl: string;
-		totalBytes: number;
-	}): Promise<DriveUploadResponse>;
+	queryProgress(input: { sessionUrl: string; totalBytes: number }): Promise<DriveUploadResponse>;
 }
 
 function safeInteger(value: number) {
