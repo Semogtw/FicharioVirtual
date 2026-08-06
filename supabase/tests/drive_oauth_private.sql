@@ -34,7 +34,7 @@ select is(
     '11111111-1111-4111-8111-111111111111',
     repeat('a', 43),
     repeat('b', 43),
-    '2026-08-06T06:10:00Z'
+    timezone('utc', now()) + interval '10 minutes'
   ),
   true,
   'service path stores a valid one-time OAuth state'
@@ -43,7 +43,7 @@ select is(
 select results_eq(
   $$
     select user_id, nonce
-    from public.consume_drive_oauth_state(repeat('a', 43), '2026-08-06T06:00:00Z')
+    from public.consume_drive_oauth_state(repeat('a', 43), timezone('utc', now()))
   $$,
   $$
     values ('11111111-1111-4111-8111-111111111111'::uuid, repeat('b', 43)::text)
@@ -54,7 +54,7 @@ select results_eq(
 select is_empty(
   $$
     select user_id, nonce
-    from public.consume_drive_oauth_state(repeat('a', 43), '2026-08-06T06:00:01Z')
+    from public.consume_drive_oauth_state(repeat('a', 43), timezone('utc', now()))
   $$,
   'OAuth state cannot be replayed'
 );
@@ -64,7 +64,7 @@ select is(
     '11111111-1111-4111-8111-111111111111',
     repeat('c', 43),
     repeat('d', 43),
-    '2026-08-06T05:59:59Z'
+    timezone('utc', now()) - interval '1 second'
   ),
   true,
   'expired state can be inserted for deterministic expiry testing'
@@ -73,7 +73,7 @@ select is(
 select is_empty(
   $$
     select user_id, nonce
-    from public.consume_drive_oauth_state(repeat('c', 43), '2026-08-06T06:00:00Z')
+    from public.consume_drive_oauth_state(repeat('c', 43), timezone('utc', now()))
   $$,
   'expired OAuth state is rejected and removed'
 );
