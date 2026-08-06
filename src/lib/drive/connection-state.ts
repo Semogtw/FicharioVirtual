@@ -2,12 +2,7 @@ import { z } from 'zod';
 import { isIsoTimestamp } from '$lib/validation/iso-timestamp';
 
 export type DriveConnectionStatus =
-	| 'disconnected'
-	| 'connecting'
-	| 'connected'
-	| 'syncing'
-	| 'error'
-	| 'revoked';
+	'disconnected' | 'connecting' | 'connected' | 'syncing' | 'error' | 'revoked';
 
 export interface DriveConnection {
 	status: DriveConnectionStatus;
@@ -44,7 +39,10 @@ const connectionSchema = z
 		root_folder_id: z.string().regex(DRIVE_ID).nullable(),
 		last_sync_started_at: z.string().refine(isIsoTimestamp).nullable(),
 		last_sync_completed_at: z.string().refine(isIsoTimestamp).nullable(),
-		last_error_code: z.string().regex(/^[a-z0-9_]{1,64}$/).nullable(),
+		last_error_code: z
+			.string()
+			.regex(/^[a-z0-9_]{1,64}$/)
+			.nullable(),
 		last_error_message: z.string().max(500).nullable()
 	})
 	.strict()
