@@ -29,6 +29,7 @@ jobs:
       - name: Format known failures and current review files
         run: |
           pnpm exec prettier --write \
+            docs/CURRENT_STATUS.md \
             docs/DEPLOYMENT.md \
             docs/DESKTOP_OCR_WORKER.md \
             docs/READINESS.md \
@@ -42,6 +43,7 @@ jobs:
             tests/unit/tooling/workflow-permissions.test.ts \
             tools/checks/check-source-security.mjs
           git diff --binary -- \
+            docs/CURRENT_STATUS.md \
             docs/DEPLOYMENT.md \
             docs/DESKTOP_OCR_WORKER.md \
             docs/READINESS.md \
