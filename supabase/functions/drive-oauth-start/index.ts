@@ -1,10 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, parseAppOrigin } from '../_shared/cors.ts';
 import { buildGoogleAuthorizationUrl } from '../_shared/google-oauth.ts';
-import {
-	generateOAuthOpaqueValue,
-	hashOAuthState
-} from '../_shared/google-oauth-http.ts';
+import { generateOAuthOpaqueValue, hashOAuthState } from '../_shared/google-oauth-http.ts';
 
 function json(status: number, body: Record<string, unknown>, appOrigin: string | null) {
 	return new Response(JSON.stringify(body), {
