@@ -6,7 +6,9 @@ const publicEnvSchema = z.object({
 	PUBLIC_GOOGLE_CLIENT_ID: z
 		.string()
 		.trim()
-		.regex(/^\d{6,}-[A-Za-z0-9_-]{10,}\.apps\.googleusercontent\.com$/)
+		.min(20)
+		.max(512)
+		.regex(/^\d+-[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$/)
 		.optional()
 		.transform((value) => value ?? null)
 });
