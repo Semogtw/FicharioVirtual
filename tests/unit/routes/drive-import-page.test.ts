@@ -9,10 +9,17 @@ describe('explicit Google Drive import page', () => {
 
 		expect(source).toContain('selectAndDownloadGoogleDriveFile');
 		expect(source).toContain('GOOGLE_PICKER_MIME_TYPES');
-		expect(source).toContain('maximumBytes: 20 * 1024 * 1024');
+		expect(source).toContain('MAX_DIRECT_PICKER_DOWNLOAD_BYTES');
+		expect(source).not.toContain('maximumBytes: 20 * 1024 * 1024');
 		expect(source).toContain('addImages([file]');
 		expect(source).toContain('addPdfs([file]');
 		expect(source).toContain("label={selecting ? 'Abrindo Drive…' : 'Escolher no Google Drive'}");
+	});
+
+	it('describes the direct browser ceiling without treating it as a document or OCR limit', () => {
+		const source = readFileSync(path, 'utf8');
+		expect(source).toContain('download direto no navegador aceita até 50 MiB');
+		expect(source).toContain('não do documento lógico nem dos lotes de OCR');
 	});
 
 	it('requires explicit OCR consent and never exposes or persists credentials', () => {
