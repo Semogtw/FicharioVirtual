@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-	GeminiResponseError,
-	requestGeminiOcrBatch
-} from '../../../supabase/functions/_shared/gemini-ocr-client';
+import { requestGeminiOcrBatch } from '../../../supabase/functions/_shared/gemini-ocr-client';
 
 const pages = [
 	{
@@ -88,7 +85,7 @@ describe('requestGeminiOcrBatch', () => {
 		expect(outcome.missingPageIds).toEqual([pages[1].pageId]);
 	});
 
-	it('rejects duplicate request identities and malformed provider payloads before returning', async () => {
+	it('rejects duplicate request identities but returns split data for malformed provider text', async () => {
 		await expect(
 			requestGeminiOcrBatch({
 				apiKey: 'test-key',
@@ -105,8 +102,18 @@ describe('requestGeminiOcrBatch', () => {
 				model: 'gemini-test',
 				pages,
 				promptVersion: 1,
-				fetchImpl: async () => new Response('{', { status: 200 })
+				fetchImpl: async () =>
+					new Response(
+						JSON.stringify({ candidates: [{ content: { parts: [{ text: '{' }] } }] }),
+						{ status: 200, headers: { 'Content-Type': 'application/json' } }
+					)
 			})
-		).rejects.toBeInstanceOf(GeminiResponseError);
+		).resolves.toEqual({
+			valid: false,
+			pages: [],
+			missingPageIds: pages.map((page) => page.pageId),
+			duplicatePageIds: [],
+			unexpectedPageIds: []
+		});
 	});
 });
