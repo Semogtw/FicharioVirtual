@@ -38,7 +38,9 @@ const publicEnvSchema = z
 				value.PUBLIC_GOOGLE_PICKER_API_KEY,
 				value.PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER
 			];
-			return pickerValues.every((item) => item === null) || pickerValues.every((item) => item !== null);
+			return (
+				pickerValues.every((item) => item === null) || pickerValues.every((item) => item !== null)
+			);
 		},
 		{ message: 'Google Picker settings must be configured together' }
 	);
@@ -51,8 +53,7 @@ export function parsePublicEnv(source: Record<string, string | undefined>): Publ
 		PUBLIC_SUPABASE_PUBLISHABLE_KEY: source.PUBLIC_SUPABASE_PUBLISHABLE_KEY,
 		PUBLIC_GOOGLE_CLIENT_ID: source.PUBLIC_GOOGLE_CLIENT_ID || undefined,
 		PUBLIC_GOOGLE_PICKER_API_KEY: source.PUBLIC_GOOGLE_PICKER_API_KEY || undefined,
-		PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER:
-			source.PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER || undefined
+		PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER: source.PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER || undefined
 	});
 
 	if (!result.success) {
