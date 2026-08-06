@@ -1,9 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-	OcrProcessingError,
-	processOcrBatch,
-	type OcrFunctionClient
-} from '../../../src/lib/services/ocr';
+import { processOcrBatch, type OcrFunctionClient } from '../../../src/lib/services/ocr';
 
 const first = '11111111-1111-4111-8111-111111111111';
 const second = '22222222-2222-4222-8222-222222222222';
@@ -107,7 +103,7 @@ describe('processOcrBatch', () => {
 		await expect(
 			processOcrBatch([first], client(null, { context: response }).gateway)
 		).rejects.toEqual(
-			expect.objectContaining<OcrProcessingError>({
+			expect.objectContaining({
 				code: 'gemini_daily_quota',
 				retryable: false
 			})
