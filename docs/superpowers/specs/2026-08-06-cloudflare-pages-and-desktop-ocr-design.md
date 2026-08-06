@@ -2,54 +2,55 @@
 
 **Data:** 6 de agosto de 2026  
 **Status:** decisão aprovada; implementação pendente  
-**Escopo:** hospedagem pública, distribuição de artefatos de modelos, roteamento híbrido de OCR e processamento local em um computador confiável
+**Escopo:** hospedagem pública, distribuição de modelos, roteamento híbrido de OCR e processamento em computador confiável
 
-## 1. Contexto
+## 1. Decisão
 
-O Fichário Virtual precisa continuar privado, pesquisável, retomável e operável sem custo obrigatório. O Google Drive permanece como armazenamento permanente dos originais e o Supabase permanece como autoridade para autenticação, metadados, busca, filas e sincronização.
+O Fichário Virtual mantém:
 
-A arquitetura anterior enviava todo conteúdo visual necessário ao Gemini. A nova decisão mantém o Gemini para conteúdo geral e resultados imediatos, mas permite encaminhar manuscritos, conteúdo misto e páginas incertas para um worker executado no computador do usuário. Esse worker pode usar modelos locais mais pesados e aproveitar CPU ou GPU sem expor uma porta doméstica à Internet.
+- Google Drive como armazenamento permanente dos originais;
+- Supabase como autoridade para autenticação, banco, RLS, filas, resultados, busca e sincronização;
+- Gemini como OCR geral e resposta imediata;
+- Cloudflare Pages como host preferencial da PWA;
+- um worker local no computador para manuscritos, conteúdo misto e páginas difíceis.
 
-A PWA passa a ter Cloudflare Pages como host público preferencial. Artefatos públicos de modelos podem ser distribuídos por um segundo projeto Pages em arquivos fragmentados. Cloudflare R2 não é requisito do MVP porque é um produto de cobrança por uso e exige uma assinatura; ele só pode ser ativado posteriormente como espelho opcional mediante decisão explícita.
+Cloudflare recebe somente assets públicos. O computador não recebe push direto do navegador: ele consulta a fila no Supabase por HTTPS de saída, reivindica um trabalho e devolve o resultado. Não existe porta pública, encaminhamento no roteador ou Cloudflare Tunnel.
 
 ## 2. Objetivos
 
 - hospedar a PWA estática no Cloudflare Pages;
-- preservar `@sveltejs/adapter-static`, o diretório `build/`, o fallback `200.html` e os headers de segurança;
-- manter imagens, PDFs, OCR, tokens e metadados privados fora da Cloudflare;
-- usar o Gemini para texto impresso, páginas gerais e resposta imediata;
-- encaminhar manuscritos, conteúdo misto e páginas incertas para uma fila local;
-- permitir que um computador confiável processe a fila quando estiver ligado;
-- não exigir abertura de porta, encaminhamento no roteador ou Cloudflare Tunnel;
-- preservar resultados de diferentes mecanismos para comparação, revisão e rollback;
+- preservar `@sveltejs/adapter-static`, `build/`, `200.html` e `_headers`;
+- impedir que documentos, OCR, tokens ou metadados privados passem pela Cloudflare;
+- usar Gemini para páginas gerais e classificá-las na mesma chamada;
+- encaminhar manuscritos e resultados incertos para o computador;
+- permitir que o computador fique desligado sem perder trabalhos;
+- preservar resultados Gemini e desktop separadamente;
 - manter correção manual como autoridade final;
-- garantir retomada após desligamento do computador, falha do modelo ou perda temporária de rede;
-- manter custo obrigatório de R$ 0 e impedir ativação silenciosa de serviços pagos.
+- distribuir modelos sem obrigar o tablet a baixá-los;
+- manter custo obrigatório de R$ 0 e nenhum fallback pago automático.
 
 ## 3. Fora de escopo
 
-- usar Cloudflare Workers, Pages Functions ou Workers AI para executar OCR pesado;
-- armazenar originais ou páginas privadas no Pages, R2 ou cache público;
-- manter o computador ligado permanentemente;
-- aceitar resultados locais sem lease, hash de origem e validação de contrato;
+- executar OCR pesado em Cloudflare Workers, Pages Functions ou Workers AI;
+- armazenar originais ou páginas privadas em Pages ou R2;
+- abrir uma API doméstica para a Internet;
 - depender exclusivamente de ROCm na RX 6600;
-- selecionar definitivamente um modelo de manuscrito antes de benchmark com páginas reais;
-- sincronização ponto a ponto direta entre navegador e computador;
-- abertura de uma API local acessível pela rede pública.
+- escolher modelo definitivo antes de benchmark com páginas reais;
+- trocar automaticamente para serviço pago;
+- reprocessar páginas antigas apenas porque um modelo novo foi publicado.
 
-## 4. Topologia canônica
+## 4. Topologia
 
 ```text
-Cloudflare Pages
-├── PWA SvelteKit estática
-├── shell público, CSS, JS e ícones
-└── nenhuma página privada ou segredo
+Cloudflare Pages — PWA
+├── HTML, CSS, JS, ícones e manifesto
+└── nenhum dado privado
 
-Cloudflare Pages — projeto separado de artefatos
+Cloudflare Pages — modelos públicos
 ├── manifestos versionados
-├── partes de modelos com até 20 MiB
-├── checksums SHA-256
-└── nenhum documento do usuário
+├── partes de até 20 MiB
+├── SHA-256
+└── licenças
 
 Google Drive
 └── originais permanentes
@@ -57,10 +58,9 @@ Google Drive
 Supabase
 ├── Auth + allowlist
 ├── PostgreSQL + RLS
-├── filas e leases
-├── registro de dispositivos locais
-├── resultados de OCR e busca
-├── Edge Functions de autenticação e acesso temporário
+├── filas, leases e resultados
+├── registro de dispositivos
+├── Edge Functions
 └── Storage privado temporário
 
 Gemini
@@ -68,57 +68,59 @@ Gemini
 
 Computador confiável
 └── Fichário Desktop OCR Worker
-    ├── consulta a fila por HTTPS de saída
-    ├── baixa somente o item reivindicado
+    ├── consulta a fila
+    ├── reivindica item
+    ├── baixa página temporária
     ├── executa modelo local
-    ├── envia texto e metadados do resultado
-    └── não aceita conexões externas
+    └── envia resultado
 ```
 
-Cloudflare nunca fica no caminho de dados privados. O site não envia uma imagem diretamente ao computador. O navegador cria ou altera um trabalho no Supabase; o worker consulta a fila e puxa o item autorizado quando estiver online.
+## 5. Cloudflare Pages da PWA
 
-## 5. Cloudflare Pages para a PWA
-
-O projeto principal usa integração Git com `Semogtw/FicharioVirtual`.
-
-Configuração de produção:
+Configuração alvo:
 
 ```text
-Branch:          main
-Node.js:         >=22.12
-Build command:   corepack enable && pnpm install --frozen-lockfile && pnpm build
+Repository:       Semogtw/FicharioVirtual
+Branch:           main
+Node.js:          >=22.12
+Build command:    corepack enable && pnpm install --frozen-lockfile && pnpm build
 Output directory: build
 ```
 
-Somente estas variáveis públicas podem participar do build:
+Somente estas variáveis públicas entram no build:
 
 ```text
 PUBLIC_SUPABASE_URL
 PUBLIC_SUPABASE_PUBLISHABLE_KEY
 ```
 
-Secrets, chaves Gemini, service-role, refresh tokens do Drive e credenciais do worker não entram no Cloudflare Pages.
+Nunca entram no Pages:
 
-O arquivo `static/_headers` continua sendo a fonte versionada de CSP, HSTS, framing, MIME, permissions e políticas de cache. O deploy precisa preservar `200.html`, `sw.js`, `registerSW.js` e `manifest.webmanifest` com os tipos e caches atuais.
+```text
+GEMINI_API_KEY
+SUPABASE_SERVICE_ROLE_KEY
+GOOGLE_CLIENT_SECRET
+DRIVE_REFRESH_TOKEN
+OCR_WORKER_DEVICE_TOKEN
+```
 
-Depois da troca de domínio, devem ser atualizados no mesmo rollout:
+O deployment preserva `_headers`, `200.html`, `sw.js`, `registerSW.js` e `manifest.webmanifest`. A origem `*.pages.dev` redireciona para a origem canônica ou fica limitada a preview.
 
-- `APP_ORIGIN` das Edge Functions;
+A troca de domínio exige atualização coordenada de:
+
+- `APP_ORIGIN` nas Edge Functions;
 - Site URL e Redirect URLs do Supabase Auth;
-- origens permitidas por CORS;
-- links de retorno do fluxo Google Drive;
-- CSP e testes pós-deployment;
-- qualquer referência ao host antigo em documentação ou configuração externa.
+- origens CORS;
+- links de retorno dos fluxos externos;
+- CSP e gates pós-deployment.
 
-O domínio `*.pages.dev` deve redirecionar para o domínio canônico ou permanecer apenas para preview controlado. O aplicativo deve considerar uma única origem de produção para evitar sessões e redirects divergentes.
+## 6. Distribuição dos modelos
 
-## 6. Distribuição gratuita dos modelos
+### 6.1 Caminho padrão sem R2
 
-### 6.1 Caminho padrão sem assinatura de cobrança
+Os modelos ficam em um segundo projeto Cloudflare Pages por Direct Upload. Como o Pages limita cada asset a 25 MiB, o empacotador usa partes de no máximo 20 MiB.
 
-Os modelos usados pelo computador ficam em um projeto Cloudflare Pages separado, implantado por Direct Upload. Como cada asset do Pages possui limite de 25 MiB, o empacotador divide os modelos em partes de no máximo 20 MiB.
-
-Estrutura pública:
+Estrutura:
 
 ```text
 /models/<model-id>/<version>/manifest.json
@@ -128,191 +130,164 @@ Estrutura pública:
 /models/<model-id>/<version>/NOTICE.txt
 ```
 
-O `manifest.json` contém exatamente:
+O manifesto registra:
 
-```json
-{
-  "schemaVersion": 1,
-  "modelId": "string-estavel",
-  "version": "versao-imutavel",
-  "format": "onnx-ou-outro-formato-aprovado",
-  "totalBytes": 0,
-  "sha256": "hash-do-arquivo-reconstituido",
-  "minimumWorkerVersion": "0.1.0",
-  "sourceUrl": "origem-publica-do-modelo",
-  "license": "identificador-da-licenca",
-  "parts": [
-    {
-      "path": "part-000.bin",
-      "bytes": 0,
-      "sha256": "hash-da-parte"
-    }
-  ]
-}
-```
+- schema;
+- ID e versão imutáveis;
+- formato;
+- tamanho total;
+- SHA-256 do arquivo reconstruído;
+- versão mínima do worker;
+- origem pública;
+- licença;
+- caminho, tamanho e SHA-256 de cada parte.
 
-O worker baixa cada parte, valida tamanho e SHA-256, reconstitui em arquivo temporário, valida o hash total e só então promove o modelo para o cache local. Falha de checksum nunca inicia inferência.
+O worker valida cada parte, reconstitui em arquivo temporário, valida o hash total e promove atomicamente o modelo para o cache. Falha de checksum impede inferência.
 
-Os caminhos de versão são imutáveis e recebem cache longo. O manifesto que aponta a versão recomendada recebe cache curto ou `no-cache`.
+Caminhos versionados recebem cache longo. O índice de versão recomendada recebe cache curto. O modelo nunca entra no precache da PWA.
 
 ### 6.2 R2 opcional
 
-R2 pode substituir o projeto de partes quando a fragmentação se tornar operacionalmente inconveniente. Essa mudança exige aprovação explícita porque R2 usa cobrança por consumo, requer assinatura e pode gerar excedente além da franquia incluída.
+R2 pode ser adotado futuramente se a fragmentação deixar de ser adequada. Ele não faz parte do MVP porque usa cobrança por consumo e exige assinatura.
 
-R2, quando habilitado, obedece a todas estas regras:
+Se habilitado:
 
-- somente artefatos públicos de modelos e licenças;
-- classe Standard;
-- domínio próprio separado;
-- nenhum original, página preparada, OCR ou token;
-- alertas de orçamento e revisão manual de consumo;
-- ausência de fallback automático para R2;
-- possibilidade de desativação sem quebrar modelos já instalados no computador.
+- guarda somente modelos públicos e licenças;
+- usa classe Standard;
+- possui domínio separado;
+- nunca recebe documentos, páginas, OCR ou tokens;
+- exige decisão explícita, revisão de consumo e procedimento de desligamento;
+- não se torna fallback automático.
 
-R2 não integra o critério obrigatório de release enquanto o projeto mantiver a política de não ativar cobrança por uso.
+## 7. Roteamento de OCR
 
-## 7. Política de roteamento de OCR
+### 7.1 Preferência explícita
 
-A decisão de rota usa informação explícita antes de classificação automática.
-
-### 7.1 Preferência por caderno e página
-
-Cada caderno e página pode declarar:
+Cada caderno e página aceita:
 
 ```text
 automatic
 printed
-gandwritten
+handwritten
 mixed
 ```
 
-O valor canônico em código deve usar `handwritten`; a grafia acima é somente uma enumeração visual e não deve ser copiada como identificador.
+A preferência da página vence a do caderno, que vence a global.
 
-Regras:
-
-- `printed`: usa Gemini, salvo reprocessamento manual no computador;
-- `handwritten`: vai direto para o computador e não gasta uma chamada Gemini por padrão;
-- `mixed`: vai para o computador, podendo receber transcrição preliminar Gemini somente por ação explícita;
-- `automatic`: segue inspeção de PDF e classificação do provedor.
+- `printed`: Gemini por padrão;
+- `handwritten`: computador por padrão, sem chamada Gemini obrigatória;
+- `mixed`: computador por padrão;
+- `automatic`: inspeção e classificação determinam a rota.
 
 ### 7.2 Texto nativo primeiro
 
-Página de PDF com texto nativo suficiente não entra em OCR nem em classificação visual. O texto nativo é indexado diretamente.
+Página com texto nativo suficiente não entra em OCR nem em classificação visual.
 
-### 7.3 Classificação automática junto da chamada Gemini
+### 7.3 Classificação junto da chamada Gemini
 
-Quando uma página em modo `automatic` precisa do Gemini, a mesma resposta estruturada deve incluir:
+Para página automática, a mesma resposta Gemini contém:
 
 ```text
 contentType: printed | handwritten | mixed | unknown
-handwritingConfidence: número entre 0 e 1
+handwritingConfidence: 0..1
 localReprocessingRecommended: boolean
-routingReasons: lista fechada de códigos
+routingReasons: códigos fechados
 text: transcrição preliminar
 warnings: avisos por página
 ```
 
-Não existe uma chamada separada apenas para classificar.
+Não existe chamada separada apenas para classificar.
 
-Encaminham para o computador:
+Entram na fila desktop:
 
 - `handwritten`;
 - `mixed`;
 - `unknown`;
-- `localReprocessingRecommended = true`;
-- resposta truncada, layout ambíguo, fórmula incerta ou grande quantidade de trechos ilegíveis;
-- solicitação manual do usuário.
+- recomendação de reprocessamento;
+- truncamento;
+- layout ambíguo;
+- fórmula incerta;
+- muitos trechos ilegíveis;
+- ação manual do usuário.
 
-Uma página `printed` sem sinais de baixa qualidade pode aceitar o Gemini como resultado principal. O usuário sempre pode encaminhá-la ao computador depois.
-
-A classificação é uma sugestão de roteamento, não uma verdade permanente. O usuário pode corrigir o tipo do caderno ou da página.
+Uma página `printed` confiável pode aceitar Gemini como resultado principal. O usuário sempre pode enviá-la ao computador depois.
 
 ## 8. Resultados e precedência
 
-Resultados de provedores diferentes não devem sobrescrever uns aos outros. Uma nova tabela `ocr_results` preserva, no mínimo:
+Resultados não se sobrescrevem. A tabela `ocr_results` registra:
 
 - página e trabalho;
 - mecanismo `gemini` ou `desktop`;
 - modelo e versão;
 - hash da origem;
 - texto bruto;
-- avisos estruturados;
-- tipo de conteúdo detectado;
-- métricas de confiança disponíveis;
-- data de criação;
+- avisos;
+- classificação;
+- dispositivo local, quando aplicável;
 - estado `preliminary`, `candidate`, `accepted` ou `rejected`;
-- dispositivo responsável, quando local.
+- timestamps.
 
-A precedência efetiva é:
+Precedência:
 
 ```text
 corrected_text
-> resultado local aceito
+> resultado desktop aceito
 > resultado Gemini aceito
 > resultado preliminar
 > texto nativo quando aplicável
 ```
 
-Páginas com texto nativo suficiente não precisam de resultado OCR. Correção manual nunca é substituída automaticamente por novo processamento.
+Correção manual nunca é substituída automaticamente.
 
-## 9. Fila para o computador
+## 9. Fila desktop
 
 ### 9.1 Modelo pull
 
-O worker inicia conexões HTTPS de saída. Ele não recebe push do navegador e não expõe porta pública.
-
 Fluxo:
 
-1. o site cria ou reencaminha um trabalho para `desktop`;
-2. o Supabase mantém o trabalho em `waiting_desktop`;
-3. o worker autenticado consulta trabalhos compatíveis;
-4. o worker reivindica um trabalho com lease e ID de dispositivo;
+1. o site cria ou redireciona um trabalho para `desktop`;
+2. o Supabase mantém `waiting_desktop`;
+3. o worker autenticado lista trabalhos compatíveis;
+4. o worker reivindica um item com lease;
 5. o backend fornece acesso temporário à página preparada;
-6. o worker valida o hash da origem;
+6. o worker valida tamanho, MIME e SHA-256;
 7. o modelo local produz texto e avisos;
-8. o worker envia o resultado com modelo, versão e hash;
-9. o backend valida lease e origem antes de aceitar;
-10. a PWA recebe a atualização por consulta ou realtime;
-11. o usuário revisa ou aceita o resultado.
+8. o worker envia resultado, modelo, versão e hash;
+9. o backend valida lease, nonce e origem;
+10. a PWA recebe a atualização e abre revisão.
 
-O computador desligado não é erro. A fila permanece aguardando indefinidamente ou até cancelamento explícito.
+Computador desligado não é falha. O trabalho permanece aguardando até retomada ou cancelamento.
 
-### 9.2 Origem do trabalho
+### 9.2 Origem temporária
 
-O worker não recebe refresh token do Google Drive. A preparação de OCR continua produzindo uma imagem temporária privada por página no Supabase Storage. Uma Edge Function dedicada retorna URL assinada de curta duração somente para o trabalho reivindicado.
+O worker não recebe token do Google Drive. A preparação de OCR gera página temporária em Supabase Storage privado. Uma Edge Function entrega URL assinada curta somente após claim.
 
-A página temporária permanece até que todas as rotas obrigatórias terminem ou sejam canceladas. A limpeza precisa considerar Gemini preliminar e processamento local para não apagar a origem antes do worker.
-
-Cada trabalho guarda `source_sha256`. Resultado produzido para uma versão anterior é rejeitado e o trabalho é recriado para a nova origem.
+A limpeza da página temporária aguarda todas as rotas obrigatórias. Cada trabalho registra `source_sha256`; resultado para origem anterior é rejeitado.
 
 ### 9.3 Lease e heartbeat
 
-Somente um dispositivo pode processar o mesmo trabalho por vez. O claim atribui:
+O claim registra:
 
-- `claimed_by_device_id`;
-- `lease_started_at`;
-- `lease_expires_at`;
-- `attempt_count`;
-- nonce de conclusão vinculado ao claim.
+- dispositivo;
+- início e expiração do lease;
+- número de tentativa;
+- nonce de conclusão.
 
-O worker renova o lease enquanto o modelo estiver ativo. Se ele cair, o lease expira e o trabalho retorna à fila sem perder resultados já persistidos.
+O worker envia heartbeat durante inferência. Se cair, o lease expira e o trabalho volta à fila.
 
-## 10. Pareamento e autenticação do worker
+## 10. Pareamento e autenticação
 
 O computador nunca recebe `service_role`, chave Gemini ou refresh token do Drive.
 
-Pareamento planejado:
+Pareamento:
 
-1. `fichario-worker pair` cria um segredo aleatório e mostra um código curto;
-2. o usuário abre Configurações no Fichário já autenticado;
-3. o usuário informa ou confirma o código e nomeia o dispositivo;
-4. uma Edge Function aprova o pareamento para o único usuário autorizado;
-5. o worker recebe uma credencial longa, aleatória e exibida uma única vez;
-6. somente o hash da credencial fica no banco;
-7. a credencial local fica no Secret Service/keyring do sistema;
-8. o dispositivo aparece na lista de dispositivos e pode ser revogado.
-
-A credencial é limitada às Edge Functions do worker. Ela não concede acesso SQL direto, não substitui sessão do navegador e não pode administrar conta ou Drive.
+1. `fichario-worker pair` cria segredo aleatório e código curto;
+2. o usuário confirma no Fichário autenticado;
+3. a Edge Function aprova o dispositivo;
+4. o worker recebe credencial longa exibida uma vez;
+5. o banco guarda somente o hash;
+6. a credencial fica no Secret Service/keyring;
+7. o dispositivo pode ser revogado.
 
 Tabelas mínimas:
 
@@ -333,22 +308,21 @@ desktop-ocr-complete
 desktop-ocr-fail
 ```
 
-Todas validam allowlist, dispositivo ativo, escopo da operação, propriedade da página e formato estrito do payload.
+A credencial permite apenas essas operações e não concede acesso SQL direto.
 
 ## 11. Worker no CachyOS
 
-O worker roda como serviço de usuário do systemd, não como root.
+O worker roda como serviço systemd do usuário, sem root.
 
 Responsabilidades:
 
-- pareamento e armazenamento seguro da credencial;
-- descoberta de capacidades de CPU/GPU;
+- pareamento e keyring;
+- descoberta de capacidades;
 - download e validação de modelos;
-- consulta da fila;
-- claim, heartbeat, processamento e conclusão;
-- spool local de resultados ainda não enviados;
-- logs sem conteúdo das páginas;
-- atualização explícita do próprio worker.
+- polling, claim, heartbeat e conclusão;
+- spool local de resultados não transmitidos;
+- logs sem conteúdo privado;
+- atualização explícita.
 
 Backends planejados:
 
@@ -359,13 +333,13 @@ cpu
 rocm-experimental
 ```
 
-A RX 6600 não pode ser tratada como compatível com ROCm até validação no sistema real. `auto` tenta apenas backends aprovados por benchmark e sempre mantém CPU como fallback funcional. O primeiro release usa concorrência máxima de um trabalho.
+CPU é fallback obrigatório. Vulkan depende de teste. ROCm na RX 6600 permanece experimental até validação real. O primeiro release usa concorrência máxima `1`.
 
-O worker pode armazenar temporariamente o texto de resultado e metadados em um spool com permissão `0600`. Imagens baixadas são apagadas após conclusão ou falha; não entram em backup, logs ou cache permanente.
+O spool pode guardar texto e metadados com permissão `0600`, mas não preserva a imagem depois da conclusão.
 
 ## 12. Interface
 
-Configurações globais de OCR:
+Configuração global:
 
 ```text
 Automático
@@ -382,120 +356,111 @@ Predominantemente manuscrito
 Conteúdo misto
 ```
 
-Painel do computador:
+A UI mostra:
 
-- dispositivos pareados e revogação;
+- dispositivos pareados;
 - online, offline, ocupado ou incompatível;
-- versão do worker;
-- backend e modelo ativos;
+- versão do worker, backend e modelo;
 - último heartbeat;
-- fila aguardando computador;
-- trabalhos em processamento, falhos e concluídos;
-- ação “Enviar ao computador”;
-- ação “Usar Gemini agora” quando permitido;
-- ação “Cancelar processamento local”.
+- fila aguardando;
+- ações para enviar ao computador, usar Gemini, cancelar ou comparar resultados.
 
-O estado offline não deve ser apresentado como falha. A UI informa que o trabalho será retomado quando o computador estiver disponível.
+Offline é estado normal, não erro.
 
 ## 13. Falhas e recuperação
 
-- **computador desligado:** mantém `waiting_desktop`;
-- **worker cai durante inferência:** lease expira e o trabalho volta à fila;
-- **modelo ausente:** baixa e valida antes de reivindicar ou devolve retry seguro;
-- **checksum inválido:** remove o artefato e bloqueia o modelo, não a página;
-- **origem alterada:** rejeita resultado obsoleto e cria novo trabalho;
-- **upload do resultado falha:** preserva resultado no spool e repete somente a conclusão;
-- **credencial revogada:** encerra processamento após o item atual ou imediatamente conforme política de segurança;
-- **Gemini indisponível:** páginas explicitamente manuscritas continuam elegíveis ao computador;
-- **worker incompatível:** mantém item na fila e exibe motivo, sem fallback pago;
-- **resultado local pior:** preserva ambos e permite aceitar o Gemini ou a correção manual.
+- computador desligado: mantém `waiting_desktop`;
+- queda durante inferência: lease expira e item volta à fila;
+- modelo ausente: instala antes do claim ou informa incompatibilidade;
+- checksum inválido: bloqueia a versão, não a página;
+- origem alterada: rejeita resultado obsoleto;
+- envio falha: preserva resultado no spool;
+- credencial revogada: novos claims e conclusões são recusados;
+- GPU falha: CPU é usada somente se a política permitir;
+- resultado local pior: ambos permanecem disponíveis para escolha.
 
 ## 14. Segurança e privacidade
 
-- Cloudflare recebe apenas arquivos públicos do aplicativo e dos modelos;
-- originais ficam no Google Drive;
+- Cloudflare contém somente assets públicos;
+- originais ficam no Drive;
 - páginas temporárias ficam no Supabase privado;
-- URLs de fonte têm curta duração e são vinculadas a trabalho e dispositivo;
-- credencial do worker é revogável e armazenada por hash no servidor;
+- URLs são curtas e vinculadas ao trabalho;
+- credencial do worker é revogável e armazenada por hash;
 - nenhuma chave administrativa fica no computador;
-- nenhum servidor doméstico é exposto;
-- conteúdo de página não entra em logs;
-- resultados são aceitos somente com lease, nonce e hash da origem;
-- modelos exigem licença registrada e checksums;
-- atualização de modelo não reprocessa páginas automaticamente;
+- nenhuma porta doméstica é exposta;
+- logs não contêm texto, imagem, token ou URL assinada completa;
+- resultado exige lease, nonce e hash da origem;
+- modelos exigem licença e checksums;
 - service worker da PWA não armazena modelos nem conteúdo privado.
 
 ## 15. Testes obrigatórios
 
 ### Cloudflare
 
-- build estático reproduzível;
-- fallback SPA sem reescrever assets;
+- build reproduzível;
+- fallback sem reescrever assets;
 - `_headers` aplicado;
-- HTTPS e redirect para origem canônica;
+- HTTPS e origem canônica;
 - PWA instalável;
-- nenhuma variável secreta no bundle;
-- rollback para deployment anterior;
-- partes de modelo abaixo de 25 MiB e hashes válidos.
+- nenhum secret no bundle;
+- rollback;
+- partes abaixo de 25 MiB e hashes válidos.
 
 ### Roteamento
 
 - texto nativo não chama OCR;
 - caderno manuscrito pula Gemini;
 - `printed` confiável conclui com Gemini;
-- `handwritten`, `mixed` e `unknown` entram na fila local;
+- `handwritten`, `mixed` e `unknown` entram na fila;
 - override manual vence classificação;
 - resultado preliminar não apaga resultado aceito.
 
 ### Worker
 
 - pareamento de uso único;
-- revogação imediata;
-- dispositivo de outro usuário recusado;
+- revogação;
 - claim exclusivo;
 - lease expirado retomável;
-- heartbeat prolonga lease;
+- heartbeat;
 - URL expirada recusada;
-- hash de origem divergente rejeitado;
+- hash divergente rejeitado;
 - conclusão idempotente;
-- queda de rede preserva spool;
-- worker offline não perde trabalho;
-- logs não contêm texto ou bytes privados;
-- CPU funciona sem GPU;
-- RX 6600 registrada somente após benchmark real.
+- spool após queda de rede;
+- logs sem conteúdo;
+- CPU sem GPU;
+- RX 6600 somente após benchmark.
 
 ## 16. Critérios de aceitação
 
 ```text
-Cloudflare Pages production deploy: PASS
-Origem canônica e redirects: PASS
-Headers e PWA pós-deployment: PASS
+Cloudflare Pages produção: PASS
+Origem canônica e headers: PASS
 Distribuição de modelo sem R2 obrigatório: PASS
-Pareamento e revogação do computador: PASS
+Nenhum conteúdo privado na Cloudflare: PASS
+Gemini geral e roteamento: PASS
+Pareamento e revogação: PASS
 Fila pull sem porta pública: PASS
 Lease, heartbeat e retomada: PASS
-Fonte temporária e hash validados: PASS
-Gemini geral + roteamento manuscrito: PASS
+Fonte e hash validados: PASS
 Resultados múltiplos preservados: PASS
-Correção manual mantém precedência: PASS
+Correção manual com precedência: PASS
 CPU local: PASS
 RX 6600: PASS ou limitação documentada
-Nenhum conteúdo privado na Cloudflare: PASS
 Nenhuma cobrança automática: PASS
 ```
 
 ## 17. Ordem de implementação
 
-1. migrar e validar o frontend estático no Cloudflare Pages;
-2. criar o projeto Pages de artefatos e o contrato de manifesto fragmentado;
-3. separar resultados OCR do estado único atual;
-4. adicionar tipos de conteúdo e política de roteamento;
-5. criar tabelas de dispositivo, pareamento e leases locais;
-6. implementar Edge Functions exclusivas do worker;
-7. criar o worker CPU-first e serviço systemd de usuário;
-8. validar download, checksum, spool e retomada;
-9. integrar um modelo de manuscrito candidato;
-10. executar benchmark com páginas reais e RX 6600;
-11. atualizar staging, privacidade, operação gratuita e gates de release.
+1. migrar e validar frontend no Cloudflare Pages;
+2. criar projeto de modelos e manifesto fragmentado;
+3. separar resultados OCR;
+4. adicionar tipos e roteamento;
+5. criar dispositivos, pareamento e leases;
+6. implementar Edge Functions do worker;
+7. criar worker CPU-first e serviço systemd;
+8. validar cache, checksums, spool e retomada;
+9. integrar modelo de manuscrito candidato;
+10. executar benchmark na RX 6600;
+11. atualizar staging e gates de release.
 
-A implementação deve ser dividida em planos independentes para hospedagem Cloudflare e OCR desktop, embora ambos obedeçam a este design canônico.
+A execução deve usar planos separados para hospedagem Cloudflare e worker desktop, ambos subordinados a esta especificação.
