@@ -146,9 +146,7 @@ describe('Drive-first image upload', () => {
 				dependencies()
 			)
 		).rejects.toThrow('metadata failed');
-		expect(metadata.removedTemporary).toEqual([
-			[`${userId}/${documentId}/thumbnail.jpg`]
-		]);
+		expect(metadata.removedTemporary).toEqual([[`${userId}/${documentId}/thumbnail.jpg`]]);
 		expect(metadata.deletedDrive).toEqual([driveFileId]);
 	});
 
@@ -159,11 +157,7 @@ describe('Drive-first image upload', () => {
 		const upload = vi.spyOn(value.gateway, 'uploadOriginal');
 
 		await expect(
-			uploadPreparedImageToDriveWithGateway(
-				{ prepared: prepared() },
-				value.gateway,
-				dependencies()
-			)
+			uploadPreparedImageToDriveWithGateway({ prepared: prepared() }, value.gateway, dependencies())
 		).rejects.toMatchObject({ name: 'DuplicateImageError', documentId });
 		expect(resolve).not.toHaveBeenCalled();
 		expect(upload).not.toHaveBeenCalled();
