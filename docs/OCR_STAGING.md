@@ -1,30 +1,40 @@
 # Validação de OCR real em staging
 
-O workflow `Verify OCR staging` executa uma única leitura real contra as Edge Functions e o provedor configurado no projeto Supabase de staging. Ele usa somente uma conta autorizada, uma chave publicável e uma imagem sintética gerada durante o job.
+O workflow `Verify OCR staging` executa uma leitura real contra as Edge Functions e o provedor configurado no projeto Supabase de staging. Ele usa uma conta autorizada, uma chave publicável e conteúdo sintético gerado durante o job.
 
-A execução é **manual** e exige marcar `confirm_external_ocr`. Essa confirmação existe porque a chamada sai da infraestrutura local e pode consumir quota do provedor. O workflow não habilita billing, não escolhe fallback pago e não recebe a chave Gemini.
+A execução é **manual** e exige marcar `confirm_external_ocr`. A confirmação existe porque a chamada sai da infraestrutura local e consome quota real do provedor. O workflow não habilita billing, não escolhe fallback pago e não recebe a chave Gemini.
 
 ## Pré-requisitos no Supabase
 
 Antes da primeira execução:
 
-1. crie e valide o projeto Supabase de staging descrito em `docs/SUPABASE_STAGING.md`;
-2. aplique todas as migrations da branch que será testada;
+1. crie e valide o projeto descrito em `docs/SUPABASE_STAGING.md`;
+2. aplique todas as migrations, incluindo:
+   - `202608060014_provider_only_ocr_batches.sql`;
+   - `202608060015_ocr_batch_usage_and_hardening.sql`;
+   - `202608060016_harden_ocr_batch_transitions.sql`;
 3. implante as Edge Functions `process-ocr` e `delete-document`;
 4. mantenha a conta `STAGING_AUTHORIZED_EMAIL` ativa em `public.app_users`;
-5. configure no ambiente das Edge Functions:
+5. configure nas Edge Functions:
 
 ```text
 APP_ORIGIN
 GEMINI_API_KEY
 OCR_MODEL_PRIMARY
 OCR_PROMPT_VERSION
-OCR_DAILY_HARD_LIMIT
 ```
 
-`APP_ORIGIN` precisa ser uma origem HTTPS válida do host de staging. `OCR_DAILY_HARD_LIMIT` deve ser um inteiro positivo e conservador. A credencial Gemini permanece somente no Supabase.
+Controles técnicos opcionais:
 
-Não cadastre `GEMINI_API_KEY` nem service-role key no GitHub Actions. O job usa os mesmos secrets públicos da verificação Supabase:
+```text
+OCR_BATCH_MAX_PAGES=40
+OCR_BATCH_MAX_BYTES=12582912
+OCR_REQUEST_TIMEOUT_MS=120000
+```
+
+`OCR_DAILY_HARD_LIMIT` não pertence mais ao contrato. Remova o segredo antigo depois de confirmar que a Edge Function nova foi implantada. A capacidade é determinada pela quota real do provedor; contadores locais servem somente para telemetria.
+
+Não cadastre `GEMINI_API_KEY` nem service-role key no GitHub Actions. O job usa apenas:
 
 ```text
 STAGING_SUPABASE_URL
@@ -33,18 +43,18 @@ STAGING_AUTHORIZED_EMAIL
 STAGING_AUTHORIZED_PASSWORD
 ```
 
-## Executar
+## Executar o smoke real
 
 No GitHub Actions:
 
 1. abra `Verify OCR staging`;
 2. escolha a branch ou SHA desejado;
 3. marque `confirm_external_ocr`;
-4. execute e aprove o environment `staging`, se ele estiver protegido.
+4. execute e aprove o environment `staging`, quando protegido.
 
-Sem a confirmação, o job termina antes de instalar dependências ou fazer qualquer chamada OCR.
+Sem confirmação, o job termina antes de instalar dependências ou chamar o OCR.
 
-Também é possível executar o verificador localmente, assumindo que o projeto remoto já está preparado:
+Também é possível executar o verificador localmente:
 
 ```bash
 STAGING_SUPABASE_URL=https://PROJECT.supabase.co \
@@ -54,69 +64,203 @@ STAGING_AUTHORIZED_PASSWORD=... \
 pnpm test:staging:ocr
 ```
 
-Prefira variáveis temporárias ou um gerenciador de secrets; não grave senhas no histórico do shell.
+Prefira variáveis temporárias ou gerenciador de secrets; não grave senhas no histórico do shell.
 
-## Contratos verificados
+## Contratos do smoke de imagem
 
-A execução:
+A prova atual:
 
 - autentica a conta pela API pública;
-- confirma que `is_authorized_user()` permanece verdadeiro;
-- registra a versão de consentimento OCR;
-- gera em memória um PNG válido e legível com o texto `FICHARIO OCR 2718`;
-- adiciona um nonce privado ao PNG para produzir SHA-256 diferente a cada execução;
-- envia original e miniatura ao prefixo privado do UUID autenticado;
-- cria documento, página e trabalho OCR por `create_image_import`;
-- invoca `process-ocr` com o `pageId` sintético;
+- confirma `is_authorized_user()`;
+- registra consentimento OCR;
+- gera em memória um PNG sintético com `FICHARIO OCR 2718`;
+- usa nonce privado para SHA-256 diferente em cada execução;
+- envia original e miniatura ao prefixo privado da conta;
+- cria documento, página e trabalho por `create_image_import`;
+- invoca `process-ocr` com o `pageId` legado, que internamente usa um lote de uma página;
 - exige resposta terminal `complete`;
-- confirma que documento, página e trabalho terminam alinhados em `ready` ou `needs_review`;
-- exige `extraction_source = 'ocr'` e transcript contendo `fichario`, `ocr` e `2718` após normalização;
-- exige tentativa e timestamp terminal persistidos, sem `last_error_code`;
+- confirma documento, página e trabalho em `ready` ou `needs_review`;
+- exige `extraction_source = 'ocr'` e transcript contendo os três tokens após normalização;
+- exige tentativa e timestamp terminal, sem `last_error_code`;
 - invoca `delete-document` antes de encerrar a sessão;
-- preserva simultaneamente falhas da verificação e da limpeza.
+- preserva simultaneamente falhas da prova e da limpeza.
 
-O job não imprime transcript, tokens, URLs assinadas ou credenciais. O conteúdo enviado é totalmente sintético.
+O job não imprime transcript, tokens, URLs assinadas ou credenciais.
+
+## Matriz obrigatória de lotes e PDFs
+
+O smoke de imagem é necessário, mas não suficiente para promover a implementação adaptativa. Execute também as provas abaixo com documentos sintéticos ou autorizados.
+
+### Texto nativo
+
+Fixture: PDF textual de cinco páginas.
+
+Esperado:
+
+- texto extraído localmente;
+- zero chamadas Gemini;
+- nenhuma imagem temporária para página textual;
+- busca disponível depois da publicação;
+- hash do original inalterado.
+
+### PDF misto
+
+Fixture: texto nativo mais três páginas digitalizadas.
+
+Esperado:
+
+- somente páginas visuais aparecem no manifesto OCR;
+- números originais são preservados;
+- falha visual não invalida texto nativo já persistido.
+
+### Lote normal
+
+Fixture: PDF digitalizado de 45 páginas.
+
+Com os controles padrão, espera-se normalmente:
+
+- duas chamadas iniciais, 40 + 5;
+- 45 resultados persistidos por página;
+- `ocr_pages = 45`;
+- `ocr_batches = 2` e `ocr_calls = 2`, salvo divisão provocada por resposta real;
+- tamanho médio de lote visível no painel;
+- temporários apagados somente depois da persistência segura.
+
+### Omissão, duplicação e truncamento
+
+Use gateway simulado ou resposta controlada.
+
+Esperado:
+
+- páginas válidas são persistidas imediatamente;
+- páginas omitidas ou duplicadas recebem `ocr_batch_split_required`;
+- JSON truncado é tratado como páginas ausentes daquele lote;
+- somente o subconjunto afetado é dividido;
+- páginas aceitas não são reenviadas;
+- uma página isolada que continua falhando permanece pendente, sem loop infinito.
+
+### Limite agregado de bytes
+
+Configure temporariamente `OCR_BATCH_MAX_BYTES` para um valor pequeno.
+
+Esperado:
+
+- o maior prefixo seguro é enviado;
+- as páginas restantes voltam em `splitRequiredPageIds`;
+- o cliente cria lotes menores;
+- nenhuma chamada ultrapassa o limite configurado;
+- o original não é recomprimido.
+
+### Página temporária grande
+
+Faça a primeira renderização superar 12 MiB.
+
+Esperado:
+
+- somente essa página recebe uma segunda renderização conservadora;
+- o original permanece intacto;
+- uma derivação ainda grande não é enviada silenciosamente nem causa estouro de memória.
+
+### Cota do provedor
+
+Teste separadamente:
+
+- `429` temporário: página e lote ficam `retryable`, com backoff finito;
+- quota diária real: páginas ficam `blocked_quota` até o período seguinte;
+- contador local elevado: não bloqueia chamada aceita pelo provedor.
+
+Nenhum cenário pode ativar billing ou fallback pago.
+
+### Cancelamento e retomada
+
+Cancele depois do primeiro lote de um PDF com mais de 40 páginas e reabra o documento.
+
+Esperado:
+
+- páginas concluídas permanecem concluídas;
+- páginas não iniciadas permanecem pendentes;
+- retomada agrupa somente páginas executáveis;
+- resposta parcial durante retomada também é dividida;
+- temporário necessário a outra rota não é apagado prematuramente.
+
+### PDFs maiores que uma chamada
+
+Fixtures:
+
+- PDF sintético acima de 50 MB;
+- PDF sintético acima de 1.000 páginas.
+
+Esperado:
+
+- um único documento lógico permanece no Drive;
+- o original não é enviado inteiro ao Gemini;
+- somente páginas que precisam de OCR são renderizadas;
+- artefatos temporários respeitam bytes e páginas do lote;
+- hash do original antes e depois é idêntico.
+
+O download direto pelo Google Picker continua limitado a 50 MiB no navegador. Esse é um limite técnico do caminho de download, não do documento lógico. Arquivos maiores precisam permanecer ou ser copiados no Drive pelo fluxo Drive-first.
+
+## Auditoria do banco
+
+Para cada prova, confira:
+
+- `ocr_batches.page_ids` e `page_numbers` na ordem correta;
+- `ocr_jobs.batch_id` e `batch_ordinal`;
+- `provider_call_count` igual às chamadas iniciadas;
+- tentativas por lote e por página;
+- `last_error_code`, `next_retry_at` e terminalidade idempotente;
+- RLS impedindo outro usuário de ler ou finalizar o lote;
+- `usage_daily` separando páginas, lotes, chamadas e tentativas;
+- ausência de qualquer contador apresentado como “páginas restantes”.
+
+Não copie texto de páginas para logs, artifacts ou relatórios.
 
 ## Relatório sanitizado
 
-Toda execução publica por sete dias o artifact `ocr-staging-report-<run-id>`. O arquivo JSON é inicializado antes da confirmação manual, portanto uma execução recusada ainda registra `status = not_run` sem instalar dependências nem chamar o OCR.
+Toda execução manual publica por sete dias o artifact `ocr-staging-report-<run-id>`. O JSON é inicializado antes da confirmação, então uma execução recusada registra `status = not_run` sem instalar dependências nem chamar OCR.
 
-Quando o verificador executa, ele substitui o arquivo com um relatório schema 1 contendo somente:
+O relatório contém somente:
 
 - `status`: `pass`, `fail` ou `not_run`;
-- `failureStage`: etapa enumerada, sem mensagem de erro bruta;
+- `failureStage` enumerado;
 - flags de autenticação, autorização, consentimento, importação, função e persistência;
 - estados terminais, contagens e presença booleana dos tokens sintéticos;
-- resultado da remoção do documento e do encerramento da sessão.
+- resultado da remoção e encerramento da sessão.
 
-O relatório não contém e-mail, UUID de usuário, IDs de documento/página/job, caminhos de Storage, URL, transcript, mensagem do provedor ou secrets. O upload usa `if: always()`, permitindo comparar falhas de configuração, execução e cleanup sem consultar dados privados.
+Ele não contém e-mail, IDs, caminhos, URL, transcript, mensagem do provedor ou secrets.
 
 ## Interpretação de falhas
 
-Falhas antes de `process-ocr` normalmente indicam Auth, allowlist, migrations, Storage ou configuração do environment GitHub.
+Falhas antes de `process-ocr` normalmente indicam Auth, allowlist, migrations, Storage ou configuração do environment.
 
-Falhas com `ocr_not_configured` indicam ausência ou valor inválido em uma das variáveis da Edge Function. Falhas de provider devem ser interpretadas pela classificação persistida em `ocr_jobs`, sem substituir automaticamente modelo, chave ou plano.
+`ocr_not_configured` indica variável ausente ou inválida. Falhas do provedor devem ser interpretadas pelos estados persistidos, sem troca automática de modelo, chave ou plano.
 
-Se o transcript não contiver os três tokens, trate como falha do smoke test. Não enfraqueça o contrato para aceitar texto vazio ou irrelevante; revise primeiro a imagem, o modelo e o prompt configurados.
+Se o transcript sintético não contiver os três tokens, não enfraqueça o contrato. Revise imagem, modelo e prompt.
 
 ## Recuperação
 
-O fluxo normal remove o documento pela Edge Function, incluindo original, miniatura, página e trabalho relacionado. Se o job for interrompido depois da criação:
+Se o job for interrompido depois da criação:
 
-1. procure um documento da conta de teste com título `__staging_ocr_probe__`;
+1. procure documento da conta de teste com título `__staging_ocr_probe__`;
 2. confirme que os caminhos estão sob `<uuid-da-conta>/<document-id>/`;
-3. use o fluxo normal `delete-document` para removê-lo;
-4. não use service-role dentro do workflow para ocultar uma falha de cleanup.
+3. remova pelo fluxo normal `delete-document`;
+4. não use service-role no workflow para ocultar falha de cleanup.
 
-A conta de teste pode manter o consentimento OCR registrado entre execuções. Ela não deve ser reutilizada como conta pessoal ou de produção.
+## Critério de aprovação
 
-## Limites desta prova
+A implementação só recebe `PASS` de staging quando:
 
-Um resultado verde comprova uma chamada real bem-sucedida para uma imagem sintética. Ele não substitui:
+- migrations e pgTAP passam em banco limpo;
+- Edge Functions passam no `deno check`;
+- testes unitários, build e E2E passam no mesmo SHA;
+- smoke real de imagem passa;
+- PDF textual produz zero chamadas;
+- PDF visual multipágina usa menos chamadas do que páginas;
+- omissão, duplicação e truncamento não perdem páginas;
+- cancelamento e retomada não repetem páginas concluídas;
+- contador local alto não bloqueia OCR;
+- `429` e quota real preservam estado;
+- original mantém o mesmo hash;
+- nenhum billing ou fallback pago foi ativado.
 
-- injeção controlada de 429 diário e transitório;
-- 503, timeout e payload inválido;
-- PDFs digitalizados ou mistos;
-- retomada depois de encerramento do navegador;
-- medição de memória em dispositivo físico;
-- confirmação administrativa de billing desativado.
+Registre SHA, modelo, data, limites técnicos e evidências em `docs/CURRENT_STATUS.md` e `docs/DEPLOYMENT.md`.
