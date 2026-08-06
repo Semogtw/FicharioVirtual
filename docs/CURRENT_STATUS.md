@@ -2,260 +2,286 @@
 
 _Atualizado: 2026-08-06_  
 _Branch ativa: `main`_  
-_Estado: integração Google Drive obrigatória em implementação; Cloudflare Pages, OCR desktop e processamento automático de PDFs grandes aprovados, mas ainda não implementados; release bloqueada._
+_Estado: OCR por lotes e quota real implementado em código; release ainda bloqueada por CI atual, banco limpo, staging externo, Drive completo, Cloudflare e dispositivos reais._
 
 ## Resumo executivo
 
-O Fichário Virtual já possui uma PWA SvelteKit avançada para organizar imagens e PDFs privados, preservar texto nativo, executar OCR seletivo, pesquisar, revisar e exportar metadados.
+O Fichário Virtual é uma PWA privada para organizar imagens e PDFs, preservar o original no Google Drive, extrair texto nativo, executar OCR seletivo, pesquisar, revisar e exportar metadados.
 
-A arquitetura canônica agora possui quatro autoridades ou superfícies distintas:
+A arquitetura canônica possui quatro autoridades ou superfícies:
 
-- **Google Drive:** armazenamento permanente dos originais;
-- **Supabase:** Auth, PostgreSQL, RLS, filas, resultados, busca, sincronização e artefatos temporários;
-- **Cloudflare Pages:** host estático e artefatos públicos de modelos, sem dados privados;
-- **computador confiável:** processamento opcional de manuscritos e páginas difíceis por um worker local.
+- **Google Drive:** arquivos originais permanentes;
+- **Supabase:** Auth, PostgreSQL, RLS, filas, resultados, busca, sincronização e temporários;
+- **Cloudflare Pages:** frontend estático e artefatos públicos, sem documentos privados;
+- **computador confiável:** rota opcional futura para manuscritos e páginas difíceis.
 
-Gemini continua sendo o mecanismo de OCR geral e imediato. A arquitetura aprovada permite que páginas manuscritas, mistas ou incertas aguardem o computador e sejam processadas por um modelo local mais pesado. O worker consulta a fila por HTTPS de saída; não existe push direto do navegador, porta pública ou Cloudflare Tunnel.
+O OCR Gemini agora suporta chamadas multipágina com persistência por página, lotes adaptativos, retomada e divisão seletiva. O Fichário não cria mais uma franquia diária própria; somente a quota real do provedor pode bloquear a execução.
 
-PDFs maiores que o limite de uma única chamada continuam sendo um único documento lógico no Drive. O aplicativo deverá inspecionar, dividir e, quando seguro, comprimir somente cópias temporárias, preservando numeração original e reunindo os resultados por página.
+## Capacidades já implementadas
 
-## Base anterior implementada
+### Produto e segurança
 
 - conta única com allowlist fail-closed;
-- interface editorial responsiva para desktop, tablet e celular;
+- interface responsiva para desktop, tablet e celular;
 - biblioteca, cadernos, tags e organização em lote;
-- importação cancelável/retomável de imagens e PDFs;
-- preparação local de imagens, miniaturas, hash e deduplicação;
-- inspeção local de PDFs e preservação de texto nativo;
-- OCR seletivo, persistente, concorrente, idempotente e com backoff;
-- busca textual ranqueada, leitor lado a lado e revisão manual;
-- rascunhos locais recuperáveis;
-- exportação JSON portátil sem tokens;
 - RLS, Storage privado, Edge Functions e URLs assinadas;
 - PWA sem cache de conteúdo autenticado;
-- testes unitários, E2E, pgTAP e gates de deployment;
-- coordenação real entre duas abas.
+- exportação JSON portátil sem tokens;
+- coordenação entre abas;
+- busca textual, leitor lado a lado e correção manual.
 
-Essas capacidades permanecem válidas, mas algumas rotas de importação ainda gravam o original no Supabase e precisam ser migradas para Drive. O OCR atual ainda está acoplado ao Gemini, mantém um único resultado efetivo por página, processa uma página por chamada, exige limite diário interno e restringe PDFs a 20 MB no fluxo existente.
+### Importação e PDFs
 
-## Trabalho Drive incorporado
+- importação cancelável e retomável de imagens e PDFs;
+- preparação local, miniaturas, SHA-256 e deduplicação;
+- inspeção local de PDFs;
+- texto nativo preservado sem OCR;
+- PDF misto envia somente páginas sem texto suficiente;
+- teto artificial de 20 MB removido da importação local;
+- original local segue por upload retomável ao Drive;
+- páginas visuais são renderizadas separadamente;
+- derivação acima de 12 MiB recebe uma segunda renderização conservadora;
+- original nunca é recomprimido ou substituído;
+- caminho direto do Google Picker aceita até 50 MiB e verifica tamanho antes do download.
 
-### Documentação e escopo
+O limite de 50 MiB do Picker é técnico e restrito ao download integral no navegador. Ele não é limite do documento lógico nem dos lotes de OCR. Arquivos externos maiores ainda dependem da conclusão do fluxo Drive-first por referência ou cópia.
 
-- design consolidado em `docs/superpowers/specs/2026-08-06-google-drive-primary-storage-design.md`;
-- plano executável em `docs/superpowers/plans/2026-08-06-google-drive-primary-storage.md`;
-- especificação canônica alterada para Drive permanente;
-- runbook externo em `docs/GOOGLE_DRIVE_SETUP.md`;
-- README e prontidão corrigidos;
-- percentuais antigos removidos.
+## OCR por quota real e lotes adaptativos
 
-### Contratos TypeScript
+A implementação está detalhada em:
 
-- tipos de arquivo, mudança, página, estado físico e conflito;
-- parsers Zod estritos para respostas Google;
-- rejeição de campos extras, tokens acidentais, IDs duplicados e timestamps inválidos;
-- escopo exato `https://www.googleapis.com/auth/drive.file`;
-- criação segura de queries para pastas;
-- valores parseados congelados.
+- `docs/checkpoints/2026-08-06-provider-only-ocr-large-pdf-implementation.md`;
+- `docs/superpowers/specs/2026-08-06-provider-only-ocr-quota-and-adaptive-batching-design.md`;
+- `docs/superpowers/specs/2026-08-06-oversized-pdf-splitting-and-compression-design.md`.
 
-### Reconciliação e sincronização
+### Banco
 
-- remoção remota vira `missing` sem apagar OCR, correções, título, caderno ou tags;
-- mesmo ID remoto reconecta o item;
-- identidade divergente cria conflito isolado;
-- sincronizador pagina o feed;
-- checkpoint só é salvo depois de aplicar todos os itens da página;
-- falha de persistência impede avanço do token;
-- conflito de um item não impede aplicação dos demais;
-- ciclos ou repetição de tokens são rejeitados.
+Migrations novas:
 
-### Banco de dados
+```text
+202608060014_provider_only_ocr_batches.sql
+202608060015_ocr_batch_usage_and_hardening.sql
+202608060016_harden_ocr_batch_transitions.sql
+```
 
-As migrations novas adicionam:
+Elas implementam:
 
-- `drive_connections`;
-- hierarquia `parent_notebook_id`;
-- `drive_folder_id` em cadernos;
-- `drive_file_id` e estado físico em documentos;
-- `storage_path` opcional para temporário ou fallback;
-- `drive_sync_jobs` com idempotência, tentativa, lease e backoff;
-- `drive_conflicts` isolados;
-- enums de conexão, operação, sincronização e conflito;
-- RLS e políticas por proprietário;
-- RPCs `mark_drive_file_missing`, `reconnect_drive_file` e `claim_drive_sync_job`;
-- testes pgTAP para isolamento, hierarquia, IDs únicos, ausência, reconexão e idempotência.
+- `ocr_batches` com páginas, números originais, rota, bytes, modelo, tentativas e chamadas;
+- vínculo ordenado por `batch_id` e `batch_ordinal` em `ocr_jobs`;
+- métricas informativas de páginas, lotes, chamadas e tentativas;
+- nova assinatura de `claim_ocr_job` sem limite diário do aplicativo;
+- remoção da assinatura antiga com quarto argumento;
+- RLS de manifestos;
+- escrita somente por RPCs validados;
+- transições terminais idempotentes;
+- `blocked_quota` reservado para bloqueio real do provedor.
 
-### Estado público de conexão
+### Planejamento
 
-- projeção pública estrita sem tokens;
-- estados “não configurado”, “desconectado”, “conectando”, “sincronizando”, “conectado”, “erro” e “revogado”;
-- rejeição de qualquer refresh token, access token ou campo extra;
-- mensagens que preservam metadados quando o acesso é revogado.
+O planejador:
 
-## Decisão Cloudflare e OCR desktop incorporada
+- ordena por número original;
+- rejeita IDs e números duplicados;
+- não mistura rotas;
+- usa normalmente até 40 páginas;
+- reduz para até 20 páginas em conteúdo denso;
+- respeita limite acumulado de bytes;
+- divide deterministicamente o subconjunto afetado;
+- valida omissões, duplicações e páginas inesperadas.
 
-A decisão está documentada em:
+Os valores 40 e 20 são padrões técnicos, não franquias.
 
-- `docs/superpowers/specs/2026-08-06-cloudflare-pages-and-desktop-ocr-design.md`;
-- `docs/CLOUDFLARE_SETUP.md`;
-- `docs/DESKTOP_OCR_WORKER.md`.
+### Execução
 
-### Cloudflare
+`process-ocr` aceita uma página legada ou uma lista de páginas. A função:
 
-- Cloudflare Pages é o host estático preferencial;
-- o projeto continua usando `@sveltejs/adapter-static` e output `build/`;
-- um segundo projeto Pages por Direct Upload pode distribuir modelos fragmentados em partes de até 20 MiB;
-- nenhum documento privado, resultado, token ou secret passa pela Cloudflare;
-- R2 é opcional e não integra o MVP por padrão, pois envolve assinatura e cobrança por uso;
-- o tablet não baixa modelos do worker ao instalar ou abrir a PWA.
+- valida um único documento;
+- reivindica cada página;
+- ignora itens já concluídos;
+- baixa derivados sequencialmente;
+- envia o maior prefixo seguro;
+- registra manifesto e chamada;
+- faz uma requisição Gemini para várias páginas;
+- exige identidade estável por `pageId` e número original;
+- persiste resultados válidos independentemente;
+- transforma JSON truncado em páginas ausentes;
+- divide somente omissões e duplicações afetadas;
+- não repete páginas aceitas;
+- deixa uma página isolada pendente em vez de entrar em loop;
+- limpa somente temporários concluídos;
+- diferencia rate limit temporário de quota diária real.
 
-### OCR híbrido
+A retomada depois de reload utiliza o mesmo executor adaptativo.
 
-- texto nativo continua tendo prioridade e não chama OCR;
-- cadernos e páginas poderão declarar `automatic`, `printed`, `handwritten` ou `mixed`;
-- Gemini processa conteúdo geral e pode classificar o tipo na mesma resposta;
-- caderno explicitamente manuscrito pula Gemini por padrão;
-- manuscrito, conteúdo misto, classificação desconhecida ou baixa qualidade entram na fila desktop;
-- resultados Gemini e desktop serão preservados separadamente;
-- correção manual permanece a autoridade final.
+### Telemetria
 
-### Worker local
+A tela de uso mostra:
 
-- opera como serviço systemd do usuário no CachyOS;
-- inicia apenas conexões HTTPS de saída;
-- usa pareamento de uso único e credencial de dispositivo revogável;
-- nunca recebe `service_role`, chave Gemini ou refresh token do Drive;
-- reivindica um trabalho com lease e heartbeat;
-- baixa página temporária privada por URL curta;
-- valida SHA-256 da origem;
-- envia texto, avisos, modelo, versão e hash;
-- guarda spool local de resultados ainda não transmitidos;
-- usa CPU como fallback obrigatório;
-- trata Vulkan como candidato e ROCm na RX 6600 como experimental até benchmark.
+- páginas;
+- lotes;
+- chamadas;
+- tentativas;
+- média de páginas por chamada;
+- páginas bloqueadas pela quota real do provedor;
+- pendências, revisão e falhas.
 
-## Decisão de PDFs grandes incorporada
+Nenhum contador local é apresentado como quantidade restante.
 
-A decisão está documentada em:
+## Google Drive
 
-- `docs/superpowers/specs/2026-08-06-oversized-pdf-splitting-and-compression-design.md`;
-- `docs/superpowers/specs/2026-08-06-provider-only-ocr-quota-and-adaptive-batching-design.md`.
+Já existem:
 
-### Limites e documento lógico
+- design e plano Drive-first;
+- contratos TypeScript estritos;
+- escopo `drive.file`;
+- reconciliação paginada;
+- checkpoint somente após persistência;
+- identidade por IDs remotos;
+- ausência sem perda de OCR e metadados;
+- conflitos isolados;
+- migrations de conexão, pastas, arquivos, jobs e conflitos;
+- estado público sem tokens;
+- upload local retomável do original;
+- Google Picker explícito com download direto limitado.
 
-Na verificação de 6 de agosto de 2026, a Gemini informava limite de 50 MB ou 1.000 páginas por PDF enviado. Esse limite pertence ao artefato de uma chamada, não ao PDF original da biblioteca.
+Ainda faltam para considerar o Drive completo:
 
-- original permanece único e intacto no Drive;
-- o usuário não divide o arquivo manualmente;
-- texto nativo é extraído antes de qualquer OCR;
-- somente páginas necessárias formam lotes temporários;
-- lotes iniciais densos ficam em torno de 20 a 40 páginas;
-- Files API não remove o limite por PDF;
-- o limite de saída pode exigir lotes menores mesmo quando o arquivo cabe na entrada.
+1. OAuth real e redirects finais;
+2. raiz e pastas em ambiente externo;
+3. Picker e upload validados com conta real;
+4. feed de mudanças e runner implantados;
+5. UI final de ausentes e conflitos;
+6. migração dos originais antigos com rollback;
+7. importação por referência ou cópia para arquivo externo acima de 50 MiB.
 
-### Divisão e compressão
+## Cloudflare Pages
 
-- divisão automática é a estratégia principal;
-- compressão é secundária, conservadora e aplicada somente a derivados temporários;
-- cores semanticamente relevantes, fórmulas e detalhes de manuscrito devem ser preservados;
-- cada lote registra páginas originais, hashes, transformação, rota e tentativa;
-- resposta precisa associar texto ao `page_id`, não apenas à posição;
-- truncamento, omissão, duplicação ou timeout relacionado ao tamanho causa bisseção do lote afetado;
-- páginas já concluídas não são reprocessadas;
-- Gemini e desktop podem processar partes diferentes do mesmo documento;
-- temporários são limpos somente após persistência segura.
+Decisão aprovada e documentada:
 
-## Pendências imediatas de código
+- frontend estático em `build/`;
+- integração Git com `main`;
+- nenhum documento privado na Cloudflare;
+- projeto separado para partes públicas de modelos;
+- R2 desativado por padrão;
+- nenhum billing automático.
 
-### Google Drive
+Ainda faltam:
 
-1. tornar o novo head integralmente verde no workflow;
-2. gerar os tipos TypeScript do schema Drive;
-3. criar serviço Supabase para ler a conexão e acionar sync;
-4. integrar cartão Drive à tela de Configurações;
-5. implementar Edge Functions de OAuth;
-6. implementar cliente Drive backend/browser com token efêmero;
-7. criar ou reconectar a raiz e pastas de cadernos;
-8. implementar upload retomável e Picker;
-9. conectar filas de imagens e PDFs ao Drive;
-10. implementar gateway real do feed e runner de jobs;
-11. criar UI de ausentes e conflitos;
-12. migrar originais existentes com rollback.
+1. criar projetos reais;
+2. configurar origem final, headers e fallback;
+3. validar deploy e rollback;
+4. validar PWA instalada em celular e tablet;
+5. publicar artefatos de modelo somente depois da implementação do worker.
 
-### Cloudflare
+## Worker desktop
 
-1. configurar Pages com integração Git e output `build/`;
-2. validar `_headers`, fallback `200.html`, PWA e origem canônica;
-3. atualizar `APP_ORIGIN`, Supabase Auth, CORS e referências externas;
-4. criar projeto Pages Direct Upload para modelos;
-5. implementar empacotamento fragmentado, manifestos, licenças e checksums;
-6. validar rollback do frontend e de versões recomendadas de modelos.
+A arquitetura do worker continua aprovada, mas não está implementada por esta entrega.
 
-### OCR desktop
+Decisões preservadas:
 
-1. separar múltiplos resultados OCR por mecanismo;
-2. adicionar tipo de conteúdo e política de roteamento;
-3. criar tabelas de dispositivo, pareamento, eventos e leases;
-4. criar Edge Functions exclusivas do worker;
-5. adaptar limpeza de páginas temporárias para aguardar todas as rotas;
-6. implementar worker CPU-first e serviço systemd do usuário;
-7. implementar cache de modelos, checksums e spool local;
-8. integrar UI de dispositivos, fila e overrides;
-9. testar classificação Gemini sem chamada extra;
-10. executar benchmark de modelos com páginas reais e RX 6600.
+- conexão HTTPS somente de saída;
+- nenhuma porta pública;
+- pareamento e revogação;
+- claim, lease e heartbeat;
+- resultado separado do Gemini;
+- CPU como fallback obrigatório;
+- Vulkan candidato;
+- RX 6600 e ROCm experimentais até benchmark;
+- nenhum service-role, chave Gemini ou refresh token no computador.
 
-### PDFs grandes e lotes adaptativos
+## Testes e gates adicionados
 
-1. remover teto diário interno e separar telemetria de bloqueio;
-2. remover o teto de 20 MB como limite arquitetural do documento lógico;
-3. distinguir limite de importação, limite de processamento e limite do provedor;
-4. criar manifesto persistente de páginas e lotes;
-5. implementar extração de subconjuntos de páginas;
-6. implementar compressão temporária versionada e conservadora;
-7. criar planejador adaptativo para Gemini e desktop;
-8. implementar bisseção automática de lote problemático;
-9. validar correspondência exata de páginas em respostas estruturadas;
-10. adaptar progresso, retomada, limpeza e painel;
-11. criar fixtures sintéticas acima de 50 MB e de 1.000 páginas;
-12. testar que hash e bytes do original permanecem inalterados.
+### Unitários
 
-## Pendências externas
+- planejador e bisseção;
+- parser estrito do lote;
+- cliente Gemini multi-imagem;
+- cliente browser agregado;
+- 429 temporário versus quota diária;
+- PDF de 21 MiB;
+- 45 páginas em 40 + 5;
+- segunda renderização de página grande;
+- cancelamento e retomada;
+- JSON truncado;
+- página isolada sem loop;
+- Picker até 50 MiB.
 
-- Google Cloud e Drive API;
-- tela de consentimento;
-- cliente OAuth Web e redirect URI;
-- secrets no Supabase;
-- migrations novas aplicadas ao staging;
-- OAuth real, upload e feed validados;
-- conta e domínio Cloudflare;
-- projeto Pages da PWA;
-- projeto Pages dos modelos;
-- origem HTTPS e `APP_ORIGIN` final;
-- contas de teste Supabase;
-- OCR staging;
-- instalação e pareamento do worker no CachyOS;
-- benchmark em CPU, Vulkan e RX 6600;
-- validação de PDFs grandes no tablet e no computador;
-- verificação dos limites oficiais de PDF, entrada e saída na data do deployment;
-- celular e tablet;
-- billing, backup e rollback.
+### Banco
+
+- claim sem quota interna;
+- contador histórico alto sem bloqueio;
+- concorrência;
+- idempotência;
+- manifesto e ordem;
+- telemetria separada;
+- RLS;
+- transições terminais.
+
+### Estáticos
+
+- Deno inclui contrato multipágina;
+- gate impede retorno do teto diário no código ativo;
+- migration histórica permanece imutável e é explicitamente superada;
+- imports unitários continuam compatíveis por reexportação.
+
+## Estado de validação
+
+### Executado parcialmente
+
+Uma execução intermediária do GitHub Actions alcançou frontend, gates offline, Deno e banco, mas foi rejeitada no final porque:
+
+- o snapshot intermediário ainda possuía divergência de Prettier;
+- um teste concorrente antigo do Google Drive produziu artifact de reparo;
+- etapas de navegador foram puladas.
+
+Essa execução não aprova o código atual e também não demonstrou falha do novo OCR.
+
+### Ainda obrigatório no mesmo SHA atual
+
+```bash
+pnpm format:check
+pnpm check
+pnpm lint
+pnpm test:unit
+pnpm check:edge
+pnpm check:offline
+pnpm test:db
+pnpm build
+pnpm test:e2e
+```
+
+Além disso:
+
+- migrations em banco limpo;
+- smoke Gemini real;
+- lote real multipágina;
+- fixtures acima de 50 MB e 1.000 páginas;
+- hash do original antes e depois;
+- cancelamento e retomada em dispositivo real;
+- tablet e celular;
+- confirmação administrativa de ausência de billing.
+
+## Pendências imediatas
+
+1. obter CI integralmente verde no SHA atual;
+2. corrigir qualquer formatação ou tipo revelado pelo CI atual;
+3. aplicar migrations em Supabase limpo;
+4. regenerar tipos TypeScript pelo schema real;
+5. executar `docs/OCR_STAGING.md`;
+6. validar PDFs grandes em computador e tablet;
+7. completar o Drive externo, incluindo arquivos maiores que o caminho direto do Picker;
+8. implantar Cloudflare;
+9. continuar worker desktop como etapa separada.
 
 ## Regras de continuidade
 
+- não reinserir teto diário interno;
+- não apresentar contadores locais como quota restante;
+- não comprimir ou substituir o original;
+- não repetir páginas já aceitas;
+- não apagar temporário antes de todas as rotas necessárias terminarem;
 - não ampliar além de `drive.file` no MVP;
-- não persistir tokens no navegador ou em tabelas expostas;
-- não remover originais do Supabase antes de confirmação e rollback do Drive;
-- não usar nome ou caminho como identidade;
-- não apagar OCR e metadados quando o arquivo desaparece;
-- não avançar page token antes da persistência completa;
-- não deixar um conflito bloquear a fila inteira;
+- não persistir tokens no navegador;
 - não colocar conteúdo privado na Cloudflare;
-- não obrigar o tablet a baixar modelos do computador;
-- não expor porta doméstica para o worker;
-- não tratar ROCm na RX 6600 como suportado sem evidência;
 - não ativar R2, billing ou fallback pago automaticamente;
-- manter resultados de mecanismos diferentes separados;
-- não alterar ou recomprimir o PDF original no Drive;
-- não tratar 50 MB ou 1.000 páginas como limite do documento lógico;
-- não marcar lote com página omitida, duplicada ou truncada como concluído;
-- não reiniciar o documento inteiro por falha de um lote;
-- manter commits pequenos e atribuir `PASS` somente ao SHA realmente validado.
+- não declarar release pronta sem gates, staging e dispositivos no mesmo SHA.
