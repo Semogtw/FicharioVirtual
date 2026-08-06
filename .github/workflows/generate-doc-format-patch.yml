@@ -37,6 +37,7 @@ jobs:
             tests/unit/tooling/current-head-workflow.test.ts \
             tests/unit/tooling/drive-edge-security-gate.test.ts \
             tests/unit/tooling/supabase-config.test.ts \
+            tests/unit/tooling/workflow-permissions.test.ts \
             tools/checks/check-source-security.mjs
           git diff --binary -- \
             docs/DESKTOP_OCR_WORKER.md \
@@ -47,6 +48,7 @@ jobs:
             tests/unit/tooling/current-head-workflow.test.ts \
             tests/unit/tooling/drive-edge-security-gate.test.ts \
             tests/unit/tooling/supabase-config.test.ts \
+            tests/unit/tooling/workflow-permissions.test.ts \
             tools/checks/check-source-security.mjs \
             > /tmp/review-format.patch
           test -s /tmp/review-format.patch
