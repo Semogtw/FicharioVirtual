@@ -175,7 +175,18 @@ jobs:
         id: database
         if: steps.supabase.outcome == 'success'
         continue-on-error: true
-        run: pnpm test:db:local
+        run: |
+          set -o pipefail
+          pnpm test:db:local 2>&1 | tee /tmp/database-verification.log
+
+      - name: Upload database failure log
+        if: steps.database.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: database-failure-${{ github.sha }}
+          path: /tmp/database-verification.log
+          if-no-files-found: error
+          retention-days: 3
 
       - name: Publish verification summary
         if: always()
