@@ -29,9 +29,7 @@ function driveFile() {
 describe('Drive resumable upload primitives', () => {
 	it('uses the Google chunk alignment and builds exact Content-Range values', () => {
 		expect(DRIVE_UPLOAD_CHUNK_ALIGNMENT).toBe(256 * 1024);
-		expect(contentRangeForChunk(0, 256 * 1024, 600 * 1024)).toBe(
-			'bytes 0-262143/614400'
-		);
+		expect(contentRangeForChunk(0, 256 * 1024, 600 * 1024)).toBe('bytes 0-262143/614400');
 		expect(contentRangeForChunk(512 * 1024, 600 * 1024, 600 * 1024)).toBe(
 			'bytes 524288-614399/614400'
 		);
@@ -56,9 +54,9 @@ describe('Drive resumable upload primitives', () => {
 				'https://upload.googleapis.com/upload/drive/v3/files/abc?uploadType=resumable&upload_id=x'
 			)
 		).toContain('upload.googleapis.com');
-		expect(() => validateDriveUploadSessionUrl('https://evil.example/upload/drive/v3/files')).toThrow(
-			'Invalid Drive upload session URL'
-		);
+		expect(() =>
+			validateDriveUploadSessionUrl('https://evil.example/upload/drive/v3/files')
+		).toThrow('Invalid Drive upload session URL');
 		expect(() =>
 			validateDriveUploadSessionUrl('http://www.googleapis.com/upload/drive/v3/files')
 		).toThrow('Invalid Drive upload session URL');
@@ -130,10 +128,7 @@ describe('Drive resumable upload runner', () => {
 
 		expect(result.id).toBe(fileId);
 		expect(queryProgress).toHaveBeenCalledWith({ sessionUrl, totalBytes: 512 * 1024 });
-		expect(ranges).toEqual([
-			'bytes 0-262143/524288',
-			'bytes 262144-524287/524288'
-		]);
+		expect(ranges).toEqual(['bytes 0-262143/524288', 'bytes 262144-524287/524288']);
 	});
 
 	it('rejects misaligned chunks, stalled 308 progress, and malformed final responses', async () => {
