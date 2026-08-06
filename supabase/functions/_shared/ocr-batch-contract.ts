@@ -17,8 +17,8 @@ export type OcrBatchParseOutcome = {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function invalid(): never {
-	throw new TypeError('Invalid OCR batch response');
+function invalidRequest(): never {
+	throw new TypeError('Invalid OCR batch request');
 }
 
 function hasExactKeys(record: Record<string, unknown>, expected: readonly string[]) {
@@ -28,7 +28,7 @@ function hasExactKeys(record: Record<string, unknown>, expected: readonly string
 }
 
 function validateRequestedPages(requestedPages: readonly OcrBatchRequestedPage[]) {
-	if (requestedPages.length < 1 || requestedPages.length > 1_000) invalid();
+	if (requestedPages.length < 1 || requestedPages.length > 1_000) invalidRequest();
 	const ids = new Set<string>();
 	const numbers = new Set<number>();
 	for (const page of requestedPages) {
@@ -40,11 +40,23 @@ function validateRequestedPages(requestedPages: readonly OcrBatchRequestedPage[]
 			ids.has(page.pageId) ||
 			numbers.has(page.pageNumber)
 		) {
-			invalid();
+			invalidRequest();
 		}
 		ids.add(page.pageId);
 		numbers.add(page.pageNumber);
 	}
+}
+
+function invalidProviderResponse(
+	requestedPages: readonly OcrBatchRequestedPage[]
+): OcrBatchParseOutcome {
+	return Object.freeze({
+		valid: false,
+		pages: Object.freeze([]),
+		missingPageIds: Object.freeze(requestedPages.map((page) => page.pageId)),
+		duplicatePageIds: Object.freeze([]),
+		unexpectedPageIds: Object.freeze([])
+	});
 }
 
 export function parseOcrBatchPayload(
@@ -56,12 +68,14 @@ export function parseOcrBatchPayload(
 	try {
 		parsed = JSON.parse(value);
 	} catch {
-		invalid();
+		return invalidProviderResponse(requestedPages);
 	}
-	if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) invalid();
+	if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+		return invalidProviderResponse(requestedPages);
+	}
 	const root = parsed as Record<string, unknown>;
 	if (!hasExactKeys(root, ['pages']) || !Array.isArray(root.pages) || root.pages.length > 1_000) {
-		invalid();
+		return invalidProviderResponse(requestedPages);
 	}
 
 	const requestedById = new Map(requestedPages.map((page) => [page.pageId, page] as const));
@@ -70,20 +84,26 @@ export function parseOcrBatchPayload(
 	const parsedById = new Map<string, OcrBatchPagePayload>();
 
 	for (const item of root.pages) {
-		if (item === null || typeof item !== 'object' || Array.isArray(item)) invalid();
+		if (item === null || typeof item !== 'object' || Array.isArray(item)) {
+			return invalidProviderResponse(requestedPages);
+		}
 		const page = item as Record<string, unknown>;
-		if (!hasExactKeys(page, ['pageId', 'pageNumber', 'text', 'warnings'])) invalid();
+		if (!hasExactKeys(page, ['pageId', 'pageNumber', 'text', 'warnings'])) {
+			return invalidProviderResponse(requestedPages);
+		}
 		if (
 			typeof page.pageId !== 'string' ||
 			!UUID.test(page.pageId) ||
 			typeof page.pageNumber !== 'number' ||
 			!Number.isInteger(page.pageNumber)
 		) {
-			invalid();
+			return invalidProviderResponse(requestedPages);
 		}
 
 		const requested = requestedById.get(page.pageId);
-		if (requested && requested.pageNumber !== page.pageNumber) invalid();
+		if (requested && requested.pageNumber !== page.pageNumber) {
+			return invalidProviderResponse(requestedPages);
+		}
 		counts.set(page.pageId, (counts.get(page.pageId) ?? 0) + 1);
 		if (!requested) {
 			unexpected.add(page.pageId);
@@ -94,7 +114,7 @@ export function parseOcrBatchPayload(
 		try {
 			payload = parseOcrPayload(JSON.stringify({ text: page.text, warnings: page.warnings }));
 		} catch {
-			invalid();
+			return invalidProviderResponse(requestedPages);
 		}
 		parsedById.set(
 			page.pageId,
