@@ -1,0 +1,86 @@
+name: Stabilize Drive runner once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/stabilize-drive-runner.yml
+
+permissions:
+  contents: write
+
+jobs:
+  stabilize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: true
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.16.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Integrate the Drive runner
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          test = Path('supabase/tests/drive_job_runner.sql')
+          test.write_text(test.read_text().replace('select plan(22);', 'select plan(24);'))
+
+          checks = Path('tools/checks/check-edge-functions.sh')
+          content = checks.read_text()
+          marker = 'deno check --no-config supabase/functions/_shared/google-drive-changes.ts\n'
+          additions = (
+              'deno check --no-config supabase/functions/_shared/google-drive-mutations.ts\n'
+              'deno check --no-config supabase/functions/_shared/drive-job-runner.ts\n'
+          )
+          if additions not in content:
+              content = content.replace(marker, marker + additions)
+          edge_marker = 'deno check --no-config supabase/functions/drive-sync/index.ts\n'
+          edge_addition = 'deno check --no-config supabase/functions/drive-run-jobs/index.ts\n'
+          if edge_addition not in content:
+              content = content.replace(edge_marker, edge_marker + edge_addition)
+          checks.write_text(content)
+
+          layout = Path('src/routes/drive/+layout.svelte')
+          content = layout.read_text()
+          marker = '\t<a href="/drive/">Recuperação</a>\n'
+          addition = '\t<a href="/drive/jobs/">Mudanças locais</a>\n'
+          if addition not in content:
+              content = content.replace(marker, marker + addition)
+          layout.write_text(content)
+          PY
+      - name: Format the Drive runner block
+        run: |
+          pnpm exec prettier --write \
+            src/lib/services/drive-jobs.ts \
+            src/routes/drive/+layout.svelte \
+            src/routes/drive/jobs/+page.svelte \
+            supabase/functions/_shared/google-drive-mutations.ts \
+            supabase/functions/_shared/drive-job-runner.ts \
+            supabase/functions/drive-run-jobs/index.ts \
+            supabase/migrations/202608060011_enqueue_local_drive_changes.sql \
+            supabase/migrations/202608060012_execute_drive_sync_jobs.sql \
+            supabase/tests/drive_local_queue.sql \
+            supabase/tests/drive_job_runner.sql \
+            tests/unit/drive/google-drive-mutations.test.ts \
+            tests/unit/drive/job-runner.test.ts \
+            tests/unit/drive/job-runner-edge.test.ts \
+            tests/unit/services/drive-jobs.test.ts \
+            tests/unit/routes/drive-jobs-page.test.ts \
+            tools/checks/check-edge-functions.sh
+      - name: Commit and remove this workflow
+        run: |
+          rm -f .github/workflows/stabilize-drive-runner.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat: integrate Google Drive job runner'
+          git push origin HEAD:main
