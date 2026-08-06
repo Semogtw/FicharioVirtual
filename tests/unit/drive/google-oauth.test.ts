@@ -8,8 +8,7 @@ import {
 } from '../../../supabase/functions/_shared/google-oauth';
 
 const clientId = '123456789012-example.apps.googleusercontent.com';
-const redirectUri =
-	'https://example.supabase.co/functions/v1/drive-oauth-callback';
+const redirectUri = 'https://example.supabase.co/functions/v1/drive-oauth-callback';
 const state = 'state_abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG';
 const nonce = 'nonce_abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG';
 
@@ -65,9 +64,7 @@ describe('Google Drive OAuth contracts', () => {
 			})
 		).toThrow('Invalid Google OAuth configuration');
 		expect(() => validateOAuthOpaqueValue('short')).toThrow('Invalid OAuth opaque value');
-		expect(() => validateOAuthOpaqueValue(`${state}.bad`)).toThrow(
-			'Invalid OAuth opaque value'
-		);
+		expect(() => validateOAuthOpaqueValue(`${state}.bad`)).toThrow('Invalid OAuth opaque value');
 	});
 
 	it('parses the initial token response strictly and requires a refresh token', () => {
