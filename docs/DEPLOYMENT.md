@@ -99,7 +99,7 @@ Confirme:
 
 O original permanente fica no Google Drive. O Storage Supabase contém páginas derivadas, fallback transitório e migração controlada.
 
-A migration eleva o teto transitório do bucket para permitir artefatos de até 50 MiB. Esse valor não é limite do documento lógico; originais maiores seguem por upload retomável ao Drive.
+A configuração local mantém `file_size_limit = "20MiB"`. Esse teto não limita o documento lógico nem o upload normal do original: o original segue diretamente ao Drive, enquanto páginas temporárias acima de 12 MiB recebem uma segunda renderização conservadora antes do envio ao Storage. Não existe migration que eleve o bucket a 50 MiB, e o deployment não deve depender dessa suposição.
 
 ## 4. Configurar Google Drive
 
@@ -167,14 +167,22 @@ supabase secrets unset OCR_DAILY_HARD_LIMIT
 
 A função não lê esse valor. Mantê-lo no painel não bloqueia o código novo, mas removê-lo evita confusão operacional.
 
-Implante:
+Implante todas as funções atualmente usadas pela PWA:
 
 ```bash
 supabase functions deploy process-ocr
 supabase functions deploy delete-document
+supabase functions deploy drive-oauth-start
+supabase functions deploy drive-oauth-callback
+supabase functions deploy drive-access-token
+supabase functions deploy drive-resolve-folder
+supabase functions deploy drive-run-jobs
+supabase functions deploy drive-sync
 ```
 
-Não use `--no-verify-jwt` nas funções da PWA. Funções futuras do worker precisam de autenticação de dispositivo explícita e fail-closed.
+A política JWT está versionada em `supabase/config.toml`. Todas as APIs autenticadas usam `verify_jwt = true`. Somente `drive-oauth-callback` usa `verify_jwt = false`, pois o redirecionamento do Google não carrega uma sessão Supabase; essa função valida a origem configurada, o `state` OAuth de uso único e o fluxo PKCE antes de concluir a conexão. Não use `supabase functions deploy --no-verify-jwt` nem enfraqueça as demais funções na linha de comando.
+
+Funções futuras do worker precisam de autenticação de dispositivo explícita e fail-closed.
 
 ## 6. Contrato de OCR implantado
 
