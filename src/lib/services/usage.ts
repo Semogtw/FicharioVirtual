@@ -3,10 +3,15 @@ import { isIsoDate, isIsoTimestamp } from '$lib/validation/iso-timestamp';
 import { getSupabaseClient } from './supabase';
 
 const counter = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+const average = z.number().nonnegative().max(1_000);
 const day = z
 	.object({
 		date: z.string().refine(isIsoDate),
 		ocrPages: counter,
+		ocrBatches: counter,
+		ocrCalls: counter,
+		ocrAttempts: counter,
+		averageBatchSize: average,
 		quotaErrors: counter
 	})
 	.strict();
@@ -20,6 +25,7 @@ const usageOverviewSchema = z
 				documents: counter,
 				pages: counter,
 				pendingPages: counter,
+				blockedQuotaPages: counter,
 				reviewPages: counter,
 				failedPages: counter,
 				manualReviews: counter
