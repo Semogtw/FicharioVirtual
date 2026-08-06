@@ -22,6 +22,7 @@ Este documento define as regras para manter o Fichário Virtual em R$ 0. Valores
 13. Não enviar conteúdo privado para Cloudflare Pages ou host de modelos.
 14. Não obrigar o tablet a baixar modelos destinados ao computador.
 15. Permitir que páginas elegíveis aguardem o computador sem custo de API.
+16. Preservar PDFs originais intactos e dividir ou comprimir somente artefatos temporários de processamento.
 
 ## 2. Supabase Free
 
@@ -45,6 +46,7 @@ Referências:
 - Avisos de capacidade aparecem antes de esgotamento.
 - Ao atingir limite, novas importações temporárias são bloqueadas ou aguardam limpeza; não há upgrade automático.
 - Páginas destinadas ao computador permanecem temporárias apenas pelo período necessário ao trabalho.
+- Artefatos derivados de PDFs grandes são removidos somente após persistência segura do resultado ou cancelamento confirmado.
 
 ### Projeto pausado
 
@@ -59,6 +61,8 @@ Referências oficiais:
 - https://ai.google.dev/gemini-api/docs/pricing?hl=pt-br
 - https://ai.google.dev/gemini-api/docs/billing?hl=pt-BR
 - https://ai.google.dev/gemini-api/docs/rate-limits?hl=pt-br
+- https://ai.google.dev/gemini-api/docs/document-processing?hl=pt-BR
+- https://ai.google.dev/gemini-api/docs/files?hl=pt-br
 
 Regras:
 
@@ -94,6 +98,37 @@ A cota real do Gemini é a única autoridade de capacidade do provedor. O Fichá
 - PDF longo ou denso usa lotes adaptativos.
 - Resultado continua persistido por página.
 - Omissão, duplicação ou truncamento não contam como sucesso integral.
+
+### PDFs grandes e limites por chamada
+
+Na verificação de 6 de agosto de 2026, a documentação oficial informava:
+
+```text
+PDF por chamada ou upload: até 50 MB ou 1.000 páginas
+Aplicação: inline e Files API
+Custo visual aproximado: 258 tokens de entrada por página
+```
+
+Esses números são limites do artefato enviado ao Gemini, não do documento lógico armazenado na biblioteca.
+
+Regras operacionais:
+
+- o original pode permanecer como um único PDF no Google Drive mesmo quando exceder o limite de uma chamada;
+- o sistema divide automaticamente as páginas que precisam de OCR;
+- lotes iniciais permanecem conservadores, normalmente em torno de 20 a 40 páginas para documentos densos;
+- a Files API não elimina o limite de 50 MB por PDF;
+- um arquivo pode caber na entrada e ainda estourar o limite de saída da transcrição;
+- compressão é aplicada somente a cópias temporárias;
+- dividir é preferível a destruir legibilidade de manuscritos com compressão agressiva;
+- truncamento, omissão, duplicação, timeout relacionado ao tamanho ou resposta inválida causam divisão do lote afetado, não reinício do documento;
+- o mapeamento para o número original de cada página é obrigatório;
+- a fragmentação não elimina RPM, TPM, RPD, limite de saída ou tempo de inferência.
+
+O teto atual de 20 MB na importação de PDF é uma incompatibilidade transitória da implementação. Ele não deve ser tratado como limite arquitetural nem substituído por um teto fixo de 50 MB. O fluxo Drive-first deve separar o limite do documento original do limite dos artefatos de OCR.
+
+A decisão detalhada está em:
+
+- `docs/superpowers/specs/2026-08-06-oversized-pdf-splitting-and-compression-design.md`.
 
 ### Estados de cota
 
@@ -201,7 +236,9 @@ Regras:
 - sem leitura ampla da conta;
 - painel de capacidade informa limitações observadas sem prometer franquia;
 - falta de espaço pausa upload e preserva fila;
-- não migrar automaticamente para outro storage pago.
+- não migrar automaticamente para outro storage pago;
+- PDF original grande permanece intacto e único no Drive;
+- artefatos fragmentados ou comprimidos não substituem o original.
 
 ## 7. Worker desktop
 
@@ -220,7 +257,9 @@ Regras:
 - spool guarda resultado temporário, não imagem permanente;
 - atualização explícita;
 - sem mineração, telemetria externa ou execução de código remoto;
-- sem download automático de modelo no tablet.
+- sem download automático de modelo no tablet;
+- lotes locais preservam integridade e resultado por página;
+- falha local devolve somente as páginas afetadas à fila.
 
 ### RX 6600
 
@@ -239,13 +278,16 @@ GPU em nuvem:      fora do MVP
 
 `@firecrawl/pdf-inspector-wasm` e PDF.js rodam no navegador e evitam OCR desnecessário. O projeto deve preservar licenças e versões fixadas.
 
+O fluxo de PDFs grandes também exige uma biblioteca ou rotina de reescrita capaz de extrair subconjuntos de páginas e, quando necessário, gerar cópias comprimidas. A escolha final precisa ser reproduzível, licenciada e testada no tablet e no computador.
+
 O worker pode usar runtime local de inferência e bibliotecas de imagem, desde que:
 
 - licença seja compatível;
 - versão seja fixada;
 - pacote seja reproduzível;
 - modelo e runtime não baixem código arbitrário;
-- CPU continue funcional.
+- CPU continue funcional;
+- o original nunca seja alterado pela preparação de OCR.
 
 ## 9. Painel de uso
 
@@ -258,6 +300,11 @@ A tela Configurações deve mostrar:
 - dispositivo online ou offline;
 - páginas concluídas localmente;
 - tamanho médio de lote;
+- tamanho e páginas do PDF original;
+- quantidade de artefatos temporários;
+- bytes antes e depois de compressão temporária;
+- bisseções de lote realizadas;
+- páginas omitidas ou truncadas;
 - armazenamento temporário estimado;
 - modelo Gemini configurado;
 - modelo local instalado;
@@ -292,6 +339,8 @@ GOOGLE_CLIENT_SECRET
 
 `OCR_MODEL_QUALITY` continua opcional e sem fallback automático.
 
+Limites externos revisados podem ser mantidos em uma configuração central versionada, mas não devem ser apresentados como segredo nem duplicados em vários módulos.
+
 ### Worker
 
 A credencial fica no keyring. O arquivo de configuração contém somente origem, preferência de backend e parâmetros não secretos.
@@ -305,9 +354,16 @@ GEMINI_API_KEY
 OCR_WORKER_DEVICE_TOKEN
 ```
 
-### Incompatibilidade transitória
+### Incompatibilidades transitórias
 
-A implementação atual ainda exige `OCR_DAILY_HARD_LIMIT` e bloqueia localmente em `claim_ocr_job`. Isso contradiz a política aprovada e precisa ser removido antes de registrar ausência de limite interno como `PASS`.
+A implementação atual ainda:
+
+- exige `OCR_DAILY_HARD_LIMIT` e bloqueia localmente em `claim_ocr_job`;
+- limita importação de PDF a 20 MB;
+- processa Gemini página por página;
+- não possui divisão, compressão temporária ou bisseção automática de lotes.
+
+Isso contradiz a política aprovada e precisa ser corrigido antes de registrar a nova arquitetura como `PASS`.
 
 ## 11. Revisão antes de release
 
@@ -316,9 +372,14 @@ A implementação atual ainda exige `OCR_DAILY_HARD_LIMIT` e bloqueia localmente
 - confirmar que R2 continua desativado;
 - confirmar projeto Gemini sem billing;
 - verificar modelo e rate limits ativos;
+- verificar novamente limites oficiais de PDF, entrada e saída;
 - confirmar ausência de franquia diária interna;
+- confirmar que o documento lógico não herda o limite de uma chamada;
 - confirmar nenhum secret no bundle;
 - testar `429`, truncamento e falta de Storage;
+- testar PDF acima de 50 MB e acima de 1.000 páginas com fixtures sintéticas;
+- testar divisão, compressão temporária, bisseção e mapeamento de páginas;
+- confirmar que o hash e os bytes do original permanecem inalterados;
 - testar worker offline, lease expirado e spool;
 - testar que tablet não baixa modelos;
 - revisar limites oficiais de Pages;
@@ -338,4 +399,8 @@ Se algum serviço deixar de atender gratuitamente:
 
 Nenhuma migração é automática. O aplicativo continua permitindo visualizar, pesquisar e exportar documentos já processados enquanto o serviço afetado estiver indisponível.
 
-A arquitetura detalhada está em `docs/superpowers/specs/2026-08-06-cloudflare-pages-and-desktop-ocr-design.md`.
+Arquitetura detalhada:
+
+- `docs/superpowers/specs/2026-08-06-cloudflare-pages-and-desktop-ocr-design.md`;
+- `docs/superpowers/specs/2026-08-06-provider-only-ocr-quota-and-adaptive-batching-design.md`;
+- `docs/superpowers/specs/2026-08-06-oversized-pdf-splitting-and-compression-design.md`.
