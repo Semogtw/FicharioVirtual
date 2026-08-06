@@ -100,15 +100,17 @@ describe('Drive job service', () => {
 				}))
 			}))
 		});
-		await expect(listDriveJobs(client([{ ...job(), refresh_token: 'secret' }]) as never)).rejects.toThrow(
-			'Não foi possível carregar a fila do Google Drive.'
-		);
+		await expect(
+			listDriveJobs(client([{ ...job(), refresh_token: 'secret' }]) as never)
+		).rejects.toThrow('Não foi possível carregar a fila do Google Drive.');
 		await expect(listDriveJobs(client(null, { message: 'offline' }) as never)).rejects.toThrow(
 			'Não foi possível carregar a fila do Google Drive.'
 		);
 		await expect(
 			runPendingDriveJobs({
-				functions: { invoke: vi.fn().mockResolvedValue({ data: null, error: { message: 'offline' } }) }
+				functions: {
+					invoke: vi.fn().mockResolvedValue({ data: null, error: { message: 'offline' } })
+				}
 			} as never)
 		).rejects.toThrow('Não foi possível executar a fila do Google Drive.');
 	});
