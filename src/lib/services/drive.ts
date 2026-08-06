@@ -32,9 +32,7 @@ function defaultClient(): DriveServiceClientLike {
 	return getSupabaseClient() as unknown as DriveServiceClientLike;
 }
 
-export function isDriveOAuthConfigured(
-	source: Record<string, string | undefined> = env
-): boolean {
+export function isDriveOAuthConfigured(source: Record<string, string | undefined> = env): boolean {
 	return parsePublicEnv(source).PUBLIC_GOOGLE_CLIENT_ID !== null;
 }
 
@@ -75,8 +73,6 @@ export async function beginDriveConnection(
 		}
 		return url.toString();
 	} catch {
-		throw new DriveConnectionServiceError(
-			'Não foi possível iniciar a conexão com o Google Drive.'
-		);
+		throw new DriveConnectionServiceError('Não foi possível iniciar a conexão com o Google Drive.');
 	}
 }
