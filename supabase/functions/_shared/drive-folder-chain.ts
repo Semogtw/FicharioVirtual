@@ -27,12 +27,7 @@ export function parseDriveNotebookRows(value: unknown): readonly DriveNotebookRo
 		if (item === null || typeof item !== 'object' || Array.isArray(item)) invalid();
 		const record = item as Record<string, unknown>;
 		const keys = Object.keys(record).sort();
-		if (
-			keys.join(',') !==
-			'drive_folder_id,drive_missing,id,name,parent_notebook_id'
-		) {
-			invalid();
-		}
+		if (keys.join(',') !== 'drive_folder_id,drive_missing,id,name,parent_notebook_id') invalid();
 		if (
 			typeof record.id !== 'string' ||
 			!UUID.test(record.id) ||
