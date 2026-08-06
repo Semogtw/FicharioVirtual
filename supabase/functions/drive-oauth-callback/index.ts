@@ -71,13 +71,10 @@ Deno.serve(async (request) => {
 			auth: { persistSession: false, autoRefreshToken: false }
 		});
 		const stateHash = await hashOAuthState(state);
-		const { data: consumed, error: consumeError } = await admin.rpc(
-			'consume_drive_oauth_state',
-			{
-				target_state_hash: stateHash,
-				consumed_at: new Date().toISOString()
-			}
-		);
+		const { data: consumed, error: consumeError } = await admin.rpc('consume_drive_oauth_state', {
+			target_state_hash: stateHash,
+			consumed_at: new Date().toISOString()
+		});
 		const verifiedState = consumeError ? null : consumedState(consumed);
 		if (!verifiedState) return redirect(appOrigin, 'error');
 
@@ -112,14 +109,11 @@ Deno.serve(async (request) => {
 			accessToken: tokens.accessToken,
 			rootFolderName
 		});
-		const { data: completed, error: completeError } = await admin.rpc(
-			'complete_drive_connection',
-			{
-				target_user_id: verifiedState.userId,
-				target_root_folder_id: bootstrap.rootFolder.id,
-				target_start_page_token: bootstrap.startPageToken
-			}
-		);
+		const { data: completed, error: completeError } = await admin.rpc('complete_drive_connection', {
+			target_user_id: verifiedState.userId,
+			target_root_folder_id: bootstrap.rootFolder.id,
+			target_start_page_token: bootstrap.startPageToken
+		});
 		if (completeError || completed !== true) return redirect(appOrigin, 'error');
 		return redirect(appOrigin, 'authorized');
 	} catch {
