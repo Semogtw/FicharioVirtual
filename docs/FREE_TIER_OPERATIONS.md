@@ -1,331 +1,235 @@
 # Operação 100% gratuita
 
-**Última verificação das franquias externas:** 6 de agosto de 2026  
-**Política interna de OCR atualizada:** 6 de agosto de 2026
+**Última verificação externa registrada:** 6 de agosto de 2026  
+**Implementação OCR atualizada:** 6 de agosto de 2026
 
-Este documento define as regras para manter o Fichário Virtual em R$ 0. Valores e franquias externas podem mudar; por isso, a aplicação deve falhar de forma segura quando uma cota termina, nunca migrar automaticamente para cobrança.
+Este documento define as regras para manter o Fichário Virtual em R$ 0. Franquias externas podem mudar; a aplicação deve falhar de forma segura quando um serviço deixa de aceitar uso e nunca migrar automaticamente para cobrança.
 
 ## 1. Política obrigatória
 
 1. Não vincular faturamento ao projeto da Gemini Developer API.
-2. Manter o Supabase no plano Free.
+2. Manter Supabase no plano Free.
 3. Manter Cloudflare Pages no plano Free.
 4. Não ativar Cloudflare R2 por padrão.
-5. Não iniciar testes gratuitos de planos pagos.
+5. Não iniciar teste gratuito de plano pago.
 6. Não cadastrar cartão apenas para aumentar limites.
 7. Não implementar fallback automático para API paga.
-8. Pausar trabalhos ao receber erros de cota do provedor.
-9. Preservar arquivo e estado para retomada posterior.
-10. Não impor franquia diária artificial de OCR dentro do Fichário.
-11. Revisar este documento antes de cada implantação relevante.
-12. Exibir no aplicativo um painel informativo de uso e estado das cotas.
-13. Não enviar conteúdo privado para Cloudflare Pages ou host de modelos.
-14. Não obrigar o tablet a baixar modelos destinados ao computador.
-15. Permitir que páginas elegíveis aguardem o computador sem custo de API.
-16. Preservar PDFs originais intactos e dividir ou comprimir somente artefatos temporários de processamento.
+8. Preservar arquivo, páginas concluídas e estado quando uma quota real termina.
+9. Não impor franquia diária artificial de OCR.
+10. Tratar contadores locais apenas como telemetria.
+11. Não enviar conteúdo privado para Cloudflare Pages ou host público de modelos.
+12. Não obrigar tablet ou celular a baixar modelos destinados ao computador.
+13. Permitir que trabalhos aguardem serviço externo ou computador sem perda.
+14. Revisar franquias e billing antes de cada implantação relevante.
 
-## 2. Supabase Free
+## 2. Autoridades de armazenamento e processamento
 
-Referência oficial: https://supabase.com/pricing
+### Google Drive
 
-Na última verificação registrada, o plano Free possuía franquias para banco, Storage, egress e invocações de Edge Functions. Os valores exatos precisam ser consultados novamente antes de cada release.
+- armazena os originais permanentes;
+- usa somente `drive.file` no MVP;
+- arquivos são criados ou escolhidos conscientemente;
+- falta de espaço pausa upload e preserva fila;
+- o Fichário não compra Google One nem migra automaticamente para storage pago.
 
-Referências:
+### Supabase
 
-- https://supabase.com/docs/guides/functions/limits
-- https://supabase.com/docs/guides/storage/uploads/file-limits
+- Auth, PostgreSQL, RLS, filas, resultados, busca e sincronização;
+- Storage privado somente para derivados temporários, fallback e migração;
+- Edge Functions orquestram autenticação, validação, rede e banco;
+- OCR pesado não roda localmente dentro da Edge Function;
+- indisponibilidade ou projeto pausado não apagam trabalho pendente.
 
-### Regras internas
+### Cloudflare Pages
 
-- Edge Functions orquestram autenticação, rede, validação e banco.
-- Renderização de PDF e transformação de imagem ficam no navegador quando possível.
-- OCR pesado não roda dentro de Edge Function.
-- Arquivos permanentes ficam no Google Drive.
-- Storage Supabase guarda somente temporários, fallback e migração.
-- O bucket possui MIME e tamanho explícitos.
-- Avisos de capacidade aparecem antes de esgotamento.
-- Ao atingir limite, novas importações temporárias são bloqueadas ou aguardam limpeza; não há upgrade automático.
-- Páginas destinadas ao computador permanecem temporárias apenas pelo período necessário ao trabalho.
-- Artefatos derivados de PDFs grandes são removidos somente após persistência segura do resultado ou cancelamento confirmado.
+- hospeda somente frontend estático e artefatos públicos;
+- não recebe documentos, OCR, tokens, sessões ou metadados privados;
+- um projeto separado pode distribuir partes públicas de modelos;
+- R2 permanece desativado enquanto o caminho Pages atender ao volume.
 
-### Projeto pausado
+### Computador confiável
 
-O aplicativo deve reconhecer indisponibilidade do Supabase e mostrar mensagem segura. Nenhum dado local pendente deve ser apagado nesse estado.
+- rota futura de inferência local sem custo de API;
+- conexão HTTPS somente de saída;
+- nenhuma porta pública;
+- CPU como fallback obrigatório;
+- cache e spool temporários;
+- sem service-role, chave Gemini ou refresh token do Drive.
 
-O worker desktop também entra em espera e não trata projeto pausado como falha permanente de página.
+O worker desktop continua aprovado em arquitetura, mas não faz parte da implementação de lotes Gemini concluída nesta etapa.
 
 ## 3. Gemini Developer API
 
-Referências oficiais:
+Referências oficiais operacionais permanecem registradas em `docs/DEPLOYMENT.md` e `docs/OCR_STAGING.md`.
 
-- https://ai.google.dev/gemini-api/docs/pricing?hl=pt-br
-- https://ai.google.dev/gemini-api/docs/billing?hl=pt-BR
-- https://ai.google.dev/gemini-api/docs/rate-limits?hl=pt-br
-- https://ai.google.dev/gemini-api/docs/document-processing?hl=pt-BR
-- https://ai.google.dev/gemini-api/docs/files?hl=pt-br
-
-Regras:
-
-- criar projeto sem faturamento vinculado;
-- gerar chave exclusiva;
-- guardar a chave somente no Supabase;
-- configurar modelo por `OCR_MODEL_PRIMARY`;
-- escolher versão estável explicitamente disponível no nível gratuito na data do deployment;
-- registrar modelo e data em `docs/DEPLOYMENT.md`;
-- não usar alias que possa trocar silenciosamente para outra política;
-- não ativar modelo pago como fallback.
-
-### Controles permitidos
+Configuração obrigatória:
 
 ```text
-OCR simultâneo Gemini:          1 ou 2, conforme estabilidade medida
-Intervalo após erro 429:        Retry-After ou política conservadora
-Tentativas automáticas extras:  finitas por lote
-Limite diário interno:          nenhum
-Reprocessamento desktop:        conforme fila e disponibilidade local
-Fallback pago:                  proibido
+APP_ORIGIN
+GEMINI_API_KEY
+OCR_MODEL_PRIMARY
+OCR_PROMPT_VERSION
 ```
 
-A cota real do Gemini é a única autoridade de capacidade do provedor. O Fichário pode contar páginas, lotes, chamadas e tentativas para telemetria, mas esses contadores não podem bloquear uma chamada que ainda seria aceita.
-
-### Economia de chamadas
-
-- PDF com texto nativo não chama Gemini.
-- PDF misto envia somente páginas necessárias.
-- Caderno marcado como manuscrito pode ir direto ao computador.
-- Classificação automática ocorre na mesma resposta da transcrição Gemini.
-- PDF escaneado curto pode usar uma chamada quando seguro.
-- PDF longo ou denso usa lotes adaptativos.
-- Resultado continua persistido por página.
-- Omissão, duplicação ou truncamento não contam como sucesso integral.
-
-### PDFs grandes e limites por chamada
-
-Na verificação de 6 de agosto de 2026, a documentação oficial informava:
+Controles técnicos opcionais:
 
 ```text
-PDF por chamada ou upload: até 50 MB ou 1.000 páginas
-Aplicação: inline e Files API
-Custo visual aproximado: 258 tokens de entrada por página
+OCR_BATCH_MAX_PAGES=40
+OCR_BATCH_MAX_BYTES=12582912
+OCR_REQUEST_TIMEOUT_MS=120000
 ```
 
-Esses números são limites do artefato enviado ao Gemini, não do documento lógico armazenado na biblioteca.
+Esses valores controlam páginas por chamada, memória e duração. Eles não representam franquia diária.
 
-Regras operacionais:
+### Política de quota
 
-- o original pode permanecer como um único PDF no Google Drive mesmo quando exceder o limite de uma chamada;
-- o sistema divide automaticamente as páginas que precisam de OCR;
-- lotes iniciais permanecem conservadores, normalmente em torno de 20 a 40 páginas para documentos densos;
-- a Files API não elimina o limite de 50 MB por PDF;
-- um arquivo pode caber na entrada e ainda estourar o limite de saída da transcrição;
-- compressão é aplicada somente a cópias temporárias;
-- dividir é preferível a destruir legibilidade de manuscritos com compressão agressiva;
-- truncamento, omissão, duplicação, timeout relacionado ao tamanho ou resposta inválida causam divisão do lote afetado, não reinício do documento;
-- o mapeamento para o número original de cada página é obrigatório;
-- a fragmentação não elimina RPM, TPM, RPD, limite de saída ou tempo de inferência.
+A quota real do Gemini é a única autoridade para capacidade do provedor.
 
-O teto atual de 20 MB na importação de PDF é uma incompatibilidade transitória da implementação. Ele não deve ser tratado como limite arquitetural nem substituído por um teto fixo de 50 MB. O fluxo Drive-first deve separar o limite do documento original do limite dos artefatos de OCR.
+O Fichário pode registrar:
 
-A decisão detalhada está em:
+- páginas;
+- lotes;
+- chamadas;
+- tentativas;
+- erros temporários;
+- bloqueios reais de quota;
+- média de páginas por chamada.
 
-- `docs/superpowers/specs/2026-08-06-oversized-pdf-splitting-and-compression-design.md`.
+Esses contadores não podem impedir uma chamada que ainda seria aceita.
 
-### Estados de cota
+Estados relevantes:
 
-- `retryable`: limite curto ou falha temporária;
-- `blocked_quota`: cota real indisponível;
-- `waiting_desktop`: página aguardando computador, não cota;
+- `retryable`: falha curta, timeout ou rate limit temporário;
+- `blocked_quota`: quota real indisponível;
+- `waiting_desktop`: trabalho aguardando computador, quando essa rota existir;
 - `needs_review`: resultado incerto;
 - `failed`: erro permanente de arquivo, segurança ou configuração.
 
-Quando a cota Gemini termina, o usuário pode:
+Nenhum estado ativa billing.
 
-- aguardar renovação;
-- encaminhar página compatível ao computador;
-- manter resultado preliminar;
-- corrigir manualmente.
+## 4. OCR por lotes implementado
 
-Nenhuma dessas ações ativa cobrança.
+A implementação ativa inclui:
 
-## 4. Cloudflare Pages Free
+- assinatura de claim sem argumento diário local;
+- remoção da assinatura antiga por migration;
+- manifestos em `ocr_batches`;
+- vínculo ordenado de páginas em `ocr_jobs`;
+- uma chamada Gemini para várias páginas;
+- resultado persistido por página;
+- telemetria separada de páginas, lotes, chamadas e tentativas;
+- RLS e escrita de manifestos apenas por RPC;
+- transições terminais idempotentes;
+- rate limit temporário separado de quota diária real.
 
-Referências oficiais:
+O segredo diário antigo não é lido pelo código atual e deve ser removido do painel depois do rollout:
 
-- https://developers.cloudflare.com/pages/platform/limits/
-- https://developers.cloudflare.com/pages/framework-guides/deploy-a-svelte-kit-site/
-- https://developers.cloudflare.com/pages/get-started/direct-upload/
-
-Na verificação de 6 de agosto de 2026, a documentação do Pages informava, no plano Free:
-
-- até 500 builds por mês;
-- um build concorrente;
-- timeout de build de 20 minutos;
-- até 20.000 arquivos por site;
-- até 25 MiB por asset;
-- suporte a integração Git e Direct Upload.
-
-Esses números são externos e podem mudar. O gate de release precisa revisar a documentação oficial novamente.
-
-### Projeto da PWA
-
-- integração Git com `main`;
-- build estático em `build/`;
-- somente variáveis públicas;
-- sem Pages Functions para OCR;
-- sem conteúdo autenticado no cache;
-- sem upload de documentos;
-- sem Image Optimization obrigatória;
-- sem add-on pago;
-- previews não usam dados reais de produção.
-
-### Projeto dos modelos
-
-O caminho padrão sem assinatura de cobrança usa outro projeto Pages por Direct Upload.
-
-- cada parte de modelo possui até 20 MiB;
-- versões são imutáveis;
-- checksums são obrigatórios;
-- licença e origem são obrigatórias;
-- somente o computador baixa modelos;
-- modelos não entram no Git principal nem no precache da PWA;
-- atualização de modelo é explícita;
-- se Pages deixar de atender ao volume, reavaliar antes de ativar outro produto.
-
-O uso de partes é uma decisão operacional para permanecer abaixo do limite por asset e evitar R2 obrigatório.
-
-## 5. Cloudflare R2
-
-Referências oficiais:
-
-- https://developers.cloudflare.com/r2/pricing/
-- https://developers.cloudflare.com/r2/get-started/
-- https://developers.cloudflare.com/billing/understand/usage-based-billing/
-
-Na verificação de 6 de agosto de 2026, R2 possuía franquia mensal incluída, mas continuava sendo produto de cobrança por uso e exigia ativação de assinatura. Excedentes de armazenamento ou operações podiam gerar cobrança.
-
-Por isso:
-
-- R2 fica desativado no MVP;
-- não criar assinatura apenas para hospedar poucos modelos;
-- não cadastrar método de pagamento em nome da política de custo zero;
-- não armazenar conteúdo privado em R2;
-- não usar R2 como fallback automático do Pages;
-- não afirmar “gratuito sem risco” apenas porque existe franquia incluída.
-
-R2 só pode ser ativado depois de uma decisão explícita que documente:
-
-- necessidade comprovada;
-- consumo esperado;
-- risco de excedente;
-- responsável pelo billing;
-- alertas e revisão;
-- procedimento de desligamento;
-- alternativa caso a assinatura seja suspensa.
-
-Mesmo se ativado, R2 guardará apenas modelos públicos e licenças.
-
-## 6. Google Drive
-
-O Drive é o armazenamento permanente do usuário e pode depender da franquia pessoal da conta Google. O Fichário não compra espaço, não ativa Google One e não cria billing automático.
-
-Regras:
-
-- escopo `drive.file`;
-- somente arquivos criados ou escolhidos explicitamente;
-- refresh token backend;
-- sem leitura ampla da conta;
-- painel de capacidade informa limitações observadas sem prometer franquia;
-- falta de espaço pausa upload e preserva fila;
-- não migrar automaticamente para outro storage pago;
-- PDF original grande permanece intacto e único no Drive;
-- artefatos fragmentados ou comprimidos não substituem o original.
-
-## 7. Worker desktop
-
-O worker usa recursos do computador do usuário e não cria custo de nuvem por inferência.
-
-Regras:
-
-- serviço de usuário, não root;
-- conexão HTTPS de saída;
-- nenhuma porta pública;
-- CPU como fallback obrigatório;
-- concorrência inicial `1`;
-- modelos públicos com licença e checksum;
-- cache local reaproveitado;
-- computador desligado mantém fila aguardando;
-- spool guarda resultado temporário, não imagem permanente;
-- atualização explícita;
-- sem mineração, telemetria externa ou execução de código remoto;
-- sem download automático de modelo no tablet;
-- lotes locais preservam integridade e resultado por página;
-- falha local devolve somente as páginas afetadas à fila.
-
-### RX 6600
-
-A GPU não é considerada suporte garantido até benchmark real. O projeto não compra GPU em nuvem e não ativa provedor pago se Vulkan ou ROCm falhar.
-
-Caminhos permitidos:
-
-```text
-CPU:               obrigatório
-Vulkan:            candidato após teste
-ROCm experimental: somente teste documentado
-GPU em nuvem:      fora do MVP
+```bash
+supabase secrets unset OCR_DAILY_HARD_LIMIT
 ```
 
-## 8. PDF e bibliotecas locais
+A ausência de teto interno está implementada, mas só recebe `PASS` operacional depois de migrations, CI e staging no mesmo SHA.
 
-`@firecrawl/pdf-inspector-wasm` e PDF.js rodam no navegador e evitam OCR desnecessário. O projeto deve preservar licenças e versões fixadas.
+## 5. Economia de chamadas
 
-O fluxo de PDFs grandes também exige uma biblioteca ou rotina de reescrita capaz de extrair subconjuntos de páginas e, quando necessário, gerar cópias comprimidas. A escolha final precisa ser reproduzível, licenciada e testada no tablet e no computador.
+- PDF com texto nativo não chama Gemini.
+- PDF misto envia somente páginas necessárias.
+- Classificação e transcrição preliminar não exigem chamadas separadas.
+- PDF visual usa páginas renderizadas em lotes adaptativos.
+- Lotes normais começam em até 40 páginas.
+- Conteúdo denso começa em até 20 páginas.
+- Resultado continua persistido por página.
+- Páginas válidas não são repetidas quando outra página falha.
 
-O worker pode usar runtime local de inferência e bibliotecas de imagem, desde que:
+O número do lote é ajustável e não é quota.
 
-- licença seja compatível;
-- versão seja fixada;
-- pacote seja reproduzível;
-- modelo e runtime não baixem código arbitrário;
-- CPU continue funcional;
-- o original nunca seja alterado pela preparação de OCR.
+## 6. PDFs grandes
+
+Na verificação externa registrada em 6 de agosto de 2026, a documentação da Gemini indicava limite de 50 MB ou 1.000 páginas por PDF enviado. Esse é um limite do artefato de uma chamada, não do documento lógico armazenado no Drive.
+
+Regras implementadas:
+
+- teto artificial de 20 MB removido da importação local;
+- original permanece único e intacto no Drive;
+- texto nativo é extraído antes do OCR;
+- somente páginas visuais recebem derivados;
+- bytes acumulados limitam cada chamada;
+- página derivada acima de 12 MiB recebe uma segunda renderização conservadora;
+- omissão, duplicação ou JSON truncado provocam divisão do subconjunto afetado;
+- uma página isolada que continua falhando permanece pendente, sem loop;
+- cancelamento preserva páginas concluídas;
+- retomada usa o mesmo executor adaptativo.
+
+Fragmentar não elimina RPM, TPM, RPD, limite de saída ou tempo de inferência.
+
+### Google Picker
+
+O download direto pelo navegador aceita até 50 MiB e verifica tamanho antes de transferir o arquivo.
+
+Esse valor:
+
+- não é limite do documento lógico;
+- não é limite dos lotes de OCR;
+- não impede upload local retomável ao Drive;
+- ainda exige conclusão do fluxo por referência ou cópia para arquivos externos maiores que 50 MiB.
+
+## 7. Compressão segura
+
+O Fichário não recomprime o original.
+
+“Compressão” nesta implementação significa produzir uma segunda imagem temporária da página quando a primeira ultrapassa o limite técnico seguro. A transformação:
+
+- afeta somente a página derivada;
+- reduz dimensão e qualidade de forma conservadora;
+- preserva o arquivo original e seu hash;
+- não é aplicada a páginas que já cabem;
+- não autoriza degradação agressiva de manuscritos, fórmulas ou cores relevantes.
+
+## 8. Cloudflare Pages e R2
+
+Cloudflare Pages continua sendo o host estático preferencial.
+
+Regras:
+
+- integração Git com `main`;
+- output `build/`;
+- somente variáveis públicas;
+- sem Pages Functions para OCR;
+- sem conteúdo autenticado em cache;
+- sem upload de documentos;
+- previews sem dados reais.
+
+R2 permanece fora do MVP por envolver assinatura e cobrança por uso. Só pode ser ativado por decisão explícita com necessidade, estimativa, risco, alertas e procedimento de desligamento.
 
 ## 9. Painel de uso
 
-A tela Configurações deve mostrar:
+A tela de Configurações mostra:
 
-- páginas analisadas hoje;
-- lotes e chamadas Gemini;
-- tentativas e erros de cota;
-- trabalhos aguardando computador;
-- dispositivo online ou offline;
-- páginas concluídas localmente;
+- páginas analisadas;
+- lotes;
+- chamadas Gemini;
+- tentativas;
 - tamanho médio de lote;
-- tamanho e páginas do PDF original;
-- quantidade de artefatos temporários;
-- bytes antes e depois de compressão temporária;
-- bisseções de lote realizadas;
-- páginas omitidas ou truncadas;
-- armazenamento temporário estimado;
-- modelo Gemini configurado;
-- modelo local instalado;
-- backend local ativo;
-- versão do worker;
-- estado da distribuição de modelos;
-- aviso de que R2 está desativado;
-- data da última revisão das franquias.
+- bloqueios reais de quota;
+- pendências, revisão e falhas;
+- trabalhos futuros do computador, quando implementados;
+- data da última revisão operacional.
 
-Os valores são informativos. Não apresentar contador local como “páginas restantes” salvo quando vier de cota real e confiável.
+Não apresentar contador local como “páginas restantes”.
 
 ## 10. Variáveis e segredos
 
-### Frontend público
+### Frontend
 
 ```text
 PUBLIC_SUPABASE_URL
 PUBLIC_SUPABASE_PUBLISHABLE_KEY
+PUBLIC_GOOGLE_CLIENT_ID
+PUBLIC_GOOGLE_PICKER_API_KEY
+PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER
 ```
 
-### Supabase secrets
+### Supabase
 
 ```text
 APP_ORIGIN
@@ -333,17 +237,15 @@ GEMINI_API_KEY
 OCR_MODEL_PRIMARY
 OCR_MODEL_QUALITY
 OCR_PROMPT_VERSION
+OCR_BATCH_MAX_PAGES
+OCR_BATCH_MAX_BYTES
+OCR_REQUEST_TIMEOUT_MS
 GOOGLE_CLIENT_ID
 GOOGLE_CLIENT_SECRET
+GOOGLE_DRIVE_REDIRECT_URI
 ```
 
-`OCR_MODEL_QUALITY` continua opcional e sem fallback automático.
-
-Limites externos revisados podem ser mantidos em uma configuração central versionada, mas não devem ser apresentados como segredo nem duplicados em vários módulos.
-
-### Worker
-
-A credencial fica no keyring. O arquivo de configuração contém somente origem, preferência de backend e parâmetros não secretos.
+`OCR_MODEL_QUALITY` continua opcional e não cria fallback automático.
 
 Nunca expor:
 
@@ -354,53 +256,48 @@ GEMINI_API_KEY
 OCR_WORKER_DEVICE_TOKEN
 ```
 
-### Incompatibilidades transitórias
+## 11. Gates antes de release
 
-A implementação atual ainda:
+No mesmo SHA:
 
-- exige `OCR_DAILY_HARD_LIMIT` e bloqueia localmente em `claim_ocr_job`;
-- limita importação de PDF a 20 MB;
-- processa Gemini página por página;
-- não possui divisão, compressão temporária ou bisseção automática de lotes.
+```bash
+pnpm format:check
+pnpm check
+pnpm lint
+pnpm test:unit
+pnpm check:edge
+pnpm check:offline
+pnpm test:db
+pnpm build
+pnpm test:e2e
+```
 
-Isso contradiz a política aprovada e precisa ser corrigido antes de registrar a nova arquitetura como `PASS`.
+Também são obrigatórios:
 
-## 11. Revisão antes de release
+- migrations em Supabase limpo;
+- smoke Gemini real;
+- lote multipágina real;
+- PDF textual com zero chamadas;
+- fixtures acima de 50 MB e 1.000 páginas;
+- hash do original inalterado;
+- cancelamento e retomada;
+- celular e tablet;
+- confirmação de billing desativado.
 
-- confirmar Supabase Free;
-- confirmar Cloudflare Pages Free;
-- confirmar que R2 continua desativado;
-- confirmar projeto Gemini sem billing;
-- verificar modelo e rate limits ativos;
-- verificar novamente limites oficiais de PDF, entrada e saída;
-- confirmar ausência de franquia diária interna;
-- confirmar que o documento lógico não herda o limite de uma chamada;
-- confirmar nenhum secret no bundle;
-- testar `429`, truncamento e falta de Storage;
-- testar PDF acima de 50 MB e acima de 1.000 páginas com fixtures sintéticas;
-- testar divisão, compressão temporária, bisseção e mapeamento de páginas;
-- confirmar que o hash e os bytes do original permanecem inalterados;
-- testar worker offline, lease expirado e spool;
-- testar que tablet não baixa modelos;
-- revisar limites oficiais de Pages;
-- revisar tamanho e quantidade dos artefatos públicos;
-- confirmar nenhum conteúdo privado em Cloudflare;
-- atualizar a data deste documento.
+Os procedimentos estão em:
+
+- `docs/DEPLOYMENT.md`;
+- `docs/OCR_STAGING.md`;
+- `docs/checkpoints/2026-08-06-provider-only-ocr-large-pdf-implementation.md`.
 
 ## 12. Plano de saída
 
-Se algum serviço deixar de atender gratuitamente:
+Se um serviço deixar de atender gratuitamente:
 
-- **Cloudflare Pages:** mover build estático e partes públicas para outro host gratuito compatível;
-- **projeto de modelos:** usar releases públicos, host autorizado ou instalação manual, preservando checksums;
-- **Supabase:** exportar PostgreSQL e temporários; avaliar outro Postgres ou instalação pessoal;
-- **Gemini:** usar fila desktop ou outro adaptador explicitamente aprovado;
-- **Google Drive:** exportar metadados e originais sem migração automática paga.
+- **Cloudflare Pages:** mover frontend e artefatos públicos para host estático gratuito compatível;
+- **Supabase:** exportar PostgreSQL e temporários;
+- **Gemini:** pausar fila, usar correção manual ou rota desktop explicitamente aprovada;
+- **Google Drive:** exportar originais e metadados sem migração paga automática;
+- **projeto de modelos:** usar host público autorizado ou instalação manual com checksum.
 
-Nenhuma migração é automática. O aplicativo continua permitindo visualizar, pesquisar e exportar documentos já processados enquanto o serviço afetado estiver indisponível.
-
-Arquitetura detalhada:
-
-- `docs/superpowers/specs/2026-08-06-cloudflare-pages-and-desktop-ocr-design.md`;
-- `docs/superpowers/specs/2026-08-06-provider-only-ocr-quota-and-adaptive-batching-design.md`;
-- `docs/superpowers/specs/2026-08-06-oversized-pdf-splitting-and-compression-design.md`.
+Nenhuma migração é automática e nenhum fallback ativa cobrança.
