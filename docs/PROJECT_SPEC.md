@@ -23,6 +23,8 @@ A experiência deve parecer um fichário digital editorial, não um chatbot. Pre
 - arquivos originais permanentes no Google Drive;
 - extração de texto nativo de PDFs sem OCR desnecessário;
 - OCR seletivo de texto manuscrito e impresso;
+- processamento adaptativo de PDFs com resultados persistidos por página;
+- ausência de franquia diária artificial criada pelo aplicativo;
 - processamento e sincronização retomáveis, idempotentes e concorrentes;
 - busca exata, textual, tolerante a acentos e aproximada;
 - visualização do arquivo original na página correta;
@@ -60,9 +62,11 @@ O banco é a autoridade para:
 - cadernos como entidades de domínio e suas ligações a pastas;
 - títulos, tags, datas e organização;
 - texto nativo, OCR bruto, correções e índice de busca;
-- filas, leases, backoff, cursores do feed e idempotência;
+- filas, lotes, leases, backoff, cursores do feed e idempotência;
 - conflitos, arquivos ausentes e reconexões;
-- consentimento e franquia diária de OCR.
+- consentimento e métricas informativas de uso de OCR.
+
+Contadores locais de páginas, lotes, chamadas ou tentativas servem para telemetria e diagnóstico. Eles não são autoridade para uma franquia diária nem podem bloquear uma chamada que ainda seja aceita pelo provedor.
 
 ### Supabase Storage
 
@@ -127,13 +131,21 @@ Quando o Drive informa remoção ou perda de acesso:
 
 Excluir no Fichário não deve apagar silenciosamente um arquivo externo não controlado pelo app. Exclusão física e exclusão dos metadados são operações explícitas e idempotentes.
 
-## 7. PDFs e OCR
+## 7. PDFs, OCR e modelos
 
-- PDFs com texto preservam e indexam o texto nativo.
-- Apenas páginas sem texto suficiente são renderizadas e enviadas ao OCR.
+- PDFs com texto preservam e indexam o texto nativo sem chamada ao Gemini.
+- PDFs mistos enviam somente as páginas sem texto suficiente.
+- A unidade persistente de resultado continua sendo a página, mas uma chamada ao provedor pode processar várias páginas.
+- PDFs escaneados curtos podem ser enviados inteiros quando estiverem dentro dos limites seguros de entrada, saída e tempo.
+- PDFs longos ou densos são divididos em lotes adaptativos; o ponto de partida recomendado é aproximadamente 20 a 40 páginas, reduzido quando houver risco de truncamento.
+- Toda resposta em lote precisa associar explicitamente cada transcrição à página correspondente e detectar páginas omitidas, duplicadas ou truncadas.
 - Gemini é chamado somente por Edge Function, com chave fora do navegador.
-- O resultado é validado por schema estrito.
+- `OCR_MODEL_PRIMARY` é o mecanismo ativo para texto impresso, manuscrito e conteúdo misto.
+- Não existe atualmente um OCR especializado em manuscritos conectado ao fluxo de produção.
+- `OCR_MODEL_QUALITY` permanece reservado e inativo até benchmark com amostras reais, política explícita de reprocessamento e teste de staging.
+- O aplicativo não impõe franquia diária própria; páginas, lotes, chamadas e tentativas são contados somente para informação e diagnóstico.
 - Falhas 429, 503, timeout ou payload inválido persistem estado e backoff.
+- Uma resposta 429 do provedor pausa o trabalho conforme `Retry-After` ou política conservadora, sem perder o original.
 - Falha de OCR não implica perda nem novo upload do original.
 - Nenhum fallback pode ativar cobrança ou trocar silenciosamente de modelo.
 
@@ -151,8 +163,10 @@ Excluir no Fichário não deve apagar silenciosamente um arquivo externo não co
 ## 9. Operação gratuita
 
 - Nenhum serviço ativa billing automaticamente.
-- Limites gratuitos são observados e exibidos.
-- Quando a cota acaba, o trabalho fica pendente ou bloqueado de forma explícita.
+- Limites gratuitos do provedor são observados e exibidos.
+- O Fichário não cria um teto diário próprio de páginas ou tentativas.
+- Permanecem apenas controles técnicos de concorrência, tentativas finitas, backoff e prevenção de repetição infinita.
+- Quando a cota real do provedor acaba, o trabalho fica pendente ou bloqueado de forma explícita até a retomada permitida pela API.
 - Não existe fallback automático para plano, modelo ou provedor pago.
 - Backup, rollback e migração devem ser ensaiados antes da promoção.
 
@@ -164,6 +178,8 @@ O plano original só está concluído quando houver evidência, no mesmo conjunt
 Frontend/PWA e gates locais: PASS
 Supabase remoto e RLS: PASS
 OCR real: PASS
+OCR sem franquia diária interna: PASS
+OCR em lotes com integridade por página: PASS
 OAuth drive.file: PASS
 Pasta Fichário Digital: PASS
 Pastas de cadernos/subcadernos: PASS
@@ -178,4 +194,4 @@ Billing desativado: PASS
 Backup e rollback: PASS
 ```
 
-A especificação detalhada da integração fica em `docs/superpowers/specs/2026-08-06-google-drive-primary-storage-design.md`; o plano executável fica em `docs/superpowers/plans/2026-08-06-google-drive-primary-storage.md`; a configuração externa fica em `docs/GOOGLE_DRIVE_SETUP.md`.
+A especificação detalhada da integração Drive fica em `docs/superpowers/specs/2026-08-06-google-drive-primary-storage-design.md`; a decisão de cotas e lotes OCR fica em `docs/superpowers/specs/2026-08-06-provider-only-ocr-quota-and-adaptive-batching-design.md`; o plano executável do Drive fica em `docs/superpowers/plans/2026-08-06-google-drive-primary-storage.md`; a configuração externa fica em `docs/GOOGLE_DRIVE_SETUP.md`.
