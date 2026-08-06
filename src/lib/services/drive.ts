@@ -15,11 +15,21 @@ export type DriveServiceClientLike = {
 	};
 	functions: {
 		invoke(
-			name: 'drive-oauth-start',
+			name: 'drive-oauth-start' | 'drive-sync',
 			options: { body: Record<string, never> }
 		): Promise<{ data: unknown; error: unknown }>;
 	};
 };
+
+export type DriveSyncClientLike = Pick<DriveServiceClientLike, 'functions'>;
+
+export interface DriveSyncReceipt {
+	status: 'completed' | 'partial';
+	pages: number;
+	applied: number;
+	ignored: number;
+	conflicts: number;
+}
 
 export class DriveConnectionServiceError extends Error {
 	constructor(message: string) {
@@ -74,5 +84,27 @@ export async function beginDriveConnection(
 		return url.toString();
 	} catch {
 		throw new DriveConnectionServiceError('Não foi possível iniciar a conexão com o Google Drive.');
+	}
+}
+
+const syncReceiptSchema = z
+	.object({
+		status: z.enum(['completed', 'partial']),
+		pages: z.int().min(1).max(100),
+		applied: z.int().min(0).max(1_000_000),
+		ignored: z.int().min(0).max(1_000_000),
+		conflicts: z.int().min(0).max(1_000_000)
+	})
+	.strict();
+
+export async function synchronizeDriveConnection(
+	client: DriveSyncClientLike = defaultClient()
+): Promise<Readonly<DriveSyncReceipt>> {
+	try {
+		const { data, error } = await client.functions.invoke('drive-sync', { body: {} });
+		if (error) throw error;
+		return Object.freeze(syncReceiptSchema.parse(data));
+	} catch {
+		throw new DriveConnectionServiceError('Não foi possível sincronizar o Google Drive.');
 	}
 }
