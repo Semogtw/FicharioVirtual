@@ -53,7 +53,10 @@ describe('Drive connection state', () => {
 
 	it('presents connected and syncing states without exposing identifiers', () => {
 		expect(
-			driveConnectionPresentation({ configured: true, connection: parseDriveConnection(connection) })
+			driveConnectionPresentation({
+				configured: true,
+				connection: parseDriveConnection(connection)
+			})
 		).toEqual({
 			kind: 'connected',
 			title: 'Google Drive conectado',
