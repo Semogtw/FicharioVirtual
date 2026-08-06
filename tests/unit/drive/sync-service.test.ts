@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { synchronizeDriveChanges, type DriveSyncGateway } from '../../../src/lib/drive/sync-service';
+import {
+	synchronizeDriveChanges,
+	type DriveSyncGateway
+} from '../../../src/lib/drive/sync-service';
 
 const firstFileId = '1AbCdEfGhIjKlMnOpQrStUvWxYz_123456';
 const secondFileId = '9ZyXwVuTsRqPoNmLkJiHgFeDcBa_654321';
