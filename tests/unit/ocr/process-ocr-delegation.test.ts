@@ -7,49 +7,58 @@ const source = readFileSync(
 );
 
 describe('process-ocr provider delegation', () => {
-	it('delegates the Gemini request and structured response parsing to the shared client', () => {
-		expect(source).toContain('requestGeminiOcr');
+	it('delegates one validated multi-page request to the shared Gemini client', () => {
+		expect(source).toContain('requestGeminiOcrBatch');
 		expect(source).toContain('parseOcrClaimResult');
 		expect(source).toContain('planOcrFailure');
+		expect(source).toContain("supabase.rpc('register_ocr_batch'");
+		expect(source).toContain("supabase.rpc('record_ocr_batch_call'");
 	});
 
-	it('does not duplicate the provider endpoint, prompt schema or payload parser', () => {
+	it('keeps both the legacy one-page body and the new exact batch body', () => {
+		expect(source).toContain("hasExactKeys(record, ['pageId'])");
+		expect(source).toContain("hasExactKeys(record, ['pageIds'])");
+		expect(source).toContain("hasExactKeys(record, ['batchId', 'pageIds'])");
+		expect(source).toContain('new Set(record.pageIds).size !== record.pageIds.length');
+	});
+
+	it('does not duplicate provider transport, prompt schema or payload parsing', () => {
 		expect(source).not.toContain('generativelanguage.googleapis.com');
 		expect(source).not.toContain('const responseSchema');
 		expect(source).not.toContain('function base64');
-		expect(source).not.toContain('function responseText');
 		expect(source).not.toContain('parseOcrPayload');
 		expect(source).not.toContain('fetchImpl');
 	});
 
-	it('rejects malformed claim results before provider execution', () => {
-		expect(source).toContain('const claimResult = parseOcrClaimResult');
-		expect(source).not.toContain('.attemptCount ?? 1');
-		expect(source).not.toContain('Number((claim as');
-		expect(source).not.toContain('parseOcrClaimState');
-		expect(source).not.toContain('parseOcrAttemptCount');
-		expect(source).toContain("return respond(503, { code: 'ocr_claim_failed' })");
+	it('does not read or send an application-created daily OCR limit', () => {
+		expect(source).not.toContain('OCR_DAILY_HARD_LIMIT');
+		expect(source).not.toContain('daily_hard_limit');
+		expect(source).not.toContain('dailyLimit');
+		expect(source).toContain("OCR_BATCH_MAX_PAGES");
+		expect(source).toContain("OCR_BATCH_MAX_BYTES");
 	});
 
-	it('preserves review state when the page was already complete before the claim', () => {
-		expect(source).toMatch(
-			/return respond\(200, \{\s*state: 'already_complete',\s*needsReview: page\.status === 'needs_review'\s*\}\)/
+	it('persists valid pages independently and requests a split only for affected identities', () => {
+		expect(source).toContain('for (const pageResult of outcome.pages)');
+		expect(source).toContain("supabase.rpc(\n\t\t\t\t'complete_ocr_job'");
+		expect(source).toContain('outcome.missingPageIds');
+		expect(source).toContain('outcome.duplicatePageIds');
+		expect(source).toContain("code: 'ocr_batch_split_required'");
+		expect(source).toContain('splitRequiredPageIds.push(pageId)');
+	});
+
+	it('cleans temporary images only after a page is already or newly complete', () => {
+		expect(source).toContain('await cleanupTemporaryImage(page.id, page.temporary_image_path)');
+		expect(source).toContain(
+			'await cleanupTemporaryImage(pageResult.pageId, claimed.page.temporary_image_path)'
 		);
+		expect(source).not.toContain('await cleanupTemporaryImage(sourcePath)');
 	});
 
-	it('reloads review state and cleans the temporary image after a claim race', () => {
-		expect(source).toMatch(
-			/if \(claimResult\.state === 'already_complete'\) \{[\s\S]*\.select\('status'\)[\s\S]*await cleanupTemporaryImage\(page\.temporary_image_path\);[\s\S]*needsReview: completedPage\.status === 'needs_review'[\s\S]*\}/
-		);
-	});
-
-	it('delegates persistence and HTTP decisions to the shared failure planner', () => {
+	it('delegates provider failures to the shared finite retry planner', () => {
 		expect(source).toContain("from '../_shared/ocr-failure.ts'");
 		expect(source).toContain('planOcrFailure');
 		expect(source).not.toContain('classifyGeminiFailure');
 		expect(source).not.toContain('geminiFailureResponse');
-		expect(source).not.toContain(
-			"const code = responseInvalid ? 'ocr_response_invalid' : 'ocr_request_failed'"
-		);
 	});
 });
