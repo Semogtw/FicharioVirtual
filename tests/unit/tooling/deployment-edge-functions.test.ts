@@ -29,9 +29,10 @@ describe('Edge Function deployment runbook', () => {
 		expect(deployment).not.toContain('supabase functions deploy --no-verify-jwt');
 	});
 
-	it('does not claim a nonexistent 50 MiB Storage migration', () => {
-		expect(deployment).not.toContain(
-			'A migration eleva o teto transitório do bucket para permitir artefatos de até 50 MiB.'
-		);
+	it('distinguishes the local 20 MiB setting from the transitional 50 MiB migration', () => {
+		expect(deployment).toContain('`supabase/config.toml` mantém `file_size_limit = "20MiB"`');
+		expect(deployment).toContain('`202608060014_provider_only_ocr_batches.sql`');
+		expect(deployment).toContain('50 MiB');
+		expect(deployment).toContain('transitório');
 	});
 });
