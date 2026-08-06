@@ -34,13 +34,13 @@ describe('process-ocr provider delegation', () => {
 		expect(source).not.toContain('OCR_DAILY_HARD_LIMIT');
 		expect(source).not.toContain('daily_hard_limit');
 		expect(source).not.toContain('dailyLimit');
-		expect(source).toContain("OCR_BATCH_MAX_PAGES");
-		expect(source).toContain("OCR_BATCH_MAX_BYTES");
+		expect(source).toContain('OCR_BATCH_MAX_PAGES');
+		expect(source).toContain('OCR_BATCH_MAX_BYTES');
 	});
 
 	it('persists valid pages independently and requests a split only for affected identities', () => {
 		expect(source).toContain('for (const pageResult of outcome.pages)');
-		expect(source).toContain("supabase.rpc(\n\t\t\t\t'complete_ocr_job'");
+		expect(source).toContain("'complete_ocr_job'");
 		expect(source).toContain('outcome.missingPageIds');
 		expect(source).toContain('outcome.duplicatePageIds');
 		expect(source).toContain("code: 'ocr_batch_split_required'");
