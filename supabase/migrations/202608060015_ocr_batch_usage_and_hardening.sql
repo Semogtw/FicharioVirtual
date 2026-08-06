@@ -1,12 +1,12 @@
-create or replace function public.positive_integer_array(values integer[])
+create or replace function public.positive_integer_array(input_values integer[])
 returns boolean
 language sql
 immutable
 strict
 set search_path = ''
 as $$
-  select cardinality(values) > 0
-    and coalesce((select bool_and(value > 0) from unnest(values) value), false);
+  select cardinality(input_values) > 0
+    and coalesce((select bool_and(item_value > 0) from unnest(input_values) item_value), false);
 $$;
 
 alter table public.ocr_batches
