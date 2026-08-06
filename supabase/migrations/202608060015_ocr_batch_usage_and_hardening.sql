@@ -6,7 +6,10 @@ strict
 set search_path = ''
 as $$
   select cardinality(input_values) > 0
-    and coalesce((select bool_and(item_value > 0) from unnest(input_values) item_value), false);
+    and coalesce((
+      select bool_and(item_value > 0)
+      from unnest(input_values) as item(item_value)
+    ), false);
 $$;
 
 alter table public.ocr_batches
