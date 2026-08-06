@@ -18,7 +18,7 @@ function redirect(appOrigin: string, result: 'authorized' | 'cancelled' | 'error
 		headers: {
 			Location: location.toString(),
 			'Cache-Control': 'no-store',
-			Referrer-Policy: 'no-referrer'
+			'Referrer-Policy': 'no-referrer'
 		}
 	});
 }
