@@ -59,9 +59,9 @@ describe('Google Drive API client', () => {
 			'initial-change-token'
 		);
 		expect(fetchImpl.mock.calls[0][0]).toContain('/drive/v3/changes/startPageToken');
-		await expect(
-			getDriveStartPageToken({ accessToken: 'short', fetchImpl })
-		).rejects.toThrow('Invalid Google Drive access token');
+		await expect(getDriveStartPageToken({ accessToken: 'short', fetchImpl })).rejects.toThrow(
+			'Invalid Google Drive access token'
+		);
 	});
 
 	it('reuses one existing root and obtains the feed token', async () => {
