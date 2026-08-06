@@ -11,6 +11,7 @@ delete from public.document_tags where user_id = '$user_id'::uuid;
 delete from public.tags where user_id = '$user_id'::uuid;
 delete from public.usage_daily where user_id = '$user_id'::uuid;
 delete from public.ocr_jobs where user_id = '$user_id'::uuid;
+delete from public.ocr_batches where user_id = '$user_id'::uuid;
 delete from public.pages where user_id = '$user_id'::uuid;
 delete from public.documents where user_id = '$user_id'::uuid;
 delete from public.notebooks where user_id = '$user_id'::uuid;
@@ -34,8 +35,7 @@ begin
   result := public.claim_ocr_job(
     '22222222-2222-4222-8222-222222222222'::uuid,
     'gemini-test',
-    '2026-08-03T00:00:00Z',
-    10
+    '2026-08-03T00:00:00Z'
   );
   if result is distinct from jsonb_build_object('state', 'not_authorized') then
     raise exception 'not-authorized claim contract drifted: %', result;
@@ -56,8 +56,7 @@ begin
   result := public.claim_ocr_job(
     '22222222-2222-4222-8222-222222222222'::uuid,
     'gemini-test',
-    '2026-08-03T00:00:01Z',
-    10
+    '2026-08-03T00:00:01Z'
   );
   if result is distinct from jsonb_build_object('state', 'consent_required') then
     raise exception 'consent-required claim contract drifted: %', result;
@@ -78,8 +77,7 @@ begin
   result := public.claim_ocr_job(
     '22222222-2222-4222-8222-222222222222'::uuid,
     'x',
-    '2026-08-03T00:00:02Z',
-    10
+    '2026-08-03T00:00:02Z'
   );
   if result is distinct from jsonb_build_object('state', 'invalid_configuration') then
     raise exception 'invalid-configuration claim contract drifted: %', result;
@@ -88,8 +86,7 @@ begin
   result := public.claim_ocr_job(
     '77777777-7777-4777-8777-777777777777'::uuid,
     'gemini-test',
-    '2026-08-03T00:00:03Z',
-    10
+    '2026-08-03T00:00:03Z'
   );
   if result is distinct from jsonb_build_object('state', 'not_found') then
     raise exception 'not-found claim contract drifted: %', result;
@@ -98,8 +95,7 @@ begin
   result := public.claim_ocr_job(
     '22222222-2222-4222-8222-222222222222'::uuid,
     'gemini-test',
-    '2026-08-03T00:00:04Z',
-    10
+    '2026-08-03T00:00:04Z'
   );
   if result->>'state' is distinct from 'claimed' then
     raise exception 'busy setup claim failed: %', result;
@@ -108,8 +104,7 @@ begin
   result := public.claim_ocr_job(
     '22222222-2222-4222-8222-222222222222'::uuid,
     'gemini-test',
-    '2026-08-03T00:00:05Z',
-    10
+    '2026-08-03T00:00:05Z'
   );
   if (select array_agg(key order by key) from jsonb_object_keys(result) as keys(key))
     is distinct from array['jobId', 'state']
@@ -135,8 +130,7 @@ begin
   result := public.claim_ocr_job(
     '22222222-2222-4222-8222-222222222222'::uuid,
     'gemini-test',
-    '2026-08-03T00:00:07Z',
-    10
+    '2026-08-03T00:00:07Z'
   );
   if (select array_agg(key order by key) from jsonb_object_keys(result) as keys(key))
     is distinct from array['jobId', 'state']
@@ -152,4 +146,4 @@ reset role;
 rollback;
 SQL
 
-echo "OCR simple claim result contracts passed."
+echo "Provider-only OCR simple claim result contracts passed."
