@@ -14,10 +14,24 @@ const deployedFunctions = [
 	'drive-sync'
 ] as const;
 
+const requiredOcrMigrations = [
+	'202608060014_provider_only_ocr_batches.sql',
+	'202608060015_ocr_batch_usage_and_hardening.sql',
+	'202608060016_harden_ocr_batch_transitions.sql',
+	'202608060017_harden_ocr_batch_manifest_jobs.sql',
+	'202608060018_recover_stale_ocr_batches.sql'
+] as const;
+
 describe('Edge Function deployment runbook', () => {
 	it('lists every currently versioned application Edge Function', () => {
 		for (const functionName of deployedFunctions) {
 			expect(deployment).toContain(`supabase functions deploy ${functionName}`);
+		}
+	});
+
+	it('requires the complete provider-only OCR migration sequence', () => {
+		for (const migration of requiredOcrMigrations) {
+			expect(deployment).toContain(migration);
 		}
 	});
 
