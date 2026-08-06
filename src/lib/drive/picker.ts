@@ -5,10 +5,12 @@ export const GOOGLE_PICKER_MIME_TYPES = Object.freeze([
 	'application/pdf'
 ] as const);
 
+export type GooglePickerMimeType = (typeof GOOGLE_PICKER_MIME_TYPES)[number];
+
 export interface GooglePickerSelection {
 	id: string;
 	name: string;
-	mimeType: (typeof GOOGLE_PICKER_MIME_TYPES)[number];
+	mimeType: GooglePickerMimeType;
 	sizeBytes: number;
 	modifiedAt: string;
 }
@@ -84,6 +86,18 @@ function runtimeIsValid(value: unknown): value is GooglePickerRuntime {
 	);
 }
 
+function validMimeTypes(value: readonly GooglePickerMimeType[]): readonly GooglePickerMimeType[] {
+	if (
+		value.length < 1 ||
+		value.length > GOOGLE_PICKER_MIME_TYPES.length ||
+		new Set(value).size !== value.length ||
+		!value.every((item) => GOOGLE_PICKER_MIME_TYPES.includes(item))
+	) {
+		throw new TypeError('Invalid Google Picker configuration');
+	}
+	return Object.freeze([...value]);
+}
+
 export function parsePickerSelection(value: unknown): GooglePickerSelection | null {
 	if (value === null || typeof value !== 'object' || Array.isArray(value)) {
 		throw new TypeError('Invalid Google Picker response');
@@ -107,7 +121,7 @@ export function parsePickerSelection(value: unknown): GooglePickerSelection | nu
 		!DRIVE_ID.test(record.id) ||
 		!validText(record.name, 1, 512) ||
 		typeof record.mimeType !== 'string' ||
-		!GOOGLE_PICKER_MIME_TYPES.includes(record.mimeType as never) ||
+		!GOOGLE_PICKER_MIME_TYPES.includes(record.mimeType as GooglePickerMimeType) ||
 		typeof record.sizeBytes !== 'string' ||
 		!/^\d{1,16}$/.test(record.sizeBytes) ||
 		typeof record.lastEditedUtc !== 'number' ||
@@ -124,7 +138,7 @@ export function parsePickerSelection(value: unknown): GooglePickerSelection | nu
 	return Object.freeze({
 		id: record.id,
 		name: record.name.trim(),
-		mimeType: record.mimeType as GooglePickerSelection['mimeType'],
+		mimeType: record.mimeType as GooglePickerMimeType,
 		sizeBytes,
 		modifiedAt
 	});
@@ -188,21 +202,24 @@ export function openGoogleDrivePicker({
 	accessToken,
 	apiKey,
 	appId,
-	runtime
+	runtime,
+	mimeTypes = GOOGLE_PICKER_MIME_TYPES
 }: {
 	accessToken: string;
 	apiKey: string;
 	appId: string;
 	runtime: GooglePickerRuntime;
+	mimeTypes?: readonly GooglePickerMimeType[];
 }): Promise<GooglePickerSelection | null> {
 	if (!runtimeIsValid(runtime) || !API_KEY.test(apiKey) || !PROJECT_NUMBER.test(appId)) {
 		throw new TypeError('Invalid Google Picker configuration');
 	}
+	const safeMimeTypes = validMimeTypes(mimeTypes);
 	const pickerApi = runtime.google.picker;
 	return new Promise((resolve, reject) => {
 		try {
 			const view = new pickerApi.DocsView();
-			view.setMimeTypes(GOOGLE_PICKER_MIME_TYPES.join(','));
+			view.setMimeTypes(safeMimeTypes.join(','));
 			view.setIncludeFolders(false);
 			view.setSelectFolderEnabled(false);
 			const builder = new pickerApi.PickerBuilder();
@@ -212,7 +229,11 @@ export function openGoogleDrivePicker({
 			builder.setAppId(appId);
 			builder.setCallback((data) => {
 				try {
-					resolve(parsePickerSelection(data));
+					const selection = parsePickerSelection(data);
+					if (selection !== null && !safeMimeTypes.includes(selection.mimeType)) {
+						throw new TypeError('Invalid Google Picker response');
+					}
+					resolve(selection);
 				} catch (error) {
 					reject(error);
 				}
