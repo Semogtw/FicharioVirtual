@@ -1,0 +1,85 @@
+name: Format Drive block once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/format-drive-block.yml
+      - src/lib/drive/legacy-migration.ts
+      - src/lib/drive/picker-service.ts
+      - src/lib/drive/recovery.ts
+      - src/routes/drive/+page.svelte
+      - src/routes/import/drive/+page.svelte
+      - supabase/functions/_shared/google-drive-changes.ts
+      - supabase/functions/drive-sync/index.ts
+      - tests/unit/drive/google-drive-changes.test.ts
+      - tests/unit/drive/legacy-migration.test.ts
+      - tests/unit/drive/picker-service.test.ts
+      - tests/unit/drive/recovery.test.ts
+      - tests/unit/routes/drive-migration-page.test.ts
+      - tests/unit/routes/drive-recovery-page.test.ts
+
+permissions:
+  contents: write
+
+concurrency:
+  group: format-drive-block-once
+  cancel-in-progress: true
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: true
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.16.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Format only the Drive feature block
+        run: |
+          pnpm exec prettier --write \
+            src/lib/drive/legacy-migration.ts \
+            src/lib/drive/picker-service.ts \
+            src/lib/drive/recovery.ts \
+            src/routes/drive/+page.svelte \
+            src/routes/import/drive/+page.svelte \
+            supabase/functions/_shared/google-drive-changes.ts \
+            supabase/functions/drive-sync/index.ts \
+            tests/unit/drive/google-drive-changes.test.ts \
+            tests/unit/drive/legacy-migration.test.ts \
+            tests/unit/drive/picker-service.test.ts \
+            tests/unit/drive/recovery.test.ts \
+            tests/unit/routes/drive-migration-page.test.ts \
+            tests/unit/routes/drive-recovery-page.test.ts
+      - name: Commit formatting when needed
+        run: |
+          if git diff --quiet; then
+            echo 'No formatting changes required.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- \
+            src/lib/drive/legacy-migration.ts \
+            src/lib/drive/picker-service.ts \
+            src/lib/drive/recovery.ts \
+            src/routes/drive/+page.svelte \
+            src/routes/import/drive/+page.svelte \
+            supabase/functions/_shared/google-drive-changes.ts \
+            supabase/functions/drive-sync/index.ts \
+            tests/unit/drive/google-drive-changes.test.ts \
+            tests/unit/drive/legacy-migration.test.ts \
+            tests/unit/drive/picker-service.test.ts \
+            tests/unit/drive/recovery.test.ts \
+            tests/unit/routes/drive-migration-page.test.ts \
+            tests/unit/routes/drive-recovery-page.test.ts
+          git commit -m 'style: format Drive feature block'
+          git push origin HEAD:main
