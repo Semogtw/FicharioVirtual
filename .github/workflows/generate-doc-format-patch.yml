@@ -1,22 +1,22 @@
-name: Generate review formatting patch once
+name: Apply repository formatting once
 
 on:
   workflow_run:
-    workflows: [Validate current head, Validate documentation]
+    workflows: [Validate documentation]
     types: [completed]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   format:
+    if: ${{ github.event.workflow_run.id == 31128141932 }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
         with:
           ref: main
-          persist-credentials: false
       - uses: pnpm/action-setup@v6
         with:
           version: 10
@@ -26,14 +26,27 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - name: Generate a deterministic repository formatting patch
+      - name: Format and remove the one-shot workflow
         run: |
           pnpm exec prettier --write .
-          git diff --binary > /tmp/review-format.patch
-          test -s /tmp/review-format.patch
-      - uses: actions/upload-artifact@v4
-        with:
-          name: review-format-${{ github.sha }}
-          path: /tmp/review-format.patch
-          if-no-files-found: error
-          retention-days: 1
+          rm .github/workflows/generate-doc-format-patch.yml
+      - name: Verify the final worktree before writing
+        run: |
+          pnpm format:check
+          pnpm check
+          pnpm lint
+          pnpm test:unit
+          pnpm check:edge
+          pnpm check:offline
+          pnpm build
+      - name: Commit only the verified formatting result
+        run: |
+          git add -A
+          git diff --cached --quiet && {
+            echo 'No formatting changes were produced.' >&2
+            exit 1
+          }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'style: apply verified repository formatting'
+          git push origin HEAD:main
