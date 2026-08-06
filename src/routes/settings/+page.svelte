@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { onDestroy } from 'svelte';
 	import Button from '$lib/components/Button.svelte';
+	import DriveConnectionCard from '$lib/components/DriveConnectionCard.svelte';
 	import InstallAppButton from '$lib/components/InstallAppButton.svelte';
 	import ThemePicker from '$lib/components/ThemePicker.svelte';
 	import { createPortableExport, downloadPortableExport } from '$lib/services/export';
@@ -77,7 +78,7 @@
 	<header>
 		<p class="eyebrow">Conta e propriedade dos dados</p>
 		<h1 id="page-title">Configurações</h1>
-		<p>Controle exportação, instalação e sessão sem expor chaves ou caminhos privados.</p>
+		<p>Controle Google Drive, exportação, instalação e sessão sem expor tokens ou caminhos privados.</p>
 	</header>
 
 	{#if signedOut}
@@ -91,13 +92,14 @@
 		{#if message}<p class="message" role="status">{message}</p>{/if}
 
 		<ThemePicker />
+		<DriveConnectionCard />
 
 		<section class="settings-card" aria-labelledby="export-title">
 			<div>
 				<h2 id="export-title">Exportação portátil</h2>
 				<p>
 					Baixe um JSON versionado com cadernos, metadados, tags, fontes de texto, correções e
-					avisos. Caminhos privados, tokens e URLs assinadas não entram no arquivo.
+					avisos. IDs internos sensíveis, tokens e URLs temporárias não entram no arquivo.
 				</p>
 			</div>
 			<Button
@@ -111,8 +113,8 @@
 			<div>
 				<h2 id="originals-title">Arquivos originais</h2>
 				<p>
-					Cada documento oferece um link assinado de curta duração para o original. Isso evita criar
-					um arquivo público ou uma URL permanente durante a exportação.
+					O Google Drive será a fonte permanente dos originais. Durante a migração, cópias no
+					Supabase permanecem como fallback até a confirmação de ID, integridade e rollback.
 				</p>
 			</div>
 			<a class="secondary-link" href="/library/">Abrir biblioteca</a>
@@ -127,6 +129,8 @@
 			<h2 id="policy-title">Política operacional</h2>
 			<ul>
 				<li>Nenhuma cobrança é ativada automaticamente.</li>
+				<li>O Drive usa somente o escopo <code>drive.file</code> no MVP.</li>
+				<li>Refresh token fica apenas no backend; o navegador recebe acesso efêmero.</li>
 				<li>A leitura externa exige consentimento e usa limite diário configurado no backend.</li>
 				<li>
 					Quando a cota termina, páginas ficam pendentes em vez de trocar silenciosamente de modelo.
@@ -138,7 +142,7 @@
 		<section class="danger-zone" aria-labelledby="session-title">
 			<div>
 				<h2 id="session-title">Sessão atual</h2>
-				<p>Encerre o acesso neste navegador. Os documentos permanecem no arquivo privado.</p>
+				<p>Encerre o acesso neste navegador. Arquivos e metadados permanecem preservados.</p>
 			</div>
 			<button type="button" disabled={signingOut || exporting} onclick={() => void signOut()}>
 				{signingOut ? 'Saindo…' : 'Sair'}
@@ -233,6 +237,13 @@
 		padding-left: 1.2rem;
 		color: var(--muted-strong);
 		line-height: 1.5;
+	}
+
+	.policy code {
+		padding: 0.1rem 0.25rem;
+		border-radius: 0.3rem;
+		background: var(--surface-strong);
+		color: var(--ink);
 	}
 
 	.danger-zone {
