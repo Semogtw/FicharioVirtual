@@ -34,8 +34,11 @@ declare
   linked_jobs integer;
   unsafe_jobs integer;
   prior_parent_count integer;
+  prior_max_split_depth integer := -1;
   inferred_parent_batch_id uuid;
+  parent_split_depth integer;
   effective_parent_batch_id uuid := target_parent_batch_id;
+  effective_split_depth integer := target_split_depth;
 begin
   if current_user_id is null
     or not (select public.is_authorized_user())
@@ -106,23 +109,24 @@ begin
 
   select
     count(distinct j.batch_id),
-    (array_agg(distinct j.batch_id) filter (where j.batch_id is not null))[1]
-  into prior_parent_count, inferred_parent_batch_id
+    (array_agg(distinct j.batch_id) filter (where j.batch_id is not null))[1],
+    coalesce(max(b.split_depth), -1)
+  into prior_parent_count, inferred_parent_batch_id, prior_max_split_depth
   from public.ocr_jobs j
+  left join public.ocr_batches b on b.id = j.batch_id
   where j.user_id = current_user_id
     and j.page_id = any(target_page_ids);
 
   if target_parent_batch_id is not null then
-    if not exists (
-      select 1
-      from public.ocr_batches b
-      where b.id = target_parent_batch_id
-        and b.user_id = current_user_id
-        and b.document_id = target_document_id
-        and b.status in ('retryable', 'blocked_quota')
-    ) then
-      return null;
-    end if;
+    select b.split_depth
+    into parent_split_depth
+    from public.ocr_batches b
+    where b.id = target_parent_batch_id
+      and b.user_id = current_user_id
+      and b.document_id = target_document_id
+      and b.status in ('retryable', 'blocked_quota');
+    if not found then return null; end if;
+
     if exists (
       select 1
       from public.ocr_jobs j
@@ -133,11 +137,19 @@ begin
     ) then
       return null;
     end if;
+
+    effective_split_depth := greatest(target_split_depth, parent_split_depth + 1);
   elsif prior_parent_count = 1 then
     effective_parent_batch_id := inferred_parent_batch_id;
+    effective_split_depth := greatest(target_split_depth, prior_max_split_depth + 1);
+  elsif prior_parent_count > 1 then
+    effective_parent_batch_id := null;
+    effective_split_depth := greatest(target_split_depth, prior_max_split_depth + 1);
   else
     effective_parent_batch_id := null;
   end if;
+
+  if effective_split_depth > 32 then return null; end if;
 
   insert into public.ocr_batches (
     id, user_id, document_id, parent_batch_id, route, status,
@@ -146,7 +158,7 @@ begin
   ) values (
     new_batch_id, current_user_id, target_document_id, effective_parent_batch_id,
     target_route, 'pending', target_page_ids, target_page_numbers,
-    target_source_bytes, target_derived_bytes, target_split_depth,
+    target_source_bytes, target_derived_bytes, effective_split_depth,
     target_model, target_prompt_version, registered_at, registered_at
   );
 
