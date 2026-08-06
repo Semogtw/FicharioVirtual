@@ -40,9 +40,19 @@ export interface LegacyDriveMigrationGateway {
 export type LegacyMigrationClientLike = DriveTokenClientLike & {
 	from(name: 'documents'): {
 		select(columns: string): {
-			not(column: string, operator: 'is', value: null): {
-				is(column: string, value: null): {
-					order(column: string, options: { ascending: boolean }): Promise<{
+			not(
+				column: string,
+				operator: 'is',
+				value: null
+			): {
+				is(
+					column: string,
+					value: null
+				): {
+					order(
+						column: string,
+						options: { ascending: boolean }
+					): Promise<{
 						data: unknown;
 						error: unknown;
 					}>;
@@ -199,8 +209,5 @@ export function migrateLegacyDriveDocument(
 	document: LegacyDriveDocument,
 	client: LegacyMigrationClientLike = defaultClient()
 ): Promise<DriveFile> {
-	return migrateLegacyDriveDocumentWithGateway(
-		document,
-		createLegacyDriveMigrationGateway(client)
-	);
+	return migrateLegacyDriveDocumentWithGateway(document, createLegacyDriveMigrationGateway(client));
 }

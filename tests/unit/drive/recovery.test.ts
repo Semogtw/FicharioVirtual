@@ -66,9 +66,9 @@ describe('Drive recovery contracts', () => {
 		expect(() => parseMissingDriveDocuments([{ ...missing, access_token: 'secret' }])).toThrow(
 			'Invalid Drive recovery response'
 		);
-		expect(() =>
-			parseOpenDriveConflicts([{ ...conflict, refresh_token: 'secret' }])
-		).toThrow('Invalid Drive recovery response');
+		expect(() => parseOpenDriveConflicts([{ ...conflict, refresh_token: 'secret' }])).toThrow(
+			'Invalid Drive recovery response'
+		);
 	});
 
 	it('rejects duplicate IDs, malformed snapshots, and unbounded responses', () => {

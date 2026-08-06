@@ -96,10 +96,7 @@ describe('legacy Drive migration runner', () => {
 		const value = gateway();
 
 		await expect(
-			migrateLegacyDriveDocumentWithGateway(
-				parseLegacyDriveDocuments([legacy])[0],
-				value
-			)
+			migrateLegacyDriveDocumentWithGateway(parseLegacyDriveDocuments([legacy])[0], value)
 		).resolves.toEqual(driveFile());
 		expect(value.downloadLegacyOriginal).toHaveBeenCalledWith(storagePath);
 		expect(value.resolveFolder).toHaveBeenCalledWith(notebookId);
@@ -123,10 +120,7 @@ describe('legacy Drive migration runner', () => {
 		});
 
 		await expect(
-			migrateLegacyDriveDocumentWithGateway(
-				parseLegacyDriveDocuments([legacy])[0],
-				value
-			)
+			migrateLegacyDriveDocumentWithGateway(parseLegacyDriveDocuments([legacy])[0], value)
 		).rejects.toThrow('database unavailable');
 		expect(value.deleteDriveFile).toHaveBeenCalledWith(driveFileId);
 	});

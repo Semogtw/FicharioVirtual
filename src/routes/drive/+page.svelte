@@ -118,7 +118,8 @@
 			<p class="eyebrow">Recuperação física</p>
 			<h1 id="page-title">Google Drive</h1>
 			<p>
-				Revise arquivos ausentes e conflitos sem apagar OCR, correções, tags ou histórico pesquisável.
+				Revise arquivos ausentes e conflitos sem apagar OCR, correções, tags ou histórico
+				pesquisável.
 			</p>
 		</div>
 		<Button
@@ -136,8 +137,8 @@
 		<section class="notice" aria-labelledby="picker-required-title">
 			<h2 id="picker-required-title">Reconexão ainda não configurada</h2>
 			<p>
-				Cadastre os identificadores públicos do Google Picker para selecionar conscientemente um novo
-				original. Nenhuma leitura ampla do Drive será solicitada.
+				Cadastre os identificadores públicos do Google Picker para selecionar conscientemente um
+				novo original. Nenhuma leitura ampla do Drive será solicitada.
 			</p>
 		</section>
 	{/if}
@@ -162,7 +163,8 @@
 						<div>
 							<strong>{document.title}</strong>
 							<small>
-								{document.kind === 'pdf' ? 'PDF' : 'Imagem'} · {document.originalFilename} · detectado em
+								{document.kind === 'pdf' ? 'PDF' : 'Imagem'} · {document.originalFilename} · detectado
+								em
 								{formatDate(document.updatedAt)}
 							</small>
 							<a href={`/documents/${document.id}/`}>Abrir metadados preservados</a>
@@ -196,7 +198,9 @@
 				{#each recovery.openConflicts as conflict (conflict.id)}
 					<li>
 						<strong>{conflictLabels[conflict.kind]}</strong>
-						<small>Isolado em {formatDate(conflict.createdAt)}. Os demais itens continuam sincronizando.</small>
+						<small
+							>Isolado em {formatDate(conflict.createdAt)}. Os demais itens continuam sincronizando.</small
+						>
 						{#if conflict.documentId}
 							<a href={`/documents/${conflict.documentId}/`}>Abrir documento relacionado</a>
 						{:else if conflict.notebookId}

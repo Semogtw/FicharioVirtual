@@ -11,7 +11,9 @@ describe('legacy Drive migration page', () => {
 		expect(source).toContain('migrateLegacyDriveDocument');
 		expect(source).toContain('async function migrateOne');
 		expect(source).toContain('async function migrateAll');
-		expect(source).toContain("label={migratingId === document.id ? 'Migrando…' : 'Migrar original'}");
+		expect(source).toContain(
+			"label={migratingId === document.id ? 'Migrando…' : 'Migrar original'}"
+		);
 		expect(source).toContain('Fallback preservado');
 	});
 

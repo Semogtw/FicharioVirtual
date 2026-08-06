@@ -41,7 +41,9 @@ function defaultClient(): DriveTokenClientLike {
 	return getSupabaseClient() as unknown as DriveTokenClientLike;
 }
 
-function validateMimeTypes(value: readonly GooglePickerMimeType[]): readonly GooglePickerMimeType[] {
+function validateMimeTypes(
+	value: readonly GooglePickerMimeType[]
+): readonly GooglePickerMimeType[] {
 	if (
 		value.length < 1 ||
 		value.length > GOOGLE_PICKER_MIME_TYPES.length ||

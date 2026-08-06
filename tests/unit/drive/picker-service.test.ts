@@ -99,9 +99,7 @@ describe('Google Picker product service', () => {
 
 	it('downloads the selected file into a bounded browser File', async () => {
 		const select = vi.fn().mockResolvedValue(selection);
-		const download = vi
-			.fn()
-			.mockResolvedValue(new Blob(['pdf'], { type: 'application/pdf' }));
+		const download = vi.fn().mockResolvedValue(new Blob(['pdf'], { type: 'application/pdf' }));
 
 		const result = await selectAndDownloadGoogleDriveFile({
 			mimeTypes: ['application/pdf'],

@@ -21,12 +21,14 @@
 	let message = $state<string | null>(null);
 
 	let activeImages = $derived(
-		importQueue.items.filter((item) => !['complete', 'duplicate', 'cancelled'].includes(item.status))
-			.length
+		importQueue.items.filter(
+			(item) => !['complete', 'duplicate', 'cancelled'].includes(item.status)
+		).length
 	);
 	let activePdfs = $derived(
-		pdfImportQueue.items.filter((item) => !['complete', 'duplicate', 'cancelled'].includes(item.status))
-			.length
+		pdfImportQueue.items.filter(
+			(item) => !['complete', 'duplicate', 'cancelled'].includes(item.status)
+		).length
 	);
 
 	async function loadNotebooks() {
@@ -119,8 +121,8 @@
 			<span>
 				<strong>Permitir OCR somente quando necessário</strong>
 				<small>
-					Imagens precisam dessa autorização. PDFs preservam texto nativo e enviam apenas páginas sem
-					texto ao provedor de leitura.
+					Imagens precisam dessa autorização. PDFs preservam texto nativo e enviam apenas páginas
+					sem texto ao provedor de leitura.
 				</small>
 			</span>
 		</label>

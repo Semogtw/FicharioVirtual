@@ -75,20 +75,18 @@ Deno.serve(async (request) => {
 	});
 
 	try {
-		const { data: refreshToken, error: refreshError } = await admin.rpc(
-			'get_drive_refresh_token',
-			{ target_user_id: user.id }
-		);
+		const { data: refreshToken, error: refreshError } = await admin.rpc('get_drive_refresh_token', {
+			target_user_id: user.id
+		});
 		if (refreshError || typeof refreshToken !== 'string' || refreshToken.length < 8) {
 			return respond(409, { code: 'drive_not_connected' });
 		}
 
 		const refreshed = await refreshGoogleAccessToken({ clientId, clientSecret, refreshToken });
 		const accessToken = refreshed.accessToken;
-		const { data: initialToken, error: beginError } = await admin.rpc(
-			'begin_drive_remote_sync',
-			{ target_user_id: user.id }
-		);
+		const { data: initialToken, error: beginError } = await admin.rpc('begin_drive_remote_sync', {
+			target_user_id: user.id
+		});
 		if (beginError || typeof initialToken !== 'string' || !PAGE_TOKEN.test(initialToken)) {
 			return respond(409, { code: 'drive_not_connected' });
 		}
@@ -105,22 +103,19 @@ Deno.serve(async (request) => {
 				const eventKey = await remoteEventKey(pageToken, change);
 				const file = change.removed ? null : change.file;
 				const parentFolderId = file?.parents.length === 1 ? file.parents[0] : null;
-				const { data: outcome, error: applyError } = await admin.rpc(
-					'apply_drive_remote_change',
-					{
-						target_user_id: user.id,
-						target_event_key: eventKey,
-						target_file_id: change.fileId,
-						target_removed: change.removed,
-						target_file_name: file?.name ?? null,
-						target_mime_type: file?.mimeType ?? null,
-						target_parent_folder_id: parentFolderId,
-						target_modified_time: file?.modifiedTime ?? null,
-						target_version: file?.version ?? null,
-						target_md5_checksum: file?.md5Checksum ?? null,
-						target_trashed: file?.trashed ?? false
-					}
-				);
+				const { data: outcome, error: applyError } = await admin.rpc('apply_drive_remote_change', {
+					target_user_id: user.id,
+					target_event_key: eventKey,
+					target_file_id: change.fileId,
+					target_removed: change.removed,
+					target_file_name: file?.name ?? null,
+					target_mime_type: file?.mimeType ?? null,
+					target_parent_folder_id: parentFolderId,
+					target_modified_time: file?.modifiedTime ?? null,
+					target_version: file?.version ?? null,
+					target_md5_checksum: file?.md5Checksum ?? null,
+					target_trashed: file?.trashed ?? false
+				});
 				if (applyError || !['applied', 'ignored', 'conflict'].includes(outcome)) {
 					throw new Error('Drive remote change persistence failed');
 				}

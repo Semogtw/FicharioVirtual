@@ -42,14 +42,26 @@ export interface DriveRecoveryState {
 export type DriveRecoveryClientLike = {
 	from(name: 'documents' | 'drive_conflicts'): {
 		select(columns: string): {
-			eq(column: string, value: unknown): {
-				order(column: string, options: { ascending: boolean }): Promise<{
+			eq(
+				column: string,
+				value: unknown
+			): {
+				order(
+					column: string,
+					options: { ascending: boolean }
+				): Promise<{
 					data: unknown;
 					error: unknown;
 				}>;
 			};
-			is(column: string, value: null): {
-				order(column: string, options: { ascending: boolean }): Promise<{
+			is(
+				column: string,
+				value: null
+			): {
+				order(
+					column: string,
+					options: { ascending: boolean }
+				): Promise<{
 					data: unknown;
 					error: unknown;
 				}>;
@@ -148,7 +160,10 @@ export function parseOpenDriveConflicts(value: unknown): readonly OpenDriveConfl
 	const result = z.array(conflictSchema).max(MAX_RECOVERY_ITEMS).safeParse(value);
 	if (!result.success) throw new TypeError('Invalid Drive recovery response');
 	const items = result.data.map((row) => {
-		if (hasForbiddenSnapshotKey(row.local_snapshot) || hasForbiddenSnapshotKey(row.remote_snapshot)) {
+		if (
+			hasForbiddenSnapshotKey(row.local_snapshot) ||
+			hasForbiddenSnapshotKey(row.remote_snapshot)
+		) {
 			throw new TypeError('Invalid Drive recovery response');
 		}
 		return Object.freeze({

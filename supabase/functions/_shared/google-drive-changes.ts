@@ -45,11 +45,7 @@ function hasControlCharacters(value: string): boolean {
 }
 
 function validAccessToken(value: string): string {
-	if (
-		value.length < 8 ||
-		value.length > 8192 ||
-		hasControlCharacters(value)
-	) {
+	if (value.length < 8 || value.length > 8192 || hasControlCharacters(value)) {
 		throw new TypeError('Invalid Google Drive access token');
 	}
 	return value;

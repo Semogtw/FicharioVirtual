@@ -44,9 +44,7 @@ describe('Google Drive change feed client', () => {
 			})
 		);
 
-		await expect(
-			listGoogleDriveChanges({ accessToken, pageToken, fetchImpl })
-		).resolves.toEqual({
+		await expect(listGoogleDriveChanges({ accessToken, pageToken, fetchImpl })).resolves.toEqual({
 			changes: [
 				{ fileId, removed: false, file: file() },
 				{ fileId: '2AbCdEfGhIjKlMnOpQrStUvWxYz_123456', removed: true }
