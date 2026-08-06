@@ -2,16 +2,23 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { calculateSha256 } from '$lib/import/hash';
 import { parseDuplicateDocumentId } from '$lib/import/duplicate-result';
 import { recordOcrConsent } from '$lib/services/ocr-consent';
-import { OcrProcessingError, processPageOcr, type OcrRunResult } from '$lib/services/ocr';
+import {
+	OcrProcessingError,
+	processOcrBatch as runOcrBatch,
+	processPageOcr,
+	type OcrBatchRunResult,
+	type OcrRunResult
+} from '$lib/services/ocr';
 import { getSupabaseClient } from '$lib/services/supabase';
 import type { Database, DocumentStatus } from '$lib/types/database';
 import { buildPdfImportPlan, type PdfImportPagePlan } from './import-plan';
 import { inspectPdf } from './inspector-client';
+import { runPdfOcrBatches, type PdfOcrBatchPage } from './ocr-batching';
 import { renderPdfPage } from './renderer';
 import type { PdfInspection } from './types';
 
-const MAX_PDF_BYTES = 20 * 1024 * 1024;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MAX_DERIVED_PAGE_BYTES = 12 * 1024 * 1024;
 
 export type PdfImportPublication = {
 	documentId: string;
@@ -50,7 +57,11 @@ export type PdfUploadDependencies = {
 	): Promise<Blob>;
 	calculateSha256(input: Blob | ArrayBuffer | ArrayBufferView): Promise<string>;
 	recordOcrConsent(version?: number): Promise<void>;
-	processPageOcr(pageId: string): Promise<OcrRunResult>;
+	processPageOcr(pageId: string, options?: { signal?: AbortSignal }): Promise<OcrRunResult>;
+	processOcrBatch?(
+		pageIds: readonly string[],
+		options?: { signal?: AbortSignal }
+	): Promise<OcrBatchRunResult>;
 };
 
 export type PdfUploadOptions = {
@@ -106,7 +117,7 @@ export class PdfUploadError extends Error {
 
 	constructor(code: PdfUploadError['code']) {
 		const messages = {
-			invalid_pdf: 'Selecione um PDF válido de até 20 MB.',
+			invalid_pdf: 'Selecione um arquivo PDF válido e não vazio.',
 			not_authenticated: 'Entre novamente antes de enviar arquivos.',
 			duplicate_check_failed: 'Não foi possível verificar se o PDF já existe.',
 			upload_failed: 'Não foi possível enviar o PDF agora.',
@@ -205,7 +216,7 @@ export function parsePdfImportPublication(
 }
 
 function validate(file: File, options: PdfUploadOptions) {
-	if (file.type !== 'application/pdf' || file.size < 1 || file.size > MAX_PDF_BYTES) {
+	if (file.type !== 'application/pdf' || file.size < 1) {
 		throw new PdfUploadError('invalid_pdf');
 	}
 	const promptVersion = options.promptVersion ?? 1;
@@ -215,7 +226,20 @@ function validate(file: File, options: PdfUploadOptions) {
 	return promptVersion;
 }
 
-async function processOcrPages(
+function pageDensity(pageNumber: number, inspection: PdfInspection): PdfOcrBatchPage['density'] {
+	if (
+		inspection.layout.pagesWithTables.includes(pageNumber) ||
+		inspection.layout.pagesWithColumns.includes(pageNumber) ||
+		inspection.ocrReasonsByPage
+			.find((entry) => entry.pageNumber === pageNumber)
+			?.reasons.some((reason) => /formula|layout|column|table|encoding/i.test(reason))
+	) {
+		return 'dense';
+	}
+	return 'normal';
+}
+
+async function processLegacyOcrPages(
 	pages: readonly PdfImportPagePlan[],
 	dependencies: PdfUploadDependencies,
 	onProgress?: PdfUploadOptions['onProgress'],
@@ -236,7 +260,7 @@ async function processOcrPages(
 			const page = queue[index++];
 			if (!page) return;
 			try {
-				const result = await dependencies.processPageOcr(page.id);
+				const result = await dependencies.processPageOcr(page.id, { signal });
 				if (result.state === 'complete' || result.state === 'already_complete') {
 					if (result.needsReview) needsReview += 1;
 					else complete += 1;
@@ -263,12 +287,41 @@ async function processOcrPages(
 	return { complete, needsReview, pending, failed };
 }
 
+async function processOcrPages(
+	pages: readonly PdfImportPagePlan[],
+	renderedSizes: ReadonlyMap<string, number>,
+	inspection: PdfInspection,
+	dependencies: PdfUploadDependencies,
+	onProgress?: PdfUploadOptions['onProgress'],
+	signal?: AbortSignal
+) {
+	const queue = pages.filter((page) => page.needsOcr);
+	if (!dependencies.processOcrBatch) {
+		return processLegacyOcrPages(queue, dependencies, onProgress, signal);
+	}
+	if (queue.length === 0) return { complete: 0, needsReview: 0, pending: 0, failed: 0 };
+	onProgress?.({ phase: 'reading', completed: 0, total: queue.length });
+	return runPdfOcrBatches({
+		pages: queue.map((page) => ({
+			id: page.id,
+			pageNumber: page.pageNumber,
+			derivedBytes: renderedSizes.get(page.id) ?? 1,
+			density: pageDensity(page.pageNumber, inspection)
+		})),
+		processBatch: (pageIds) => dependencies.processOcrBatch!(pageIds, { signal }),
+		signal,
+		onPageFinished: (pageNumber, completed, total) =>
+			onProgress?.({ phase: 'reading', completed, total, pageNumber })
+	});
+}
+
 const defaultDependencies: PdfUploadDependencies = {
 	inspectPdf,
 	renderPdfPage,
 	calculateSha256,
 	recordOcrConsent,
-	processPageOcr
+	processPageOcr: (pageId, options) => processPageOcr(pageId, undefined, options),
+	processOcrBatch: (pageIds, options) => runOcrBatch(pageIds, undefined, options)
 };
 
 export async function uploadPdfWithGateway(
@@ -300,6 +353,7 @@ export async function uploadPdfWithGateway(
 	const storageRoot = `${userId}/${documentId}`;
 	const originalStoragePath = `${storageRoot}/original.pdf`;
 	let pages = buildPdfImportPlan(inspection, storageRoot).map((page) => ({ ...page }));
+	const renderedSizes = new Map<string, number>();
 	const uploadedPaths: string[] = [];
 	let metadataPublished = false;
 
@@ -319,14 +373,23 @@ export async function uploadPdfWithGateway(
 				total: ocrPages.length,
 				pageNumber: page.pageNumber
 			});
-			const blob = await dependencies.renderPdfPage(file, page.pageNumber, {
+			let blob = await dependencies.renderPdfPage(file, page.pageNumber, {
 				maxDimension: 2400,
 				quality: 0.88,
 				signal: options.signal
 			});
+			if (blob.size > MAX_DERIVED_PAGE_BYTES) {
+				blob = await dependencies.renderPdfPage(file, page.pageNumber, {
+					maxDimension: 1800,
+					quality: 0.78,
+					signal: options.signal
+				});
+			}
+			if (blob.size < 1) throw new PdfUploadError('upload_failed');
 			const temporaryImagePath = `${storageRoot}/pages/${page.pageNumber}.${imageExtension(blob)}`;
 			await gateway.upload(temporaryImagePath, blob);
 			uploadedPaths.push(temporaryImagePath);
+			renderedSizes.set(page.id, blob.size);
 			pages = pages.map((candidate) =>
 				candidate.id === page.id ? { ...candidate, temporaryImagePath } : candidate
 			);
@@ -355,7 +418,14 @@ export async function uploadPdfWithGateway(
 		metadataPublished = true;
 		options.onProgress?.({ phase: 'publishing', completed: 1, total: 1 });
 
-		const ocr = await processOcrPages(pages, dependencies, options.onProgress, options.signal);
+		const ocr = await processOcrPages(
+			pages,
+			renderedSizes,
+			inspection,
+			dependencies,
+			options.onProgress,
+			options.signal
+		);
 		return Object.freeze({
 			...publication,
 			inspection,
