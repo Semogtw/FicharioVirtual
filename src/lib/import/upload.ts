@@ -206,7 +206,7 @@ async function removeUploaded(
 	}
 }
 
-export async function uploadPreparedImage(
+export async function uploadPreparedImageToSupabase(
 	input: UploadPreparedImageInput,
 	client?: SupabaseClient<Database>
 ): Promise<UploadedPage> {
@@ -331,4 +331,13 @@ export async function uploadPreparedImage(
 			thumbnailPath
 		});
 	}, signal);
+}
+
+export async function uploadPreparedImage(
+	input: UploadPreparedImageInput,
+	client?: SupabaseClient<Database>
+): Promise<UploadedPage> {
+	if (client !== undefined) return uploadPreparedImageToSupabase(input, client);
+	const { uploadPreparedImageToDrive } = await import('./drive-upload');
+	return uploadPreparedImageToDrive(input);
 }
