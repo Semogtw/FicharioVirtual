@@ -1,6 +1,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { planOcrBatches } from '$lib/ocr/batch-planner';
 import type { Database } from '$lib/types/database';
-import { OcrProcessingError, processPageOcr, type OcrRunResult } from './ocr';
+import {
+	OcrProcessingError,
+	processOcrBatch,
+	processPageOcr,
+	type OcrBatchRunResult,
+	type OcrRunResult
+} from './ocr';
 import { getSupabaseClient } from './supabase';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -17,7 +24,15 @@ export type OcrResumeSummary = {
 	failed: number;
 };
 type OcrProcessor = (pageId: string) => Promise<OcrRunResult>;
-export type OcrResumeOptions = { signal?: AbortSignal; client?: SupabaseClient<Database> };
+type OcrBatchProcessor = (
+	pageIds: readonly string[],
+	options?: { signal?: AbortSignal }
+) => Promise<OcrBatchRunResult>;
+export type OcrResumeOptions = {
+	signal?: AbortSignal;
+	client?: SupabaseClient<Database>;
+	batchProcessor?: OcrBatchProcessor;
+};
 
 function validId(value: string) {
 	if (!UUID.test(value)) throw new TypeError('Invalid document identifier');
@@ -62,18 +77,73 @@ export function parsePendingOcrPages(data: unknown): readonly PendingOcrPage[] {
 		seenPageNumbers.add(pageNumber);
 		return Object.freeze({ id: pageId, pageNumber });
 	});
-	return Object.freeze(pages);
+	return Object.freeze(pages.sort((left, right) => left.pageNumber - right.pageNumber));
 }
 
-export async function resumeDocumentOcrWithGateway(
-	documentId: string,
-	gateway: OcrResumeGateway,
-	processor: OcrProcessor = processPageOcr,
-	options: Pick<OcrResumeOptions, 'signal'> = {}
+async function resumeInBatches(
+	pages: readonly PendingOcrPage[],
+	processor: OcrBatchProcessor,
+	signal?: AbortSignal
 ): Promise<OcrResumeSummary> {
-	const validDocumentId = validId(documentId);
-	await gateway.recoverStaleJobs();
-	const pages = [...(await gateway.listPendingPages(validDocumentId))];
+	const batches = planOcrBatches(
+		pages.map((page) => ({
+			pageId: page.id,
+			pageNumber: page.pageNumber,
+			derivedBytes: 1,
+			density: 'normal',
+			route: 'gemini'
+		})),
+		{ maxPages: 40, denseMaxPages: 20, maxDerivedBytes: 40 }
+	);
+	const finalized = new Set<string>();
+	let completed = 0;
+	let needsReview = 0;
+	let pending = 0;
+	let failed = 0;
+
+	for (const batch of batches) {
+		if (signal?.aborted) break;
+		const pageIds = batch.pages.map((page) => page.pageId);
+		try {
+			const result = await processor(pageIds, { signal });
+			const review = new Set(result.reviewPageIds);
+			for (const pageId of result.completedPageIds) {
+				if (finalized.has(pageId)) continue;
+				finalized.add(pageId);
+				if (review.has(pageId)) needsReview += 1;
+				else completed += 1;
+			}
+			for (const pageId of result.pendingPageIds) {
+				if (!finalized.has(pageId)) {
+					finalized.add(pageId);
+					pending += 1;
+				}
+			}
+			for (const pageId of result.failedPageIds) {
+				if (!finalized.has(pageId)) {
+					finalized.add(pageId);
+					failed += 1;
+				}
+			}
+		} catch (error) {
+			const retryable = !(error instanceof OcrProcessingError) || error.retryable;
+			for (const pageId of pageIds) {
+				if (finalized.has(pageId)) continue;
+				finalized.add(pageId);
+				if (retryable) pending += 1;
+				else failed += 1;
+			}
+		}
+	}
+	pending += pages.length - finalized.size;
+	return Object.freeze({ completed, needsReview, pending, failed });
+}
+
+async function resumePageByPage(
+	pages: readonly PendingOcrPage[],
+	processor: OcrProcessor,
+	signal?: AbortSignal
+): Promise<OcrResumeSummary> {
 	let cursor = 0;
 	let completed = 0;
 	let needsReview = 0;
@@ -83,7 +153,7 @@ export async function resumeDocumentOcrWithGateway(
 
 	async function consume() {
 		while (cursor < pages.length) {
-			if (options.signal?.aborted) return;
+			if (signal?.aborted) return;
 			const page = pages[cursor++];
 			if (!page) return;
 			try {
@@ -106,6 +176,20 @@ export async function resumeDocumentOcrWithGateway(
 	return Object.freeze({ completed, needsReview, pending, failed });
 }
 
+export async function resumeDocumentOcrWithGateway(
+	documentId: string,
+	gateway: OcrResumeGateway,
+	processor: OcrProcessor = processPageOcr,
+	options: Pick<OcrResumeOptions, 'signal' | 'batchProcessor'> = {}
+): Promise<OcrResumeSummary> {
+	const validDocumentId = validId(documentId);
+	await gateway.recoverStaleJobs();
+	const pages = [...(await gateway.listPendingPages(validDocumentId))];
+	return options.batchProcessor
+		? resumeInBatches(pages, options.batchProcessor, options.signal)
+		: resumePageByPage(pages, processor, options.signal);
+}
+
 class SupabaseGateway implements OcrResumeGateway {
 	constructor(private readonly client: SupabaseClient<Database>) {}
 
@@ -119,9 +203,7 @@ class SupabaseGateway implements OcrResumeGateway {
 			target_document_id: validId(documentId),
 			selection_at: new Date().toISOString()
 		});
-		if (error) {
-			throw new Error('Não foi possível localizar as páginas pendentes.');
-		}
+		if (error) throw new Error('Não foi possível localizar as páginas pendentes.');
 		try {
 			return parsePendingOcrPages(data);
 		} catch {
@@ -135,6 +217,11 @@ export function resumeDocumentOcr(documentId: string, options: OcrResumeOptions 
 		documentId,
 		new SupabaseGateway(options.client ?? getSupabaseClient()),
 		processPageOcr,
-		{ signal: options.signal }
+		{
+			signal: options.signal,
+			batchProcessor:
+				options.batchProcessor ??
+				((pageIds, batchOptions) => processOcrBatch(pageIds, undefined, batchOptions))
+		}
 	);
 }
