@@ -52,11 +52,7 @@ describe('Drive OAuth Edge Function boundaries', () => {
 
 		expect(config).toContain('[functions.drive-oauth-callback]');
 		expect(config).toMatch(/\[functions\.drive-oauth-callback\][\s\S]*?verify_jwt = false/);
-		expect(config).not.toMatch(
-			/\[functions\.drive-oauth-start\][\s\S]*?verify_jwt = false/
-		);
-		expect(config).not.toMatch(
-			/\[functions\.drive-access-token\][\s\S]*?verify_jwt = false/
-		);
+		expect(config).not.toMatch(/\[functions\.drive-oauth-start\][\s\S]*?verify_jwt = false/);
+		expect(config).not.toMatch(/\[functions\.drive-access-token\][\s\S]*?verify_jwt = false/);
 	});
 });
