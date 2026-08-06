@@ -76,7 +76,11 @@ function normalizePage(page: OcrBatchPageCandidate) {
 	return Object.freeze({ ...page, density, route });
 }
 
-function keyFor(route: OcrRoute, pages: readonly Readonly<Required<OcrBatchPageCandidate>>[], depth: number) {
+function keyFor(
+	route: OcrRoute,
+	pages: readonly Readonly<Required<OcrBatchPageCandidate>>[],
+	depth: number
+) {
 	const first = pages[0];
 	const last = pages.at(-1);
 	if (!first || !last) throw new TypeError('OCR batch cannot be empty');
@@ -108,7 +112,9 @@ export function planOcrBatches(
 	limits: OcrBatchPlannerLimits = {}
 ): readonly PlannedOcrBatch[] {
 	const resolved = normalizedLimits(limits);
-	const pages = candidates.map(normalizePage).sort((left, right) => left.pageNumber - right.pageNumber);
+	const pages = candidates
+		.map(normalizePage)
+		.sort((left, right) => left.pageNumber - right.pageNumber);
 	const ids = new Set<string>();
 	const numbers = new Set<number>();
 	for (const page of pages) {
@@ -138,7 +144,8 @@ export function planOcrBatches(
 		const candidatePageLimit = candidateContainsDense ? resolved.denseMaxPages : resolved.maxPages;
 		const routeChanged = currentRoute !== null && currentRoute !== page.route;
 		const pageLimitReached = current.length > 0 && current.length + 1 > candidatePageLimit;
-		const byteLimitReached = current.length > 0 && currentBytes + page.derivedBytes > resolved.maxDerivedBytes;
+		const byteLimitReached =
+			current.length > 0 && currentBytes + page.derivedBytes > resolved.maxDerivedBytes;
 		if (routeChanged || pageLimitReached || byteLimitReached) flush();
 
 		currentRoute = page.route;
@@ -150,7 +157,9 @@ export function planOcrBatches(
 	return Object.freeze(batches);
 }
 
-export function bisectOcrBatch(batch: PlannedOcrBatch): readonly [PlannedOcrBatch, PlannedOcrBatch] {
+export function bisectOcrBatch(
+	batch: PlannedOcrBatch
+): readonly [PlannedOcrBatch, PlannedOcrBatch] {
 	if (batch.pages.length < 2) throw new TypeError('Cannot split a one-page OCR batch');
 	const midpoint = Math.ceil(batch.pages.length / 2);
 	const depth = batch.splitDepth + 1;
