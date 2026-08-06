@@ -47,7 +47,9 @@ describe('Google Drive API client', () => {
 		expect(url.searchParams.get('pageSize')).toBe('10');
 		expect(url.searchParams.get('q')).toContain('Fichário Digital');
 		expect(url.searchParams.get('fields')).toContain('files(id,name,mimeType');
-		expect(init).toEqual({ headers: { Accept: 'application/json', Authorization: `Bearer ${accessToken}` } });
+		expect(init).toEqual({
+			headers: { Accept: 'application/json', Authorization: `Bearer ${accessToken}` }
+		});
 	});
 
 	it('parses the initial change token strictly', async () => {
@@ -57,9 +59,9 @@ describe('Google Drive API client', () => {
 			'initial-change-token'
 		);
 		expect(fetchImpl.mock.calls[0][0]).toContain('/drive/v3/changes/startPageToken');
-		expect(() => getDriveStartPageToken({ accessToken: 'short', fetchImpl })).toThrow(
-			'Invalid Google Drive access token'
-		);
+		await expect(
+			getDriveStartPageToken({ accessToken: 'short', fetchImpl })
+		).rejects.toThrow('Invalid Google Drive access token');
 	});
 
 	it('reuses one existing root and obtains the feed token', async () => {
