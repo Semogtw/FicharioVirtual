@@ -160,7 +160,7 @@ export function createLegacyDriveMigrationGateway(
 	client: LegacyMigrationClientLike = defaultClient()
 ): LegacyDriveMigrationGateway {
 	return Object.freeze({
-		async downloadLegacyOriginal(storagePath) {
+		async downloadLegacyOriginal(storagePath: string) {
 			if (!STORAGE_PATH.test(storagePath)) {
 				throw new TypeError('Invalid legacy Storage path');
 			}
@@ -170,10 +170,10 @@ export function createLegacyDriveMigrationGateway(
 			}
 			return data;
 		},
-		resolveFolder(notebookId) {
+		resolveFolder(notebookId: string | null) {
 			return resolveDriveFolder(notebookId, client as never);
 		},
-		uploadOriginal(blob, name, parentFolderId) {
+		uploadOriginal(blob: Blob, name: string, parentFolderId: string) {
 			return uploadBrowserBlobToDrive({
 				client,
 				blob,
@@ -181,7 +181,15 @@ export function createLegacyDriveMigrationGateway(
 				parentFolderId
 			});
 		},
-		async publishMigration({ documentId, storagePath, file }) {
+		async publishMigration({
+			documentId,
+			storagePath,
+			file
+		}: {
+			documentId: string;
+			storagePath: string;
+			file: DriveFile;
+		}) {
 			if (file.parents.length !== 1 || file.trashed) {
 				throw new TypeError('Invalid Drive file response');
 			}
@@ -199,7 +207,7 @@ export function createLegacyDriveMigrationGateway(
 				throw new Error('Não foi possível publicar a migração do original no Google Drive.');
 			}
 		},
-		deleteDriveFile(fileId) {
+		deleteDriveFile(fileId: string) {
 			return deleteBrowserDriveFile({ client, fileId });
 		}
 	});
