@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { stageDrivePdfReference } from '../../../src/lib/pdf/drive-reference';
+import { DrivePdfReferenceStageRecoveryError } from '../../../src/lib/pdf/drive-reference-stage-recovery';
 import type { DriveFile } from '../../../src/lib/drive/types';
 import type { GooglePickerSelection } from '../../../src/lib/drive/picker';
 
@@ -28,18 +29,21 @@ const copied: DriveFile = {
 	trashed: false
 };
 
+const staged = {
+	documentId,
+	driveFileId: copiedFileId,
+	sourceSizeBytes: selection.sizeBytes,
+	status: 'pending_inspection' as const
+};
+
 function dependencies() {
 	return {
 		createDocumentId: vi.fn(() => documentId),
 		resolveFolder: vi.fn().mockResolvedValue(parentFolderId),
 		copyFile: vi.fn().mockResolvedValue(copied),
 		deleteFile: vi.fn().mockResolvedValue(undefined),
-		stage: vi.fn().mockResolvedValue({
-			documentId,
-			driveFileId: copiedFileId,
-			sourceSizeBytes: selection.sizeBytes,
-			status: 'pending_inspection'
-		})
+		stage: vi.fn().mockResolvedValue(staged),
+		recoverStage: vi.fn().mockResolvedValue(null)
 	};
 }
 
@@ -55,12 +59,7 @@ describe('stageDrivePdfReference', () => {
 				client: {} as never,
 				dependencies: deps
 			})
-		).resolves.toEqual({
-			documentId,
-			driveFileId: copiedFileId,
-			sourceSizeBytes: selection.sizeBytes,
-			status: 'pending_inspection'
-		});
+		).resolves.toEqual(staged);
 
 		expect(deps.resolveFolder).toHaveBeenCalledWith(notebookId, expect.anything());
 		expect(deps.copyFile).toHaveBeenCalledWith(
@@ -91,12 +90,47 @@ describe('stageDrivePdfReference', () => {
 				sourceModifiedAt: selection.modifiedAt
 			})
 		);
+		expect(deps.recoverStage).not.toHaveBeenCalled();
 		expect(deps.deleteFile).not.toHaveBeenCalled();
 	});
 
-	it('deletes the copied Drive file when durable staging fails', async () => {
+	it('recovers a committed stage when the RPC response is lost without deleting its Drive copy', async () => {
+		const deps = dependencies();
+		deps.stage.mockRejectedValue(new Error('response lost after commit'));
+		deps.recoverStage.mockResolvedValue(staged);
+
+		await expect(
+			stageDrivePdfReference({
+				selection,
+				notebookId,
+				title: 'Apostila grande',
+				client: {} as never,
+				dependencies: deps
+			})
+		).resolves.toEqual(staged);
+
+		expect(deps.recoverStage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				client: expect.anything(),
+				expected: {
+					documentId,
+					driveFileId: copiedFileId,
+					driveParentFolderId: parentFolderId,
+					driveMimeType: 'application/pdf',
+					driveModifiedTime: copied.modifiedTime,
+					driveVersion: copied.version,
+					driveMd5Checksum: copied.md5Checksum,
+					sourceSizeBytes: selection.sizeBytes
+				}
+			})
+		);
+		expect(deps.deleteFile).not.toHaveBeenCalled();
+	});
+
+	it('deletes the copied Drive file only when recovery proves durable staging is absent', async () => {
 		const deps = dependencies();
 		deps.stage.mockRejectedValue(new Error('rpc failed'));
+		deps.recoverStage.mockResolvedValue(null);
 
 		await expect(
 			stageDrivePdfReference({
@@ -110,6 +144,41 @@ describe('stageDrivePdfReference', () => {
 		expect(deps.deleteFile).toHaveBeenCalledWith(
 			expect.objectContaining({ client: expect.anything(), fileId: copiedFileId })
 		);
+	});
+
+	it('preserves the copied Drive file when durable staging state cannot be confirmed', async () => {
+		const deps = dependencies();
+		deps.stage.mockRejectedValue(new Error('rpc response unavailable'));
+		deps.recoverStage.mockRejectedValue(new DrivePdfReferenceStageRecoveryError());
+
+		await expect(
+			stageDrivePdfReference({
+				selection,
+				notebookId,
+				title: 'Apostila grande',
+				client: {} as never,
+				dependencies: deps
+			})
+		).rejects.toThrow('A cópia no Google Drive foi preservada.');
+		expect(deps.deleteFile).not.toHaveBeenCalled();
+	});
+
+	it('recovers a durable stage after a malformed success response without deleting the copy', async () => {
+		const deps = dependencies();
+		deps.stage.mockResolvedValue({ ...staged, accessToken: 'unexpected' });
+		deps.recoverStage.mockResolvedValue(staged);
+
+		await expect(
+			stageDrivePdfReference({
+				selection,
+				notebookId,
+				title: 'Apostila grande',
+				client: {} as never,
+				dependencies: deps
+			})
+		).resolves.toEqual(staged);
+		expect(deps.recoverStage).toHaveBeenCalledOnce();
+		expect(deps.deleteFile).not.toHaveBeenCalled();
 	});
 
 	it('rejects a non-PDF selection before creating Drive side effects', async () => {
