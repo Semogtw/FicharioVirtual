@@ -79,9 +79,10 @@ describe('DrivePdfDataRangeTransport', () => {
 });
 
 describe('openDrivePdfRangeDocument', () => {
-	it('disables streaming and automatic prefetch while using the custom range transport', async () => {
+	it('configures the worker and disables streaming/prefetch for the range transport', async () => {
 		const document = { numPages: 321 } as never;
 		const destroy = vi.fn().mockResolvedValue(undefined);
+		const configureWorker = vi.fn().mockResolvedValue(undefined);
 		const createLoadingTask = vi.fn((_source: unknown) => ({
 			promise: Promise.resolve(document),
 			destroy
@@ -94,11 +95,16 @@ describe('openDrivePdfRangeDocument', () => {
 				totalBytes,
 				dependencies: {
 					downloadRange: vi.fn(),
+					configureWorker,
 					createLoadingTask
 				}
 			})
 		).resolves.toBe(document);
 
+		expect(configureWorker).toHaveBeenCalledOnce();
+		expect(configureWorker.mock.invocationCallOrder[0]).toBeLessThan(
+			createLoadingTask.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY
+		);
 		expect(createLoadingTask).toHaveBeenCalledTimes(1);
 		const source = createLoadingTask.mock.calls[0]?.[0] as Record<string, unknown>;
 		expect(source).toMatchObject({
