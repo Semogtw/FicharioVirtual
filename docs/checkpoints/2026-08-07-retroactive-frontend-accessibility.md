@@ -37,6 +37,23 @@ Aplicar retroativamente ao frontend atual as práticas de acessibilidade, intera
 - clique/toque e persistência existentes foram preservados;
 - elevação por hover passou a respeitar a capacidade real do ponteiro.
 
+### Adoção seletiva de Shadcn
+
+A revisão posterior avaliou Shadcn-Svelte contra o design system editorial já existente. Não foi iniciada uma migração global para Tailwind/Bits UI: isso duplicaria a camada de styling sem benefício proporcional para componentes que já possuem identidade própria.
+
+Foi adotado o padrão de `Native Select` como primitive local em `src/lib/components/ui/native-select/NativeSelect.svelte`, porque seis fluxos repetiam o mesmo `<select>` e o mesmo tratamento visual. O primitive mantém a semântica nativa — inclusive o seletor do sistema em mobile — e adiciona chevron SVG, estados disabled/hover, área de toque e integração com os tokens editoriais existentes.
+
+O primitive substitui selects crus em:
+
+- filtros da Biblioteca;
+- filtro da Pesquisa;
+- importação de imagens;
+- importação de PDFs;
+- organização de documentos;
+- importação pelo Google Drive.
+
+A regra daqui para frente é usar Shadcn/Bits UI apenas quando um primitive complexo realmente reduzir risco e retrabalho — por exemplo dialog, sheet, popover, combobox ou menu acessível — mantendo CSS/tokens editoriais e componentes de identidade do produto como camada principal.
+
 ## Regressões cobertas
 
 Foram adicionados testes focados em contratos de UI para:
@@ -49,7 +66,8 @@ Foram adicionados testes focados em contratos de UI para:
 - foco visível dos seletores de imagem e PDF;
 - navegação por teclado do seletor de temas;
 - hover do seletor de temas limitado a ponteiros precisos;
-- anúncios de progresso das filas de imagem e PDF.
+- anúncios de progresso das filas de imagem e PDF;
+- adoção do `NativeSelect` compartilhado nos seis fluxos sem reintroduzir `<select>` estilizado por rota.
 
 ## Hardening descoberto durante a validação
 
@@ -63,6 +81,8 @@ O repositório `Semogtw/Offline-Toolchains` possui um workspace específico do F
 2. gates de código deixaram de impedir a criação do artifact: são executados individualmente, as falhas entram em `validation_status`/`validation_failures`, os artifacts disponíveis são enviados e o workflow só então termina vermelho.
 
 Esse contrato mantém a validação honesta sem transformar um lint ou gate concorrente em perda de checkout ou bloqueio do restante do desenvolvimento.
+
+Na rodada posterior, o workspace portátil também permitiu fechar os gates reais do frontend/Drive: `svelte-check` chegou a zero erros e warnings, lint ficou verde, a suíte unitária passou com 823 testes, os cinco cenários E2E passaram e o build/PWA concluiu localmente. Um novo bundle foi então disparado contra o HEAD remoto para confirmar o mesmo estado fora do checkout reconstruído.
 
 ## Concorrência
 
