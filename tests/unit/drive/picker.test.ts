@@ -47,8 +47,12 @@ describe('Google Picker contracts', () => {
 	});
 
 	it('accepts direct-download metadata through 50 MiB and rejects larger files', () => {
-		expect(parsePickerSelection(picked(String(30 * 1024 * 1024)))?.sizeBytes).toBe(30 * 1024 * 1024);
-		expect(parsePickerSelection(picked(String(50 * 1024 * 1024)))?.sizeBytes).toBe(50 * 1024 * 1024);
+		expect(parsePickerSelection(picked(String(30 * 1024 * 1024)))?.sizeBytes).toBe(
+			30 * 1024 * 1024
+		);
+		expect(parsePickerSelection(picked(String(50 * 1024 * 1024)))?.sizeBytes).toBe(
+			50 * 1024 * 1024
+		);
 		expect(() => parsePickerSelection(picked(String(50 * 1024 * 1024 + 1)))).toThrow(
 			'Invalid Google Picker response'
 		);
@@ -89,7 +93,13 @@ describe('Google Picker contracts', () => {
 		const runtime = { gapi: { load: vi.fn() }, google: { picker: {} as Record<string, unknown> } };
 		const documentLike = {
 			querySelector: vi.fn().mockReturnValue(null),
-			createElement: vi.fn(() => ({ src: '', async: false, defer: false, onload: null, onerror: null })),
+			createElement: vi.fn(() => ({
+				src: '',
+				async: false,
+				defer: false,
+				onload: null,
+				onerror: null
+			})),
 			head: {
 				appendChild(script: (typeof scripts)[number]) {
 					scripts.push(script);
@@ -163,7 +173,8 @@ describe('Google Picker contracts', () => {
 		expect(builder.setAppId).toHaveBeenCalledWith(appId);
 		expect(builder.enableFeature).not.toHaveBeenCalled();
 		expect(picker.setVisible).toHaveBeenCalledWith(true);
-		const callback = builder.setCallback.mock.calls[0]?.[0] as ((value: unknown) => void) | undefined;
+		const callback = builder.setCallback.mock.calls[0]?.[0] as
+			((value: unknown) => void) | undefined;
 		expect(callback).toBeTypeOf('function');
 		callback?.(picked());
 		await expect(pending).resolves.toMatchObject({ id: fileId, name: 'Apostila.pdf' });
