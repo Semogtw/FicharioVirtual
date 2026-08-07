@@ -19,6 +19,7 @@ describe('Drive job runner Edge Function boundary', () => {
 		const source = readFileSync(path, 'utf8');
 
 		expect(source).toContain('ensureDriveFolder');
+		expect(source).toContain('parentId: parentFolderId');
 		expect(source).toContain('getGoogleDriveItem');
 		expect(source).toContain('updateGoogleDriveItem');
 		expect(source).toContain('deleteGoogleDriveItem');
