@@ -9,11 +9,14 @@ describe('explicit Google Drive import page', () => {
 
 		expect(source).toContain('selectGoogleDriveImportSource');
 		expect(source).toContain('stageDrivePdfReference');
+		expect(source).toContain('importStagedDrivePdfReference');
 		expect(source).toContain('GOOGLE_PICKER_MIME_TYPES');
 		expect(source).toContain('MAX_DIRECT_PICKER_DOWNLOAD_BYTES');
 		expect(source).not.toContain('maximumBytes: 20 * 1024 * 1024');
 		expect(source).toContain("selected.kind === 'reference'");
 		expect(source).toContain("selected.selection.mimeType !== 'application/pdf'");
+		expect(source).toContain('const staged = await stageDrivePdfReference');
+		expect(source).toContain('await importStagedDrivePdfReference');
 		expect(source).toContain('addImages([selected.file]');
 		expect(source).toContain('addPdfs([selected.file]');
 		expect(source).toContain("label={selecting ? 'Abrindo Drive…' : 'Escolher no Google Drive'}");
