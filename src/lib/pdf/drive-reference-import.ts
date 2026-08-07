@@ -7,6 +7,11 @@ import { getSupabaseClient } from '$lib/services/supabase';
 import type { Database } from '$lib/types/database';
 import type { StagedDrivePdfReference } from './drive-reference';
 import {
+	isDrivePdfReferenceStillFinalizable,
+	recoverDrivePdfReferencePublication,
+	type DrivePdfReferenceRecoveryClient
+} from './drive-reference-publication-recovery';
+import {
 	DrivePdfReferenceChangedError,
 	verifyDrivePdfReferenceIdentity
 } from './drive-reference-identity';
@@ -77,6 +82,11 @@ export interface DrivePdfReferenceImportDependencies {
 		pages: readonly PdfImportPagePlan[];
 		promptVersion: number;
 	}): Promise<unknown>;
+	recoverPublication(input: {
+		documentId: string;
+		pages: readonly PdfImportPagePlan[];
+	}): Promise<PdfImportPublication | null>;
+	referencePending(documentId: string): Promise<boolean>;
 	processPage(pageId: string, options?: { signal?: AbortSignal }): Promise<PageProcessResult>;
 }
 
@@ -152,7 +162,7 @@ function createDefaultDependencies(
 			const { error } = await client.storage.from('documents').upload(path, blob, {
 				contentType: blob.type,
 				cacheControl: '86400',
-				upsert: false
+				upsert: true
 			});
 			if (error) throw error;
 		},
@@ -178,6 +188,17 @@ function createDefaultDependencies(
 			if (error) throw error;
 			return data;
 		},
+		recoverPublication: ({ documentId, pages }) =>
+			recoverDrivePdfReferencePublication({
+				client: client as unknown as DrivePdfReferenceRecoveryClient,
+				documentId,
+				pages
+			}),
+		referencePending: (documentId) =>
+			isDrivePdfReferenceStillFinalizable({
+				client: client as unknown as DrivePdfReferenceRecoveryClient,
+				documentId
+			}),
 		processPage: (pageId, options) => processPageOcr(pageId, undefined, options)
 	};
 }
@@ -322,14 +343,24 @@ export async function importStagedDrivePdfReference({
 
 		if (signal?.aborted) throw abortError();
 		safelyReportProgress(onProgress, { phase: 'publishing' });
-		const publication = parsePdfImportPublication(
-			await runtime.finalize({
-				documentId: staged.documentId,
-				pages: Object.freeze(pages.map((page) => Object.freeze(page))),
-				promptVersion
-			}),
-			staged.documentId
-		);
+		const immutablePages = Object.freeze(pages.map((page) => Object.freeze(page)));
+		let publication: PdfImportPublication;
+		try {
+			publication = parsePdfImportPublication(
+				await runtime.finalize({
+					documentId: staged.documentId,
+					pages: immutablePages,
+					promptVersion
+				}),
+				staged.documentId
+			);
+		} catch (finalizeError) {
+			const recovered = await runtime
+				.recoverPublication({ documentId: staged.documentId, pages: immutablePages })
+				.catch(() => null);
+			if (!recovered) throw finalizeError;
+			publication = recovered;
+		}
 		metadataPublished = true;
 
 		const ocr = await processPublishedOcrPages(pages, runtime, onProgress, signal);
@@ -344,7 +375,8 @@ export async function importStagedDrivePdfReference({
 		});
 	} catch (error) {
 		if (!metadataPublished && uploadedPaths.length > 0) {
-			await runtime.remove(uploadedPaths).catch(() => undefined);
+			const referencePending = await runtime.referencePending(staged.documentId).catch(() => false);
+			if (referencePending) await runtime.remove(uploadedPaths).catch(() => undefined);
 		}
 		if (error instanceof PdfConsentRequiredError) throw error;
 		if (error instanceof DrivePdfReferenceChangedError) throw error;
