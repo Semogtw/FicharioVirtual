@@ -9,6 +9,7 @@
 		selectGoogleDriveImportSource
 	} from '$lib/drive/picker-service';
 	import { stageDrivePdfReference } from '$lib/pdf/drive-reference';
+	import { importStagedDrivePdfReference } from '$lib/pdf/drive-reference-import';
 	import { listNotebooks } from '$lib/services/notebooks';
 	import { addImages, importQueue } from '$lib/stores/import-queue.svelte';
 	import { addPdfs, pdfImportQueue } from '$lib/stores/pdf-import-queue.svelte';
@@ -70,12 +71,20 @@
 				if (selected.selection.mimeType !== 'application/pdf') {
 					throw new Error('Arquivos grandes por referência precisam ser PDFs.');
 				}
-				await stageDrivePdfReference({
+				const staged = await stageDrivePdfReference({
 					selection: selected.selection,
 					notebookId: notebookId || null,
 					title: referenceTitle(selected.selection.name)
 				});
-				message = `“${selected.selection.name}” foi preservado no Drive e preparado para inspeção por faixas.`;
+				const imported = await importStagedDrivePdfReference({
+					staged,
+					consentGranted: true
+				});
+				const pending = imported.ocrPending + imported.ocrFailed;
+				message =
+					pending > 0
+						? `“${selected.selection.name}” foi importado por referência; ${pending} página(s) de OCR permanecem retomáveis.`
+						: `“${selected.selection.name}” foi importado por referência sem baixar o PDF inteiro.`;
 				return;
 			}
 
