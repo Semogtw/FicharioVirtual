@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
 	createDriveFolder,
+	deleteDriveFile,
 	ensureDriveFolder
 } from '../../../supabase/functions/_shared/google-drive-client';
 
 const accessToken = 'ephemeral-access-token';
 const parentId = '0AParentFolderId_123456789';
 const folderId = '0AChildFolderId_123456789';
+const fileId = '1AbCdEfGhIjKlMnOpQrStUvWxYz_123456';
 
 function folder(id = folderId) {
 	return {
@@ -69,5 +71,29 @@ describe('Drive notebook folders', () => {
 		await expect(
 			ensureDriveFolder({ accessToken, name: 'Genética', parentId, fetchImpl })
 		).rejects.toThrow('Ambiguous Google Drive folder');
+	});
+});
+
+describe('Drive controlled file deletion', () => {
+	it.each([204, 404])('treats status %s as an idempotent successful delete', async (status) => {
+		const fetchImpl = vi.fn().mockResolvedValue(new Response(null, { status }));
+
+		await expect(deleteDriveFile({ accessToken, fileId, fetchImpl })).resolves.toBeUndefined();
+		expect(fetchImpl).toHaveBeenCalledTimes(1);
+		const [requested, init] = fetchImpl.mock.calls[0];
+		const url = new URL(requested);
+		expect(url.pathname).toBe(`/drive/v3/files/${fileId}`);
+		expect(url.searchParams.get('supportsAllDrives')).toBe('false');
+		expect(init).toMatchObject({
+			method: 'DELETE',
+			headers: { Authorization: `Bearer ${accessToken}` }
+		});
+	});
+
+	it('rejects provider failures without exposing the access token', async () => {
+		const fetchImpl = vi.fn().mockResolvedValue(new Response(null, { status: 503 }));
+		await expect(deleteDriveFile({ accessToken, fileId, fetchImpl })).rejects.toThrow(
+			'Google Drive file delete failed'
+		);
 	});
 });
