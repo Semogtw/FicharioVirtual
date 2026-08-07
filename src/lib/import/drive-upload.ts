@@ -68,6 +68,17 @@ function requireUuid(value: string, label: string): string {
 	return value;
 }
 
+function validateBoundaryInput(input: UploadPreparedImageInput) {
+	if (input.signal?.aborted) throw abortError();
+	const promptVersion = input.promptVersion ?? 1;
+	if (!Number.isInteger(promptVersion) || promptVersion < 1 || promptVersion > 10_000) {
+		throw new TypeError('Invalid OCR prompt version');
+	}
+	if (input.notebookId !== null && input.notebookId !== undefined) {
+		requireUuid(input.notebookId, 'notebook identifier');
+	}
+}
+
 const defaultDependencies: DriveImageUploadDependencies = {
 	calculateSha256,
 	generateUuid() {
@@ -93,14 +104,8 @@ export async function uploadPreparedImageToDriveWithGateway(
 	gateway: DriveImageImportGateway,
 	dependencies: DriveImageUploadDependencies = defaultDependencies
 ): Promise<DriveUploadedPage> {
-	if (input.signal?.aborted) throw abortError();
+	validateBoundaryInput(input);
 	const promptVersion = input.promptVersion ?? 1;
-	if (!Number.isInteger(promptVersion) || promptVersion < 1 || promptVersion > 10_000) {
-		throw new TypeError('Invalid OCR prompt version');
-	}
-	if (input.notebookId !== null && input.notebookId !== undefined) {
-		requireUuid(input.notebookId, 'notebook identifier');
-	}
 
 	const [userId, sha256] = await Promise.all([
 		gateway.currentUserId(),
@@ -258,7 +263,11 @@ class SupabaseDriveImageGateway implements DriveImageImportGateway {
 
 export function uploadPreparedImageToDrive(
 	input: UploadPreparedImageInput,
-	client: SupabaseClient<Database> = getSupabaseClient()
+	client?: SupabaseClient<Database>
 ) {
-	return uploadPreparedImageToDriveWithGateway(input, new SupabaseDriveImageGateway(client));
+	validateBoundaryInput(input);
+	return uploadPreparedImageToDriveWithGateway(
+		input,
+		new SupabaseDriveImageGateway(client ?? getSupabaseClient())
+	);
 }
