@@ -234,9 +234,7 @@ Deno.serve(async (request) => {
 			return notebook.driveFolderId;
 		},
 		async ensureFolder(name, parentFolderId) {
-			return toDriveItem(
-				await ensureDriveFolder({ accessToken, name, parentId: parentFolderId })
-			);
+			return toDriveItem(await ensureDriveFolder({ accessToken, name, parentId: parentFolderId }));
 		},
 		getItem(fileId) {
 			return getGoogleDriveItem({ accessToken, fileId });
