@@ -23,12 +23,14 @@ function copy(fileId: string, documentId: string, createdAt: string) {
 
 function dependencies() {
 	return {
-		listCopies: vi.fn().mockResolvedValue([
-			copy(orphanFileId, orphanDocumentId, old),
-			copy(liveFileId, liveDocumentId, old),
-			copy(youngFileId, youngDocumentId, young),
-			copy(secondOrphanFileId, secondOrphanDocumentId, old)
-		]),
+		listCopies: vi
+			.fn()
+			.mockResolvedValue([
+				copy(orphanFileId, orphanDocumentId, old),
+				copy(liveFileId, liveDocumentId, old),
+				copy(youngFileId, youngDocumentId, young),
+				copy(secondOrphanFileId, secondOrphanDocumentId, old)
+			]),
 		findExistingDocumentIds: vi.fn().mockResolvedValue(new Set([liveDocumentId])),
 		deleteFile: vi.fn().mockResolvedValue(undefined)
 	};
@@ -77,7 +79,9 @@ describe('orphaned Drive PDF reference reconciliation', () => {
 
 	it('continues reconciling other orphans when one Drive deletion fails', async () => {
 		const deps = dependencies();
-		deps.deleteFile.mockRejectedValueOnce(new Error('temporary Drive failure')).mockResolvedValueOnce(undefined);
+		deps.deleteFile
+			.mockRejectedValueOnce(new Error('temporary Drive failure'))
+			.mockResolvedValueOnce(undefined);
 
 		await expect(
 			reconcileOrphanedDrivePdfReferenceCopies({
