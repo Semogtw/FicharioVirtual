@@ -145,7 +145,10 @@ describe('Google Picker contracts', () => {
 			setOAuthToken: vi.fn().mockReturnThis(),
 			setDeveloperKey: vi.fn().mockReturnThis(),
 			setAppId: vi.fn().mockReturnThis(),
-			setCallback: vi.fn((_value: (value: unknown) => void) => builder),
+			setCallback: vi.fn((value: (value: unknown) => void) => {
+				void value;
+				return builder;
+			}),
 			enableFeature: vi.fn().mockReturnThis(),
 			build: vi.fn(() => picker)
 		};
