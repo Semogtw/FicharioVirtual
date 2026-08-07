@@ -69,12 +69,14 @@ select is(
   'start-change-token',
   'remote sync begins from the durable start token'
 );
+reset role;
 select is(
   (select status::text from public.drive_connections where user_id = '11111111-1111-4111-8111-111111111111'),
   'syncing',
   'beginning sync marks the connection syncing'
 );
 
+set local role service_role;
 select is(
   public.apply_drive_remote_change(
     '11111111-1111-4111-8111-111111111111',
@@ -92,6 +94,7 @@ select is(
   'applied',
   'known file metadata is updated by Drive identity'
 );
+reset role;
 select results_eq(
   $$
     select drive_version, drive_md5_checksum, physical_state::text, drive_sync_status::text
@@ -109,6 +112,7 @@ select results_eq(
   'known file remains available with fresh Drive metadata'
 );
 
+set local role service_role;
 select is(
   public.apply_drive_remote_change(
     '11111111-1111-4111-8111-111111111111',
@@ -126,6 +130,7 @@ select is(
   'applied',
   'removed Drive file is applied without deleting its record'
 );
+reset role;
 select results_eq(
   $$
     select title, sha256, physical_state::text
@@ -138,6 +143,7 @@ select results_eq(
   'removed file preserves searchable metadata and text identity'
 );
 
+set local role service_role;
 select is(
   public.apply_drive_remote_change(
     '11111111-1111-4111-8111-111111111111',
@@ -155,7 +161,9 @@ select is(
   'ignored',
   'unknown Drive changes are ignored instead of imported implicitly'
 );
+reset role;
 
+set local role service_role;
 select is(
   public.apply_drive_remote_change(
     '11111111-1111-4111-8111-111111111111',
@@ -173,6 +181,7 @@ select is(
   'applied',
   'known Drive folder updates its notebook'
 );
+reset role;
 select results_eq(
   $$
     select name, parent_notebook_id, drive_version, drive_missing
@@ -185,6 +194,7 @@ select results_eq(
   'notebook reflects its remote folder metadata'
 );
 
+set local role service_role;
 select is(
   public.apply_drive_remote_change(
     '11111111-1111-4111-8111-111111111111',
@@ -202,6 +212,7 @@ select is(
   'conflict',
   'unknown parent folder isolates one conflict'
 );
+reset role;
 select is(
   (select count(*) from public.drive_conflicts where resolved_at is null),
   1::bigint,
@@ -212,6 +223,7 @@ select is(
   1::bigint,
   'conflict has an idempotent sync job receipt'
 );
+set local role service_role;
 select is(
   public.apply_drive_remote_change(
     '11111111-1111-4111-8111-111111111111',
@@ -229,12 +241,14 @@ select is(
   'conflict',
   'replaying the same remote event is idempotent'
 );
+reset role;
 select is(
   (select count(*) from public.drive_conflicts where resolved_at is null),
   1::bigint,
   'replay does not duplicate the conflict'
 );
 
+set local role service_role;
 select is(
   public.persist_drive_change_checkpoint(
     '11111111-1111-4111-8111-111111111111',
@@ -265,6 +279,7 @@ select is(
   true,
   'final page promotes the new durable start token'
 );
+reset role;
 select results_eq(
   $$
     select status::text, start_page_token, next_page_token, last_error_code
@@ -277,6 +292,7 @@ select results_eq(
   'successful sync closes cleanly on the final token'
 );
 
+set local role service_role;
 select is(
   public.fail_drive_remote_sync(
     '11111111-1111-4111-8111-111111111111',
@@ -286,6 +302,7 @@ select is(
   true,
   'sync failure is persisted without discarding checkpoints'
 );
+reset role;
 select results_eq(
   $$
     select status::text, start_page_token, last_error_code, last_error_message
