@@ -2,10 +2,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, parseAppOrigin } from '../_shared/cors.ts';
 import { claimStateHttpStatus, parseOcrClaimResult } from '../_shared/ocr-contract.ts';
 import { planOcrFailure } from '../_shared/ocr-failure.ts';
-import {
-	requestGeminiOcrBatch,
-	type GeminiOcrBatchPage
-} from '../_shared/gemini-ocr-client.ts';
+import { requestGeminiOcrBatch, type GeminiOcrBatchPage } from '../_shared/gemini-ocr-client.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MODEL = /^[A-Za-z0-9._-]{3,128}$/;
@@ -118,9 +115,7 @@ function aggregateBody(input: {
 		pendingPageIds: Object.freeze([...new Set(input.pendingPageIds)]),
 		failedPageIds: Object.freeze([...new Set(input.failedPageIds)]),
 		splitRequiredPageIds: Object.freeze([...new Set(input.splitRequiredPageIds)]),
-		unexpectedResultPageIds: Object.freeze([
-			...new Set(input.unexpectedResultPageIds ?? [])
-		])
+		unexpectedResultPageIds: Object.freeze([...new Set(input.unexpectedResultPageIds ?? [])])
 	});
 }
 
@@ -250,9 +245,7 @@ Deno.serve(async (request) => {
 
 	const { data: pageData, error: pageError } = await supabase
 		.from('pages')
-		.select(
-			'id,status,temporary_image_path,document_id,page_number,ocr_raw_text,corrected_text'
-		)
+		.select('id,status,temporary_image_path,document_id,page_number,ocr_raw_text,corrected_text')
 		.in('id', [...parsedRequest.pageIds]);
 	if (pageError) return respond(503, { code: 'page_lookup_failed' });
 	if (!Array.isArray(pageData) || pageData.length !== parsedRequest.pageIds.length) {
@@ -307,7 +300,8 @@ Deno.serve(async (request) => {
 			target_model: model,
 			claimed_at: claimedAt
 		});
-		const claimResult = !claimError && claim && typeof claim === 'object' ? parseOcrClaimResult(claim) : null;
+		const claimResult =
+			!claimError && claim && typeof claim === 'object' ? parseOcrClaimResult(claim) : null;
 		if (!claimResult) {
 			for (const claimed of claimedPages) {
 				await failJob(claimed.page.id, {
@@ -556,16 +550,13 @@ Deno.serve(async (request) => {
 		for (const pageResult of outcome.pages) {
 			const claimed = providerClaims.get(pageResult.pageId);
 			if (!claimed) continue;
-			const { data: completed, error: completionError } = await supabase.rpc(
-				'complete_ocr_job',
-				{
-					target_page_id: pageResult.pageId,
-					extracted_text: pageResult.text,
-					extraction_warnings: pageResult.warnings,
-					terminal_status: pageResult.needsReview ? 'needs_review' : 'ready',
-					completed_at: completedAt
-				}
-			);
+			const { data: completed, error: completionError } = await supabase.rpc('complete_ocr_job', {
+				target_page_id: pageResult.pageId,
+				extracted_text: pageResult.text,
+				extraction_warnings: pageResult.warnings,
+				terminal_status: pageResult.needsReview ? 'needs_review' : 'ready',
+				completed_at: completedAt
+			});
 			if (completionError || completed !== true) {
 				await failJob(pageResult.pageId, {
 					code: 'ocr_completion_failed',
