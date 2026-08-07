@@ -22,8 +22,8 @@ describe('explicit Google Drive import page', () => {
 	it('describes the direct browser ceiling and the reference path for larger PDFs', () => {
 		const source = readFileSync(path, 'utf8');
 		expect(source).toContain('download direto no navegador aceita até 50 MiB');
-		expect(source).toContain('PDFs maiores são preservados no Drive e preparados por referência');
-		expect(source).toContain('não do documento lógico nem dos lotes de OCR');
+		expect(source).toMatch(/PDFs maiores são preservados no Drive e\s+preparados por referência/);
+		expect(source).toContain('não é do documento lógico nem dos lotes de OCR');
 	});
 
 	it('requires explicit OCR consent and never exposes or persists credentials', () => {
