@@ -24,7 +24,10 @@ describe('parseOcrBatchPayload', () => {
 	});
 
 	it('keeps valid unique pages while reporting omissions for subset retry', () => {
-		const parsed = parseOcrBatchPayload(JSON.stringify({ pages: [result(first)] }), [first, second]);
+		const parsed = parseOcrBatchPayload(JSON.stringify({ pages: [result(first)] }), [
+			first,
+			second
+		]);
 
 		expect(parsed.valid).toBe(false);
 		expect(parsed.pages.map((page) => page.pageId)).toEqual([first.pageId]);
