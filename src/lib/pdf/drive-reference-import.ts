@@ -400,13 +400,7 @@ export async function importStagedDrivePdfReference({
 		}
 		metadataPublished = true;
 
-		const ocr = await processPublishedOcrPages(
-			pages,
-			renderedSizes,
-			runtime,
-			onProgress,
-			signal
-		);
+		const ocr = await processPublishedOcrPages(pages, renderedSizes, runtime, onProgress, signal);
 		if (signal?.aborted) throw abortError();
 		safelyReportProgress(onProgress, { phase: 'complete' });
 		return Object.freeze({
