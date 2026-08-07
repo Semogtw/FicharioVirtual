@@ -1,4 +1,9 @@
-import { PDFDataRangeTransport, getDocument, type PDFDocumentProxy } from 'pdfjs-dist';
+import {
+	GlobalWorkerOptions,
+	PDFDataRangeTransport,
+	getDocument,
+	type PDFDocumentProxy
+} from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { downloadBrowserDriveRange } from '$lib/drive/browser-files';
 import type { DriveTokenClientLike } from '$lib/drive/browser-upload';
 
@@ -11,6 +16,11 @@ type LoadingTaskLike = {
 	promise: Promise<PDFDocumentProxy>;
 	destroy(): Promise<void>;
 };
+
+export type DrivePdfRangeDocument = Readonly<{
+	document: PDFDocumentProxy;
+	destroy(): Promise<void>;
+}>;
 
 export interface DrivePdfRangeDependencies {
 	downloadRange: DownloadRange;
@@ -110,10 +120,7 @@ export class DrivePdfRangeError extends Error {
 }
 
 async function configurePdfWorker() {
-	const [{ GlobalWorkerOptions }, workerModule] = await Promise.all([
-		import('pdfjs-dist'),
-		import('pdfjs-dist/build/pdf.worker.min.mjs?url')
-	]);
+	const workerModule = await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url');
 	GlobalWorkerOptions.workerSrc = workerModule.default;
 }
 
@@ -133,9 +140,10 @@ export async function openDrivePdfRangeDocument({
 	fileId: string;
 	totalBytes: number;
 	dependencies?: DrivePdfRangeDependencies;
-}): Promise<PDFDocumentProxy> {
+}): Promise<DrivePdfRangeDocument> {
 	validSource(fileId, totalBytes);
 	let loadingTask: LoadingTaskLike | null = null;
+	let destroyed = false;
 	let rejectRangeFailure: (error: unknown) => void = () => undefined;
 	const rangeFailure = new Promise<never>((_resolve, reject) => {
 		rejectRangeFailure = reject;
@@ -147,9 +155,16 @@ export async function openDrivePdfRangeDocument({
 		downloadRange: dependencies.downloadRange,
 		onFailure(error) {
 			rejectRangeFailure(error);
-			void loadingTask?.destroy().catch(() => undefined);
+			void destroyLoadingTask();
 		}
 	});
+
+	async function destroyLoadingTask() {
+		if (destroyed) return;
+		destroyed = true;
+		transport.abort();
+		await loadingTask?.destroy().catch(() => undefined);
+	}
 
 	try {
 		await dependencies.configureWorker();
@@ -160,10 +175,10 @@ export async function openDrivePdfRangeDocument({
 			disableStream: true,
 			disableAutoFetch: true
 		});
-		return await Promise.race([loadingTask.promise, rangeFailure]);
+		const document = await Promise.race([loadingTask.promise, rangeFailure]);
+		return Object.freeze({ document, destroy: destroyLoadingTask });
 	} catch {
-		transport.abort();
-		await loadingTask?.destroy().catch(() => undefined);
+		await destroyLoadingTask();
 		throw new DrivePdfRangeError();
 	}
 }
