@@ -18,15 +18,12 @@ type LoadingTaskLike = {
 
 export interface DrivePdfRangeDependencies {
 	downloadRange: DownloadRange;
+	configureWorker(): Promise<void>;
 	createLoadingTask(source: PdfDocumentSource): LoadingTaskLike;
 }
 
 function validSource(fileId: string, totalBytes: number) {
-	if (
-		!DRIVE_ID.test(fileId) ||
-		!Number.isSafeInteger(totalBytes) ||
-		totalBytes < 1
-	) {
+	if (!DRIVE_ID.test(fileId) || !Number.isSafeInteger(totalBytes) || totalBytes < 1) {
 		throw new TypeError('Invalid Drive PDF range source');
 	}
 }
@@ -116,8 +113,17 @@ export class DrivePdfRangeError extends Error {
 	}
 }
 
+async function configurePdfWorker() {
+	const [{ GlobalWorkerOptions }, workerModule] = await Promise.all([
+		import('pdfjs-dist'),
+		import('pdfjs-dist/build/pdf.worker.min.mjs?url')
+	]);
+	GlobalWorkerOptions.workerSrc = workerModule.default;
+}
+
 const defaultDependencies: DrivePdfRangeDependencies = {
 	downloadRange: downloadBrowserDriveRange,
+	configureWorker: configurePdfWorker,
 	createLoadingTask: getDocument
 };
 
@@ -150,6 +156,7 @@ export async function openDrivePdfRangeDocument({
 	});
 
 	try {
+		await dependencies.configureWorker();
 		loadingTask = dependencies.createLoadingTask({
 			range: transport,
 			rangeChunkSize: DRIVE_PDF_RANGE_CHUNK_BYTES,
