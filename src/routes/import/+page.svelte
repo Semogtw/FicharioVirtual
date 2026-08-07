@@ -42,17 +42,20 @@
 	);
 
 	const statusLabels = {
-		queued: 'Na fila',
-		preparing: 'Preparando no dispositivo',
-		uploading: 'Enviando com segurança',
-		reading: 'Lendo a página',
-		waiting: 'Leitura pendente',
-		needs_review: 'Pronto para revisão',
-		complete: 'Importação concluída',
-		duplicate: 'Já existe no fichário',
-		failed: 'Falha na importação',
-		cancelled: 'Cancelado'
-	} satisfies Record<ImportQueueItem['status'], string>;
+		uploading: 'Enviando',
+		pending: 'Na fila',
+		processing: 'Processando',
+		ready: 'Pronto',
+		partially_ready: 'Parcialmente pronto',
+		needs_review: 'Revisar',
+		failed: 'Falhou'
+	} as const;
+
+	const dateFormatter = new Intl.DateTimeFormat('pt-BR', {
+		day: '2-digit',
+		month: 'short',
+		year: 'numeric'
+	});
 
 	function formatBytes(bytes: number) {
 		if (bytes < 1024) return `${bytes} B`;
@@ -277,7 +280,12 @@
 									→ {formatBytes(item.preparedBytes)}
 								{/if}
 							</small>
-							<span class={`status ${item.status}`}>{statusLabels[item.status]}</span>
+							<span
+								class={`status ${item.status}`}
+								role="status"
+								aria-live="polite"
+								aria-atomic="true">{statusLabels[item.status]}</span
+							>
 							{#if item.error}<p>{item.error}</p>{/if}
 						</div>
 						<div class="item-actions">
