@@ -1,6 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseClient } from '$lib/services/supabase';
-import type { Database } from '$lib/types/database';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DRIVE_ID = /^[A-Za-z0-9_-]{10,256}$/;
@@ -15,7 +13,7 @@ export type ResumableDrivePdfReference = Readonly<{
 	updatedAt: string;
 }>;
 
-type RpcClient = SupabaseClient<Database> & {
+type RpcClient = {
 	rpc(
 		name: 'list_drive_pdf_reference_imports',
 		args?: Record<string, never>
@@ -28,10 +26,10 @@ function hasExactKeys(record: Record<string, unknown>, expected: readonly string
 	return actual.length === sorted.length && actual.every((key, index) => key === sorted[index]);
 }
 
-function validIso(value: unknown): value is string {
-	if (typeof value !== 'string') return false;
+function normalizeIso(value: unknown): string | null {
+	if (typeof value !== 'string' || value.length < 20 || value.length > 40) return null;
 	const timestamp = Date.parse(value);
-	return Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value;
+	return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
 }
 
 function parseReference(value: unknown): ResumableDrivePdfReference {
@@ -39,6 +37,8 @@ function parseReference(value: unknown): ResumableDrivePdfReference {
 		throw new TypeError('Invalid Drive PDF reference list');
 	}
 	const record = value as Record<string, unknown>;
+	const sourceModifiedAt = normalizeIso(record.sourceModifiedAt);
+	const updatedAt = normalizeIso(record.updatedAt);
 	if (
 		!hasExactKeys(record, [
 			'documentId',
@@ -62,8 +62,8 @@ function parseReference(value: unknown): ResumableDrivePdfReference {
 		typeof record.title !== 'string' ||
 		record.title.trim().length < 1 ||
 		record.title.length > 240 ||
-		!validIso(record.sourceModifiedAt) ||
-		!validIso(record.updatedAt)
+		sourceModifiedAt === null ||
+		updatedAt === null
 	) {
 		throw new TypeError('Invalid Drive PDF reference list');
 	}
@@ -73,13 +73,13 @@ function parseReference(value: unknown): ResumableDrivePdfReference {
 		sourceSizeBytes: record.sourceSizeBytes,
 		status: record.status as ResumableDrivePdfReference['status'],
 		title: record.title,
-		sourceModifiedAt: record.sourceModifiedAt,
-		updatedAt: record.updatedAt
+		sourceModifiedAt,
+		updatedAt
 	});
 }
 
 export async function listDrivePdfReferences(
-	client: RpcClient = getSupabaseClient() as RpcClient
+	client: RpcClient = getSupabaseClient() as unknown as RpcClient
 ): Promise<readonly ResumableDrivePdfReference[]> {
 	const { data, error } = await client.rpc('list_drive_pdf_reference_imports');
 	if (error) throw new Error('Não foi possível carregar os PDFs grandes pendentes.');
