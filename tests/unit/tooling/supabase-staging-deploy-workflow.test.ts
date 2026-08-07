@@ -34,7 +34,9 @@ describe('Supabase staging migration deploy workflow', () => {
 	it('takes administrative connection material only from protected environment settings', () => {
 		expect(source).toContain('SUPABASE_ACCESS_TOKEN: ${{ secrets.STAGING_SUPABASE_ACCESS_TOKEN }}');
 		expect(source).toContain('SUPABASE_DB_PASSWORD: ${{ secrets.STAGING_SUPABASE_DB_PASSWORD }}');
-		expect(source).toContain('STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}');
+		expect(source).toContain(
+			'STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}'
+		);
 		expect(source).not.toContain('exgggshcdzjaxmfcoasm');
 	});
 });
