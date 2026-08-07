@@ -64,29 +64,29 @@ describe('stageDrivePdfReference', () => {
 
 		expect(deps.resolveFolder).toHaveBeenCalledWith(notebookId, expect.anything());
 		expect(deps.copyFile).toHaveBeenCalledWith(
-		expect.objectContaining({
-			client: expect.anything(),
-			sourceFileId,
-			parentFolderId,
-			name: selection.name
-		})
-	);
+			expect.objectContaining({
+				client: expect.anything(),
+				sourceFileId,
+				parentFolderId,
+				name: selection.name
+			})
+		);
 		expect(deps.stage).toHaveBeenCalledWith(
-		expect.objectContaining({
-			client: expect.anything(),
-			targetDocumentId: documentId,
-			targetNotebookId: notebookId,
-			documentTitle: 'Apostila grande',
-			originalFilename: selection.name,
-			targetDriveFileId: copiedFileId,
-			targetDriveParentFolderId: parentFolderId,
-			targetDriveModifiedTime: copied.modifiedTime,
-			targetDriveVersion: copied.version,
-			targetDriveMd5Checksum: copied.md5Checksum,
-			sourceSizeBytes: selection.sizeBytes,
-			sourceModifiedAt: selection.modifiedAt
-		})
-	);
+			expect.objectContaining({
+				client: expect.anything(),
+				targetDocumentId: documentId,
+				targetNotebookId: notebookId,
+				documentTitle: 'Apostila grande',
+				originalFilename: selection.name,
+				targetDriveFileId: copiedFileId,
+				targetDriveParentFolderId: parentFolderId,
+				targetDriveModifiedTime: copied.modifiedTime,
+				targetDriveVersion: copied.version,
+				targetDriveMd5Checksum: copied.md5Checksum,
+				sourceSizeBytes: selection.sizeBytes,
+				sourceModifiedAt: selection.modifiedAt
+			})
+		);
 		expect(deps.deleteFile).not.toHaveBeenCalled();
 	});
 
