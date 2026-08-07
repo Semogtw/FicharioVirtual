@@ -52,7 +52,8 @@ describe('local database gate runner', () => {
 		expect(concurrencyGate).not.toMatch(/\bpython(?:3)?\b/);
 		expect(idempotencyGate).toContain('first claim contract drifted');
 		expect(idempotencyGate).toContain('already-complete claim contract drifted');
-		expect(idempotencyGate).toContain('retry-later claim contract drifted');
+		expect(idempotencyGate).toContain('provider quota retried before UTC rollover');
+		expect(idempotencyGate).toContain('next-day claim contract drifted');
 		expect(idempotencyGate).toContain("array['attemptCount', 'jobId', 'state', 'usageToday']");
 	});
 

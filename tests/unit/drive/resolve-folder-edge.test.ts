@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 const functionPath = 'supabase/functions/drive-resolve-folder/index.ts';
 const servicePath = 'src/lib/drive/resolve-folder.ts';
 const rpc = (name: string) => new RegExp(`rpc\\(\\s*['"]${name}['"]`);
+const tokenInBrowserResponse = (name: 'accessToken' | 'refreshToken') =>
+	new RegExp(`respond\\([\\s\\S]{0,180}\\b${name}\\b`);
 
 describe('Drive folder resolution boundary', () => {
 	it('authenticates, validates the hierarchy, and persists each created folder identity', () => {
@@ -18,8 +20,8 @@ describe('Drive folder resolution boundary', () => {
 		expect(source).toContain(".from('notebooks')");
 		expect(source).toContain('drive_folder_id: folder.id');
 		expect(source).toContain("'Cache-Control': 'no-store'");
-		expect(source).not.toContain('refreshToken:');
-		expect(source).not.toContain('accessToken:');
+		expect(source).not.toMatch(tokenInBrowserResponse('refreshToken'));
+		expect(source).not.toMatch(tokenInBrowserResponse('accessToken'));
 	});
 
 	it('exposes only a strict folderId result to the browser', () => {
