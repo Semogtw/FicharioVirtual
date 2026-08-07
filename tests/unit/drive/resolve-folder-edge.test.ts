@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 const functionPath = 'supabase/functions/drive-resolve-folder/index.ts';
 const servicePath = 'src/lib/drive/resolve-folder.ts';
+const rpc = (name: string) => new RegExp(`rpc\\(\\s*['"]${name}['"]`);
 
 describe('Drive folder resolution boundary', () => {
 	it('authenticates, validates the hierarchy, and persists each created folder identity', () => {
@@ -11,7 +12,7 @@ describe('Drive folder resolution boundary', () => {
 		expect(source).toContain('auth.getUser()');
 		expect(source).toContain('parseDriveNotebookRows');
 		expect(source).toContain('buildNotebookFolderChain');
-		expect(source).toContain("rpc('get_drive_refresh_token'");
+		expect(source).toMatch(rpc('get_drive_refresh_token'));
 		expect(source).toContain('refreshGoogleAccessToken');
 		expect(source).toContain('ensureDriveFolder');
 		expect(source).toContain(".from('notebooks')");
