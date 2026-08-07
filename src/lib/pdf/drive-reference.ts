@@ -1,10 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { copyBrowserDriveFile, deleteBrowserDriveFile } from '$lib/drive/browser-files';
 import type { DriveTokenClientLike } from '$lib/drive/browser-upload';
-import {
-	resolveDriveFolder,
-	type DriveFolderClientLike
-} from '$lib/drive/resolve-folder';
+import { resolveDriveFolder, type DriveFolderClientLike } from '$lib/drive/resolve-folder';
 import type { GooglePickerSelection } from '$lib/drive/picker';
 import type { DriveFile } from '$lib/drive/types';
 import { getSupabaseClient } from '$lib/services/supabase';
