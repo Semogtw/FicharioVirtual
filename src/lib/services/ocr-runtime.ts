@@ -21,9 +21,7 @@ export type OcrBatchRunResult = {
 	unexpectedResultPageIds: readonly string[];
 };
 
-type OcrFunctionBody =
-	| { pageId: string }
-	| { pageIds: readonly string[]; batchId?: string };
+type OcrFunctionBody = { pageId: string } | { pageIds: readonly string[]; batchId?: string };
 
 export type OcrFunctionClient = {
 	functions: {
@@ -219,7 +217,9 @@ function parseBatchResult(data: unknown, requestedPageIds: readonly string[]): O
 	const failed = new Set(failedPageIds);
 
 	if (
-		[...completedPageIds, ...pendingPageIds, ...failedPageIds].some((pageId) => !requested.has(pageId)) ||
+		[...completedPageIds, ...pendingPageIds, ...failedPageIds].some(
+			(pageId) => !requested.has(pageId)
+		) ||
 		reviewPageIds.some((pageId) => !completed.has(pageId)) ||
 		splitRequiredPageIds.some((pageId) => !pending.has(pageId)) ||
 		unexpectedResultPageIds.some((pageId) => requested.has(pageId)) ||
