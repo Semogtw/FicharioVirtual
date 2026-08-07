@@ -73,6 +73,25 @@ The migration should reach staging through the normal ordered migration synchron
 - absence of administrative table privileges for `authenticated`;
 - read-only client access to `usage_daily`.
 
+## Deployment status
+
+A second live migration-history check confirmed that `fichario-staging` is currently applied only through `202608060004_cover_drive_foreign_keys`, while the repository is versioned through `202608070008_harden_authenticated_database_privileges`. That leaves **24 repository migrations pending** on staging.
+
+The remaining step is operational rather than a missing schema change. The safe path is:
+
+```bash
+supabase link --project-ref <project-ref>
+supabase db push
+supabase migration list --linked
+supabase test db
+```
+
+The repository currently has no versioned deploy workflow with the administrative Supabase credentials required by `db push`; the existing staging verification workflow intentionally uses only public credentials. The Management API migration helper was not used as a substitute because it would register generated migration versions rather than preserve the repository's existing migration numbers. Likewise, applying only `070008` would put the live schema out of order.
+
+`docs/SUPABASE_STAGING.md` now records the ordered deployment contract so a future manual or protected CI deploy cannot silently fork migration history.
+
+Until those 24 migrations are pushed in order, the live security advisor is expected to continue reporting the seven authenticated-executable `SECURITY DEFINER` functions present in the older schema. The performance advisor also reports unused-index informational findings; those remain intentionally unchanged until representative workload statistics justify removals.
+
 ## Follow-up
 
-When staging catches up to the repository migration history, rerun the Supabase security advisor. Expected authenticated-executable `SECURITY DEFINER` warnings should then be limited to deliberate capability-boundary RPCs; each remaining warning should be reviewed against its execution grants and authorization guard rather than suppressed globally.
+After the ordered `db push`, rerun `supabase migration list --linked`, the database tests, and the Supabase security/performance advisors. Expected authenticated-executable `SECURITY DEFINER` warnings should then be limited to deliberate capability-boundary RPCs; each remaining warning should be reviewed against its execution grants and authorization guard rather than suppressed globally.
