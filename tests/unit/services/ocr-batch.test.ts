@@ -102,18 +102,14 @@ describe('processOcrBatch', () => {
 		);
 		await expect(
 			processOcrBatch([first], client(null, { context: temporary }).gateway)
-		).rejects.toEqual(
-			expect.objectContaining({ code: 'gemini_rate_limited', retryable: true })
-		);
+		).rejects.toEqual(expect.objectContaining({ code: 'gemini_rate_limited', retryable: true }));
 
-		const daily = new Response(
-			JSON.stringify({ code: 'gemini_daily_quota', retryable: false }),
-			{ status: 429, headers: { 'Content-Type': 'application/json' } }
-		);
+		const daily = new Response(JSON.stringify({ code: 'gemini_daily_quota', retryable: false }), {
+			status: 429,
+			headers: { 'Content-Type': 'application/json' }
+		});
 		await expect(
 			processOcrBatch([first], client(null, { context: daily }).gateway)
-		).rejects.toEqual(
-			expect.objectContaining({ code: 'gemini_daily_quota', retryable: false })
-		);
+		).rejects.toEqual(expect.objectContaining({ code: 'gemini_daily_quota', retryable: false }));
 	});
 });
