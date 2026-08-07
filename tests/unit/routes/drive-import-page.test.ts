@@ -22,6 +22,18 @@ describe('explicit Google Drive import page', () => {
 		expect(source).toContain("label={selecting ? 'Abrindo Drive…' : 'Escolher no Google Drive'}");
 	});
 
+	it('reloads and resumes durable large-PDF references without reopening Picker', () => {
+		const source = readFileSync(path, 'utf8');
+		expect(source).toContain('listDrivePdfReferences');
+		expect(source).toContain('async function loadPendingReferences');
+		expect(source).toContain('async function resumeReference');
+		expect(source).toContain("reference.status === 'pending_inspection'");
+		expect(source).toContain("status: 'pending_inspection'");
+		expect(source).toContain('await loadPendingReferences()');
+		expect(source).toContain('PDFs grandes preservados');
+		expect(source).toContain("label={resumingDocumentId === reference.documentId ? 'Retomando…' : 'Retomar'}");
+	});
+
 	it('describes the direct browser ceiling and the reference path for larger PDFs', () => {
 		const source = readFileSync(path, 'utf8');
 		expect(source).toContain('download direto no navegador aceita até 50 MiB');
