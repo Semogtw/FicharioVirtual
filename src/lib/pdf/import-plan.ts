@@ -9,6 +9,11 @@ export type PdfImportPagePlan = {
 	jobId: string | null;
 };
 
+export type PdfImportPlanInspection = Pick<
+	PdfInspection,
+	'pageCount' | 'nativePages' | 'pagesNeedingOcr'
+>;
+
 const STORAGE_ROOT = /^[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*$/;
 
 function uuid() {
@@ -18,7 +23,7 @@ function uuid() {
 }
 
 export function buildPdfImportPlan(
-	inspection: PdfInspection,
+	inspection: PdfImportPlanInspection,
 	storageRoot: string
 ): readonly PdfImportPagePlan[] {
 	if (!STORAGE_ROOT.test(storageRoot) || storageRoot.length > 900) {
