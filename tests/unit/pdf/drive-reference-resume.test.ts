@@ -28,7 +28,20 @@ describe('listDrivePdfReferences', () => {
 		expect(value).toEqual(input);
 		expect(Object.isFrozen(value)).toBe(true);
 		expect(Object.isFrozen(value[0])).toBe(true);
-		expect(JSON.stringify(value)).not.toMatch(/accessToken|refreshToken|bytes|blob/i);
+		expect(Object.keys(value[0] ?? {}).sort()).toEqual(
+			[
+				'documentId',
+				'driveFileId',
+				'sourceSizeBytes',
+				'status',
+				'title',
+				'sourceModifiedAt',
+				'updatedAt'
+			].sort()
+		);
+		expect(JSON.stringify(value)).not.toMatch(
+			/accessToken|refreshToken|blob|fileData|fileContents/i
+		);
 	});
 
 	it('rejects malformed or widened server responses', async () => {
