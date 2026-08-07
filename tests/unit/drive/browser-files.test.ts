@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import {
 	copyBrowserDriveFile,
 	deleteBrowserDriveFile,
-	downloadBrowserDriveFile
+	downloadBrowserDriveFile,
+	downloadBrowserDriveRange
 } from '../../../src/lib/drive/browser-files';
 
 const accessToken = 'ephemeral-access-token-value';
@@ -95,6 +96,77 @@ describe('browser Drive file operations', () => {
 				fetchImpl
 			})
 		).rejects.toThrow('O arquivo selecionado no Google Drive é grande demais.');
+	});
+
+	it('downloads an exact byte range without allowing a full-file fallback', async () => {
+		const bytes = new Uint8Array(1024).fill(7);
+		const fetchImpl = vi.fn().mockResolvedValue(
+			new Response(bytes, {
+				status: 206,
+				headers: {
+					'Content-Type': 'application/pdf',
+					'Content-Length': '1024',
+					'Content-Range': 'bytes 1024-2047/4096'
+				}
+			})
+		);
+
+		const result = await downloadBrowserDriveRange({
+			client: client(),
+			fileId: sourceFileId,
+			start: 1024,
+			endExclusive: 2048,
+			totalBytes: 4096,
+			fetchImpl
+		});
+
+		expect(result.size).toBe(1024);
+		expect(result.type).toBe('application/pdf');
+		const [requested, init] = fetchImpl.mock.calls[0];
+		expect(new URL(requested).searchParams.get('alt')).toBe('media');
+		expect(init.cache).toBe('no-store');
+		expect(init.headers).toMatchObject({
+			Authorization: `Bearer ${accessToken}`,
+			Range: 'bytes=1024-2047'
+		});
+	});
+
+	it('rejects providers that ignore or alter the requested byte range', async () => {
+		const fullResponse = new Response(new Uint8Array(4096), {
+			status: 200,
+			headers: { 'Content-Type': 'application/pdf', 'Content-Length': '4096' }
+		});
+		const readFullBody = vi.spyOn(fullResponse, 'blob');
+		await expect(
+			downloadBrowserDriveRange({
+				client: client(),
+				fileId: sourceFileId,
+				start: 0,
+				endExclusive: 1024,
+				totalBytes: 4096,
+				fetchImpl: vi.fn().mockResolvedValue(fullResponse)
+			})
+		).rejects.toThrow('Não foi possível baixar parte do arquivo selecionado no Google Drive.');
+		expect(readFullBody).not.toHaveBeenCalled();
+
+		await expect(
+			downloadBrowserDriveRange({
+				client: client(),
+				fileId: sourceFileId,
+				start: 0,
+				endExclusive: 1024,
+				totalBytes: 4096,
+				fetchImpl: vi.fn().mockResolvedValue(
+					new Response(new Uint8Array(1024), {
+						status: 206,
+						headers: {
+							'Content-Type': 'application/pdf',
+							'Content-Range': 'bytes 1-1024/4096'
+						}
+					})
+				)
+			})
+		).rejects.toThrow('Não foi possível baixar parte do arquivo selecionado no Google Drive.');
 	});
 
 	it('deletes an app-controlled file and treats an already-missing file as cleaned', async () => {
