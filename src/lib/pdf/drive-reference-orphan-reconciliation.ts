@@ -27,7 +27,9 @@ export type DrivePdfOrphanReconciliationResult = Readonly<{
 }>;
 
 export interface DrivePdfOrphanReconciliationDependencies {
-	listCopies(input: { client: DriveTokenClientLike }): Promise<readonly BrowserDrivePdfReferenceCopy[]>;
+	listCopies(input: {
+		client: DriveTokenClientLike;
+	}): Promise<readonly BrowserDrivePdfReferenceCopy[]>;
 	findExistingDocumentIds(
 		documentIds: readonly string[],
 		client: ReconciliationClient
