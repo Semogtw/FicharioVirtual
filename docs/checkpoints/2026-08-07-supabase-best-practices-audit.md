@@ -2,106 +2,159 @@
 
 ## Scope
 
-This checkpoint records a repository + live staging review using the Supabase/Postgres best-practices guidance, with emphasis on Security/RLS and privilege boundaries. The audit was performed while `main` was receiving concurrent Drive/PDF work, so database changes were kept isolated in a new migration and committed in small checkpoints.
+This checkpoint records a repository + live staging review using the Supabase/Postgres best-practices guidance, with emphasis on RLS, privilege boundaries, migration-history integrity, foreign-key indexing and deploy reproducibility. The audit ran while `main` was also receiving concurrent Drive/PDF work, so changes were kept in small isolated commits and live migration work was applied strictly in repository order.
 
-## Findings
+## Findings and fixes
 
 ### 1. Authenticated table privileges were broader than the application contract
 
-Supabase's default ACLs for new `public` tables grant the API roles a broad privilege set. Existing migrations already narrowed CRUD in several places, but the live staging catalog still showed `authenticated` with administrative privileges including `TRUNCATE`, `TRIGGER`, `REFERENCES`, and `MAINTAIN` on application tables.
+Supabase default ACLs had left `authenticated` with administrative privileges such as `TRUNCATE`, `TRIGGER`, `REFERENCES` and `MAINTAIN` on application tables. RLS protects row-oriented operations but does not make those privileges part of the intended browser capability boundary.
 
-RLS protects row-oriented operations, but it does not protect `TRUNCATE`. These privileges are therefore outside the intended client capability boundary even when PostgREST does not expose every SQL operation directly.
+`202608070008_harden_authenticated_database_privileges.sql`:
 
-`202608070008_harden_authenticated_database_privileges.sql` now:
+- removes those privileges from current `public` application tables;
+- removes them from future `public` table defaults of the migration role;
+- preserves table-specific CRUD contracts instead of re-granting broad DML;
+- restores `usage_daily` to `SELECT`-only for authenticated clients.
 
-- removes those four administrative privileges from all current `public` application tables;
-- removes them from the migration role's future `public` table defaults;
-- preserves existing table-specific CRUD contracts rather than broadly re-granting DML;
-- restores `usage_daily` to `SELECT`-only for `authenticated` clients.
+Live catalog verification after deployment found zero remaining administrative privileges in that set for `authenticated`.
 
-### 2. Several SECURITY DEFINER functions did not need elevation
+### 2. SECURITY DEFINER use was reduced to deliberate capability boundaries
 
-The live Supabase advisor reported authenticated-executable `SECURITY DEFINER` functions. A warning is not automatically a vulnerability: some OCR RPCs intentionally act as capability boundaries because direct writes to accounting or protected state are forbidden.
+The following helpers operate on owner-scoped rows and no longer need elevation, so `070008` changes them to `SECURITY INVOKER`:
 
-The following helpers operate only on rows already protected by owner RLS and do not require elevated table privileges, so migration `070008` changes them to `SECURITY INVOKER`:
+- `is_authorized_user()`;
+- `clear_temporary_page_image(uuid, text)`;
+- `complete_ocr_job(uuid, text, jsonb, text, timestamptz)`;
+- `fail_ocr_job(uuid, text, text, boolean, timestamptz, timestamptz)`.
 
-- `is_authorized_user()`
-- `clear_temporary_page_image(uuid, text)`
-- `complete_ocr_job(uuid, text, jsonb, text, timestamptz)`
-- `fail_ocr_job(uuid, text, text, boolean,timestamptz,timestamptz)`
+Privileged OCR RPCs that coordinate protected accounting, manifests or allowlist state remain `SECURITY DEFINER`. They are capability boundaries rather than convenience helpers.
 
-The security contract now tests this explicitly.
+`block_ocr_job_quota(...)` still needs privileged accounting access, but the audit found that it lacked the active-user allowlist guard. `070008` preserves elevation and adds `is_authorized_user()` before privileged state changes.
 
-### 3. Remaining privileged OCR RPCs are deliberate capability boundaries
+Drive worker SECURITY DEFINER functions remain service-only: execution is revoked from `public`, `anon` and `authenticated` and granted to `service_role` where required.
 
-Some RPCs must remain `SECURITY DEFINER` because authenticated clients are not allowed to directly mutate the protected state they coordinate:
+### 3. Staging migration drift was fully repaired
 
-- `claim_ocr_job(...)` updates quota/accounting state and already checks the active-user allowlist;
-- `record_ocr_consent(integer)` updates the allowlist row while clients otherwise have read-only access;
-- batch registration/call/finish/recovery RPCs coordinate `ocr_batches` and `usage_daily`, whose direct writes are restricted by later hardening migrations.
+At the start of the audit, live staging ended at:
 
-`block_ocr_job_quota(...)` also needs privileged accounting access, but the audit found that its latest source definition checked `auth.uid()` without checking `is_authorized_user()`. Migration `070008` preserves `SECURITY DEFINER` and adds the missing active-user allowlist guard. The security contract records both the intentional elevation and the required guard.
+```text
+202608060004_cover_drive_foreign_keys
+```
 
-Drive worker `SECURITY DEFINER` functions were also reviewed: the worker-side functions revoke execution from `public`, `anon`, and `authenticated`, granting execution only to `service_role`, so their elevated role remains intentional.
+while the repository had already advanced through the Drive-first, OCR-batch and large-PDF-reference migrations.
 
-### 4. Unused-index advisor results are not actionable yet
+The missing migrations were applied one-by-one in canonical repository order through `202608070008_harden_authenticated_database_privileges`.
 
-The performance advisor currently reports unused indexes in staging. No index was removed as part of this audit. The environment is new and low-traffic, so zero/low usage is not sufficient evidence that an index is redundant; many of the indexes cover FK, queue, synchronization, and expected production access paths.
+The connected migration action generates its own timestamp version. For this one-time recovery, every successful migration was therefore followed immediately by a transaction that changed only that migration-history row to the original Git version and asserted exactly one matching `(version, name)` row before proceeding. The final remote history was then re-read and contained no generated versions.
 
-Index removal should wait for representative workload statistics and query-plan evidence.
+This recovery procedure is not the normal deployment path. Future deployments should use the protected CLI workflow and `supabase db push`, which preserves the versioned history directly.
 
-### 5. Live staging is behind repository migrations
+### 4. Performance advisor found a real missing foreign-key index
 
-The staging migration history currently trails the repository's migration set (including the newer OCR batch and Drive PDF reference work). Because of that drift, migration `070008` was **not** applied directly to staging out of order.
+After the schema was synchronized, the performance advisor reported an unindexed FK on the composite ownership reference:
 
-Instead, its SQL was executed inside a transaction against the live catalog and rolled back. The rehearsal confirmed:
+```text
+ocr_batches(document_id, user_id)
+```
 
-- zero unexpected `SECURITY DEFINER` functions among the four converted helpers;
-- `block_ocr_job_quota` remains `SECURITY DEFINER` and contains the allowlist guard;
-- zero `public` application tables retain `TRUNCATE`, `TRIGGER`, `REFERENCES`, or `MAINTAIN` for `authenticated`;
-- `usage_daily` remains readable but not writable by `authenticated`.
+The existing `ocr_batches_document_idx(document_id, created_at)` did not cover that FK.
 
-The migration should reach staging through the normal ordered migration synchronization path.
+`202608070009_cover_ocr_batches_document_foreign_key.sql` adds:
+
+```sql
+create index ocr_batches_document_owner_idx
+  on public.ocr_batches (document_id, user_id);
+```
+
+`supabase/tests/performance_contracts.sql` now locks that coverage in pgTAP. The first version of the test exposed a test-only `name[]` versus `text[]` comparison mismatch; the contract was corrected with an explicit `attname::text` cast before being treated as green.
+
+After `070009` reached staging, the unindexed-FK advisor warning disappeared.
+
+The remaining performance-advisor findings are `unused_index` informational results. No index was removed: staging is new/low-traffic and many indexes cover FK, queue and synchronization paths that need representative workload statistics before removal can be justified.
+
+### 5. Edge runtime was materially behind the schema
+
+Live staging initially had only two Edge Functions:
+
+- `delete-document` v1;
+- `process-ocr` v1.
+
+Both were older than the repository. The old OCR runtime still used the application daily hard-limit contract, while the migrated database uses provider-authoritative quota plus OCR batches. The old deletion function also predated Drive-first deletion.
+
+The runtime was synchronized so all eight versioned functions are now ACTIVE:
+
+- `process-ocr` v2, JWT required;
+- `delete-document` v2, JWT required;
+- `drive-oauth-start` v1, JWT required;
+- `drive-oauth-callback` v1, JWT disabled intentionally;
+- `drive-access-token` v1, JWT required;
+- `drive-resolve-folder` v1, JWT required;
+- `drive-run-jobs` v1, JWT required;
+- `drive-sync` v1, JWT required.
+
+The callback is the sole unauthenticated Edge route because Google returns to it without the user's Supabase JWT. Its application-level authorization uses the one-time OAuth state/nonce flow. `tests/unit/tooling/supabase-edge-jwt-config.test.ts` now protects this exact policy.
+
+No Edge Function runtime errors were present in the project logs immediately after deployment. Runtime publication does not by itself prove that every custom Google/Gemini secret is configured or that the real providers accept the credentials.
 
 ## Regression coverage
 
-`supabase/tests/security_contracts.sql` now covers:
+Live staging validation completed with:
 
-- invoker status for helpers that should rely on RLS;
-- explicit definer status for privileged OCR capability boundaries;
-- the allowlist guard in privileged quota blocking;
-- absence of administrative table privileges for `authenticated`;
-- read-only client access to `usage_daily`.
+- `supabase/tests/security_contracts.sql`: **47/47 pgTAP checks passed** inside a rollback transaction;
+- `supabase/tests/performance_contracts.sql`: **1/1 pgTAP check passed**;
+- security advisor: only the seven deliberate authenticated-executable OCR SECURITY DEFINER capability boundaries remain;
+- performance advisor: the FK-without-index finding is gone; only unused-index informational findings remain.
 
-`tests/unit/tooling/supabase-staging-deploy-workflow.test.ts` also locks the deployment channel to a manual, protected workflow with read-only repository permissions, disabled checkout credentials, pinned Supabase CLI, migration listing, dry-run before push, and no `--include-all` shortcut.
+Repository tooling now also covers:
+
+- manual/protected staging deployment;
+- read-only GitHub repository permissions;
+- disabled persisted checkout credentials;
+- pinned Supabase CLI;
+- migration list + dry-run before `db push`;
+- rejection of the `--include-all` shortcut;
+- Edge Function deployment only after the database is synchronized;
+- remote function listing after deployment;
+- no global `--no-verify-jwt` override;
+- exactly one JWT exception in `supabase/config.toml`: `drive-oauth-callback`.
 
 ## Deployment status
 
-A second live migration-history check confirmed that `fichario-staging` is currently applied only through `202608060004_cover_drive_foreign_keys`, while the repository is versioned through `202608070008_harden_authenticated_database_privileges`. That leaves **24 repository migrations pending** on staging.
+Live `fichario-staging` is synchronized through:
 
-The repository now contains `.github/workflows/deploy-supabase-staging.yml`, a manual deployment channel that:
+```text
+202608070009_cover_ocr_batches_document_foreign_key
+```
 
-1. runs only through the `staging-deploy` environment;
-2. uses `contents: read` and checkout with `persist-credentials: false`;
-3. pins `supabase/setup-cli@v2` to CLI `2.111.0`;
-4. links the configured staging project;
-5. lists local/remote migration history;
-6. runs `supabase db push --linked --dry-run`;
-7. applies `supabase db push --linked` only after the preview succeeds;
-8. lists migration history again after deployment.
+and its eight Edge Functions are ACTIVE.
 
-The protected environment must provide:
+`.github/workflows/deploy-supabase-staging.yml` now deploys both parts from one checkout:
+
+1. link staging;
+2. list migration drift;
+3. run `db push --dry-run`;
+4. apply `db push`;
+5. confirm migration history;
+6. deploy all versioned Edge Functions;
+7. list deployed Edge Functions.
+
+The workflow uses the per-function `verify_jwt` policy from `supabase/config.toml`; it must not use a global `--no-verify-jwt` override.
+
+The remaining deployment-automation blocker is GitHub account configuration, not repository code. The repository currently has zero GitHub Environments configured. Before the workflow can run with administrative credentials, create/protect `staging-deploy` and provide:
 
 - secret `STAGING_SUPABASE_ACCESS_TOKEN`;
 - secret `STAGING_SUPABASE_DB_PASSWORD`;
 - variable `STAGING_SUPABASE_PROJECT_REF`.
 
-The GitHub repository currently has no environments configured, so this administrative workflow cannot yet receive those values and was not executed during the audit. The remaining live-staging work is therefore account configuration/approval, not missing repository code.
-
-The Management API migration helper was not used as a substitute because it would register generated migration versions rather than preserve the repository's existing migration numbers. Likewise, applying only `070008` would put the live schema out of order.
-
-Until those 24 migrations are pushed in order, the live security advisor is expected to continue reporting the seven authenticated-executable `SECURITY DEFINER` functions present in the older schema. The performance advisor also reports unused-index informational findings; those remain intentionally unchanged until representative workload statistics justify removals.
+The connector used for this audit does not expose Edge Function secret enumeration. Therefore the custom runtime values required by Google/Gemini integrations must still be confirmed through the normal Supabase secret-management path before provider-level staging validation.
 
 ## Follow-up
 
-Create and protect the `staging-deploy` environment, configure its two secrets and project-ref variable, then run `Deploy Supabase staging migrations`. After the ordered `db push`, rerun `supabase migration list --linked`, the database/staging tests, and the Supabase security/performance advisors. Expected authenticated-executable `SECURITY DEFINER` warnings should then be limited to deliberate capability-boundary RPCs; each remaining warning should be reviewed against its execution grants and authorization guard rather than suppressed globally.
+The database/schema audit itself is no longer blocked by migration drift. Remaining Supabase-oriented work is operational validation:
+
+1. configure/protect the GitHub `staging-deploy` environment so future deployments are reproducible from Git;
+2. confirm required custom Edge Function secrets without printing them;
+3. run the remote Auth/RLS/Storage staging gate with dedicated synthetic accounts;
+4. exercise Google OAuth/Drive and Gemini OCR against staging credentials;
+5. rerun security/performance advisors after representative workload exists before considering any unused-index removal.
