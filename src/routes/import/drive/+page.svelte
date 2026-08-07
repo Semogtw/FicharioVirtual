@@ -14,6 +14,7 @@
 		listDrivePdfReferences,
 		type ResumableDrivePdfReference
 	} from '$lib/pdf/drive-reference-resume';
+	import { deleteDocument } from '$lib/services/documents';
 	import { listNotebooks } from '$lib/services/notebooks';
 	import { addImages, importQueue } from '$lib/stores/import-queue.svelte';
 	import { addPdfs, pdfImportQueue } from '$lib/stores/pdf-import-queue.svelte';
@@ -25,6 +26,7 @@
 	let loadingReferences = $state(true);
 	let pendingReferences = $state<readonly ResumableDrivePdfReference[]>([]);
 	let resumingDocumentId = $state<string | null>(null);
+	let deletingDocumentId = $state<string | null>(null);
 	let selecting = $state(false);
 	let consent = $state(false);
 	let error = $state<string | null>(null);
@@ -87,7 +89,7 @@
 	}
 
 	async function resumeReference(reference: ResumableDrivePdfReference) {
-		if (resumingDocumentId !== null || selecting) return;
+		if (resumingDocumentId !== null || deletingDocumentId !== null || selecting) return;
 		error = null;
 		message = null;
 		if (!consent) {
@@ -115,8 +117,34 @@
 		}
 	}
 
+	async function cancelReference(reference: ResumableDrivePdfReference) {
+		if (deletingDocumentId !== null || resumingDocumentId !== null || selecting) return;
+		if (!globalThis.confirm(`Excluir a cópia preservada de “${reference.title}” do Google Drive?`)) {
+			return;
+		}
+		error = null;
+		message = null;
+		deletingDocumentId = reference.documentId;
+		try {
+			await deleteDocument(reference.documentId);
+			message = `A cópia preservada de “${reference.title}” foi excluída.`;
+		} catch (caught) {
+			error =
+				caught instanceof Error ? caught.message : 'Não foi possível excluir o PDF preservado.';
+		} finally {
+			deletingDocumentId = null;
+			await loadPendingReferences();
+		}
+	}
+
 	async function selectFromDrive() {
-		if (selecting || !pickerConfigured || resumingDocumentId !== null) return;
+		if (
+			selecting ||
+			!pickerConfigured ||
+			resumingDocumentId !== null ||
+			deletingDocumentId !== null
+		)
+			return;
 		error = null;
 		message = null;
 		if (!consent) {
@@ -215,7 +243,7 @@
 			<input
 				type="checkbox"
 				bind:checked={consent}
-				disabled={selecting || resumingDocumentId !== null}
+				disabled={selecting || resumingDocumentId !== null || deletingDocumentId !== null}
 			/>
 			<span>
 				<strong>Permitir OCR somente quando necessário</strong>
@@ -238,7 +266,7 @@
 		</div>
 		<Button
 			label={selecting ? 'Abrindo Drive…' : 'Escolher no Google Drive'}
-			disabled={!pickerConfigured || selecting || loadingNotebooks || resumingDocumentId !== null}
+			disabled={!pickerConfigured || selecting || loadingNotebooks || resumingDocumentId !== null || deletingDocumentId !== null}
 			onclick={() => void selectFromDrive()}
 		/>
 	</section>
@@ -268,11 +296,18 @@
 								<strong>{reference.title}</strong>
 								<small>{formatSize(reference.sourceSizeBytes)} · preservado no Google Drive</small>
 							</div>
-							<Button
-								label={resumingDocumentId === reference.documentId ? 'Retomando…' : 'Retomar'}
-								disabled={selecting || resumingDocumentId !== null}
-								onclick={() => void resumeReference(reference)}
-							/>
+							<div class="reference-actions">
+								<Button
+									label={resumingDocumentId === reference.documentId ? 'Retomando…' : 'Retomar'}
+									disabled={selecting || resumingDocumentId !== null || deletingDocumentId !== null}
+									onclick={() => void resumeReference(reference)}
+								/>
+								<Button
+									label={deletingDocumentId === reference.documentId ? 'Excluindo…' : 'Excluir cópia'}
+									disabled={selecting || resumingDocumentId !== null || deletingDocumentId !== null}
+									onclick={() => void cancelReference(reference)}
+								/>
+							</div>
 						</article>
 					{/each}
 				</div>
@@ -418,10 +453,16 @@
 		border-radius: var(--radius-sm);
 		background: var(--surface-strong);
 	}
-	.reference-list article > div {
+	.reference-list article > div:first-child {
 		display: grid;
 		gap: 0.2rem;
 		min-width: 0;
+	}
+	.reference-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-shrink: 0;
 	}
 	.reference-list strong,
 	.reference-list small {
@@ -468,6 +509,10 @@
 		.picker-card,
 		.reference-list article,
 		.reference-error {
+			align-items: stretch;
+			flex-direction: column;
+		}
+		.reference-actions {
 			align-items: stretch;
 			flex-direction: column;
 		}
