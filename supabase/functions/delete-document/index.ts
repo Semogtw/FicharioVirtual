@@ -1,5 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, parseAppOrigin } from '../_shared/cors.ts';
+import { deleteDriveFile } from '../_shared/google-drive-client.ts';
+import { refreshGoogleAccessToken } from '../_shared/google-oauth-http.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -56,11 +58,49 @@ Deno.serve(async (request) => {
 
 	const { data: document, error: loadError } = await supabase
 		.from('documents')
-		.select('storage_path,thumbnail_path,pages(temporary_image_path)')
+		.select('storage_path,thumbnail_path,drive_file_id,pages(temporary_image_path)')
 		.eq('id', documentId)
 		.maybeSingle();
 	if (loadError) return respond(503, 'document_lookup_failed');
 	if (!document) return respond(204);
+
+	if (document.drive_file_id !== null) {
+		const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+		const clientId = Deno.env.get('GOOGLE_CLIENT_ID');
+		const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET');
+		if (!serviceRoleKey || !clientId || !clientSecret) {
+			return respond(503, 'drive_delete_not_configured');
+		}
+
+		const admin = createClient(supabaseUrl, serviceRoleKey, {
+			auth: { persistSession: false, autoRefreshToken: false }
+		});
+		const { data: refreshToken, error: refreshError } = await admin.rpc(
+			'get_drive_refresh_token',
+			{ target_user_id: user.id }
+		);
+		if (refreshError || typeof refreshToken !== 'string' || refreshToken.length < 8) {
+			return respond(409, 'drive_not_connected');
+		}
+
+		let accessToken: string;
+		try {
+			const refreshed = await refreshGoogleAccessToken({
+				clientId,
+				clientSecret,
+				refreshToken
+			});
+			accessToken = refreshed.accessToken;
+		} catch {
+			return respond(503, 'drive_token_refresh_failed');
+		}
+
+		try {
+			await deleteDriveFile({ accessToken, fileId: document.drive_file_id });
+		} catch {
+			return respond(503, 'drive_delete_failed');
+		}
+	}
 
 	const pagePaths = Array.isArray(document.pages)
 		? document.pages
@@ -74,7 +114,7 @@ Deno.serve(async (request) => {
 
 	if (paths.length > 0) {
 		const { error: storageError } = await supabase.storage.from('documents').remove(paths);
-		if (storageError) return respond(503, 'storage_delete_failed');
+		if (document.drive_file_id === null && storageError) return respond(503, 'storage_delete_failed');
 	}
 
 	const { error: deleteError } = await supabase.from('documents').delete().eq('id', documentId);
