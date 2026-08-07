@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(34);
+select plan(43);
 
 select has_table('public', 'app_users', 'allowlist table exists');
 select has_table('public', 'notebooks', 'notebooks table exists');
@@ -94,6 +94,83 @@ select ok(
 select ok(
   has_function_privilege('authenticated', 'public.export_portable_manifest()', 'execute'),
   'authenticated role may call portable export under RLS'
+);
+
+select ok(
+  not (select prosecdef from pg_proc where oid = 'public.is_authorized_user()'::regprocedure),
+  'authorization helper runs with caller privileges'
+);
+select ok(
+  not (select prosecdef from pg_proc where oid = 'public.clear_temporary_page_image(uuid,text)'::regprocedure),
+  'temporary image cleanup relies on owner RLS instead of definer privileges'
+);
+select ok(
+  not (
+    select prosecdef
+    from pg_proc
+    where oid = 'public.complete_ocr_job(uuid,text,jsonb,text,timestamp with time zone)'::regprocedure
+  ),
+  'OCR completion relies on owner RLS instead of definer privileges'
+);
+select ok(
+  not (
+    select prosecdef
+    from pg_proc
+    where oid = 'public.fail_ocr_job(uuid,text,text,boolean,timestamp with time zone,timestamp with time zone)'::regprocedure
+  ),
+  'OCR failure relies on owner RLS instead of definer privileges'
+);
+
+select ok(
+  not exists (
+    select 1
+    from pg_class as relation
+    join pg_namespace as namespace on namespace.oid = relation.relnamespace
+    where namespace.nspname = 'public'
+      and relation.relkind in ('r', 'p')
+      and has_table_privilege('authenticated', relation.oid, 'TRUNCATE')
+  ),
+  'authenticated cannot truncate application tables'
+);
+select ok(
+  not exists (
+    select 1
+    from pg_class as relation
+    join pg_namespace as namespace on namespace.oid = relation.relnamespace
+    where namespace.nspname = 'public'
+      and relation.relkind in ('r', 'p')
+      and has_table_privilege('authenticated', relation.oid, 'TRIGGER')
+  ),
+  'authenticated cannot create triggers on application tables'
+);
+select ok(
+  not exists (
+    select 1
+    from pg_class as relation
+    join pg_namespace as namespace on namespace.oid = relation.relnamespace
+    where namespace.nspname = 'public'
+      and relation.relkind in ('r', 'p')
+      and has_table_privilege('authenticated', relation.oid, 'REFERENCES')
+  ),
+  'authenticated cannot create foreign keys against application tables'
+);
+select ok(
+  not exists (
+    select 1
+    from pg_class as relation
+    join pg_namespace as namespace on namespace.oid = relation.relnamespace
+    where namespace.nspname = 'public'
+      and relation.relkind in ('r', 'p')
+      and has_table_privilege('authenticated', relation.oid, 'MAINTAIN')
+  ),
+  'authenticated cannot run table maintenance operations'
+);
+select ok(
+  not has_table_privilege('authenticated', 'public.usage_daily', 'INSERT')
+    and not has_table_privilege('authenticated', 'public.usage_daily', 'UPDATE')
+    and not has_table_privilege('authenticated', 'public.usage_daily', 'DELETE')
+    and has_table_privilege('authenticated', 'public.usage_daily', 'SELECT'),
+  'usage counters remain read-only to authenticated clients'
 );
 
 select * from finish();
