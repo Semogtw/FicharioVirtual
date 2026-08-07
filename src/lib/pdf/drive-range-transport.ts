@@ -1,8 +1,4 @@
-import {
-	PDFDataRangeTransport,
-	getDocument,
-	type PDFDocumentProxy
-} from 'pdfjs-dist';
+import { PDFDataRangeTransport, getDocument, type PDFDocumentProxy } from 'pdfjs-dist';
 import { downloadBrowserDriveRange } from '$lib/drive/browser-files';
 import type { DriveTokenClientLike } from '$lib/drive/browser-upload';
 
