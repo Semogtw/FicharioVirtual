@@ -174,6 +174,23 @@ type UsageDailyRow = {
 	updated_at: string;
 };
 
+type DrivePdfReferenceImportStatus =
+	| 'pending_inspection'
+	| 'inspecting'
+	| 'ready_to_finalize'
+	| 'failed';
+
+type DrivePdfReferenceImportRow = {
+	document_id: string;
+	user_id: string;
+	source_size_bytes: number;
+	source_modified_at: string;
+	status: DrivePdfReferenceImportStatus;
+	last_error_code: string | null;
+	created_at: string;
+	updated_at: string;
+};
+
 export type Database = {
 	public: {
 		Tables: {
@@ -346,6 +363,20 @@ export type Database = {
 					updated_at?: string;
 				},
 				Partial<Omit<UsageDailyRow, 'user_id' | 'usage_date'>>
+			>;
+			drive_pdf_reference_imports: TableDefinition<
+				DrivePdfReferenceImportRow,
+				{
+					document_id: string;
+					user_id: string;
+					source_size_bytes: number;
+					source_modified_at: string;
+					status?: DrivePdfReferenceImportStatus;
+					last_error_code?: string | null;
+					created_at?: string;
+					updated_at?: string;
+				},
+				Partial<Omit<DrivePdfReferenceImportRow, 'document_id' | 'user_id'>>
 			>;
 		};
 		Views: Record<string, never>;
@@ -581,6 +612,22 @@ export type Database = {
 					excerpt: string;
 					rank: number;
 				}>;
+			};
+			stage_drive_pdf_reference: {
+				Args: {
+					target_document_id: string;
+					target_notebook_id: string | null;
+					document_title: string;
+					original_filename: string;
+					target_drive_file_id: string;
+					target_drive_parent_folder_id: string;
+					target_drive_modified_time: string;
+					target_drive_version: string;
+					target_drive_md5_checksum: string | null;
+					source_size_bytes: number;
+					source_modified_at: string;
+				};
+				Returns: Json;
 			};
 			set_tag_membership: {
 				Args: { target_tag_id: string; target_document_id: string; assigned: boolean };
