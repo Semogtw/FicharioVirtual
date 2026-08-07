@@ -68,7 +68,11 @@ describe('stageDrivePdfReference', () => {
 				client: expect.anything(),
 				sourceFileId,
 				parentFolderId,
-				name: selection.name
+				name: selection.name,
+				appProperties: {
+					ficharioPurpose: 'oversized_pdf_reference',
+					ficharioDocumentId: documentId
+				}
 			})
 		);
 		expect(deps.stage).toHaveBeenCalledWith(
