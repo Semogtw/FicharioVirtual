@@ -1,6 +1,6 @@
 # Rollout das migrations de OCR por lotes
 
-_Atualizado em 6 de agosto de 2026._
+_Atualizado em 7 de agosto de 2026._
 
 Este runbook complementa `docs/DEPLOYMENT.md`. As migrations abaixo são cumulativas, forward-only e precisam ser aplicadas na ordem exata antes da Edge Function `process-ocr` correspondente ao código atual.
 
@@ -12,6 +12,7 @@ Este runbook complementa `docs/DEPLOYMENT.md`. As migrations abaixo são cumulat
 202608060016_harden_ocr_batch_transitions.sql
 202608060017_harden_ocr_batch_manifest_jobs.sql
 202608060018_recover_stale_ocr_batches.sql
+202608060019_fix_ocr_batch_job_linkage.sql
 ```
 
 ## Responsabilidade de cada migration
@@ -55,6 +56,14 @@ Este runbook complementa `docs/DEPLOYMENT.md`. As migrations abaixo são cumulat
 - registra `stale_processing_claim` sem conteúdo privado;
 - preserva jobs e lotes ainda frescos.
 
+### 019 — vínculo final entre jobs e manifestos
+
+- mantém a rota (`gemini` ou `desktop`) como propriedade do manifesto `ocr_batches`, sem depender de coluna inexistente em `ocr_jobs`;
+- preserva vínculo ordinal, parent batch e `split_depth` derivados pelas migrations anteriores;
+- corrige o RPC `register_ocr_batch` sem reescrever migrations já aplicadas.
+
+A migration `202608060020_fix_drive_retry_status_enum.sql` também faz parte do schema atual, mas é hardening da fila do Google Drive, não do rollout OCR. Ela deve ser aplicada normalmente por `supabase db push` junto das demais migrations do repositório.
+
 ## Aplicação
 
 ```bash
@@ -63,7 +72,7 @@ supabase db push
 supabase test db
 ```
 
-Não implante `process-ocr` novo antes de o banco possuir as cinco migrations. Não edite migration já aplicada; qualquer correção posterior deve receber novo timestamp.
+Não implante `process-ocr` novo antes de o banco possuir as seis migrations OCR acima. Não edite migration já aplicada; qualquer correção posterior deve receber novo timestamp.
 
 ## Validação mínima
 
@@ -85,6 +94,7 @@ A validação precisa demonstrar:
 - lote-filho preserva pai e profundidade;
 - crash libera job, página e lote;
 - job fresco não é recuperado prematuramente;
+- rota permanece no manifesto, sem coluna artificial em `ocr_jobs`;
 - RLS e grants continuam fail-closed.
 
 ## Rollback
