@@ -9,12 +9,16 @@ const staged = {
 };
 
 function dependencies() {
-	const document = { destroy: vi.fn().mockResolvedValue(undefined) };
+	const document = { numPages: 3 };
+	const destroy = vi.fn().mockResolvedValue(undefined);
 	return {
 		document,
+		destroy,
 		currentUserId: vi.fn().mockResolvedValue('11111111-1111-4111-8111-111111111111'),
-		verifyIdentity: vi.fn().mockResolvedValue({ driveVersion: '4', sourceSizeBytes: staged.sourceSizeBytes }),
-		openDocument: vi.fn().mockResolvedValue(document),
+		verifyIdentity: vi
+			.fn()
+			.mockResolvedValue({ driveVersion: '4', sourceSizeBytes: staged.sourceSizeBytes }),
+		openDocument: vi.fn().mockResolvedValue({ document, destroy }),
 		inspectDocument: vi.fn().mockResolvedValue({
 			pageCount: 1,
 			nativePages: [],
@@ -37,7 +41,9 @@ describe('Drive PDF derived page ceiling', () => {
 		const deps = dependencies();
 		deps.renderPage
 			.mockResolvedValueOnce(new Blob([new Uint8Array(13 * 1024 * 1024)], { type: 'image/webp' }))
-			.mockResolvedValueOnce(new Blob([new Uint8Array(12 * 1024 * 1024 + 1)], { type: 'image/jpeg' }));
+			.mockResolvedValueOnce(
+				new Blob([new Uint8Array(12 * 1024 * 1024 + 1)], { type: 'image/jpeg' })
+			);
 
 		await expect(
 			importStagedDrivePdfReference({
