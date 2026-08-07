@@ -2,7 +2,13 @@ import type { PDFDocumentProxy } from 'pdfjs-dist';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { DriveTokenClientLike } from '$lib/drive/browser-upload';
 import { recordOcrConsent } from '$lib/services/ocr-consent';
-import { OcrProcessingError, processPageOcr, type OcrRunResult } from '$lib/services/ocr';
+import {
+	OcrProcessingError,
+	processOcrBatch as runOcrBatch,
+	processPageOcr,
+	type OcrBatchRunResult,
+	type OcrRunResult
+} from '$lib/services/ocr';
 import { getSupabaseClient } from '$lib/services/supabase';
 import type { Database } from '$lib/types/database';
 import type { StagedDrivePdfReference } from './drive-reference';
@@ -22,6 +28,7 @@ import {
 } from './drive-range-inspector';
 import { openDrivePdfRangeDocument, type DrivePdfRangeDocument } from './drive-range-transport';
 import { buildPdfImportPlan, type PdfImportPagePlan } from './import-plan';
+import { runPdfOcrBatches } from './ocr-batching';
 import { renderPdfDocumentPage } from './renderer';
 import {
 	PdfConsentRequiredError,
@@ -88,6 +95,10 @@ export interface DrivePdfReferenceImportDependencies {
 	}): Promise<PdfImportPublication | null>;
 	referencePending(documentId: string): Promise<boolean>;
 	processPage(pageId: string, options?: { signal?: AbortSignal }): Promise<PageProcessResult>;
+	processBatch?(
+		pageIds: readonly string[],
+		options?: { signal?: AbortSignal }
+	): Promise<OcrBatchRunResult>;
 }
 
 export class DrivePdfReferenceImportError extends Error {
@@ -199,17 +210,41 @@ function createDefaultDependencies(
 				client: client as unknown as DrivePdfReferenceRecoveryClient,
 				documentId
 			}),
-		processPage: (pageId, options) => processPageOcr(pageId, undefined, options)
+		processPage: (pageId, options) => processPageOcr(pageId, undefined, options),
+		processBatch: (pageIds, options) => runOcrBatch(pageIds, undefined, options)
 	};
 }
 
 async function processPublishedOcrPages(
 	pages: readonly PdfImportPagePlan[],
+	renderedSizes: ReadonlyMap<string, number>,
 	dependencies: DrivePdfReferenceImportDependencies,
 	onProgress?: (progress: DrivePdfReferenceImportProgress) => void,
 	signal?: AbortSignal
 ) {
 	const queue = pages.filter((page) => page.needsOcr);
+	const processBatch = dependencies.processBatch;
+	if (processBatch && queue.length > 0) {
+		return runPdfOcrBatches({
+			pages: queue.map((page) => {
+				const derivedBytes = renderedSizes.get(page.id);
+				if (!Number.isSafeInteger(derivedBytes) || !derivedBytes || derivedBytes < 1) {
+					throw new Error('missing_derived_page_size');
+				}
+				return {
+					id: page.id,
+					pageNumber: page.pageNumber,
+					derivedBytes,
+					density: 'normal' as const
+				};
+			}),
+			processBatch: (pageIds) => processBatch(pageIds, { signal }),
+			signal,
+			onPageFinished: (pageNumber, current, total) =>
+				safelyReportProgress(onProgress, { phase: 'ocr', pageNumber, current, total })
+		});
+	}
+
 	let complete = 0;
 	let needsReview = 0;
 	let pending = 0;
@@ -302,6 +337,7 @@ export async function importStagedDrivePdfReference({
 
 		const storageRoot = `${userId}/${staged.documentId}`;
 		let pages = buildPdfImportPlan(inspection, storageRoot).map((page) => ({ ...page }));
+		const renderedSizes = new Map<string, number>();
 		const ocrPages = pages.filter((page) => page.needsOcr);
 
 		for (let index = 0; index < ocrPages.length; index += 1) {
@@ -335,6 +371,7 @@ export async function importStagedDrivePdfReference({
 			}
 			const temporaryImagePath = `${storageRoot}/pages/${page.pageNumber}.${imageExtension(blob)}`;
 			await runtime.upload(temporaryImagePath, blob);
+			renderedSizes.set(page.id, blob.size);
 			uploadedPaths.push(temporaryImagePath);
 			pages = pages.map((candidate) =>
 				candidate.id === page.id ? { ...candidate, temporaryImagePath } : candidate
@@ -363,7 +400,13 @@ export async function importStagedDrivePdfReference({
 		}
 		metadataPublished = true;
 
-		const ocr = await processPublishedOcrPages(pages, runtime, onProgress, signal);
+		const ocr = await processPublishedOcrPages(
+			pages,
+			renderedSizes,
+			runtime,
+			onProgress,
+			signal
+		);
 		if (signal?.aborted) throw abortError();
 		safelyReportProgress(onProgress, { phase: 'complete' });
 		return Object.freeze({
