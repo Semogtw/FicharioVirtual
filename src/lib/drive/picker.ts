@@ -41,6 +41,12 @@ export interface GooglePickerRuntime {
 	};
 }
 
+type GooglePickerLoaderRuntime = {
+	gapi: {
+		load(name: 'picker', callback: () => void): void;
+	};
+};
+
 type ScriptLike = {
 	src: string;
 	async: boolean;
@@ -76,6 +82,12 @@ function validText(value: unknown, minimum: number, maximum: number): value is s
 	});
 }
 
+function pickerLoaderIsValid(value: unknown): value is GooglePickerLoaderRuntime {
+	if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+	const runtime = value as { gapi?: { load?: unknown } };
+	return typeof runtime.gapi?.load === 'function';
+}
+
 function runtimeIsValid(value: unknown): value is GooglePickerRuntime {
 	if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
 	const runtime = value as Partial<GooglePickerRuntime>;
@@ -84,6 +96,28 @@ function runtimeIsValid(value: unknown): value is GooglePickerRuntime {
 		typeof runtime.google?.picker?.DocsView === 'function' &&
 		typeof runtime.google?.picker?.PickerBuilder === 'function'
 	);
+}
+
+function loadPickerModule(
+	runtime: unknown,
+	resolve: (runtime: GooglePickerRuntime) => void,
+	reject: (reason?: unknown) => void
+) {
+	if (!pickerLoaderIsValid(runtime)) {
+		reject(new Error('Google Picker runtime unavailable'));
+		return;
+	}
+	try {
+		runtime.gapi.load('picker', () => {
+			if (!runtimeIsValid(runtime)) {
+				reject(new Error('Google Picker runtime unavailable'));
+				return;
+			}
+			resolve(runtime);
+		});
+	} catch (error) {
+		reject(error);
+	}
 }
 
 function validMimeTypes(value: readonly GooglePickerMimeType[]): readonly GooglePickerMimeType[] {
@@ -146,24 +180,19 @@ export function parsePickerSelection(value: unknown): GooglePickerSelection | nu
 
 export function loadGooglePickerApi({
 	documentLike = document as unknown as DocumentLike,
-	runtime = globalThis as unknown as GooglePickerRuntime
+	runtime = globalThis as unknown
 }: {
 	documentLike?: DocumentLike;
-	runtime?: GooglePickerRuntime;
+	runtime?: unknown;
 } = {}): Promise<GooglePickerRuntime> {
 	if (runtimeIsValid(runtime)) {
-		return new Promise((resolve, reject) => {
-			try {
-				runtime.gapi.load('picker', () => resolve(runtime));
-			} catch (error) {
-				reject(error);
-			}
-		});
+		return new Promise((resolve, reject) => loadPickerModule(runtime, resolve, reject));
 	}
 	if (pickerLoad) return pickerLoad;
 	pickerLoad = new Promise<GooglePickerRuntime>((resolve, reject) => {
 		const existing = documentLike.querySelector('script[data-fichario-google-picker="true"]');
 		if (existing) {
+			pickerLoad = null;
 			reject(new Error('Google Picker script exists without a trusted runtime'));
 			return;
 		}
@@ -172,17 +201,14 @@ export function loadGooglePickerApi({
 		script.async = true;
 		script.defer = true;
 		script.onload = () => {
-			if (!runtimeIsValid(runtime)) {
-				pickerLoad = null;
-				reject(new Error('Google Picker runtime unavailable'));
-				return;
-			}
-			try {
-				runtime.gapi.load('picker', () => resolve(runtime));
-			} catch (error) {
-				pickerLoad = null;
-				reject(error);
-			}
+			loadPickerModule(
+				runtime,
+				(loadedRuntime) => resolve(loadedRuntime),
+				(error) => {
+					pickerLoad = null;
+					reject(error);
+				}
+			);
 		};
 		script.onerror = () => {
 			pickerLoad = null;
