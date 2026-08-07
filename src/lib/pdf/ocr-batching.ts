@@ -1,8 +1,4 @@
-import {
-	planOcrBatches,
-	type OcrPageDensity,
-	type PlannedOcrBatch
-} from '$lib/ocr/batch-planner';
+import { planOcrBatches, type OcrPageDensity, type PlannedOcrBatch } from '$lib/ocr/batch-planner';
 import { OcrProcessingError, type OcrBatchRunResult } from '$lib/services/ocr';
 
 export type PdfOcrBatchPage = {
@@ -61,9 +57,7 @@ function splitCandidates(
 	);
 }
 
-export async function runPdfOcrBatches(
-	input: RunPdfOcrBatchesInput
-): Promise<PdfOcrBatchCounts> {
+export async function runPdfOcrBatches(input: RunPdfOcrBatchesInput): Promise<PdfOcrBatchCounts> {
 	if (input.pages.length === 0) {
 		return Object.freeze({ complete: 0, needsReview: 0, pending: 0, failed: 0 });
 	}
@@ -104,7 +98,9 @@ export async function runPdfOcrBatches(
 	while (queue.length > 0 && !input.signal?.aborted) {
 		const batch = queue.shift();
 		if (!batch) break;
-		const pageIds = batch.pages.map((page) => page.pageId).filter((pageId) => !finalized.has(pageId));
+		const pageIds = batch.pages
+			.map((page) => page.pageId)
+			.filter((pageId) => !finalized.has(pageId));
 		if (pageIds.length === 0) continue;
 		try {
 			const result = await input.processBatch(Object.freeze(pageIds));
