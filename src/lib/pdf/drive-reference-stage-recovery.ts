@@ -26,6 +26,13 @@ type StageRecoveryClient = Readonly<{
 		name: 'get_drive_pdf_reference_identity',
 		args: { target_document_id: string }
 	): Promise<{ data: unknown; error: unknown }>;
+	from(table: 'documents'): {
+		select(columns: 'id'): {
+			eq(column: 'id', value: string): {
+				maybeSingle(): Promise<{ data: unknown; error: unknown }>;
+			};
+		};
+	};
 }>;
 
 export class DrivePdfReferenceStageRecoveryError extends Error {
@@ -134,6 +141,29 @@ function sameIdentity(
 	);
 }
 
+async function documentAbsenceIsConfirmed(client: StageRecoveryClient, documentId: string) {
+	try {
+		const { data, error } = await client
+			.from('documents')
+			.select('id')
+			.eq('id', documentId)
+			.maybeSingle();
+		if (error) throw error;
+		if (data === null) return true;
+		if (
+			typeof data !== 'object' ||
+			Array.isArray(data) ||
+			!exactKeys(data as Record<string, unknown>, ['id']) ||
+			(data as { id?: unknown }).id !== documentId
+		) {
+			throw new Error('invalid document recovery response');
+		}
+		return false;
+	} catch {
+		throw new DrivePdfReferenceStageRecoveryError();
+	}
+}
+
 export async function recoverDrivePdfReferenceStage({
 	client,
 	expected
@@ -149,7 +179,11 @@ export async function recoverDrivePdfReferenceStage({
 			target_document_id: expected.documentId
 		});
 		if (result.error) {
-			if (errorCode(result.error) === KNOWN_MISSING_STAGE_SQLSTATE) return null;
+			if (errorCode(result.error) === KNOWN_MISSING_STAGE_SQLSTATE) {
+				return (await documentAbsenceIsConfirmed(client, expected.documentId))
+					? null
+					: Promise.reject(new DrivePdfReferenceStageRecoveryError());
+			}
 			throw result.error;
 		}
 		data = result.data;
