@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import { onDestroy } from 'svelte';
 	import Button from '$lib/components/Button.svelte';
+	import NativeSelect from '$lib/components/ui/native-select/NativeSelect.svelte';
 	import type { NotebookSummary } from '$lib/domain/notebook';
 	import {
 		importSelectionUrl,
@@ -145,14 +146,14 @@
 	<section class="options" aria-label="Opções do PDF">
 		<label>
 			<span>Caderno</span>
-			<select
+			<NativeSelect
 				bind:value={notebookId}
 				disabled={notebookLoading || !notebookOptionsReady}
 				onchange={selectNotebook}
 			>
 				<option value="">Sem caderno</option>
 				{#each notebooks as notebook}<option value={notebook.id}>{notebook.name}</option>{/each}
-			</select>
+			</NativeSelect>
 		</label>
 		<label class="consent">
 			<input type="checkbox" bind:checked={consent} />
@@ -325,14 +326,6 @@
 		color: var(--muted);
 		font-size: 0.75rem;
 		font-weight: 740;
-	}
-	select {
-		min-height: 3rem;
-		padding: 0.65rem 0.75rem;
-		border: 1px solid var(--line-strong);
-		border-radius: var(--radius-sm);
-		background: var(--surface-strong);
-		color: var(--ink);
 	}
 	.consent {
 		display: flex;
