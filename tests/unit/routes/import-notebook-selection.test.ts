@@ -25,7 +25,9 @@ describe('import notebook query selection', () => {
 			expect(source).toContain('O caderno solicitado precisa ser confirmado antes da importação.');
 			expect(source).not.toContain('.catch(() => undefined)');
 			expect(source).toContain('importSelectionUrl(page.url, notebookId)');
-			expect(source).toMatch(/replaceState\((?:url|importSelectionUrl\(page\.url, notebookId\)), page\.state\)/);
+			expect(source).toMatch(
+				/replaceState\((?:url|importSelectionUrl\(page\.url, notebookId\)), page\.state\)/
+			);
 			expect(source).not.toContain('onMount(() =>');
 			expect(source).toContain('onDestroy(() =>');
 		}
