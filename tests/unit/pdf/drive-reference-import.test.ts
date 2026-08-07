@@ -25,15 +25,17 @@ function inspection() {
 }
 
 function dependencies() {
-	const document = { destroy: vi.fn().mockResolvedValue(undefined) };
+	const document = { numPages: 3 };
+	const destroy = vi.fn().mockResolvedValue(undefined);
 	return {
 		document,
+		destroy,
 		currentUserId: vi.fn().mockResolvedValue(userId),
 		verifyIdentity: vi.fn().mockResolvedValue({
 			driveVersion: '4',
 			sourceSizeBytes: staged.sourceSizeBytes
 		}),
-		openDocument: vi.fn().mockResolvedValue(document),
+		openDocument: vi.fn().mockResolvedValue({ document, destroy }),
 		inspectDocument: vi.fn().mockResolvedValue(inspection()),
 		recordOcrConsent: vi.fn().mockResolvedValue(undefined),
 		renderPage: vi.fn().mockResolvedValue(new Blob([new Uint8Array(1024)], { type: 'image/webp' })),
@@ -103,7 +105,7 @@ describe('importStagedDrivePdfReference', () => {
 			deps.finalize.mock.invocationCallOrder[0] ?? 0
 		);
 		expect(deps.remove).not.toHaveBeenCalled();
-		expect(deps.document.destroy).toHaveBeenCalledOnce();
+		expect(deps.destroy).toHaveBeenCalledOnce();
 		expect(result).toMatchObject({
 			documentId,
 			pageCount: 3,
@@ -132,7 +134,7 @@ describe('importStagedDrivePdfReference', () => {
 		expect(deps.upload).not.toHaveBeenCalled();
 		expect(deps.finalize).not.toHaveBeenCalled();
 		expect(deps.remove).not.toHaveBeenCalled();
-		expect(deps.document.destroy).toHaveBeenCalledOnce();
+		expect(deps.destroy).toHaveBeenCalledOnce();
 	});
 
 	it('removes uploaded derivatives when finalization fails but preserves the Drive reference', async () => {
@@ -151,7 +153,7 @@ describe('importStagedDrivePdfReference', () => {
 		expect(deps.upload).toHaveBeenCalledOnce();
 		expect(deps.remove).toHaveBeenCalledWith([`${userId}/${documentId}/pages/2.webp`]);
 		expect(deps.processPage).not.toHaveBeenCalled();
-		expect(deps.document.destroy).toHaveBeenCalledOnce();
+		expect(deps.destroy).toHaveBeenCalledOnce();
 	});
 
 	it('keeps temporary pages after publication when provider processing is retryable', async () => {
