@@ -46,7 +46,9 @@ describe('local database gate runner', () => {
 		expect(claimContractGate).toContain('not-retryable claim contract drifted');
 		expect(concurrencyGate).toContain('validate_claim_shape');
 		expect(concurrencyGate).toContain('Concurrent claim A contract drifted');
-		expect(concurrencyGate).toContain("keys !== 'jobId,nextRetryAt,state'");
+		expect(concurrencyGate).toContain("keys !== 'attemptCount,jobId,state,usageToday'");
+		expect(concurrencyGate).toContain('Both provider-bound claims must be counted informationally');
+		expect(concurrencyGate).toContain('The application must not create a local quota block.');
 		expect(concurrencyGate).not.toMatch(/\bpython(?:3)?\b/);
 		expect(idempotencyGate).toContain('first claim contract drifted');
 		expect(idempotencyGate).toContain('already-complete claim contract drifted');
