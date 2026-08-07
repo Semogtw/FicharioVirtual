@@ -43,6 +43,7 @@ export interface DrivePdfReferenceDependencies {
 		sourceFileId: string;
 		parentFolderId: string;
 		name: string;
+		appProperties: Readonly<Record<string, string>>;
 	}): Promise<DriveFile>;
 	deleteFile(input: { client: ReferenceClient; fileId: string }): Promise<void>;
 	stage(input: StageInput): Promise<unknown>;
@@ -177,7 +178,11 @@ export async function stageDrivePdfReference({
 			client,
 			sourceFileId: source.id,
 			parentFolderId,
-			name: source.name
+			name: source.name,
+			appProperties: Object.freeze({
+				ficharioPurpose: 'oversized_pdf_reference',
+				ficharioDocumentId: documentId
+			})
 		}),
 		parentFolderId
 	);
