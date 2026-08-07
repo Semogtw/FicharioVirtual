@@ -12,7 +12,7 @@ select ok(
       and index_definition.indisvalid
       and index_definition.indisready
       and (
-        select array_agg(attribute.attname order by key_position.ordinality)
+        select array_agg(attribute.attname::text order by key_position.ordinality)
         from unnest(index_definition.indkey::smallint[]) with ordinality as key_position(attribute_number, ordinality)
         join pg_attribute as attribute
           on attribute.attrelid = index_definition.indrelid
