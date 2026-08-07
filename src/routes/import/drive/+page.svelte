@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import Button from '$lib/components/Button.svelte';
 	import NativeSelect from '$lib/components/ui/native-select/NativeSelect.svelte';
 	import type { NotebookSummary } from '$lib/domain/notebook';
@@ -9,8 +9,14 @@
 		isGooglePickerConfigured,
 		selectGoogleDriveImportSource
 	} from '$lib/drive/picker-service';
-	import { stageDrivePdfReference } from '$lib/pdf/drive-reference';
-	import { importStagedDrivePdfReference } from '$lib/pdf/drive-reference-import';
+	import {
+		stageDrivePdfReference,
+		type StagedDrivePdfReference
+	} from '$lib/pdf/drive-reference';
+	import {
+		importStagedDrivePdfReference,
+		type DrivePdfReferenceImportProgress
+	} from '$lib/pdf/drive-reference-import';
 	import {
 		listDrivePdfReferences,
 		type ResumableDrivePdfReference
@@ -27,6 +33,8 @@
 	let loadingReferences = $state(true);
 	let pendingReferences = $state<readonly ResumableDrivePdfReference[]>([]);
 	let resumingDocumentId = $state<string | null>(null);
+	let referenceProgress = $state<DrivePdfReferenceImportProgress | null>(null);
+	let referenceAbortController: AbortController | null = null;
 	let deletingDocumentId = $state<string | null>(null);
 	let selecting = $state(false);
 	let consent = $state(false);
@@ -89,6 +97,69 @@
 			: `“${name}” foi importado por referência sem baixar o PDF inteiro.`;
 	}
 
+	function referenceProgressMessage(progress: DrivePdfReferenceImportProgress) {
+		if (progress.phase === 'inspecting') {
+			return `Inspecionando página ${progress.pageNumber ?? 0} de ${progress.pageCount ?? 0}…`;
+		}
+		if (progress.phase === 'rendering_ocr') {
+			return `Preparando página ${progress.current ?? 0} de ${progress.total ?? 0} para OCR…`;
+		}
+		if (progress.phase === 'ocr') {
+			return `Lendo página ${progress.current ?? 0} de ${progress.total ?? 0} com OCR…`;
+		}
+		const labels: Record<DrivePdfReferenceImportProgress['phase'], string> = {
+			verifying: 'Verificando a cópia preservada no Drive…',
+			opening: 'Abrindo o PDF por faixas…',
+			inspecting: 'Inspecionando páginas…',
+			rendering_ocr: 'Preparando páginas para OCR…',
+			publishing: 'Publicando a estrutura do documento…',
+			ocr: 'Executando OCR…',
+			complete: 'Importação concluída.'
+		};
+		return labels[progress.phase];
+	}
+
+	function isAbortError(error: unknown) {
+		return error instanceof DOMException && error.name === 'AbortError';
+	}
+
+	async function runReferenceImport(staged: StagedDrivePdfReference, name: string) {
+		const controller = new AbortController();
+		referenceAbortController = controller;
+		resumingDocumentId = staged.documentId;
+		referenceProgress = null;
+		try {
+			return await importStagedDrivePdfReference({
+				staged,
+				consentGranted: true,
+				signal: controller.signal,
+				onProgress: (progress) => {
+					referenceProgress = progress;
+				}
+			});
+		} catch (caught) {
+			if (isAbortError(caught)) {
+				error = null;
+				message = `O processamento de “${name}” foi interrompido sem apagar o estado durável. Se ainda houver etapas pendentes, elas poderão ser retomadas.`;
+				return null;
+			}
+			throw caught;
+		} finally {
+			if (referenceAbortController === controller) referenceAbortController = null;
+			referenceProgress = null;
+			resumingDocumentId = null;
+			await loadPendingReferences();
+		}
+	}
+
+	function stopReferenceProcessing(reference: ResumableDrivePdfReference) {
+		if (resumingDocumentId !== reference.documentId) return;
+		const controller = referenceAbortController;
+		if (!controller || controller.signal.aborted) return;
+		controller.abort();
+		message = `Interrompendo “${reference.title}” sem apagar o estado durável…`;
+	}
+
 	async function resumeReference(reference: ResumableDrivePdfReference) {
 		if (resumingDocumentId !== null || deletingDocumentId !== null || selecting) return;
 		error = null;
@@ -97,24 +168,22 @@
 			error = 'Confirme a autorização de OCR antes de retomar o PDF.';
 			return;
 		}
-		resumingDocumentId = reference.documentId;
 		try {
-			const imported = await importStagedDrivePdfReference({
-				staged: {
+			const imported = await runReferenceImport(
+				{
 					documentId: reference.documentId,
 					driveFileId: reference.driveFileId,
 					sourceSizeBytes: reference.sourceSizeBytes,
 					status: 'pending_inspection'
 				},
-				consentGranted: true
-			});
-			message = referenceMessage(reference.title, imported.ocrPending + imported.ocrFailed);
+				reference.title
+			);
+			if (imported) {
+				message = referenceMessage(reference.title, imported.ocrPending + imported.ocrFailed);
+			}
 		} catch (caught) {
 			error =
 				caught instanceof Error ? caught.message : 'Não foi possível retomar o PDF preservado.';
-		} finally {
-			resumingDocumentId = null;
-			await loadPendingReferences();
 		}
 	}
 
@@ -172,15 +241,13 @@
 					title: referenceTitle(selected.selection.name)
 				});
 				await loadPendingReferences();
-				const imported = await importStagedDrivePdfReference({
-					staged,
-					consentGranted: true
-				});
-				message = referenceMessage(
-					selected.selection.name,
-					imported.ocrPending + imported.ocrFailed
-				);
-				await loadPendingReferences();
+				const imported = await runReferenceImport(staged, selected.selection.name);
+				if (imported) {
+					message = referenceMessage(
+						selected.selection.name,
+						imported.ocrPending + imported.ocrFailed
+					);
+				}
 				return;
 			}
 
@@ -205,6 +272,10 @@
 
 	onMount(() => {
 		void Promise.all([loadNotebooks(), loadPendingReferences()]);
+	});
+
+	onDestroy(() => {
+		referenceAbortController?.abort();
 	});
 </script>
 
@@ -304,11 +375,19 @@
 								<small>{formatSize(reference.sourceSizeBytes)} · preservado no Google Drive</small>
 							</div>
 							<div class="reference-actions">
-								<Button
-									label={resumingDocumentId === reference.documentId ? 'Retomando…' : 'Retomar'}
-									disabled={selecting || resumingDocumentId !== null || deletingDocumentId !== null}
-									onclick={() => void resumeReference(reference)}
-								/>
+								{#if resumingDocumentId === reference.documentId}
+									<Button
+										label="Parar processamento"
+										disabled={deletingDocumentId !== null}
+										onclick={() => stopReferenceProcessing(reference)}
+									/>
+								{:else}
+									<Button
+										label="Retomar"
+										disabled={selecting || resumingDocumentId !== null || deletingDocumentId !== null}
+										onclick={() => void resumeReference(reference)}
+									/>
+								{/if}
 								<Button
 									label={deletingDocumentId === reference.documentId
 										? 'Excluindo…'
@@ -317,6 +396,11 @@
 									onclick={() => void cancelReference(reference)}
 								/>
 							</div>
+							{#if resumingDocumentId === reference.documentId && referenceProgress}
+								<p class="reference-progress" role="status">
+									{referenceProgressMessage(referenceProgress)}
+								</p>
+							{/if}
 						</article>
 					{/each}
 				</div>
@@ -445,9 +529,9 @@
 		gap: 0.65rem;
 	}
 	.reference-list article {
-		display: flex;
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
 		align-items: center;
-		justify-content: space-between;
 		gap: 0.8rem;
 		padding: 0.75rem;
 		border: 1px solid var(--line);
@@ -459,6 +543,14 @@
 		gap: 0.2rem;
 		min-width: 0;
 	}
+	.reference-progress {
+		grid-column: 1 / -1;
+		margin: 0;
+		color: var(--archive);
+		font-size: 0.82rem;
+		font-weight: 650;
+	}
+
 	.reference-actions {
 		display: flex;
 		align-items: center;
@@ -512,6 +604,9 @@
 		.reference-error {
 			align-items: stretch;
 			flex-direction: column;
+		}
+		.reference-list article {
+			grid-template-columns: 1fr;
 		}
 		.reference-actions {
 			align-items: stretch;
