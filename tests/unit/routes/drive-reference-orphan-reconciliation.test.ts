@@ -6,7 +6,9 @@ const source = readFileSync('src/routes/import/drive/+page.svelte', 'utf8');
 describe('Drive import orphan reconciliation lifecycle', () => {
 	it('starts old managed-copy reconciliation on mount without blocking the import page', () => {
 		expect(source).toContain('reconcileOrphanedDrivePdfReferenceCopies');
-		expect(source).toContain('void reconcileOrphanedDrivePdfReferenceCopies().catch(() => undefined)');
+		expect(source).toContain(
+			'void reconcileOrphanedDrivePdfReferenceCopies().catch(() => undefined)'
+		);
 		expect(source).toContain('void Promise.all([loadNotebooks(), loadPendingReferences()])');
 		expect(source).not.toContain('await reconcileOrphanedDrivePdfReferenceCopies()');
 	});
