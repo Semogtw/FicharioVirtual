@@ -51,12 +51,6 @@
 		failed: 'Falhou'
 	} as const;
 
-	const dateFormatter = new Intl.DateTimeFormat('pt-BR', {
-		day: '2-digit',
-		month: 'short',
-		year: 'numeric'
-	});
-
 	function formatBytes(bytes: number) {
 		if (bytes < 1024) return `${bytes} B`;
 		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
