@@ -8,14 +8,16 @@ describe('Drive recovery navigation', () => {
 	it('adds Google Drive to the desktop navigation', () => {
 		const source = readFileSync(shellPath, 'utf8');
 
-		expect(source).toContain("{ href: '/drive/', label: 'Drive', mark: '☁' }");
+		expect(source).toContain("{ href: '/drive/', label: 'Drive', icon: 'drive' }");
+		expect(source).toContain('<NavigationIcon name={item.icon}');
 	});
 
 	it('keeps recovery reachable from the mobile navigation', () => {
 		const source = readFileSync(mobilePath, 'utf8');
 
-		expect(source).toContain('href="/drive/"');
-		expect(source).toContain('<small>Drive</small>');
+		expect(source).toContain("{ href: '/drive/', label: 'Drive', icon: 'drive' }");
+		expect(source).toContain('href={item.href}');
+		expect(source).toContain('{item.label}');
 		expect(source).toContain('grid-template-columns: repeat(5, 1fr)');
 	});
 });
