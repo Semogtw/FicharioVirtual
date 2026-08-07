@@ -28,7 +28,7 @@ The following helpers operate only on rows already protected by owner RLS and do
 - `is_authorized_user()`
 - `clear_temporary_page_image(uuid, text)`
 - `complete_ocr_job(uuid, text, jsonb, text, timestamptz)`
-- `fail_ocr_job(uuid, text, text, boolean, timestamptz, timestamptz)`
+- `fail_ocr_job(uuid, text, text, boolean,timestamptz,timestamptz)`
 
 The security contract now tests this explicitly.
 
@@ -73,25 +73,35 @@ The migration should reach staging through the normal ordered migration synchron
 - absence of administrative table privileges for `authenticated`;
 - read-only client access to `usage_daily`.
 
+`tests/unit/tooling/supabase-staging-deploy-workflow.test.ts` also locks the deployment channel to a manual, protected workflow with read-only repository permissions, disabled checkout credentials, pinned Supabase CLI, migration listing, dry-run before push, and no `--include-all` shortcut.
+
 ## Deployment status
 
 A second live migration-history check confirmed that `fichario-staging` is currently applied only through `202608060004_cover_drive_foreign_keys`, while the repository is versioned through `202608070008_harden_authenticated_database_privileges`. That leaves **24 repository migrations pending** on staging.
 
-The remaining step is operational rather than a missing schema change. The safe path is:
+The repository now contains `.github/workflows/deploy-supabase-staging.yml`, a manual deployment channel that:
 
-```bash
-supabase link --project-ref <project-ref>
-supabase db push
-supabase migration list --linked
-supabase test db
-```
+1. runs only through the `staging-deploy` environment;
+2. uses `contents: read` and checkout with `persist-credentials: false`;
+3. pins `supabase/setup-cli@v2` to CLI `2.111.0`;
+4. links the configured staging project;
+5. lists local/remote migration history;
+6. runs `supabase db push --linked --dry-run`;
+7. applies `supabase db push --linked` only after the preview succeeds;
+8. lists migration history again after deployment.
 
-The repository currently has no versioned deploy workflow with the administrative Supabase credentials required by `db push`; the existing staging verification workflow intentionally uses only public credentials. The Management API migration helper was not used as a substitute because it would register generated migration versions rather than preserve the repository's existing migration numbers. Likewise, applying only `070008` would put the live schema out of order.
+The protected environment must provide:
 
-`docs/SUPABASE_STAGING.md` now records the ordered deployment contract so a future manual or protected CI deploy cannot silently fork migration history.
+- secret `STAGING_SUPABASE_ACCESS_TOKEN`;
+- secret `STAGING_SUPABASE_DB_PASSWORD`;
+- variable `STAGING_SUPABASE_PROJECT_REF`.
+
+The GitHub repository currently has no environments configured, so this administrative workflow cannot yet receive those values and was not executed during the audit. The remaining live-staging work is therefore account configuration/approval, not missing repository code.
+
+The Management API migration helper was not used as a substitute because it would register generated migration versions rather than preserve the repository's existing migration numbers. Likewise, applying only `070008` would put the live schema out of order.
 
 Until those 24 migrations are pushed in order, the live security advisor is expected to continue reporting the seven authenticated-executable `SECURITY DEFINER` functions present in the older schema. The performance advisor also reports unused-index informational findings; those remain intentionally unchanged until representative workload statistics justify removals.
 
 ## Follow-up
 
-After the ordered `db push`, rerun `supabase migration list --linked`, the database tests, and the Supabase security/performance advisors. Expected authenticated-executable `SECURITY DEFINER` warnings should then be limited to deliberate capability-boundary RPCs; each remaining warning should be reviewed against its execution grants and authorization guard rather than suppressed globally.
+Create and protect the `staging-deploy` environment, configure its two secrets and project-ref variable, then run `Deploy Supabase staging migrations`. After the ordered `db push`, rerun `supabase migration list --linked`, the database/staging tests, and the Supabase security/performance advisors. Expected authenticated-executable `SECURITY DEFINER` warnings should then be limited to deliberate capability-boundary RPCs; each remaining warning should be reviewed against its execution grants and authorization guard rather than suppressed globally.
