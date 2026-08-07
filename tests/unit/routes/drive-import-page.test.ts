@@ -34,8 +34,12 @@ describe('explicit Google Drive import page', () => {
 		expect(source).toContain('await deleteDocument(reference.documentId)');
 		expect(source).toContain('await loadPendingReferences()');
 		expect(source).toContain('PDFs grandes preservados');
-		expect(source).toContain("label={resumingDocumentId === reference.documentId ? 'Retomando…' : 'Retomar'}");
-		expect(source).toContain("label={deletingDocumentId === reference.documentId ? 'Excluindo…' : 'Excluir cópia'}");
+		expect(source).toContain(
+			"label={resumingDocumentId === reference.documentId ? 'Retomando…' : 'Retomar'}"
+		);
+		expect(source).toMatch(
+			/label=\{deletingDocumentId === reference\.documentId\s*\? 'Excluindo…'\s*:\s*'Excluir cópia'\}/
+		);
 	});
 
 	it('describes the direct browser ceiling and the reference path for larger PDFs', () => {
