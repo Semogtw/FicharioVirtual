@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(20);
+select plan(19);
 
 insert into auth.users (id, email)
 values
@@ -70,11 +70,13 @@ from public.create_drive_image_import(
   1
 );
 update public.documents
-set
-  ocr_text = 'Texto preservado',
-  corrected_text = 'Texto corrigido preservado',
-  drive_sync_status = 'conflict'
+set drive_sync_status = 'conflict'
 where id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+update public.pages
+set
+  ocr_raw_text = 'Texto preservado',
+  corrected_text = 'Texto corrigido preservado'
+where id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 
 insert into public.drive_sync_jobs (
   id,
@@ -210,9 +212,16 @@ select is(
 );
 select results_eq(
   $$
-    select physical_state::text, drive_sync_status::text, title, ocr_text, corrected_text
-    from public.documents
-    where id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+    select
+      document.physical_state::text,
+      document.drive_sync_status::text,
+      document.title,
+      page.ocr_raw_text,
+      page.corrected_text
+    from public.documents as document
+    join public.pages as page on page.document_id = document.id
+    where document.id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+      and page.page_number = 1
   $$,
   $$ values (
     'missing'::text,
