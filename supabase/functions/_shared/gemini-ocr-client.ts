@@ -1,7 +1,4 @@
-import {
-	parseOcrBatchPayload,
-	type OcrBatchParseOutcome
-} from './ocr-batch-contract.ts';
+import { parseOcrBatchPayload, type OcrBatchParseOutcome } from './ocr-batch-contract.ts';
 import { parseOcrPayload, type OcrPayload } from './ocr-contract.ts';
 
 export class GeminiTransportError extends Error {
