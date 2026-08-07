@@ -2,6 +2,7 @@
 	import { page } from '$app/state';
 	import { onDestroy, untrack } from 'svelte';
 	import Button from '$lib/components/Button.svelte';
+	import NativeSelect from '$lib/components/ui/native-select/NativeSelect.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import type { NotebookSummary } from '$lib/domain/notebook';
 	import { highlightSnippet } from '$lib/search/highlight';
@@ -142,12 +143,16 @@
 		</label>
 		<label class="notebook-filter">
 			<span class="visually-hidden">Filtrar por caderno</span>
-			<select bind:value={notebookId} disabled={notebookLoading} onchange={() => void run(true)}>
+			<NativeSelect
+				bind:value={notebookId}
+				disabled={notebookLoading}
+				onchange={() => void run(true)}
+			>
 				<option value="">Todos os cadernos</option>
 				{#each notebooks as notebook}
 					<option value={notebook.id}>{notebook.name}</option>
 				{/each}
-			</select>
+			</NativeSelect>
 		</label>
 		<Button label="Pesquisar" onclick={() => void run(true)} />
 	</section>
@@ -265,8 +270,7 @@
 		background: var(--surface);
 	}
 
-	input,
-	select {
+	input {
 		width: 100%;
 		min-height: 2.75rem;
 		padding: 0.65rem 0.75rem;
