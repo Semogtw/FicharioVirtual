@@ -17,6 +17,33 @@
 		activeTheme = theme;
 	}
 
+	function navigateTheme(event: KeyboardEvent, themeId: ThemeId) {
+		const currentIndex = THEMES.findIndex((theme) => theme.id === themeId);
+		let nextIndex: number | null = null;
+
+		if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+			nextIndex = (currentIndex + 1) % THEMES.length;
+		} else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+			nextIndex = (currentIndex - 1 + THEMES.length) % THEMES.length;
+		} else if (event.key === 'Home') {
+			nextIndex = 0;
+		} else if (event.key === 'End') {
+			nextIndex = THEMES.length - 1;
+		}
+
+		if (nextIndex === null) return;
+		event.preventDefault();
+
+		const nextTheme = THEMES[nextIndex];
+		selectTheme(nextTheme.id);
+		requestAnimationFrame(() => {
+			const nextButton = document.querySelector<HTMLButtonElement>(
+				`[data-theme-option="${nextTheme.id}"]`
+			);
+			nextButton?.focus();
+		});
+	}
+
 	onMount(() => {
 		const rootTheme = document.documentElement.dataset.theme;
 		activeTheme = isThemeId(rootTheme) ? rootTheme : readStoredTheme(localStorage);
@@ -50,7 +77,10 @@
 				class:active={activeTheme === theme.id}
 				role="radio"
 				aria-checked={activeTheme === theme.id}
+				tabindex={activeTheme === theme.id ? 0 : -1}
+				data-theme-option={theme.id}
 				onclick={() => selectTheme(theme.id)}
+				onkeydown={(event) => navigateTheme(event, theme.id)}
 			>
 				<span class="option-copy">
 					<strong>{theme.name}</strong>
