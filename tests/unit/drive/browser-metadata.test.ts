@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { getBrowserDriveFileMetadata } from '../../../src/lib/drive/browser-metadata';
+import type { DriveTokenClientLike } from '../../../src/lib/drive/browser-upload';
 
 const accessToken = 'ephemeral-access-token-value';
 const fileId = '1AbCdEfGhIjKlMnOpQrStUvWxYz_123456';
 const parentFolderId = '0AParentFolderId_123456789';
 
-function client() {
+function client(): DriveTokenClientLike {
 	return {
 		functions: {
 			invoke: vi.fn().mockResolvedValue({
@@ -13,7 +14,7 @@ function client() {
 				error: null
 			})
 		}
-	} as never;
+	};
 }
 
 function metadata() {
