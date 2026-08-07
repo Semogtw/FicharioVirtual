@@ -6,8 +6,9 @@
 	import {
 		MAX_DIRECT_PICKER_DOWNLOAD_BYTES,
 		isGooglePickerConfigured,
-		selectAndDownloadGoogleDriveFile
+		selectGoogleDriveImportSource
 	} from '$lib/drive/picker-service';
+	import { stageDrivePdfReference } from '$lib/pdf/drive-reference';
 	import { listNotebooks } from '$lib/services/notebooks';
 	import { addImages, importQueue } from '$lib/stores/import-queue.svelte';
 	import { addPdfs, pdfImportQueue } from '$lib/stores/pdf-import-queue.svelte';
@@ -44,6 +45,11 @@
 		}
 	}
 
+	function referenceTitle(name: string) {
+		const withoutExtension = name.replace(/\.pdf$/i, '').trim();
+		return (withoutExtension || 'PDF importado').slice(0, 240);
+	}
+
 	async function selectFromDrive() {
 		if (selecting || !pickerConfigured) return;
 		error = null;
@@ -54,17 +60,31 @@
 		}
 		selecting = true;
 		try {
-			const file = await selectAndDownloadGoogleDriveFile({
+			const selected = await selectGoogleDriveImportSource({
 				mimeTypes: GOOGLE_PICKER_MIME_TYPES,
 				maximumBytes: MAX_DIRECT_PICKER_DOWNLOAD_BYTES
 			});
-			if (file === null) return;
-			if (file.type === 'application/pdf') {
-				addPdfs([file], { notebookId: notebookId || null, consentGranted: true });
-				message = `“${file.name}” foi encaminhado à fila de PDFs.`;
-			} else if (['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-				addImages([file], { mode: 'standard', notebookId: notebookId || null });
-				message = `“${file.name}” foi encaminhado à fila de imagens.`;
+			if (selected === null) return;
+
+			if (selected.kind === 'reference') {
+				if (selected.selection.mimeType !== 'application/pdf') {
+					throw new Error('Arquivos grandes por referência precisam ser PDFs.');
+				}
+				await stageDrivePdfReference({
+					selection: selected.selection,
+					notebookId: notebookId || null,
+					title: referenceTitle(selected.selection.name)
+				});
+				message = `“${selected.selection.name}” foi preservado no Drive e preparado para inspeção por faixas.`;
+				return;
+			}
+
+			if (selected.file.type === 'application/pdf') {
+				addPdfs([selected.file], { notebookId: notebookId || null, consentGranted: true });
+				message = `“${selected.file.name}” foi encaminhado à fila de PDFs.`;
+			} else if (['image/jpeg', 'image/png', 'image/webp'].includes(selected.file.type)) {
+				addImages([selected.file], { mode: 'standard', notebookId: notebookId || null });
+				message = `“${selected.file.name}” foi encaminhado à fila de imagens.`;
 			} else {
 				throw new Error('O tipo selecionado não é compatível com o Fichário.');
 			}
@@ -134,8 +154,8 @@
 			<p class="eyebrow">JPG · PNG · WebP · PDF</p>
 			<h2 id="picker-title">Escolher um arquivo</h2>
 			<p>
-				O download direto no navegador aceita até 50 MiB. Esse é um limite técnico deste caminho,
-				não do documento lógico nem dos lotes de OCR.
+				O download direto no navegador aceita até 50 MiB. PDFs maiores são preservados no Drive e
+				preparados por referência; esse teto não é do documento lógico nem dos lotes de OCR.
 			</p>
 		</div>
 		<Button
