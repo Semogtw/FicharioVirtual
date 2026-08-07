@@ -1,8 +1,8 @@
 # Estado atual do Fichário Virtual
 
-_Atualizado: 2026-08-06_  
+_Atualizado: 2026-08-07_  
 _Branch ativa: `main`_  
-_Estado: OCR por lotes, quota exclusiva do provedor e Google Drive-first implementados em código; release ainda depende de CI no mesmo SHA, Supabase limpo, staging externo, Cloudflare e dispositivos reais._
+_Estado: Drive-first, OCR seletivo por lotes e importação de PDFs grandes por ranges implementados e validados no CI; release ainda depende de staging externo, serviços reais e dispositivos reais._
 
 ## Resumo executivo
 
@@ -10,16 +10,16 @@ O Fichário Virtual é uma PWA privada para organizar imagens e PDFs, preservar 
 
 As autoridades permanecem separadas:
 
-- **Google Drive:** originais permanentes;
-- **Supabase:** Auth, PostgreSQL, RLS, filas, resultados, sincronização e temporários;
+- **Google Drive:** armazenamento permanente dos originais;
+- **Supabase:** Auth, PostgreSQL, RLS, filas, resultados, sincronização e derivados temporários;
 - **Cloudflare Pages:** frontend estático e artefatos públicos, sem documentos privados;
 - **computador confiável:** futura rota local para manuscritos e páginas difíceis.
 
-O Gemini usa chamadas multipágina com persistência por página, lotes adaptativos, retomada e divisão seletiva. O aplicativo não possui franquia diária própria: somente uma resposta real de quota do provedor pode produzir `blocked_quota`.
+O aplicativo não possui franquia diária própria de OCR. `blocked_quota` só representa uma resposta real de quota do provedor.
 
 ## Implementado em código
 
-### Produto e segurança
+### Produto, segurança e interface
 
 - conta única com allowlist fail-closed;
 - interface responsiva para desktop, tablet e celular;
@@ -28,135 +28,109 @@ O Gemini usa chamadas multipágina com persistência por página, lotes adaptati
 - PWA sem cache de conteúdo autenticado;
 - URLs assinadas curtas;
 - Edge Functions com política JWT explícita;
-- CORS fail-closed compartilhado nas APIs do navegador;
-- callback OAuth sem JWT de gateway, protegido por origem, `state` de uso único e PKCE;
-- gates que impedem workflows versionados com `contents: write` ou checkout autenticado;
-- scanner de secrets sem expressões regulares globais reutilizadas entre arquivos.
+- CORS fail-closed compartilhado;
+- OAuth Google com `state` de uso único, PKCE e refresh token privado no backend;
+- workflows sem capacidade automática de push;
+- scanner de secrets e gates de segurança;
+- componentes visuais compartilhados e melhorias retroativas de acessibilidade.
 
-### Importação, Storage e PDFs
+### Importação e PDFs
 
-- importação cancelável e retomável de imagens e PDFs;
+- importação cancelável e retomável de imagens e PDFs locais;
 - preparação local, miniaturas, SHA-256 e deduplicação;
 - texto nativo preservado sem OCR;
-- PDF misto envia somente páginas sem texto suficiente;
+- PDF misto envia somente páginas que realmente precisam de OCR;
 - upload retomável do original diretamente ao Drive;
-- renderização separada das páginas visuais;
+- original nunca é recomprimido nem substituído;
+- Google Picker explícito;
+- download direto pelo navegador limitado a 50 MiB apenas como limite técnico desse caminho;
+- arquivos PDF maiores que 50 MiB selecionados no Picker seguem por referência durável no Drive, sem download integral;
+- leitura remota estrita por `Range` com validação de `206`, `Content-Range`, comprimento e tamanho final;
+- PDF.js com `PDFDataRangeTransport`, streaming/prefetch desabilitados e lifecycle explícito do loading task;
+- lease de access token efêmero em memória para evitar renovar token a cada range;
+- inspeção sequencial por página com extração de texto nativo;
+- renderização somente das páginas que precisam de OCR;
+- derivado preferencial WebP com fallback JPEG;
 - segunda renderização conservadora quando um derivado ultrapassa 12 MiB;
-- original nunca é recomprimido ou substituído;
-- Google Picker com validação antecipada e download direto de até 50 MiB.
+- rejeição final de derivado acima de 12 MiB;
+- staging persistente de referências grandes;
+- verificação da identidade física da cópia no Drive antes da primeira leitura por range;
+- finalização atômica de documento, páginas e jobs OCR;
+- validação estrita dos descritores antes de qualquer mutação;
+- retomada após reload sem reabrir Picker ou copiar novamente;
+- recuperação quando o finalizador efetivamente commitou mas a resposta foi perdida;
+- cleanup fail-closed: derivados só são removidos após falha quando o banco confirma que a referência ainda está finalizável;
+- upload idempotente dos derivados temporários;
+- progresso por fase e por página;
+- `AbortController` na UI para parar processamento ativo sem confundir isso com a ação destrutiva de excluir a cópia;
+- exclusão Drive-first remove o original controlado antes de remover metadados locais.
 
-O `supabase/config.toml` mantém `file_size_limit = "20MiB"` para desenvolvimento local. A migration `202608060014_provider_only_ocr_batches.sql` eleva o bucket remoto `documents` para pelo menos 50 MiB como compatibilidade transitória da migração Drive-first. No fluxo normal, o original vai ao Drive e os derivados permanecem abaixo de 12 MiB. Os 50 MiB do bucket remoto não são o limite arquitetural do documento nem autorização para manter originais permanentemente no Supabase.
+O `supabase/config.toml` ainda mantém `file_size_limit = "20MiB"` no ambiente local. A migration de compatibilidade eleva o bucket remoto `documents` para pelo menos 50 MiB, mas no fluxo Drive-first normal o original não permanece no Supabase. Esses valores não são limites arquiteturais do documento lógico.
 
 ### OCR por lotes e quota real
-
-Migrations principais:
-
-```text
-202608060014_provider_only_ocr_batches.sql
-202608060015_ocr_batch_usage_and_hardening.sql
-202608060016_harden_ocr_batch_transitions.sql
-202608060017_harden_ocr_batch_manifest_jobs.sql
-202608060018_recover_stale_ocr_batches.sql
-```
 
 A implementação inclui:
 
 - `ocr_batches` com páginas, números originais, rota, bytes, modelo, tentativas e chamadas;
 - vínculo ordenado e imutável em `ocr_jobs`;
-- métricas informativas de páginas, lotes, chamadas e tentativas;
-- `claim_ocr_job` sem argumento de limite diário;
-- RLS e escrita de manifestos somente por RPCs validados;
-- registro atômico apenas quando todas as páginas possuem jobs vinculáveis;
+- métricas de páginas, lotes, chamadas e tentativas;
+- RLS e escrita de manifestos somente por contratos validados;
+- registro atômico somente quando todas as páginas possuem jobs vinculáveis;
 - validação ordinal dos pares `pageId` e número original;
-- referências de jobs com `ON DELETE RESTRICT` para preservar manifestos históricos;
-- lotes-filhos seguros para páginas vindas de um único pai `retryable` ou `blocked_quota`;
-- reagrupamento de múltiplos pais terminais sem inventar uma linhagem falsa;
-- recuperação após interrupção que libera job, página e manifesto depois de 15 minutos;
+- referências históricas protegidas com `ON DELETE RESTRICT`;
+- recuperação de jobs/páginas/lotes interrompidos;
 - transições terminais idempotentes;
-- `blocked_quota` reservado para quota real do provedor;
-- planejamento de até 40 páginas, reduzido para conteúdo denso;
-- limite acumulado de bytes;
+- planejamento adaptativo de páginas e bytes;
 - uma chamada Gemini para múltiplas imagens;
-- identidade estável por `pageId` e número original;
-- persistência independente das páginas válidas;
-- omissões, duplicações e JSON truncado convertidos em divisão seletiva;
-- ausência de loop quando resta uma única página;
-- retomada após reload usando o mesmo executor adaptativo;
+- persistência independente de páginas válidas;
+- omissões, duplicações e respostas truncadas convertidas em divisão seletiva;
 - distinção entre rate limit temporário e quota diária real;
-- painel com páginas, lotes, chamadas, tentativas, média por chamada e bloqueios reais.
+- retomada após reload;
+- limpeza do derivado temporário após OCR terminal bem-sucedido, preservando-o quando uma nova tentativa ainda é necessária.
 
 ### Google Drive-first
 
 Já estão implementados:
 
-- OAuth start e callback;
-- refresh token privado no backend e token efêmero;
+- OAuth start/callback e refresh token privado;
+- access token efêmero;
 - escopo `drive.file`;
-- pasta `Fichário Digital` e pastas aninhadas;
+- pasta raiz `Fichário Digital` e pastas aninhadas;
 - upload retomável;
-- Google Picker explícito;
+- Google Picker;
 - feed paginado de mudanças;
-- checkpoint depois da persistência;
-- identidade por IDs remotos;
-- ausência e reconexão sem perda de OCR;
-- fila idempotente, lease, retry e conflito;
-- executor de criação, atualização, movimento e exclusão;
+- checkpoint somente depois da persistência;
+- identidade por IDs e metadados remotos;
+- ausência/reconexão sem perda de OCR;
+- fila idempotente, lease, retry e conflitos;
+- criação, atualização, movimento e exclusão;
 - telas de conexão, jobs, conflitos e migração;
 - migração de originais legados com rollback;
-- migrations, pgTAP, contratos TypeScript e testes unitários;
-- type-check Deno e gates de segurança das funções Drive.
+- cópia controlada e importação por ranges de PDFs grandes;
+- migrations, pgTAP, contratos TypeScript, testes unitários e gates Deno.
 
-Isso ainda precisa ser validado em uma conta Google real. A existência do código não substitui OAuth, Picker, upload, mudanças, conflitos e migração executados no ambiente final.
-
-## Pendências funcionais
-
-### Arquivo já existente no Drive acima de 50 MiB
-
-O Picker recusa antes do download integral arquivos maiores que 50 MiB. Copiar o arquivo dentro do Drive não resolve sozinho a inspeção, a detecção de texto nem a renderização seletiva, pois o pipeline atual recebe um `File` local.
-
-A solução correta exige leitura remota por intervalos ou processamento equivalente para:
-
-1. preservar ou copiar o arquivo dentro do escopo `drive.file`;
-2. inspecionar o PDF sem download integral no navegador;
-3. renderizar somente páginas necessárias;
-4. manter tokens e URLs fora de logs e cache;
-5. retomar intervalos sem duplicar derivados;
-6. preservar identidade e hash do original.
-
-### Worker desktop
-
-A arquitetura está documentada, mas o worker não foi implementado. Continuam pendentes pareamento, credenciais por dispositivo, claim, lease, heartbeat, spool, backend CPU, modelos verificados, serviço systemd e benchmark da RX 6600.
-
-## Hardening concluído nesta revisão
-
-- remoção do último token de configuração de quota antiga em código ativo;
-- Deno verifica `google-drive-mutations.ts`, `drive-job-runner.ts` e `drive-run-jobs/index.ts`;
-- gate de segurança cobre as cinco APIs Drive chamadas pelo navegador;
-- callback OAuth recebe verificações separadas de origem, redirect, cache e referrer;
-- `supabase/config.toml` declara JWT explicitamente para todas as funções;
-- somente `drive-oauth-callback` possui `verify_jwt = false`;
-- runbook de deployment lista as oito Edge Functions atuais;
-- três workflows one-shot antigos com capacidade de push foram removidos;
-- teste impede reintrodução de escrita automática no repositório;
-- divergências determinísticas de Prettier dos artifacts anteriores foram aplicadas;
-- dois erros de sintaxe TypeScript detectados pelo CI foram corrigidos;
-- migration 015 deixou de usar palavra reservada como parâmetro e ganhou alias explícito para `unnest`;
-- migration 016 qualifica a coluna `finished_at` para não colidir com o parâmetro do RPC;
-- migration 017 preserva integridade, ordem, imutabilidade e linhagem dos manifestos;
-- migration 018 recupera atomicamente jobs, páginas e lotes interrompidos.
+A existência do código não substitui validação com uma conta Google real. OAuth, Picker, ranges, uploads, mudanças, conflitos e migração ainda precisam ser executados no ambiente final.
 
 ## Estado de validação
 
-O checkpoint `b3089b0d8fe4bb0378d0c1f4355b92603556ad1d` encontrou:
+### Recibo completo de CI
 
-- dois erros de sintaxe TypeScript;
-- palavra reservada na migration 015;
-- divergências de Prettier;
-- E2E pulado porque o frontend não chegou a ficar verde.
+O workflow `Validate current head` no SHA `50897346272269642d95d75aa249f6a96b9479f6` terminou com **success** em 2026-08-07.
 
-Esses problemas foram corrigidos em commits posteriores. O checkpoint não aprova o head atual, e ainda não existe recibo completo do Actions para o SHA final.
+No mesmo SHA passaram:
 
-### Gates obrigatórios no mesmo SHA
+- Prettier e ESLint;
+- `svelte-check` com 0 erros e 0 warnings;
+- 212 arquivos de testes unitários, totalizando 834 testes;
+- build de produção;
+- gates offline/source;
+- instalação do Chromium e E2E;
+- type-check das Edge Functions com Deno;
+- Supabase CLI e gates locais de banco/pgTAP.
+
+Esse recibo valida o código naquele SHA. Commits posteriores precisam de um novo recibo completo antes de uma afirmação de release pronta.
+
+### Gates obrigatórios
 
 ```bash
 pnpm format:check
@@ -170,38 +144,52 @@ pnpm build
 pnpm test:e2e
 ```
 
-Também são obrigatórios:
+## Pendências reais
 
-- migrations em Supabase limpo;
-- tipos TypeScript regenerados pelo schema implantado;
-- OAuth e Drive com conta real;
-- smoke Gemini real e lote multipágina;
-- fixtures acima de 50 MB e 1.000 páginas;
-- hash do original antes e depois;
-- cancelamento e retomada em dispositivo real;
-- tablet e celular;
-- confirmação administrativa de ausência de billing.
+### Staging e serviços externos
+
+Ainda são obrigatórios antes de release:
+
+- aplicar migrations em um projeto Supabase limpo/staging e verificar drift;
+- regenerar os tipos TypeScript a partir do schema efetivamente implantado;
+- executar OAuth e Google Drive com conta real;
+- executar smoke Gemini real e lote multipágina;
+- testar PDFs grandes reais, incluindo arquivos acima de 50 MiB e documentos extensos;
+- validar hash/identidade do original antes/depois;
+- testar cancelamento/retomada em computador, tablet e celular;
+- validar Cloudflare Pages e headers no domínio final;
+- confirmar administrativamente ausência de billing/fallback pago.
+
+### Janela copy → stage de PDF grande
+
+O fluxo já remove a cópia do Drive quando o RPC de staging retorna erro. Resta uma janela impossível de capturar com `try/catch`: o navegador pode morrer depois de `files.copy` e antes de `stage_drive_pdf_reference`. Nesse caso a cópia pode ficar órfã no Drive sem registro correspondente no banco.
+
+A próxima camada de resiliência deve identificar cópias gerenciadas pelo app de forma privada e reconciliá-las com o banco sem ampliar o escopo além de `drive.file`. `appProperties` do Drive é uma candidata apropriada porque pode ser gravada no recurso copiado e pesquisada posteriormente pelo mesmo app.
+
+### Worker desktop
+
+A arquitetura está documentada, mas o worker local ainda não foi implementado. Permanecem pendentes pareamento, credenciais por dispositivo, claim, lease, heartbeat, spool, backend CPU, modelos verificados, serviço systemd e benchmark da GPU local.
 
 ## Pendências imediatas
 
-1. obter CI integralmente verde no head atual;
-2. aplicar migrations em Supabase limpo e executar pgTAP;
-3. regenerar tipos pelo schema real;
-4. executar staging Supabase, Google Drive e Gemini;
-5. validar PDFs grandes em computador e tablet;
-6. projetar e implementar leitura remota do Picker acima de 50 MiB;
-7. implantar Cloudflare;
+1. manter CI completo verde nos novos SHAs;
+2. fechar a janela crash entre cópia Drive e staging de PDF grande;
+3. aplicar e validar o schema em Supabase staging limpo;
+4. regenerar tipos pelo schema real;
+5. executar staging Google Drive + Gemini;
+6. validar PDFs grandes reais e dispositivos móveis/tablet;
+7. implantar e verificar Cloudflare;
 8. implementar o worker desktop em etapa separada.
 
 ## Regras de continuidade
 
 - não reinserir teto diário interno;
 - não apresentar contador local como quota restante;
-- não comprimir ou substituir o original;
+- não comprimir nem substituir o original;
 - não repetir páginas já aceitas;
-- não apagar temporário antes de todas as rotas necessárias terminarem;
+- não apagar temporário necessário para retry;
 - não ampliar além de `drive.file` no MVP;
-- não persistir tokens no navegador;
+- não persistir access/refresh tokens no navegador;
 - não colocar conteúdo privado na Cloudflare;
 - não ativar R2, billing ou fallback pago automaticamente;
 - não conceder push automático a workflows temporários;
