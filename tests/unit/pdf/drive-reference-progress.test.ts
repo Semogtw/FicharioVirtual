@@ -9,11 +9,14 @@ const staged = {
 };
 
 function dependencies() {
-	const document = { destroy: vi.fn().mockResolvedValue(undefined) };
+	const document = { numPages: 3 };
+	const destroy = vi.fn().mockResolvedValue(undefined);
 	return {
 		currentUserId: vi.fn().mockResolvedValue('11111111-1111-4111-8111-111111111111'),
-		verifyIdentity: vi.fn().mockResolvedValue({ driveVersion: '4', sourceSizeBytes: staged.sourceSizeBytes }),
-		openDocument: vi.fn().mockResolvedValue(document),
+		verifyIdentity: vi
+			.fn()
+			.mockResolvedValue({ driveVersion: '4', sourceSizeBytes: staged.sourceSizeBytes }),
+		openDocument: vi.fn().mockResolvedValue({ document, destroy }),
 		inspectDocument: vi.fn(async (_document, options) => {
 			options?.onPage?.(1, 1);
 			return {
@@ -68,11 +71,15 @@ describe('oversized Drive PDF progress', () => {
 			'ocr',
 			'complete'
 		]);
-		expect(onProgress.mock.calls.find(([value]) => value.phase === 'inspecting')?.[0]).toMatchObject({
+		expect(
+			onProgress.mock.calls.find(([value]) => value.phase === 'inspecting')?.[0]
+		).toMatchObject({
 			pageNumber: 1,
 			pageCount: 1
 		});
-		expect(onProgress.mock.calls.find(([value]) => value.phase === 'rendering_ocr')?.[0]).toMatchObject({
+		expect(
+			onProgress.mock.calls.find(([value]) => value.phase === 'rendering_ocr')?.[0]
+		).toMatchObject({
 			pageNumber: 1,
 			current: 1,
 			total: 1
