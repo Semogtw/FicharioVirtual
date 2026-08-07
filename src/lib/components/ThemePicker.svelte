@@ -176,12 +176,6 @@
 			transform 120ms ease;
 	}
 
-	button:hover {
-		border-color: var(--line-strong);
-		box-shadow: 0 0.5rem 1.4rem rgb(var(--ink-rgb) / 7%);
-		transform: translateY(-0.08rem);
-	}
-
 	button.active {
 		border-color: var(--archive);
 		box-shadow: inset 0 0 0 1px var(--archive);
@@ -242,6 +236,14 @@
 
 	button:not(.active) .check {
 		background: transparent;
+	}
+
+	@media (hover: hover) and (pointer: fine) {
+		button:hover {
+			border-color: var(--line-strong);
+			box-shadow: 0 0.5rem 1.4rem rgb(var(--ink-rgb) / 7%);
+			transform: translateY(-0.08rem);
+		}
 	}
 
 	@media (max-width: 760px) {
