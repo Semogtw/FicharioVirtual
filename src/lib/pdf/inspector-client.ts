@@ -1,7 +1,5 @@
 import type { PdfInspection, PdfWorkerRequest, PdfWorkerResponse } from './types';
 
-const MAX_PDF_BYTES = 20 * 1024 * 1024;
-
 export interface PdfWorkerLike {
 	onmessage: ((event: MessageEvent<PdfWorkerResponse>) => void) | null;
 	onerror: ((event: ErrorEvent) => void) | null;
@@ -26,7 +24,7 @@ export class PdfInspectionError extends Error {
 
 	constructor(code: PdfInspectionError['code']) {
 		const messages = {
-			invalid_pdf: 'Selecione um PDF válido de até 20 MB.',
+			invalid_pdf: 'Selecione um PDF válido e não vazio.',
 			encrypted_pdf: 'Este PDF exige senha e ainda não pode ser importado.',
 			inspection_failed: 'Não foi possível analisar este PDF no dispositivo.'
 		} as const;
@@ -47,7 +45,7 @@ function id() {
 }
 
 function validate(file: File) {
-	if (file.type !== 'application/pdf' || file.size < 1 || file.size > MAX_PDF_BYTES) {
+	if (file.type !== 'application/pdf' || file.size < 1) {
 		throw new PdfInspectionError('invalid_pdf');
 	}
 }

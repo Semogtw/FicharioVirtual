@@ -14,6 +14,12 @@ const sessionId = '33333333-3333-4333-8333-333333333333';
 const resumeKey = '44444444-4444-4444-8444-444444444444';
 const timestamp = '2026-08-04T18:00:00.000Z';
 
+function reportedSizePdf(size: number) {
+	const file = new File(['pdf'], 'large.pdf', { type: 'application/pdf', lastModified: 1 });
+	Object.defineProperty(file, 'size', { value: size });
+	return file;
+}
+
 function record(overrides: Partial<StoredPdfImportRecord> = {}): StoredPdfImportRecord {
 	return {
 		version: 1,
@@ -57,6 +63,11 @@ describe('parseStoredPdfImport', () => {
 		expect(result.file).toBeInstanceOf(File);
 		expect(result.resumeKey).toBe(resumeKey);
 		expect(Object.isFrozen(result)).toBe(true);
+	});
+
+	it('accepts resumable PDFs above the obsolete 20 MiB ceiling', () => {
+		const result = parseStoredPdfImport(record({ file: reportedSizePdf(21 * 1024 * 1024) }));
+		expect(result.file.size).toBe(21 * 1024 * 1024);
 	});
 
 	it('rejects unsupported versions, unsafe files, extra keys and malformed ownership', () => {

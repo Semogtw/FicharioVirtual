@@ -44,7 +44,28 @@ function pdf(name: string) {
 	return new File(['pdf'], name, { type: 'application/pdf' });
 }
 
+function reportedSizePdf(name: string, size: number) {
+	const file = pdf(name);
+	Object.defineProperty(file, 'size', { value: size });
+	return file;
+}
+
 describe('PdfInspectionClient', () => {
+	it('does not enforce the obsolete 20 MiB logical PDF ceiling', async () => {
+		const workers: FakePdfWorker[] = [];
+		const client = new PdfInspectionClient(() => {
+			const worker = new FakePdfWorker();
+			workers.push(worker);
+			return worker;
+		});
+		const file = reportedSizePdf('large.pdf', 21 * 1024 * 1024);
+
+		const inspection = client.inspect(file);
+		expect(workers[0]?.request?.file).toBe(file);
+		workers[0]?.succeed();
+		await expect(inspection).resolves.toEqual(expect.objectContaining({ pageCount: 1 }));
+	});
+
 	it('releases the worker slot when posting the inspection request throws', async () => {
 		const workers: FakePdfWorker[] = [];
 		let call = 0;

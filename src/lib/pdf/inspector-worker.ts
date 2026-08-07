@@ -9,7 +9,6 @@ import {
 } from './types';
 
 const worker = self as DedicatedWorkerGlobalScope;
-const MAX_PDF_BYTES = 20 * 1024 * 1024;
 let initialization: Promise<void> | null = null;
 
 function initialize() {
@@ -28,11 +27,7 @@ worker.onmessage = async (event: MessageEvent<PdfWorkerRequest>) => {
 	const request = event.data;
 	if (request?.type !== 'inspect' || typeof request.id !== 'string') return;
 
-	if (
-		request.file.type !== 'application/pdf' ||
-		request.file.size < 1 ||
-		request.file.size > MAX_PDF_BYTES
-	) {
+	if (request.file.type !== 'application/pdf' || request.file.size < 1) {
 		worker.postMessage({
 			type: 'failure',
 			id: request.id,

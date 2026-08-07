@@ -3,7 +3,6 @@ import { isIsoTimestamp } from '$lib/validation/iso-timestamp';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const LOCAL_ID = /^[A-Za-z0-9_-]{1,160}$/;
-const MAX_PDF_BYTES = 20 * 1024 * 1024;
 
 export type StoredPdfImportStatus =
 	| 'queued'
@@ -108,7 +107,6 @@ export function parseStoredPdfImport(data: unknown): StoredPdfImportRecord {
 		!(file instanceof File) ||
 		file.type !== 'application/pdf' ||
 		file.size < 1 ||
-		file.size > MAX_PDF_BYTES ||
 		(notebookId !== null && (typeof notebookId !== 'string' || !UUID.test(notebookId))) ||
 		typeof consentGranted !== 'boolean' ||
 		typeof status !== 'string' ||
