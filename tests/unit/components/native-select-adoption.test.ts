@@ -25,7 +25,7 @@ describe('shadcn-style native select primitive', () => {
 	it.each(adoptedRoutes)('%s uses the shared primitive instead of styling a raw select', (path) => {
 		const source = readFileSync(path, 'utf8');
 
-		expect(source).toContain("$lib/components/ui/native-select/NativeSelect.svelte");
+		expect(source).toContain('$lib/components/ui/native-select/NativeSelect.svelte');
 		expect(source).not.toContain('<select');
 	});
 });
