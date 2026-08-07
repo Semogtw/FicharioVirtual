@@ -5,14 +5,15 @@ const source = readFileSync(
 	new URL('../../../supabase/functions/process-ocr/index.ts', import.meta.url),
 	'utf8'
 );
+const rpc = (name: string) => new RegExp(`supabase\\.rpc\\(\\s*['"]${name}['"]`);
 
 describe('process-ocr provider delegation', () => {
 	it('delegates one validated multi-page request to the shared Gemini client', () => {
 		expect(source).toContain('requestGeminiOcrBatch');
 		expect(source).toContain('parseOcrClaimResult');
 		expect(source).toContain('planOcrFailure');
-		expect(source).toContain("supabase.rpc('register_ocr_batch'");
-		expect(source).toContain("supabase.rpc('record_ocr_batch_call'");
+		expect(source).toMatch(rpc('register_ocr_batch'));
+		expect(source).toMatch(rpc('record_ocr_batch_call'));
 	});
 
 	it('keeps both the legacy one-page body and the new exact batch body', () => {
