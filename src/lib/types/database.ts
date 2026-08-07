@@ -5,9 +5,21 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 
 export type DocumentKind = 'image' | 'pdf';
 export type DocumentStatus =
-	'uploading' | 'pending' | 'processing' | 'ready' | 'partially_ready' | 'needs_review' | 'failed';
+	| 'uploading'
+	| 'pending'
+	| 'processing'
+	| 'ready'
+	| 'partially_ready'
+	| 'needs_review'
+	| 'failed';
 export type ProcessingStatus =
-	'pending' | 'processing' | 'ready' | 'retryable' | 'blocked_quota' | 'needs_review' | 'failed';
+	| 'pending'
+	| 'processing'
+	| 'ready'
+	| 'retryable'
+	| 'blocked_quota'
+	| 'needs_review'
+	| 'failed';
 export type ExtractionSource = 'native_pdf' | 'ocr' | 'manual';
 export type ImportStatus =
 	| 'draft'
@@ -285,7 +297,9 @@ export type Database = {
 					created_at?: string;
 					updated_at?: string;
 				},
-				Partial<Omit<OcrBatchRow, 'id' | 'user_id' | 'document_id' | 'page_ids' | 'page_numbers'>>
+				Partial<
+					Omit<OcrBatchRow, 'id' | 'user_id' | 'document_id' | 'page_ids' | 'page_numbers'>
+				>
 			>;
 			ocr_jobs: TableDefinition<
 				OcrJobRow,
@@ -482,6 +496,14 @@ export type Database = {
 			delete_notebook: { Args: { target_notebook_id: string }; Returns: boolean };
 			delete_tag: { Args: { target_tag_id: string }; Returns: boolean };
 			export_portable_manifest: { Args: Record<string, never>; Returns: Json };
+			finalize_drive_pdf_reference_import: {
+				Args: {
+					target_document_id: string;
+					page_descriptors: Json;
+					prompt_version?: number;
+				};
+				Returns: Json;
+			};
 			finish_ocr_batch: {
 				Args: {
 					target_batch_id: string;
@@ -495,6 +517,10 @@ export type Database = {
 			};
 			get_usage_overview: { Args: Record<string, never>; Returns: Json };
 			is_authorized_user: { Args: Record<string, never>; Returns: boolean };
+			list_drive_pdf_reference_imports: {
+				Args: Record<string, never>;
+				Returns: Json;
+			};
 			list_notebooks: {
 				Args: Record<string, never>;
 				Returns: Array<{
