@@ -104,7 +104,7 @@ async function mockSupabase(context: BrowserContext, counters: RequestCounters) 
 			counters.consents += 1;
 			return json(route, true);
 		}
-		if (path === '/rest/v1/rpc/create_image_import') {
+		if (path === '/rest/v1/rpc/create_drive_image_import') {
 			counters.metadataCreates += 1;
 			const body = request.postDataJSON() as Record<string, string>;
 			return json(route, [
@@ -114,6 +114,16 @@ async function mockSupabase(context: BrowserContext, counters: RequestCounters) 
 					ocr_job_id: body.target_job_id
 				}
 			]);
+		}
+
+		if (path === '/functions/v1/drive-resolve-folder') {
+			return json(route, { folderId: 'RootFolder_1234567890' });
+		}
+		if (path === '/functions/v1/drive-access-token') {
+			return json(route, {
+				accessToken: 'drive-access-token-e2e',
+				expiresAt: '2099-01-01T00:00:00.000Z'
+			});
 		}
 
 		if (path.startsWith('/storage/v1/object/documents/')) {
@@ -127,6 +137,57 @@ async function mockSupabase(context: BrowserContext, counters: RequestCounters) 
 
 		counters.unknown.push(`${request.method()} ${path}`);
 		return json(route, { message: 'Unexpected mocked request' }, 500);
+	});
+
+	await context.route('https://www.googleapis.com/**', async (route) => {
+		const request = route.request();
+		const url = new URL(request.url());
+		const cors = {
+			'Access-Control-Allow-Origin': 'http://127.0.0.1:4173',
+			'Access-Control-Allow-Headers':
+				'authorization,content-type,content-range,x-upload-content-length,x-upload-content-type',
+			'Access-Control-Allow-Methods': 'POST,PUT,OPTIONS',
+			'Access-Control-Expose-Headers': 'Location,Range'
+		};
+		if (request.method() === 'OPTIONS') {
+			return route.fulfill({ status: 204, headers: cors, body: '' });
+		}
+		if (request.method() === 'POST' && url.pathname === '/upload/drive/v3/files') {
+			return route.fulfill({
+				status: 200,
+				headers: {
+					...cors,
+					Location:
+						'https://www.googleapis.com/upload/drive/v3/files/session-e2e?uploadType=resumable'
+				},
+				body: ''
+			});
+		}
+		if (request.method() === 'PUT' && url.pathname === '/upload/drive/v3/files/session-e2e') {
+			counters.storageUploads += 1;
+			return route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				headers: cors,
+				body: JSON.stringify({
+					id: 'DriveFile_1234567890',
+					name: 'shared.webp',
+					mimeType: 'image/webp',
+					parents: ['RootFolder_1234567890'],
+					modifiedTime: timestamp,
+					version: '1',
+					md5Checksum: '0123456789abcdef0123456789abcdef',
+					trashed: false
+				})
+			});
+		}
+		counters.unknown.push(`${request.method()} ${url.origin}${url.pathname}`);
+		return route.fulfill({
+			status: 500,
+			contentType: 'application/json',
+			headers: cors,
+			body: JSON.stringify({ message: 'Unexpected mocked Google request' })
+		});
 	});
 }
 
@@ -208,8 +269,8 @@ test('two tabs resume one persisted image import without duplicate upload or OCR
 	await expect
 		.poll(async () => {
 			return (
-				(await first.getByText('Importação concluída', { exact: true }).count()) +
-				(await second.getByText('Importação concluída', { exact: true }).count())
+				(await first.getByText('Pronto', { exact: true }).count()) +
+				(await second.getByText('Pronto', { exact: true }).count())
 			);
 		})
 		.toBe(1);
