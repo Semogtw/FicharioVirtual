@@ -223,7 +223,12 @@
 						<div class="file-icon" aria-hidden="true">PDF</div>
 						<div class="item-copy">
 							<strong>{item.file.name}</strong>
-							<span class={`status ${item.status}`}>{labels[item.status]}</span>
+							<span
+								class={`status ${item.status}`}
+								role="status"
+								aria-live="polite"
+								aria-atomic="true">{labels[item.status]}</span
+							>
 							{#if item.progress}
 								<small
 									>{item.progress.completed}/{item.progress.total}{#if item.progress.pageNumber}
