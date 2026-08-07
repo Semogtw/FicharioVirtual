@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(43);
+select plan(47);
 
 select has_table('public', 'app_users', 'allowlist table exists');
 select has_table('public', 'notebooks', 'notebooks table exists');
@@ -119,6 +119,24 @@ select ok(
     where oid = 'public.fail_ocr_job(uuid,text,text,boolean,timestamp with time zone,timestamp with time zone)'::regprocedure
   ),
   'OCR failure relies on owner RLS instead of definer privileges'
+);
+select ok(
+  (select prosecdef from pg_proc where oid = 'public.claim_ocr_job(uuid,text,timestamp with time zone)'::regprocedure),
+  'OCR claim remains an explicit privileged quota capability'
+);
+select ok(
+  (select prosecdef from pg_proc where oid = 'public.block_ocr_job_quota(uuid,text,timestamp with time zone)'::regprocedure),
+  'quota blocking remains an explicit privileged accounting capability'
+);
+select ok(
+  position(
+    'is_authorized_user' in pg_get_functiondef('public.block_ocr_job_quota(uuid,text,timestamp with time zone)'::regprocedure)
+  ) > 0,
+  'privileged quota blocking checks the active-user allowlist'
+);
+select ok(
+  (select prosecdef from pg_proc where oid = 'public.record_ocr_consent(integer)'::regprocedure),
+  'OCR consent remains an explicit privileged allowlist capability'
 );
 
 select ok(
