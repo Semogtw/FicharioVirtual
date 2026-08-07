@@ -47,7 +47,9 @@ describe('requestGeminiOcrBatch', () => {
 		});
 
 		const body = JSON.parse(String(captured?.body)) as {
-			contents: Array<{ parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> }>;
+			contents: Array<{
+				parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }>;
+			}>;
 			generationConfig: {
 				maxOutputTokens: number;
 				responseFormat: { text: { schema: { required: string[] } } };
@@ -104,10 +106,10 @@ describe('requestGeminiOcrBatch', () => {
 				pages,
 				promptVersion: 1,
 				fetchImpl: async () =>
-					new Response(
-						JSON.stringify({ candidates: [{ content: { parts: [{ text: '{' }] } }] }),
-						{ status: 200, headers: { 'Content-Type': 'application/json' } }
-					)
+					new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: '{' }] } }] }), {
+						status: 200,
+						headers: { 'Content-Type': 'application/json' }
+					})
 			})
 		).resolves.toEqual({
 			valid: false,
