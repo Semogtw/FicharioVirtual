@@ -5,21 +5,9 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 
 export type DocumentKind = 'image' | 'pdf';
 export type DocumentStatus =
-	| 'uploading'
-	| 'pending'
-	| 'processing'
-	| 'ready'
-	| 'partially_ready'
-	| 'needs_review'
-	| 'failed';
+	'uploading' | 'pending' | 'processing' | 'ready' | 'partially_ready' | 'needs_review' | 'failed';
 export type ProcessingStatus =
-	| 'pending'
-	| 'processing'
-	| 'ready'
-	| 'retryable'
-	| 'blocked_quota'
-	| 'needs_review'
-	| 'failed';
+	'pending' | 'processing' | 'ready' | 'retryable' | 'blocked_quota' | 'needs_review' | 'failed';
 export type ExtractionSource = 'native_pdf' | 'ocr' | 'manual';
 export type ImportStatus =
 	| 'draft'
@@ -187,10 +175,7 @@ type UsageDailyRow = {
 };
 
 type DrivePdfReferenceImportStatus =
-	| 'pending_inspection'
-	| 'inspecting'
-	| 'ready_to_finalize'
-	| 'failed';
+	'pending_inspection' | 'inspecting' | 'ready_to_finalize' | 'failed';
 
 type DrivePdfReferenceImportRow = {
 	document_id: string;
@@ -297,9 +282,7 @@ export type Database = {
 					created_at?: string;
 					updated_at?: string;
 				},
-				Partial<
-					Omit<OcrBatchRow, 'id' | 'user_id' | 'document_id' | 'page_ids' | 'page_numbers'>
-				>
+				Partial<Omit<OcrBatchRow, 'id' | 'user_id' | 'document_id' | 'page_ids' | 'page_numbers'>>
 			>;
 			ocr_jobs: TableDefinition<
 				OcrJobRow,
@@ -514,6 +497,10 @@ export type Database = {
 					finished_at: string;
 				};
 				Returns: boolean;
+			};
+			get_drive_pdf_reference_identity: {
+				Args: { target_document_id: string };
+				Returns: Json;
 			};
 			get_usage_overview: { Args: Record<string, never>; Returns: Json };
 			is_authorized_user: { Args: Record<string, never>; Returns: boolean };
