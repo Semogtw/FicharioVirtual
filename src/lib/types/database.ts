@@ -5,21 +5,9 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 
 export type DocumentKind = 'image' | 'pdf';
 export type DocumentStatus =
-	| 'uploading'
-	| 'pending'
-	| 'processing'
-	| 'ready'
-	| 'partially_ready'
-	| 'needs_review'
-	| 'failed';
+	'uploading' | 'pending' | 'processing' | 'ready' | 'partially_ready' | 'needs_review' | 'failed';
 export type ProcessingStatus =
-	| 'pending'
-	| 'processing'
-	| 'ready'
-	| 'retryable'
-	| 'blocked_quota'
-	| 'needs_review'
-	| 'failed';
+	'pending' | 'processing' | 'ready' | 'retryable' | 'blocked_quota' | 'needs_review' | 'failed';
 export type ExtractionSource = 'native_pdf' | 'ocr' | 'manual';
 export type ImportStatus =
 	| 'draft'
@@ -366,6 +354,19 @@ export type Database = {
 				Args: { target_page_id: string; target_model: string; claimed_at: string };
 				Returns: Json;
 			};
+			complete_drive_legacy_migration: {
+				Args: {
+					target_document_id: string;
+					expected_storage_path: string;
+					target_drive_file_id: string;
+					target_drive_parent_folder_id: string;
+					target_drive_mime_type: string;
+					target_drive_modified_time: string;
+					target_drive_version: string;
+					target_drive_md5_checksum: string | null;
+				};
+				Returns: boolean;
+			};
 			complete_ocr_job: {
 				Args: {
 					target_page_id: string;
@@ -375,6 +376,46 @@ export type Database = {
 					completed_at: string;
 				};
 				Returns: boolean;
+			};
+			create_drive_image_import: {
+				Args: {
+					target_document_id: string;
+					target_page_id: string;
+					target_job_id: string;
+					target_notebook_id: string | null;
+					document_title: string;
+					original_filename: string;
+					target_drive_file_id: string;
+					target_drive_parent_folder_id: string;
+					target_drive_mime_type: string;
+					target_drive_modified_time: string;
+					target_drive_version: string;
+					target_drive_md5_checksum: string | null;
+					thumbnail_storage_path: string;
+					prepared_sha256: string;
+					source_created_at?: string | null;
+					prompt_version?: number;
+				};
+				Returns: Array<{ document_id: string; page_id: string; ocr_job_id: string }>;
+			};
+			create_drive_pdf_import: {
+				Args: {
+					target_document_id: string;
+					target_notebook_id: string | null;
+					document_title: string;
+					original_filename: string;
+					target_drive_file_id: string;
+					target_drive_parent_folder_id: string;
+					target_drive_mime_type: string;
+					target_drive_modified_time: string;
+					target_drive_version: string;
+					target_drive_md5_checksum: string | null;
+					prepared_sha256: string;
+					source_created_at: string | null;
+					page_descriptors: Json;
+					prompt_version?: number;
+				};
+				Returns: Json;
 			};
 			create_image_import: {
 				Args: {
@@ -471,6 +512,18 @@ export type Database = {
 					updated_at: string;
 				}>;
 			};
+			reconnect_missing_drive_document: {
+				Args: {
+					target_document_id: string;
+					target_drive_file_id: string;
+					target_drive_parent_folder_id: string;
+					target_drive_mime_type: string;
+					target_drive_modified_time: string;
+					target_drive_version: string;
+					target_drive_md5_checksum: string | null;
+				};
+				Returns: boolean;
+			};
 			record_ocr_batch_call: {
 				Args: { target_batch_id: string; attempted_pages: number; called_at: string };
 				Returns: boolean;
@@ -495,6 +548,10 @@ export type Database = {
 			};
 			rename_tag: {
 				Args: { target_tag_id: string; tag_name: string };
+				Returns: boolean;
+			};
+			resolve_drive_conflict: {
+				Args: { target_conflict_id: string; target_resolution: 'retry_local' | 'mark_missing' };
 				Returns: boolean;
 			};
 			resolve_page_locations: {
