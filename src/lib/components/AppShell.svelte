@@ -34,7 +34,9 @@
 	function isCurrent(href: string) {
 		const pathname = normalizePath(page.url.pathname);
 		const target = normalizePath(href);
-		return target === '/' ? pathname === '/' : pathname === target || pathname.startsWith(`${target}/`);
+		return target === '/'
+			? pathname === '/'
+			: pathname === target || pathname.startsWith(`${target}/`);
 	}
 
 	function search(query: string) {
