@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
 	import Button from '$lib/components/Button.svelte';
+	import NativeSelect from '$lib/components/ui/native-select/NativeSelect.svelte';
 	import DocumentCard from '$lib/components/DocumentCard.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import type {
@@ -115,30 +116,34 @@
 	>
 		<label>
 			<span>Caderno</span>
-			<select bind:value={notebookId} disabled={notebookLoading} onchange={() => void load(true)}>
+			<NativeSelect
+				bind:value={notebookId}
+				disabled={notebookLoading}
+				onchange={() => void load(true)}
+			>
 				<option value="">Todos</option>
 				{#each notebooks as notebook}
 					<option value={notebook.id}>{notebook.name}</option>
 				{/each}
-			</select>
+			</NativeSelect>
 		</label>
 		<label>
 			<span>Tipo</span>
-			<select bind:value={kind} onchange={() => void load(true)}>
+			<NativeSelect bind:value={kind} onchange={() => void load(true)}>
 				<option value="">Todos</option>
 				<option value="image">Imagem</option>
 				<option value="pdf">PDF</option>
-			</select>
+			</NativeSelect>
 		</label>
 		<label>
 			<span>Estado</span>
-			<select bind:value={status} onchange={() => void load(true)}>
+			<NativeSelect bind:value={status} onchange={() => void load(true)}>
 				<option value="">Todos</option>
 				<option value="ready">Pronto</option>
 				<option value="processing">Processando</option>
 				<option value="needs_review">Revisar</option>
 				<option value="failed">Falhou</option>
-			</select>
+			</NativeSelect>
 		</label>
 		<label>
 			<span>De</span>
@@ -262,7 +267,6 @@
 		font-weight: 740;
 	}
 
-	select,
 	input {
 		width: 100%;
 		min-height: 2.7rem;
