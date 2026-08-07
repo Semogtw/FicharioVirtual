@@ -8,6 +8,7 @@ const documentId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const fileId = '1AbCdEfGhIjKlMnOpQrStUvWxYz_123456';
 const parentFolderId = '0ARootFolderId_123456789';
 const sourceSizeBytes = 70 * 1024 * 1024;
+type IdentityClient = Parameters<typeof verifyDrivePdfReferenceIdentity>[0]['client'];
 
 function rpcIdentity() {
 	return {
@@ -35,10 +36,13 @@ function liveMetadata() {
 	};
 }
 
-function client(data: unknown = rpcIdentity(), error: unknown = null) {
+function client(data: unknown = rpcIdentity(), error: unknown = null): IdentityClient {
 	return {
+		functions: {
+			invoke: vi.fn().mockResolvedValue({ data: null, error: null })
+		},
 		rpc: vi.fn().mockResolvedValue({ data, error })
-	} as never;
+	};
 }
 
 describe('verifyDrivePdfReferenceIdentity', () => {
@@ -59,9 +63,7 @@ describe('verifyDrivePdfReferenceIdentity', () => {
 		expect(db.rpc).toHaveBeenCalledWith('get_drive_pdf_reference_identity', {
 			target_document_id: documentId
 		});
-		expect(getMetadata).toHaveBeenCalledWith(
-			expect.objectContaining({ client: db, fileId })
-		);
+		expect(getMetadata).toHaveBeenCalledWith(expect.objectContaining({ client: db, fileId }));
 	});
 
 	it.each([
