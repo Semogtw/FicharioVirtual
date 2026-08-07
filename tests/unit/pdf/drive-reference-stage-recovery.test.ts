@@ -16,7 +16,7 @@ const expected = {
 	documentId,
 	driveFileId,
 	driveParentFolderId: parentFolderId,
-	driveMimeType: 'application/pdf',
+	driveMimeType: 'application/pdf' as const,
 	driveModifiedTime: modifiedTime,
 	driveVersion,
 	driveMd5Checksum: md5Checksum,
@@ -42,6 +42,16 @@ describe('Drive PDF reference staging recovery', () => {
 			sourceSizeBytes,
 			status: 'pending_inspection'
 		});
+	});
+
+	it('also recovers an exact identity when Drive does not expose an MD5 checksum', async () => {
+		const withoutMd5 = { ...expected, driveMd5Checksum: null };
+		await expect(
+			recoverDrivePdfReferenceStage({
+				client: client(withoutMd5),
+				expected: withoutMd5
+			})
+		).resolves.toMatchObject({ documentId, driveFileId, sourceSizeBytes });
 	});
 
 	it('returns null only for the explicit SQL state meaning no staged identity exists', async () => {
