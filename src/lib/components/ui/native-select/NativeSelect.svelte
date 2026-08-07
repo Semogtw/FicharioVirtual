@@ -27,7 +27,13 @@
 		{@render children()}
 	</select>
 	<svg aria-hidden="true" viewBox="0 0 20 20" fill="none">
-		<path d="m6 8 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+		<path
+			d="m6 8 4 4 4-4"
+			stroke="currentColor"
+			stroke-width="1.8"
+			stroke-linecap="round"
+			stroke-linejoin="round"
+		/>
 	</svg>
 </div>
 
