@@ -5,7 +5,7 @@ const functionPath = 'supabase/functions/drive-resolve-folder/index.ts';
 const servicePath = 'src/lib/drive/resolve-folder.ts';
 const rpc = (name: string) => new RegExp(`rpc\\(\\s*['"]${name}['"]`);
 const tokenInBrowserResponse = (name: 'accessToken' | 'refreshToken') =>
-	new RegExp(`respond\\([\\s\\S]{0,180}\\b${name}\\b`);
+	new RegExp(`respond\\(\\s*\\d+\\s*,\\s*\\{[^}]*\\b${name}\\s*:`);
 
 describe('Drive folder resolution boundary', () => {
 	it('authenticates, validates the hierarchy, and persists each created folder identity', () => {
