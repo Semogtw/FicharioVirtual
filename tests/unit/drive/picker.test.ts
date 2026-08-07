@@ -46,15 +46,15 @@ describe('Google Picker contracts', () => {
 		).toThrow('Invalid Google Picker response');
 	});
 
-	it('accepts direct-download metadata through 50 MiB and rejects larger files', () => {
+	it('accepts metadata above the direct-download ceiling for reference imports', () => {
 		expect(parsePickerSelection(picked(String(30 * 1024 * 1024)))?.sizeBytes).toBe(
 			30 * 1024 * 1024
 		);
 		expect(parsePickerSelection(picked(String(50 * 1024 * 1024)))?.sizeBytes).toBe(
 			50 * 1024 * 1024
 		);
-		expect(() => parsePickerSelection(picked(String(50 * 1024 * 1024 + 1)))).toThrow(
-			'Invalid Google Picker response'
+		expect(parsePickerSelection(picked(String(120 * 1024 * 1024)))?.sizeBytes).toBe(
+			120 * 1024 * 1024
 		);
 	});
 
