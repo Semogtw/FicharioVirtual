@@ -4,21 +4,25 @@ import { describe, expect, it } from 'vitest';
 const path = 'src/routes/import/drive/+page.svelte';
 
 describe('explicit Google Drive import page', () => {
-	it('selects one bounded Drive file and dispatches it to the existing image or PDF queue', () => {
+	it('dispatches small Drive files to local queues and oversized PDFs to durable references', () => {
 		const source = readFileSync(path, 'utf8');
 
-		expect(source).toContain('selectAndDownloadGoogleDriveFile');
+		expect(source).toContain('selectGoogleDriveImportSource');
+		expect(source).toContain('stageDrivePdfReference');
 		expect(source).toContain('GOOGLE_PICKER_MIME_TYPES');
 		expect(source).toContain('MAX_DIRECT_PICKER_DOWNLOAD_BYTES');
 		expect(source).not.toContain('maximumBytes: 20 * 1024 * 1024');
-		expect(source).toContain('addImages([file]');
-		expect(source).toContain('addPdfs([file]');
+		expect(source).toContain("selected.kind === 'reference'");
+		expect(source).toContain("selected.selection.mimeType !== 'application/pdf'");
+		expect(source).toContain('addImages([selected.file]');
+		expect(source).toContain('addPdfs([selected.file]');
 		expect(source).toContain("label={selecting ? 'Abrindo Drive…' : 'Escolher no Google Drive'}");
 	});
 
-	it('describes the direct browser ceiling without treating it as a document or OCR limit', () => {
+	it('describes the direct browser ceiling and the reference path for larger PDFs', () => {
 		const source = readFileSync(path, 'utf8');
 		expect(source).toContain('download direto no navegador aceita até 50 MiB');
+		expect(source).toContain('PDFs maiores são preservados no Drive e preparados por referência');
 		expect(source).toContain('não do documento lógico nem dos lotes de OCR');
 	});
 
