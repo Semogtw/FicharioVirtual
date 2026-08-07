@@ -1,11 +1,11 @@
 import { env } from '$env/dynamic/public';
 import { z } from 'zod';
 import { parseDriveConnection, type DriveConnection } from '$lib/drive/connection-state';
-import { parsePublicEnv } from '$lib/env/public';
 import { getSupabaseClient } from './supabase';
 
 const CONNECTION_COLUMNS =
 	'status,google_email,root_folder_id,last_sync_started_at,last_sync_completed_at,last_error_code,last_error_message';
+const GOOGLE_CLIENT_ID = /^\d+-[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$/;
 
 export type DriveServiceClientLike = {
 	from(name: 'drive_connections'): {
@@ -43,7 +43,8 @@ function defaultClient(): DriveServiceClientLike {
 }
 
 export function isDriveOAuthConfigured(source: Record<string, string | undefined> = env): boolean {
-	return parsePublicEnv(source).PUBLIC_GOOGLE_CLIENT_ID !== null;
+	const clientId = source.PUBLIC_GOOGLE_CLIENT_ID?.trim();
+	return clientId !== undefined && GOOGLE_CLIENT_ID.test(clientId);
 }
 
 export async function loadDriveConnection(
