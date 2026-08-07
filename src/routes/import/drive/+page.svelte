@@ -9,10 +9,7 @@
 		isGooglePickerConfigured,
 		selectGoogleDriveImportSource
 	} from '$lib/drive/picker-service';
-	import {
-		stageDrivePdfReference,
-		type StagedDrivePdfReference
-	} from '$lib/pdf/drive-reference';
+	import { stageDrivePdfReference, type StagedDrivePdfReference } from '$lib/pdf/drive-reference';
 	import {
 		importStagedDrivePdfReference,
 		type DrivePdfReferenceImportProgress
@@ -384,7 +381,9 @@
 								{:else}
 									<Button
 										label="Retomar"
-										disabled={selecting || resumingDocumentId !== null || deletingDocumentId !== null}
+										disabled={selecting ||
+											resumingDocumentId !== null ||
+											deletingDocumentId !== null}
 										onclick={() => void resumeReference(reference)}
 									/>
 								{/if}
