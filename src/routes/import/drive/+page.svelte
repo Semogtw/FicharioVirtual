@@ -14,6 +14,7 @@
 		importStagedDrivePdfReference,
 		type DrivePdfReferenceImportProgress
 	} from '$lib/pdf/drive-reference-import';
+	import { reconcileOrphanedDrivePdfReferenceCopies } from '$lib/pdf/drive-reference-orphan-reconciliation';
 	import {
 		listDrivePdfReferences,
 		type ResumableDrivePdfReference
@@ -268,6 +269,7 @@
 	}
 
 	onMount(() => {
+		void reconcileOrphanedDrivePdfReferenceCopies().catch(() => undefined);
 		void Promise.all([loadNotebooks(), loadPendingReferences()]);
 	});
 
