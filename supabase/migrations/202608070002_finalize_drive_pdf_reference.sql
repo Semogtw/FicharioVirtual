@@ -15,7 +15,7 @@ declare
   staged_document_status public.document_status;
   staged_document_kind public.document_kind;
   staged_storage_path text;
-  page_count integer;
+  resolved_page_count integer;
   descriptor_count integer;
   distinct_page_count integer;
   minimum_page integer;
@@ -63,8 +63,8 @@ begin
     raise exception 'invalid PDF page descriptors' using errcode = '22023';
   end if;
 
-  page_count := jsonb_array_length(page_descriptors);
-  if page_count < 1 or page_count > 10000 then
+  resolved_page_count := jsonb_array_length(page_descriptors);
+  if resolved_page_count < 1 or resolved_page_count > 10000 then
     raise exception 'invalid PDF page count' using errcode = '22023';
   end if;
 
@@ -81,10 +81,10 @@ begin
     and (value->>'pageNumber') ~ '^[0-9]+$'
     and jsonb_typeof(value->'needsOcr') = 'boolean';
 
-  if descriptor_count <> page_count
-    or distinct_page_count <> page_count
+  if descriptor_count <> resolved_page_count
+    or distinct_page_count <> resolved_page_count
     or minimum_page <> 1
-    or maximum_page <> page_count
+    or maximum_page <> resolved_page_count
   then
     raise exception 'PDF page descriptors must be continuous and unique' using errcode = '22023';
   end if;
@@ -138,14 +138,14 @@ begin
   end loop;
 
   document_state := case
-    when ocr_page_count = page_count then 'processing'::public.document_status
+    when ocr_page_count = resolved_page_count then 'processing'::public.document_status
     when ocr_page_count > 0 then 'partially_ready'::public.document_status
     when review_page_count > 0 then 'needs_review'::public.document_status
     else 'ready'::public.document_status
   end;
 
   update public.documents
-  set page_count = finalize_drive_pdf_reference_import.page_count,
+  set page_count = resolved_page_count,
       status = document_state
   where id = target_document_id
     and user_id = current_user_id;
@@ -236,7 +236,7 @@ begin
 
   return jsonb_build_object(
     'documentId', target_document_id,
-    'pageCount', page_count,
+    'pageCount', resolved_page_count,
     'ocrPageCount', ocr_page_count,
     'reviewPageCount', review_page_count,
     'status', document_state
