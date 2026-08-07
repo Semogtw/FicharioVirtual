@@ -14,6 +14,22 @@ O workflow `Verify Supabase staging` verifica autenticação, allowlist, isolame
 
 As contas precisam ser diferentes e devem permanecer reservadas ao gate. Não reutilize a conta pessoal administradora.
 
+## Sincronizar migrations antes do gate
+
+O histórico remoto precisa corresponder aos arquivos versionados em `supabase/migrations/`. Faça a sincronização pelo Supabase CLI, preservando os números das migrations do repositório:
+
+```bash
+supabase link --project-ref <project-ref>
+supabase db push
+supabase migration list --linked
+```
+
+Não substitua esse fluxo por várias chamadas avulsas ao Management API nem aplique somente a migration mais nova quando o staging estiver atrasado. Esses atalhos podem executar DDL fora de ordem ou registrar versões diferentes das existentes no Git, fazendo um `supabase db push` posterior interpretar incorretamente o histórico.
+
+O deploy de migrations exige credenciais administrativas próprias do ambiente de implantação. Elas não pertencem ao workflow público de verificação abaixo, que deliberadamente usa apenas a chave publicável. Se o repositório ganhar um workflow de deploy no futuro, mantenha `SUPABASE_ACCESS_TOKEN` e a credencial do banco em um environment protegido e execute `db push` antes de qualquer gate remoto.
+
+Depois do push, confirme que a última versão listada em `supabase migration list --linked` é a mesma migration mais recente do diretório local. Só então execute os testes de staging e os advisors de segurança/performance.
+
 ## Configurar o environment do GitHub
 
 Crie um environment chamado `staging` no repositório e cadastre os seguintes secrets:
