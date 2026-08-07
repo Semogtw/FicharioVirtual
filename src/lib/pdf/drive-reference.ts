@@ -6,6 +6,11 @@ import type { GooglePickerSelection } from '$lib/drive/picker';
 import type { DriveFile } from '$lib/drive/types';
 import { getSupabaseClient } from '$lib/services/supabase';
 import type { Database } from '$lib/types/database';
+import {
+	DrivePdfReferenceStageRecoveryError,
+	recoverDrivePdfReferenceStage,
+	type DrivePdfReferenceStageIdentity
+} from './drive-reference-stage-recovery';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DRIVE_ID = /^[A-Za-z0-9_-]{10,256}$/;
@@ -47,6 +52,10 @@ export interface DrivePdfReferenceDependencies {
 	}): Promise<DriveFile>;
 	deleteFile(input: { client: ReferenceClient; fileId: string }): Promise<void>;
 	stage(input: StageInput): Promise<unknown>;
+	recoverStage(input: {
+		client: ReferenceClient;
+		expected: DrivePdfReferenceStageIdentity;
+	}): Promise<StagedDrivePdfReference | null>;
 }
 
 function hasExactKeys(record: Record<string, unknown>, expected: readonly string[]) {
@@ -146,7 +155,9 @@ const defaultDependencies: DrivePdfReferenceDependencies = {
 		});
 		if (error) throw error;
 		return data;
-	}
+	},
+	recoverStage: ({ client, expected }) =>
+		recoverDrivePdfReferenceStage({ client, expected })
 };
 
 export async function stageDrivePdfReference({
@@ -186,6 +197,16 @@ export async function stageDrivePdfReference({
 		}),
 		parentFolderId
 	);
+	const expectedStageIdentity: DrivePdfReferenceStageIdentity = Object.freeze({
+		documentId,
+		driveFileId: copied.id,
+		driveParentFolderId: parentFolderId,
+		driveMimeType: 'application/pdf',
+		driveModifiedTime: copied.modifiedTime,
+		driveVersion: copied.version,
+		driveMd5Checksum: copied.md5Checksum,
+		sourceSizeBytes: source.sizeBytes
+	});
 
 	try {
 		const staged = await dependencies.stage({
@@ -208,6 +229,18 @@ export async function stageDrivePdfReference({
 			sourceSizeBytes: source.sizeBytes
 		});
 	} catch {
+		let recovered: StagedDrivePdfReference | null;
+		try {
+			recovered = await dependencies.recoverStage({
+				client,
+				expected: expectedStageIdentity
+			});
+		} catch (error) {
+			if (error instanceof DrivePdfReferenceStageRecoveryError) throw error;
+			throw new DrivePdfReferenceStageRecoveryError();
+		}
+		if (recovered !== null) return recovered;
+
 		try {
 			await dependencies.deleteFile({ client, fileId: copied.id });
 		} catch {
