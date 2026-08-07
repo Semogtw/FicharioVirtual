@@ -75,10 +75,9 @@ Deno.serve(async (request) => {
 		const admin = createClient(supabaseUrl, serviceRoleKey, {
 			auth: { persistSession: false, autoRefreshToken: false }
 		});
-		const { data: refreshToken, error: refreshError } = await admin.rpc(
-			'get_drive_refresh_token',
-			{ target_user_id: user.id }
-		);
+		const { data: refreshToken, error: refreshError } = await admin.rpc('get_drive_refresh_token', {
+			target_user_id: user.id
+		});
 		if (refreshError || typeof refreshToken !== 'string' || refreshToken.length < 8) {
 			return respond(409, 'drive_not_connected');
 		}
@@ -114,7 +113,8 @@ Deno.serve(async (request) => {
 
 	if (paths.length > 0) {
 		const { error: storageError } = await supabase.storage.from('documents').remove(paths);
-		if (document.drive_file_id === null && storageError) return respond(503, 'storage_delete_failed');
+		if (document.drive_file_id === null && storageError)
+			return respond(503, 'storage_delete_failed');
 	}
 
 	const { error: deleteError } = await supabase.from('documents').delete().eq('id', documentId);
