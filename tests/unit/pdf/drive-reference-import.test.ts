@@ -29,12 +29,14 @@ function dependencies() {
 	return {
 		document,
 		currentUserId: vi.fn().mockResolvedValue(userId),
+		verifyIdentity: vi.fn().mockResolvedValue({
+			driveVersion: '4',
+			sourceSizeBytes: staged.sourceSizeBytes
+		}),
 		openDocument: vi.fn().mockResolvedValue(document),
 		inspectDocument: vi.fn().mockResolvedValue(inspection()),
 		recordOcrConsent: vi.fn().mockResolvedValue(undefined),
-		renderPage: vi
-			.fn()
-			.mockResolvedValue(new Blob([new Uint8Array(1024)], { type: 'image/webp' })),
+		renderPage: vi.fn().mockResolvedValue(new Blob([new Uint8Array(1024)], { type: 'image/webp' })),
 		upload: vi.fn().mockResolvedValue(undefined),
 		remove: vi.fn().mockResolvedValue(undefined),
 		finalize: vi.fn().mockImplementation(async ({ pages }) => ({
@@ -59,13 +61,14 @@ describe('importStagedDrivePdfReference', () => {
 			dependencies: deps
 		});
 
+		expect(deps.verifyIdentity).toHaveBeenCalledOnce();
 		expect(deps.openDocument).toHaveBeenCalledWith(
 			expect.objectContaining({
 				client: expect.anything(),
 				fileId: driveFileId,
 				totalBytes: staged.sourceSizeBytes
 			})
-	);
+		);
 		expect(deps.inspectDocument).toHaveBeenCalledWith(deps.document, expect.anything());
 		expect(deps.recordOcrConsent).toHaveBeenCalledOnce();
 		expect(deps.renderPage).toHaveBeenCalledTimes(1);
@@ -123,6 +126,7 @@ describe('importStagedDrivePdfReference', () => {
 			})
 		).rejects.toMatchObject({ name: 'PdfConsentRequiredError' });
 
+		expect(deps.verifyIdentity).toHaveBeenCalledOnce();
 		expect(deps.recordOcrConsent).not.toHaveBeenCalled();
 		expect(deps.renderPage).not.toHaveBeenCalled();
 		expect(deps.upload).not.toHaveBeenCalled();
@@ -145,9 +149,7 @@ describe('importStagedDrivePdfReference', () => {
 		).rejects.toThrow('Não foi possível concluir a importação do PDF grande.');
 
 		expect(deps.upload).toHaveBeenCalledOnce();
-		expect(deps.remove).toHaveBeenCalledWith([
-			`${userId}/${documentId}/pages/2.webp`
-		]);
+		expect(deps.remove).toHaveBeenCalledWith([`${userId}/${documentId}/pages/2.webp`]);
 		expect(deps.processPage).not.toHaveBeenCalled();
 		expect(deps.document.destroy).toHaveBeenCalledOnce();
 	});
