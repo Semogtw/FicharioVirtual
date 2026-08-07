@@ -16,7 +16,7 @@ describe('explicit Google Drive import page', () => {
 		expect(source).toContain("selected.kind === 'reference'");
 		expect(source).toContain("selected.selection.mimeType !== 'application/pdf'");
 		expect(source).toContain('const staged = await stageDrivePdfReference');
-		expect(source).toContain('await importStagedDrivePdfReference');
+		expect(source).toContain('await runReferenceImport(staged, selected.selection.name)');
 		expect(source).toContain('addImages([selected.file]');
 		expect(source).toContain('addPdfs([selected.file]');
 		expect(source).toContain("label={selecting ? 'Abrindo Drive…' : 'Escolher no Google Drive'}");
@@ -34,9 +34,8 @@ describe('explicit Google Drive import page', () => {
 		expect(source).toContain('await deleteDocument(reference.documentId)');
 		expect(source).toContain('await loadPendingReferences()');
 		expect(source).toContain('PDFs grandes preservados');
-		expect(source).toContain(
-			"label={resumingDocumentId === reference.documentId ? 'Retomando…' : 'Retomar'}"
-		);
+		expect(source).toContain('label="Retomar"');
+		expect(source).toContain('label="Parar processamento"');
 		expect(source).toMatch(
 			/label=\{deletingDocumentId === reference\.documentId\s*\? 'Excluindo…'\s*:\s*'Excluir cópia'\}/
 		);
