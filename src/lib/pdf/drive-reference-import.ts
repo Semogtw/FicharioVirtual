@@ -15,7 +15,7 @@ import {
 	type DrivePdfRangeInspection,
 	type DrivePdfRangeInspectionOptions
 } from './drive-range-inspector';
-import { openDrivePdfRangeDocument } from './drive-range-transport';
+import { openDrivePdfRangeDocument, type DrivePdfRangeDocument } from './drive-range-transport';
 import { buildPdfImportPlan, type PdfImportPagePlan } from './import-plan';
 import { renderPdfDocumentPage } from './renderer';
 import {
@@ -33,13 +33,7 @@ type PageProcessResult = Pick<OcrRunResult, 'state'> & { needsReview?: boolean }
 
 export type DrivePdfReferenceImportProgress = Readonly<{
 	phase:
-		| 'verifying'
-		| 'opening'
-		| 'inspecting'
-		| 'rendering_ocr'
-		| 'publishing'
-		| 'ocr'
-		| 'complete';
+		'verifying' | 'opening' | 'inspecting' | 'rendering_ocr' | 'publishing' | 'ocr' | 'complete';
 	pageNumber?: number;
 	pageCount?: number;
 	current?: number;
@@ -65,7 +59,7 @@ export interface DrivePdfReferenceImportDependencies {
 		client: DriveTokenClientLike;
 		fileId: string;
 		totalBytes: number;
-	}): Promise<PDFDocumentProxy>;
+	}): Promise<DrivePdfRangeDocument>;
 	inspectDocument(
 		document: PDFDocumentProxy,
 		options?: DrivePdfRangeInspectionOptions
@@ -250,6 +244,7 @@ export async function importStagedDrivePdfReference({
 	const runtime = dependencies ?? createDefaultDependencies(client);
 	const uploadedPaths: string[] = [];
 	let metadataPublished = false;
+	let rangeDocument: DrivePdfRangeDocument | null = null;
 	let document: PDFDocumentProxy | null = null;
 
 	try {
@@ -267,11 +262,12 @@ export async function importStagedDrivePdfReference({
 		if (signal?.aborted) throw abortError();
 
 		safelyReportProgress(onProgress, { phase: 'opening' });
-		document = await runtime.openDocument({
+		rangeDocument = await runtime.openDocument({
 			client,
 			fileId: staged.driveFileId,
 			totalBytes: staged.sourceSizeBytes
 		});
+		document = rangeDocument.document;
 		const inspection = await runtime.inspectDocument(document, {
 			signal,
 			onPage: (pageNumber, pageCount) =>
@@ -355,6 +351,6 @@ export async function importStagedDrivePdfReference({
 		if (error instanceof DOMException && error.name === 'AbortError') throw error;
 		throw new DrivePdfReferenceImportError();
 	} finally {
-		if (document) await document.destroy().catch(() => undefined);
+		await rangeDocument?.destroy().catch(() => undefined);
 	}
 }
