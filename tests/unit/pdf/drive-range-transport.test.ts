@@ -18,9 +18,9 @@ async function flush() {
 
 describe('DrivePdfDataRangeTransport', () => {
 	it('maps PDF.js range requests to exact Drive byte ranges', async () => {
-		const downloadRange = vi.fn().mockResolvedValue(
-			new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'application/pdf' })
-		);
+		const downloadRange = vi
+			.fn()
+			.mockResolvedValue(new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'application/pdf' }));
 		const onFailure = vi.fn();
 		const transport = new DrivePdfDataRangeTransport({
 			client: client(),
@@ -83,23 +83,26 @@ describe('openDrivePdfRangeDocument', () => {
 		const document = { numPages: 321 } as never;
 		const destroy = vi.fn().mockResolvedValue(undefined);
 		const configureWorker = vi.fn().mockResolvedValue(undefined);
-		const createLoadingTask = vi.fn((_source: unknown) => ({
-			promise: Promise.resolve(document),
-			destroy
-		}));
+		const createLoadingTask = vi.fn((source: unknown) => {
+			void source;
+			return {
+				promise: Promise.resolve(document),
+				destroy
+			};
+		});
 
-		await expect(
-			openDrivePdfRangeDocument({
-				client: client(),
-				fileId,
-				totalBytes,
-				dependencies: {
-					downloadRange: vi.fn(),
-					configureWorker,
-					createLoadingTask
-				}
-			})
-		).resolves.toBe(document);
+		const opened = await openDrivePdfRangeDocument({
+			client: client(),
+			fileId,
+			totalBytes,
+			dependencies: {
+				downloadRange: vi.fn(),
+				configureWorker,
+				createLoadingTask
+			}
+		});
+
+		expect(opened.document).toBe(document);
 
 		expect(configureWorker).toHaveBeenCalledOnce();
 		expect(configureWorker.mock.invocationCallOrder[0]).toBeLessThan(
@@ -117,5 +120,9 @@ describe('openDrivePdfRangeDocument', () => {
 		expect(source).not.toHaveProperty('data');
 		expect(source.range).toBeInstanceOf(DrivePdfDataRangeTransport);
 		expect(destroy).not.toHaveBeenCalled();
+
+		await opened.destroy();
+		await opened.destroy();
+		expect(destroy).toHaveBeenCalledOnce();
 	});
 });
