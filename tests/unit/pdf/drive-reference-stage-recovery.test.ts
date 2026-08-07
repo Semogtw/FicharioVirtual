@@ -23,17 +23,29 @@ const expected = {
 	sourceSizeBytes
 };
 
-function client(data: unknown, error: unknown = null) {
+function client(
+	data: unknown,
+	error: unknown = null,
+	documentLookup: { data: unknown; error: unknown } = { data: null, error: null }
+) {
 	return {
-		rpc: vi.fn().mockResolvedValue({ data, error })
+		rpc: vi.fn().mockResolvedValue({ data, error }),
+		from: vi.fn(() => ({
+			select: vi.fn(() => ({
+				eq: vi.fn(() => ({
+					maybeSingle: vi.fn().mockResolvedValue(documentLookup)
+				}))
+			}))
+		}))
 	} as never;
 }
 
 describe('Drive PDF reference staging recovery', () => {
 	it('recovers an exact durable stage after the RPC response was lost', async () => {
+		const current = client(expected);
 		await expect(
 			recoverDrivePdfReferenceStage({
-				client: client(expected),
+				client: current,
 				expected
 			})
 		).resolves.toEqual({
@@ -42,6 +54,7 @@ describe('Drive PDF reference staging recovery', () => {
 			sourceSizeBytes,
 			status: 'pending_inspection'
 		});
+		expect(current.from).not.toHaveBeenCalled();
 	});
 
 	it('also recovers an exact identity when Drive does not expose an MD5 checksum', async () => {
@@ -54,16 +67,37 @@ describe('Drive PDF reference staging recovery', () => {
 		).resolves.toMatchObject({ documentId, driveFileId, sourceSizeBytes });
 	});
 
-	it('returns null only for the explicit SQL state meaning no staged identity exists', async () => {
+	it('returns null only when SQL reports no staged identity and the document row is also absent', async () => {
+		const current = client(null, {
+			code: '55000',
+			message: 'Drive PDF reference identity is unavailable'
+		});
 		await expect(
-			recoverDrivePdfReferenceStage({
-				client: client(null, {
-					code: '55000',
-					message: 'Drive PDF reference identity is unavailable'
-				}),
-				expected
-			})
+			recoverDrivePdfReferenceStage({ client: current, expected })
 		).resolves.toBeNull();
+		expect(current.from).toHaveBeenCalledWith('documents');
+	});
+
+	it('preserves the Drive copy if staging vanished because the document may already be finalized', async () => {
+		const current = client(
+			null,
+			{ code: '55000', message: 'Drive PDF reference identity is unavailable' },
+			{ data: { id: documentId }, error: null }
+		);
+		await expect(
+			recoverDrivePdfReferenceStage({ client: current, expected })
+		).rejects.toBeInstanceOf(DrivePdfReferenceStageRecoveryError);
+	});
+
+	it('fails closed if document absence cannot be proven after SQLSTATE 55000', async () => {
+		const current = client(
+			null,
+			{ code: '55000', message: 'Drive PDF reference identity is unavailable' },
+			{ data: null, error: new Error('database lookup unavailable') }
+		);
+		await expect(
+			recoverDrivePdfReferenceStage({ client: current, expected })
+		).rejects.toBeInstanceOf(DrivePdfReferenceStageRecoveryError);
 	});
 
 	it('fails closed for network, auth, and other unknown lookup failures', async () => {
