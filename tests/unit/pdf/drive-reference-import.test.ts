@@ -48,6 +48,8 @@ function dependencies() {
 			reviewPageCount: 0,
 			status: 'partially_ready'
 		})),
+		recoverPublication: vi.fn().mockResolvedValue(null),
+		referencePending: vi.fn().mockResolvedValue(true),
 		processPage: vi.fn().mockResolvedValue({ state: 'complete', needsReview: false })
 	};
 }
