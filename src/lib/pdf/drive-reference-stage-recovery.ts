@@ -121,6 +121,7 @@ function sameIdentity(
 	expected: DrivePdfReferenceStageIdentity,
 	actual: DrivePdfReferenceStageIdentity
 ) {
+	const expectedMd5 = expected.driveMd5Checksum?.toLowerCase() ?? null;
 	return (
 		actual.documentId === expected.documentId &&
 		actual.driveFileId === expected.driveFileId &&
@@ -128,7 +129,7 @@ function sameIdentity(
 		actual.driveMimeType === expected.driveMimeType &&
 		actual.driveModifiedTime === expected.driveModifiedTime &&
 		actual.driveVersion === expected.driveVersion &&
-		actual.driveMd5Checksum === expected.driveMd5Checksum?.toLowerCase() &&
+		actual.driveMd5Checksum === expectedMd5 &&
 		actual.sourceSizeBytes === expected.sourceSizeBytes
 	);
 }
