@@ -45,13 +45,7 @@ function safely(operation: (() => unknown) | undefined) {
 	}
 }
 
-export async function renderPdfPage(
-	file: File,
-	pageNumber: number,
-	options: RenderPdfPageOptions = {}
-): Promise<Blob> {
-	if (file.type !== 'application/pdf' || file.size < 1) throw new PdfRenderError('render_failed');
-	if (!Number.isInteger(pageNumber) || pageNumber < 1) throw new PdfRenderError('invalid_page');
+function renderOptions(options: RenderPdfPageOptions) {
 	const maxDimension = options.maxDimension ?? 2400;
 	const quality = options.quality ?? 0.88;
 	if (!Number.isInteger(maxDimension) || maxDimension < 2048 || maxDimension > 2560) {
@@ -60,47 +54,27 @@ export async function renderPdfPage(
 	if (!Number.isFinite(quality) || quality < 0.6 || quality > 0.95) {
 		throw new TypeError('Invalid PDF render quality');
 	}
-	if (options.signal?.aborted) throw abortError();
+	return { maxDimension, quality };
+}
 
-	const [{ getDocument, GlobalWorkerOptions }, workerModule] = await Promise.all([
-		import('pdfjs-dist'),
-		import('pdfjs-dist/build/pdf.worker.min.mjs?url')
-	]);
-	if (options.signal?.aborted) throw abortError();
-	GlobalWorkerOptions.workerSrc = workerModule.default;
-
-	const bytes = new Uint8Array(await file.arrayBuffer());
-	if (options.signal?.aborted) {
-		bytes.fill(0);
-		throw abortError();
+export async function renderPdfDocumentPage(
+	pdfDocument: PDFDocumentProxy,
+	pageNumber: number,
+	options: RenderPdfPageOptions = {}
+): Promise<Blob> {
+	if (!Number.isInteger(pageNumber) || pageNumber < 1 || pageNumber > pdfDocument.numPages) {
+		throw new PdfRenderError('invalid_page');
 	}
-	const loadingTask = getDocument({ data: bytes, useSystemFonts: true });
-	let pdfDocument: PDFDocumentProxy | null = null;
+	const { maxDimension, quality } = renderOptions(options);
+	if (options.signal?.aborted) throw abortError();
+
 	let pdfPage: PDFPageProxy | null = null;
 	let canvas: HTMLCanvasElement | null = null;
 	let renderTask: RenderTask | null = null;
-	let destroyPromise: Promise<void> | null = null;
-	const destroyLoadingTask = () => {
-		destroyPromise ??= Promise.resolve(loadingTask.destroy()).catch(() => undefined);
-		return destroyPromise;
-	};
-	const cancel = () => {
-		safely(() => renderTask?.cancel());
-		void destroyLoadingTask();
-	};
+	const cancel = () => safely(() => renderTask?.cancel());
 	options.signal?.addEventListener('abort', cancel, { once: true });
 
 	try {
-		try {
-			pdfDocument = await loadingTask.promise;
-		} catch (error) {
-			if (options.signal?.aborted) throw abortError();
-			const detail = error instanceof Error ? error.message : String(error);
-			throw new PdfRenderError(/password/i.test(detail) ? 'encrypted_pdf' : 'render_failed');
-		}
-		if (pageNumber > pdfDocument.numPages) throw new PdfRenderError('invalid_page');
-		if (options.signal?.aborted) throw abortError();
-
 		try {
 			pdfPage = await pdfDocument.getPage(pageNumber);
 		} catch {
@@ -137,12 +111,59 @@ export async function renderPdfPage(
 		options.signal?.removeEventListener('abort', cancel);
 		safely(() => renderTask?.cancel());
 		safely(() => pdfPage?.cleanup());
-		safely(() => pdfDocument?.cleanup());
-		await destroyLoadingTask();
 		if (canvas) {
 			canvas.width = 0;
 			canvas.height = 0;
 		}
+	}
+}
+
+export async function renderPdfPage(
+	file: File,
+	pageNumber: number,
+	options: RenderPdfPageOptions = {}
+): Promise<Blob> {
+	if (file.type !== 'application/pdf' || file.size < 1) throw new PdfRenderError('render_failed');
+	if (!Number.isInteger(pageNumber) || pageNumber < 1) throw new PdfRenderError('invalid_page');
+	renderOptions(options);
+	if (options.signal?.aborted) throw abortError();
+
+	const [{ getDocument, GlobalWorkerOptions }, workerModule] = await Promise.all([
+		import('pdfjs-dist'),
+		import('pdfjs-dist/build/pdf.worker.min.mjs?url')
+	]);
+	if (options.signal?.aborted) throw abortError();
+	GlobalWorkerOptions.workerSrc = workerModule.default;
+
+	const bytes = new Uint8Array(await file.arrayBuffer());
+	if (options.signal?.aborted) {
+		bytes.fill(0);
+		throw abortError();
+	}
+	const loadingTask = getDocument({ data: bytes, useSystemFonts: true });
+	let pdfDocument: PDFDocumentProxy | null = null;
+	let destroyPromise: Promise<void> | null = null;
+	const destroyLoadingTask = () => {
+		destroyPromise ??= Promise.resolve(loadingTask.destroy()).catch(() => undefined);
+		return destroyPromise;
+	};
+	const cancel = () => void destroyLoadingTask();
+	options.signal?.addEventListener('abort', cancel, { once: true });
+
+	try {
+		try {
+			pdfDocument = await loadingTask.promise;
+		} catch (error) {
+			if (options.signal?.aborted) throw abortError();
+			const detail = error instanceof Error ? error.message : String(error);
+			throw new PdfRenderError(/password/i.test(detail) ? 'encrypted_pdf' : 'render_failed');
+		}
+		if (options.signal?.aborted) throw abortError();
+		return await renderPdfDocumentPage(pdfDocument, pageNumber, options);
+	} finally {
+		options.signal?.removeEventListener('abort', cancel);
+		safely(() => pdfDocument?.cleanup());
+		await destroyLoadingTask();
 		bytes.fill(0);
 	}
 }
