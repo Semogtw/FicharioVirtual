@@ -90,7 +90,7 @@ describe('Google Picker contracts', () => {
 		).toThrow('Invalid Google Picker response');
 	});
 
-	it('loads the official Picker script once and rejects preexisting hostile globals', async () => {
+	it('loads the Picker module after api.js exposes only the gapi loader', async () => {
 		const scripts: Array<{
 			src: string;
 			onload: null | (() => void);
@@ -113,9 +113,18 @@ describe('Google Picker contracts', () => {
 			}
 		};
 		const runtime = {
-			gapi: { load: vi.fn((_name, callback) => callback()) },
-			google: { picker: {} }
+			gapi: { load: vi.fn() },
+			google: { picker: {} as Record<string, unknown> }
 		};
+		runtime.gapi.load.mockImplementation((_name: string, callback: () => void) => {
+			Object.assign(runtime.google.picker, {
+				Action: { PICKED: 'picked', CANCEL: 'cancel' },
+				DocsView: vi.fn(),
+				Feature: { MULTISELECT_ENABLED: 'multiselect' },
+				PickerBuilder: vi.fn()
+			});
+			callback();
+		});
 
 		await expect(
 			loadGooglePickerApi({ documentLike: documentLike as never, runtime })
@@ -125,7 +134,6 @@ describe('Google Picker contracts', () => {
 	});
 
 	it('builds one-file Picker with the approved MIME types and strict callback', async () => {
-		let callback: ((value: unknown) => void) | null = null;
 		const view = {
 			setMimeTypes: vi.fn().mockReturnThis(),
 			setIncludeFolders: vi.fn().mockReturnThis(),
@@ -137,10 +145,7 @@ describe('Google Picker contracts', () => {
 			setOAuthToken: vi.fn().mockReturnThis(),
 			setDeveloperKey: vi.fn().mockReturnThis(),
 			setAppId: vi.fn().mockReturnThis(),
-			setCallback: vi.fn((value) => {
-				callback = value;
-				return builder;
-			}),
+			setCallback: vi.fn((_value: (value: unknown) => void) => builder),
 			enableFeature: vi.fn().mockReturnThis(),
 			build: vi.fn(() => picker)
 		};
@@ -163,6 +168,8 @@ describe('Google Picker contracts', () => {
 		expect(builder.setAppId).toHaveBeenCalledWith(appId);
 		expect(builder.enableFeature).not.toHaveBeenCalled();
 		expect(picker.setVisible).toHaveBeenCalledWith(true);
+		const callback = builder.setCallback.mock.calls[0]?.[0];
+		expect(callback).toBeTypeOf('function');
 		callback?.({
 			action: 'picked',
 			docs: [
