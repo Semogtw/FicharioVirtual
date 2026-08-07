@@ -62,7 +62,12 @@ function dependencies() {
 describe('oversized Drive PDF OCR batching', () => {
 	it('sends compatible rendered pages through the shared adaptive batch runner', async () => {
 		const deps = dependencies();
-		const progress: Array<{ phase: string; pageNumber?: number; current?: number; total?: number }> = [];
+		const progress: Array<{
+			phase: string;
+			pageNumber?: number;
+			current?: number;
+			total?: number;
+		}> = [];
 
 		const result = await importStagedDrivePdfReference({
 			staged,
