@@ -39,6 +39,10 @@ export interface GooglePickerDownloadDependencies {
 	}): Promise<Blob>;
 }
 
+export type GoogleDriveImportSource =
+	| Readonly<{ kind: 'download'; selection: GooglePickerSelection; file: File }>
+	| Readonly<{ kind: 'reference'; selection: GooglePickerSelection }>;
+
 function defaultClient(): DriveTokenClientLike {
 	return getSupabaseClient() as unknown as DriveTokenClientLike;
 }
@@ -127,6 +131,58 @@ export async function selectGoogleDriveFile({
 	}
 }
 
+function validDirectDownloadLimit(maximumBytes: number) {
+	if (
+		!Number.isSafeInteger(maximumBytes) ||
+		maximumBytes < 1 ||
+		maximumBytes > MAX_DIRECT_PICKER_DOWNLOAD_BYTES
+	) {
+		throw new TypeError('Invalid Google Drive download limit');
+	}
+	return maximumBytes;
+}
+
+export async function selectGoogleDriveImportSource({
+	mimeTypes,
+	maximumBytes,
+	source = env,
+	client = defaultClient(),
+	dependencies = {
+		select: (input) => selectGoogleDriveFile(input),
+		download: downloadBrowserDriveFile
+	}
+}: {
+	mimeTypes: readonly GooglePickerMimeType[];
+	maximumBytes: number;
+	source?: Record<string, string | undefined>;
+	client?: DriveTokenClientLike;
+	dependencies?: GooglePickerDownloadDependencies;
+}): Promise<GoogleDriveImportSource | null> {
+	const safeMaximumBytes = validDirectDownloadLimit(maximumBytes);
+	const safeMimeTypes = validateMimeTypes(mimeTypes);
+	const selection = await dependencies.select({ mimeTypes: safeMimeTypes, source, client });
+	if (selection === null) return null;
+	if (!safeMimeTypes.includes(selection.mimeType)) {
+		throw new Error('O arquivo selecionado no Google Drive não corresponde ao tipo solicitado.');
+	}
+	if (selection.sizeBytes > safeMaximumBytes) {
+		return Object.freeze({ kind: 'reference', selection });
+	}
+	const blob = await dependencies.download({
+		client,
+		fileId: selection.id,
+		maximumBytes: safeMaximumBytes
+	});
+	if (blob.size < 1 || blob.size > safeMaximumBytes || blob.type !== selection.mimeType) {
+		throw new Error('O arquivo baixado do Google Drive não corresponde à seleção.');
+	}
+	const file = new File([blob], selection.name, {
+		type: selection.mimeType,
+		lastModified: Date.parse(selection.modifiedAt)
+	});
+	return Object.freeze({ kind: 'download', selection, file });
+}
+
 export async function selectAndDownloadGoogleDriveFile({
 	mimeTypes,
 	maximumBytes,
@@ -143,36 +199,18 @@ export async function selectAndDownloadGoogleDriveFile({
 	client?: DriveTokenClientLike;
 	dependencies?: GooglePickerDownloadDependencies;
 }): Promise<File | null> {
-	if (
-		!Number.isSafeInteger(maximumBytes) ||
-		maximumBytes < 1 ||
-		maximumBytes > MAX_DIRECT_PICKER_DOWNLOAD_BYTES
-	) {
-		throw new TypeError('Invalid Google Drive download limit');
-	}
-	const safeMimeTypes = validateMimeTypes(mimeTypes);
-	const selection = await dependencies.select({ mimeTypes: safeMimeTypes, source, client });
-	if (selection === null) return null;
-	if (selection.sizeBytes > maximumBytes) {
+	const selected = await selectGoogleDriveImportSource({
+		mimeTypes,
+		maximumBytes,
+		source,
+		client,
+		dependencies
+	});
+	if (selected === null) return null;
+	if (selected.kind === 'reference') {
 		throw new Error(
 			'O arquivo selecionado excede o caminho de download direto. Preserve-o no Drive e importe por referência quando esse fluxo estiver disponível.'
 		);
 	}
-	const blob = await dependencies.download({
-		client,
-		fileId: selection.id,
-		maximumBytes
-	});
-	if (
-		blob.size < 1 ||
-		blob.size > maximumBytes ||
-		blob.type !== selection.mimeType ||
-		!safeMimeTypes.includes(selection.mimeType)
-	) {
-		throw new Error('O arquivo baixado do Google Drive não corresponde à seleção.');
-	}
-	return new File([blob], selection.name, {
-		type: selection.mimeType,
-		lastModified: Date.parse(selection.modifiedAt)
-	});
+	return selected.file;
 }
