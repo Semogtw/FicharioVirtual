@@ -307,7 +307,7 @@
 		background: var(--surface);
 	}
 
-	li:hover {
+	li:focus-within {
 		border-color: var(--line-strong);
 		box-shadow: var(--shadow-soft);
 	}
@@ -386,6 +386,13 @@
 	.load-more {
 		display: flex;
 		justify-content: center;
+	}
+
+	@media (hover: hover) and (pointer: fine) {
+		li:hover {
+			border-color: var(--line-strong);
+			box-shadow: var(--shadow-soft);
+		}
 	}
 
 	@media (max-width: 760px) {
