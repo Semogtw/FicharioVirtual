@@ -7,7 +7,6 @@ import type { Database } from '$lib/types/database';
 import { getSupabaseClient } from '$lib/services/supabase';
 import { parseDuplicateDocumentId } from './duplicate-result';
 import { calculateSha256 } from './hash';
-import type { PreparedImage } from './image-types';
 import {
 	DuplicateImageError,
 	ImageUploadError,
