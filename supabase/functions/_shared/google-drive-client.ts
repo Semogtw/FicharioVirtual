@@ -227,6 +227,27 @@ export async function ensureDriveFolder({
 	);
 }
 
+export async function deleteDriveFile({
+	accessToken,
+	fileId,
+	fetchImpl = fetch
+}: {
+	accessToken: string;
+	fileId: string;
+	fetchImpl?: FetchLike;
+}): Promise<void> {
+	const safeFileId = validDriveId(fileId);
+	const url = new URL(`https://www.googleapis.com/drive/v3/files/${safeFileId}`);
+	url.searchParams.set('supportsAllDrives', 'false');
+	const response = await fetchImpl(url.toString(), {
+		method: 'DELETE',
+		headers: authorization(accessToken)
+	});
+	if (response.status !== 204 && response.status !== 404) {
+		throw new Error('Google Drive file delete failed');
+	}
+}
+
 export async function getDriveStartPageToken({
 	accessToken,
 	fetchImpl = fetch
