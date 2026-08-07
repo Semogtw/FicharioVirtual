@@ -161,49 +161,135 @@
 </div>
 
 <style>
-	.page { display: grid; gap: 1.25rem; }
+	.page {
+		display: grid;
+		gap: 1.25rem;
+	}
 	.eyebrow {
-		margin: 0 0 0.4rem; color: var(--archive); font-size: 0.74rem; font-weight: 780;
-		letter-spacing: 0.11em; text-transform: uppercase;
+		margin: 0 0 0.4rem;
+		color: var(--archive);
+		font-size: 0.74rem;
+		font-weight: 780;
+		letter-spacing: 0.11em;
+		text-transform: uppercase;
 	}
-	h1, h2 { font-family: var(--font-heading); font-weight: 540; }
-	h1 { margin: 0 0 0.55rem; font-size: clamp(2.4rem, 6vw, 4.5rem); letter-spacing: -0.04em; }
-	header p:last-child, .notice p, .picker-card p {
-		max-width: 56rem; margin: 0; color: var(--muted); line-height: 1.55;
+	h1,
+	h2 {
+		font-family: var(--font-heading);
+		font-weight: 540;
 	}
-	.options, .picker-card, .notice, .queues a {
-		padding: 1rem; border: 1px solid var(--line); border-radius: var(--radius-md);
+	h1 {
+		margin: 0 0 0.55rem;
+		font-size: clamp(2.4rem, 6vw, 4.5rem);
+		letter-spacing: -0.04em;
+	}
+	header p:last-child,
+	.notice p,
+	.picker-card p {
+		max-width: 56rem;
+		margin: 0;
+		color: var(--muted);
+		line-height: 1.55;
+	}
+	.options,
+	.picker-card,
+	.notice,
+	.queues a {
+		padding: 1rem;
+		border: 1px solid var(--line);
+		border-radius: var(--radius-md);
 		background: var(--surface);
 	}
-	.options { display: grid; grid-template-columns: minmax(12rem, 0.4fr) minmax(20rem, 1fr); gap: 1rem; }
-	.options > label:first-child { display: grid; gap: 0.4rem; }
-	.options > label:first-child span { color: var(--muted); font-size: 0.75rem; font-weight: 740; }
+	.options {
+		display: grid;
+		grid-template-columns: minmax(12rem, 0.4fr) minmax(20rem, 1fr);
+		gap: 1rem;
+	}
+	.options > label:first-child {
+		display: grid;
+		gap: 0.4rem;
+	}
+	.options > label:first-child span {
+		color: var(--muted);
+		font-size: 0.75rem;
+		font-weight: 740;
+	}
 	select {
-		min-height: 3rem; padding: 0.65rem 0.75rem; border: 1px solid var(--line-strong);
-		border-radius: var(--radius-sm); background: var(--surface-strong); color: var(--ink);
+		min-height: 3rem;
+		padding: 0.65rem 0.75rem;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--radius-sm);
+		background: var(--surface-strong);
+		color: var(--ink);
 	}
 	.consent {
-		display: flex; align-items: flex-start; gap: 0.65rem; padding: 0.75rem;
-		border-left: 0.3rem solid var(--accent); background: rgb(166 94 67 / 7%);
+		display: flex;
+		align-items: flex-start;
+		gap: 0.65rem;
+		padding: 0.75rem;
+		border-left: 0.3rem solid var(--accent);
+		background: rgb(166 94 67 / 7%);
 	}
-	.consent input { width: 1.1rem; height: 1.1rem; margin-top: 0.18rem; }
-	.consent span { display: grid; gap: 0.2rem; }
-	.consent small, .queues span { color: var(--muted); line-height: 1.45; }
+	.consent input {
+		width: 1.1rem;
+		height: 1.1rem;
+		margin-top: 0.18rem;
+	}
+	.consent span {
+		display: grid;
+		gap: 0.2rem;
+	}
+	.consent small,
+	.queues span {
+		color: var(--muted);
+		line-height: 1.45;
+	}
 	.picker-card {
-		display: flex; align-items: center; justify-content: space-between; gap: 1rem;
-		min-height: 10rem; border-left: 0.3rem solid var(--archive);
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		min-height: 10rem;
+		border-left: 0.3rem solid var(--archive);
 	}
-	.picker-card h2, .notice h2 { margin: 0 0 0.4rem; }
-	.notice { border-left: 0.3rem solid var(--danger); }
-	.queues { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
-	.queues a { display: grid; gap: 0.3rem; color: var(--ink); }
-	.error, .message {
-		margin: 0; padding: 0.75rem 0.9rem; border-left: 0.3rem solid var(--danger);
-		background: rgb(var(--danger-rgb) / 7%); color: var(--danger);
+	.picker-card h2,
+	.notice h2 {
+		margin: 0 0 0.4rem;
 	}
-	.message { border-color: var(--archive); background: var(--archive-soft); color: var(--archive); }
+	.notice {
+		border-left: 0.3rem solid var(--danger);
+	}
+	.queues {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 0.75rem;
+	}
+	.queues a {
+		display: grid;
+		gap: 0.3rem;
+		color: var(--ink);
+	}
+	.error,
+	.message {
+		margin: 0;
+		padding: 0.75rem 0.9rem;
+		border-left: 0.3rem solid var(--danger);
+		background: rgb(var(--danger-rgb) / 7%);
+		color: var(--danger);
+	}
+	.message {
+		border-color: var(--archive);
+		background: var(--archive-soft);
+		color: var(--archive);
+	}
 	@media (max-width: 720px) {
-		.options, .queues { grid-template-columns: 1fr; }
-		.picker-card { align-items: stretch; flex-direction: column; }
+		.options,
+		.queues {
+			grid-template-columns: 1fr;
+		}
+		.picker-card {
+			align-items: stretch;
+			flex-direction: column;
+		}
 	}
 </style>
