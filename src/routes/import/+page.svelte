@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import { onDestroy } from 'svelte';
 	import Button from '$lib/components/Button.svelte';
+	import NativeSelect from '$lib/components/ui/native-select/NativeSelect.svelte';
 	import type { NotebookSummary } from '$lib/domain/notebook';
 	import {
 		importSelectionUrl,
@@ -42,13 +43,16 @@
 	);
 
 	const statusLabels = {
+		queued: 'Na fila',
+		preparing: 'Preparando',
 		uploading: 'Enviando',
-		pending: 'Na fila',
-		processing: 'Processando',
-		ready: 'Pronto',
-		partially_ready: 'Parcialmente pronto',
+		reading: 'Lendo',
+		waiting: 'Aguardando',
 		needs_review: 'Revisar',
-		failed: 'Falhou'
+		complete: 'Pronto',
+		duplicate: 'Duplicado',
+		failed: 'Falhou',
+		cancelled: 'Cancelado'
 	} as const;
 
 	function formatBytes(bytes: number) {
@@ -162,7 +166,7 @@
 	<section class="settings" aria-label="Opções da importação">
 		<label>
 			<span>Caderno</span>
-			<select
+			<NativeSelect
 				bind:value={notebookId}
 				disabled={notebookLoading || !notebookOptionsReady}
 				onchange={selectNotebook}
@@ -171,7 +175,7 @@
 				{#each notebooks as notebook}
 					<option value={notebook.id}>{notebook.name}</option>
 				{/each}
-			</select>
+			</NativeSelect>
 		</label>
 		<fieldset>
 			<legend>Definição</legend>
@@ -372,15 +376,6 @@
 		color: var(--muted);
 		font-size: 0.75rem;
 		font-weight: 740;
-	}
-
-	select {
-		min-height: 3rem;
-		padding: 0.65rem 0.75rem;
-		border: 1px solid var(--line-strong);
-		border-radius: var(--radius-sm);
-		background: var(--surface-strong);
-		color: var(--ink);
 	}
 
 	fieldset {
