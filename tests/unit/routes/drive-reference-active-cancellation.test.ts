@@ -19,7 +19,8 @@ describe('active oversized Drive PDF cancellation', () => {
 		expect(source).toContain('async function cancelReference');
 		expect(source).toContain('await deleteDocument(reference.documentId)');
 		expect(source).toContain('Excluir cópia');
-		expect(source).toContain('async function stopReferenceProcessing');
+		expect(source).toContain('function stopReferenceProcessing');
+		expect(source).toContain('stopReferenceProcessing(reference)');
 	});
 
 	it('surfaces phase and page progress for the active durable reference', () => {
