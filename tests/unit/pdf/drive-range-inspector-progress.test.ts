@@ -23,9 +23,7 @@ describe('Drive PDF range inspection progress', () => {
 			})
 			.mockImplementationOnce(() => undefined);
 
-		await expect(
-			inspectDrivePdfDocument(document as never, { onPage })
-		).resolves.toMatchObject({
+		await expect(inspectDrivePdfDocument(document as never, { onPage })).resolves.toMatchObject({
 			pageCount: 3,
 			pagesNeedingOcr: [2]
 		});
