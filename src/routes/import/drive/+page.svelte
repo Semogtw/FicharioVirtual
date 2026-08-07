@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import Button from '$lib/components/Button.svelte';
+	import NativeSelect from '$lib/components/ui/native-select/NativeSelect.svelte';
 	import type { NotebookSummary } from '$lib/domain/notebook';
 	import { GOOGLE_PICKER_MIME_TYPES } from '$lib/drive/picker';
 	import {
@@ -233,12 +234,12 @@
 	<section class="options" aria-label="Opções da importação">
 		<label>
 			<span>Caderno de destino</span>
-			<select bind:value={notebookId} disabled={loadingNotebooks || selecting}>
+			<NativeSelect bind:value={notebookId} disabled={loadingNotebooks || selecting}>
 				<option value="">Sem caderno</option>
 				{#each notebooks as notebook}
 					<option value={notebook.id}>{notebook.name}</option>
 				{/each}
-			</select>
+			</NativeSelect>
 		</label>
 
 		<label class="consent">
@@ -393,14 +394,6 @@
 		color: var(--muted);
 		font-size: 0.75rem;
 		font-weight: 740;
-	}
-	select {
-		min-height: 3rem;
-		padding: 0.65rem 0.75rem;
-		border: 1px solid var(--line-strong);
-		border-radius: var(--radius-sm);
-		background: var(--surface-strong);
-		color: var(--ink);
 	}
 	.consent {
 		display: flex;
