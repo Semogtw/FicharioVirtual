@@ -12,7 +12,9 @@ const staged = {
 function dependencies() {
 	return {
 		currentUserId: vi.fn().mockResolvedValue('11111111-1111-4111-8111-111111111111'),
-		verifyIdentity: vi.fn().mockResolvedValue({ driveVersion: '4', sourceSizeBytes: staged.sourceSizeBytes }),
+		verifyIdentity: vi
+			.fn()
+			.mockResolvedValue({ driveVersion: '4', sourceSizeBytes: staged.sourceSizeBytes }),
 		openDocument: vi.fn(),
 		inspectDocument: vi.fn(),
 		recordOcrConsent: vi.fn(),
