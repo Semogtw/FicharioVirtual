@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
 	MAX_DIRECT_PICKER_DOWNLOAD_BYTES,
-	selectAndDownloadGoogleDriveFile
+	selectAndDownloadGoogleDriveFile,
+	selectGoogleDriveImportSource
 } from '../../../src/lib/drive/picker-service';
 
 const source = {
@@ -37,6 +38,22 @@ describe('large Google Picker files', () => {
 			})
 		).resolves.toBeInstanceOf(File);
 		expect(download).toHaveBeenCalledTimes(1);
+	});
+
+	it('returns an oversized selection by reference without downloading it', async () => {
+		const selected = selection(120 * 1024 * 1024);
+		const download = vi.fn();
+
+		await expect(
+			selectGoogleDriveImportSource({
+				mimeTypes: ['application/pdf'],
+				maximumBytes: MAX_DIRECT_PICKER_DOWNLOAD_BYTES,
+				source,
+				client: {} as never,
+				dependencies: { select: vi.fn().mockResolvedValue(selected), download }
+			})
+		).resolves.toEqual({ kind: 'reference', selection: selected });
+		expect(download).not.toHaveBeenCalled();
 	});
 
 	it('does not download a selected file that exceeds the configured browser path', async () => {
