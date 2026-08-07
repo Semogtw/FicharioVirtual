@@ -7,7 +7,21 @@ import {
 import type { DriveFile } from './types';
 
 const DRIVE_ID = /^[A-Za-z0-9_-]{10,256}$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const APP_PROPERTY_KEY = /^[A-Za-z][A-Za-z0-9_]{0,31}$/;
 const FILE_FIELDS = 'id,name,mimeType,parents,modifiedTime,version,md5Checksum,trashed';
+const MANAGED_REFERENCE_QUERY =
+	"appProperties has { key='ficharioPurpose' and value='oversized_pdf_reference' } and trashed = false";
+const MANAGED_REFERENCE_FIELDS =
+	'nextPageToken,files(id,name,mimeType,parents,createdTime,trashed,appProperties)';
+const MAX_MANAGED_REFERENCE_PAGES = 100;
+
+export type BrowserDrivePdfReferenceCopy = Readonly<{
+	fileId: string;
+	documentId: string;
+	parentFolderId: string;
+	createdAt: string;
+}>;
 
 function validDriveId(value: string): string {
 	if (!DRIVE_ID.test(value)) throw new TypeError('Invalid Google Drive file identifier');
@@ -30,6 +44,36 @@ function validName(value: string | undefined): string | undefined {
 	return normalized;
 }
 
+function validAppProperties(
+	value: Readonly<Record<string, string>> | undefined
+): Readonly<Record<string, string>> | undefined {
+	if (value === undefined) return undefined;
+	const entries = Object.entries(value);
+	if (entries.length < 1 || entries.length > 30) {
+		throw new TypeError('Invalid Google Drive app properties');
+	}
+	const encoder = new TextEncoder();
+	const normalized: Record<string, string> = {};
+	for (const [key, rawValue] of entries) {
+		if (!APP_PROPERTY_KEY.test(key) || typeof rawValue !== 'string') {
+			throw new TypeError('Invalid Google Drive app properties');
+		}
+		const safeValue = rawValue.trim();
+		if (
+			safeValue.length < 1 ||
+			[...safeValue].some((character) => {
+				const code = character.codePointAt(0);
+				return code !== undefined && (code < 32 || code === 127);
+			}) ||
+			encoder.encode(key).byteLength + encoder.encode(safeValue).byteLength > 124
+		) {
+			throw new TypeError('Invalid Google Drive app properties');
+		}
+		normalized[key] = safeValue;
+	}
+	return Object.freeze(normalized);
+}
+
 function authorization(accessToken: string) {
 	return { Authorization: `Bearer ${accessToken}` };
 }
@@ -46,22 +90,106 @@ async function strictJson(response: Response): Promise<unknown> {
 	}
 }
 
+function normalizedIsoTimestamp(value: unknown): string | null {
+	if (typeof value !== 'string' || value.length < 10 || value.length > 64) return null;
+	const timestamp = Date.parse(value);
+	return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
+}
+
+function validPageToken(value: unknown): string | null {
+	if (value === undefined || value === null) return null;
+	if (typeof value !== 'string' || value.length < 1 || value.length > 2048) {
+		throw new Error('Google Drive managed reference response failed');
+	}
+	return value;
+}
+
+function parseManagedReferencePage(value: unknown): {
+	files: BrowserDrivePdfReferenceCopy[];
+	nextPageToken: string | null;
+} {
+	if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+		throw new Error('Google Drive managed reference response failed');
+	}
+	const record = value as Record<string, unknown>;
+	const keys = Object.keys(record);
+	if (
+		!keys.every((key) => key === 'files' || key === 'nextPageToken') ||
+		!Array.isArray(record.files)
+	) {
+		throw new Error('Google Drive managed reference response failed');
+	}
+	const files = record.files.map((entry): BrowserDrivePdfReferenceCopy => {
+		if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+			throw new Error('Google Drive managed reference response failed');
+		}
+		const file = entry as Record<string, unknown>;
+		const fileKeys = Object.keys(file).sort();
+		const expectedKeys = [
+			'appProperties',
+			'createdTime',
+			'id',
+			'mimeType',
+			'name',
+			'parents',
+			'trashed'
+		];
+		if (
+			fileKeys.length !== expectedKeys.length ||
+			!fileKeys.every((key, index) => key === expectedKeys[index]) ||
+			!DRIVE_ID.test(String(file.id ?? '')) ||
+			file.mimeType !== 'application/pdf' ||
+			file.trashed !== false ||
+			!Array.isArray(file.parents) ||
+			file.parents.length !== 1 ||
+			!DRIVE_ID.test(String(file.parents[0] ?? '')) ||
+			typeof file.name !== 'string' ||
+			validName(file.name) === undefined ||
+			file.appProperties === null ||
+			typeof file.appProperties !== 'object' ||
+			Array.isArray(file.appProperties)
+		) {
+			throw new Error('Google Drive managed reference response failed');
+		}
+		const properties = file.appProperties as Record<string, unknown>;
+		const createdAt = normalizedIsoTimestamp(file.createdTime);
+		if (
+			properties.ficharioPurpose !== 'oversized_pdf_reference' ||
+			typeof properties.ficharioDocumentId !== 'string' ||
+			!UUID.test(properties.ficharioDocumentId) ||
+			createdAt === null
+		) {
+			throw new Error('Google Drive managed reference response failed');
+		}
+		return Object.freeze({
+			fileId: String(file.id),
+			documentId: properties.ficharioDocumentId,
+			parentFolderId: String(file.parents[0]),
+			createdAt
+		});
+	});
+	return { files, nextPageToken: validPageToken(record.nextPageToken) };
+}
+
 export async function copyBrowserDriveFile({
 	client,
 	sourceFileId,
 	parentFolderId,
 	name,
+	appProperties,
 	fetchImpl = fetch
 }: {
 	client: DriveTokenClientLike;
 	sourceFileId: string;
 	parentFolderId: string;
 	name?: string;
+	appProperties?: Readonly<Record<string, string>>;
 	fetchImpl?: BrowserFetchLike;
 }): Promise<DriveFile> {
 	const sourceId = validDriveId(sourceFileId);
 	const parentId = validDriveId(parentFolderId);
 	const safeName = validName(name);
+	const safeProperties = validAppProperties(appProperties);
 	try {
 		const access = await requestDriveAccessToken(client);
 		const url = new URL(`https://www.googleapis.com/drive/v3/files/${sourceId}/copy`);
@@ -76,13 +204,54 @@ export async function copyBrowserDriveFile({
 			},
 			body: JSON.stringify({
 				...(safeName === undefined ? {} : { name: safeName }),
-				parents: [parentId]
+				parents: [parentId],
+				...(safeProperties === undefined ? {} : { appProperties: safeProperties })
 			})
 		});
 		return parseDriveFile(await strictJson(response));
 	} catch (error) {
 		if (error instanceof TypeError && error.message.startsWith('Invalid Google Drive')) throw error;
 		throw new Error('Não foi possível copiar o arquivo no Google Drive.');
+	}
+}
+
+export async function listBrowserDrivePdfReferenceCopies({
+	client,
+	fetchImpl = fetch
+}: {
+	client: DriveTokenClientLike;
+	fetchImpl?: BrowserFetchLike;
+}): Promise<readonly BrowserDrivePdfReferenceCopy[]> {
+	try {
+		const access = await requestDriveAccessToken(client);
+		const collected: BrowserDrivePdfReferenceCopy[] = [];
+		const seenTokens = new Set<string>();
+		let pageToken: string | null = null;
+		for (let page = 0; page < MAX_MANAGED_REFERENCE_PAGES; page += 1) {
+			const url = new URL('https://www.googleapis.com/drive/v3/files');
+			url.searchParams.set('q', MANAGED_REFERENCE_QUERY);
+			url.searchParams.set('spaces', 'drive');
+			url.searchParams.set('pageSize', '100');
+			url.searchParams.set('fields', MANAGED_REFERENCE_FIELDS);
+			if (pageToken !== null) url.searchParams.set('pageToken', pageToken);
+			const response = await fetchImpl(url.toString(), {
+				redirect: 'error',
+				cache: 'no-store',
+				headers: { Accept: 'application/json', ...authorization(access.accessToken) }
+			});
+			const parsed = parseManagedReferencePage(await strictJson(response));
+			collected.push(...parsed.files);
+			if (parsed.nextPageToken === null) return Object.freeze(collected);
+			if (seenTokens.has(parsed.nextPageToken)) {
+				throw new Error('Google Drive managed reference response failed');
+			}
+			seenTokens.add(parsed.nextPageToken);
+			pageToken = parsed.nextPageToken;
+		}
+		throw new Error('Google Drive managed reference response failed');
+	} catch (error) {
+		if (error instanceof TypeError && error.message.startsWith('Invalid Google Drive')) throw error;
+		throw new Error('Não foi possível listar cópias gerenciadas de PDFs no Google Drive.');
 	}
 }
 
