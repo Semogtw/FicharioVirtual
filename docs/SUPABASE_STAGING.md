@@ -1,38 +1,80 @@
-# Validação do Supabase em staging
+# Validação e deploy do Supabase em staging
 
-O workflow `Verify Supabase staging` verifica autenticação, allowlist, isolamento RLS e Storage privado em um projeto remoto sem usar service-role key e sem depender de dados reais.
+O staging do Fichário separa duas responsabilidades:
+
+- `Deploy Supabase staging`: deploy administrativo manual de migrations e Edge Functions versionadas;
+- `Verify Supabase staging`: verificação de Auth, allowlist, RLS e Storage privado usando apenas credenciais públicas e contas sintéticas de teste.
+
+## Estado live em 2026-08-07
+
+O projeto remoto foi sincronizado manualmente e está com o histórico canônico de migrations aplicado até:
+
+```text
+202608070009_cover_ocr_batches_document_foreign_key
+```
+
+O histórico remoto foi conferido depois do deploy e não possui versões temporárias geradas pelo mecanismo de aplicação usado durante a recuperação do staging.
+
+Os contratos pgTAP foram executados diretamente no staging com rollback:
+
+- segurança: 47/47 checks aprovados;
+- performance: 1/1 check aprovado para a cobertura da FK composta de `ocr_batches`.
+
+O advisor de segurança agora mantém somente os avisos de `SECURITY DEFINER` correspondentes aos RPCs OCR que atuam deliberadamente como capability boundaries. O advisor de performance não aponta mais FK sem índice; os avisos restantes são apenas índices ainda não usados e não devem ser removidos sem carga representativa e evidência de plano de consulta.
+
+O runtime Edge também está sincronizado. As oito funções versionadas estão `ACTIVE`:
+
+```text
+process-ocr
+delete-document
+drive-oauth-start
+drive-oauth-callback
+drive-access-token
+drive-resolve-folder
+drive-run-jobs
+drive-sync
+```
+
+`process-ocr` e `delete-document` foram atualizadas para o runtime compatível com o schema atual. `drive-oauth-callback` é a única função com `verify_jwt = false`; ela recebe o redirect do Google e usa o contrato próprio de `state`/nonce. Todas as outras funções exigem JWT segundo `supabase/config.toml`.
+
+A publicação das funções terminou sem erros de deploy e não havia erros de Edge Function registrados imediatamente após a sincronização. Isso não substitui um teste funcional com Google/Gemini reais.
 
 ## Preparar o projeto
 
-1. Crie um projeto Supabase exclusivo para staging.
+1. Use um projeto Supabase exclusivo para staging.
 2. Aplique todas as migrations da branch que será validada.
-3. Crie duas contas Auth exclusivas para testes automatizados.
-4. Adicione somente a primeira conta em `public.app_users` com `is_active = true`.
-5. Confirme que a segunda conta autentica normalmente, mas não possui linha ativa na allowlist.
-6. Confirme que o bucket privado `documents` foi criado pelas migrations.
-7. Não copie documentos pessoais ou secrets de produção para o projeto.
+3. Publique as Edge Functions da mesma branch depois do `db push`.
+4. Crie duas contas Auth exclusivas para testes automatizados.
+5. Adicione somente a primeira conta em `public.app_users` com `is_active = true`.
+6. Confirme que a segunda conta autentica normalmente, mas não possui linha ativa na allowlist.
+7. Confirme que o bucket privado `documents` foi criado pelas migrations.
+8. Não copie documentos pessoais ou secrets de produção para o projeto.
 
 As contas precisam ser diferentes e devem permanecer reservadas ao gate. Não reutilize a conta pessoal administradora.
 
-## Sincronizar migrations antes do gate
+## Deploy administrativo versionado
 
-O histórico remoto precisa corresponder aos arquivos versionados em `supabase/migrations/`. O repositório oferece o workflow manual `Deploy Supabase staging migrations`, que preserva os números das migrations, lista o drift, executa `db push --dry-run` e só então aplica as migrations pendentes.
+O histórico remoto precisa corresponder aos arquivos em `supabase/migrations/`, e as Edge Functions devem sair de `supabase/functions/` + `supabase/config.toml` do mesmo checkout.
 
-O fluxo equivalente pelo Supabase CLI é:
+O workflow manual `Deploy Supabase staging` executa, nessa ordem:
 
 ```bash
-supabase link --project-ref <project-ref>
+supabase link --project-ref "$STAGING_SUPABASE_PROJECT_REF"
 supabase migration list --linked
 supabase db push --linked --dry-run
 supabase db push --linked
 supabase migration list --linked
+supabase functions deploy --project-ref "$STAGING_SUPABASE_PROJECT_REF"
+supabase functions list --project-ref "$STAGING_SUPABASE_PROJECT_REF"
 ```
 
-Não substitua esse fluxo por várias chamadas avulsas ao Management API nem aplique somente a migration mais nova quando o staging estiver atrasado. Esses atalhos podem executar DDL fora de ordem ou registrar versões diferentes das existentes no Git, fazendo um `supabase db push` posterior interpretar incorretamente o histórico.
+Não use `--include-all` para contornar drift de histórico e não use `--no-verify-jwt` global no deploy de funções. As políticas individuais de JWT pertencem ao `supabase/config.toml` versionado.
+
+Não aplique somente a migration mais nova quando o staging estiver atrasado. Também não substitua o fluxo versionado por uma sequência de DDLs avulsos que deixe `supabase_migrations.schema_migrations` divergente do Git. Um `db push` posterior depende desse histórico estar correto.
 
 ### Environment administrativo de deploy
 
-Crie um environment separado chamado `staging-deploy`. Ele deve ser usado somente pelo workflow `Deploy Supabase staging migrations` e, quando a configuração da conta permitir, exigir aprovação manual.
+Crie um environment separado chamado `staging-deploy`. Ele deve ser usado somente pelo workflow `Deploy Supabase staging` e, quando a configuração da conta permitir, exigir aprovação manual.
 
 Configure nele:
 
@@ -42,15 +84,32 @@ Secret: STAGING_SUPABASE_DB_PASSWORD
 Variable: STAGING_SUPABASE_PROJECT_REF
 ```
 
-O workflow mapeia esses valores para as variáveis esperadas pelo Supabase CLI, usa `contents: read`, desabilita credenciais persistidas no checkout e fixa `supabase/setup-cli@v2` com CLI `2.111.0`. Nenhuma service-role key é necessária para aplicar migrations.
+O workflow usa `contents: read`, checkout com `persist-credentials: false` e `supabase/setup-cli@v2` com CLI `2.111.0`.
 
-O environment `staging-deploy` não deve conter as credenciais de usuários de teste descritas abaixo. Separar deploy administrativo de verificação pública reduz o blast radius caso um dos jobs seja alterado no futuro.
+Em 2026-08-07 o repositório ainda não possui GitHub Environments configurados. Portanto o workflow administrativo está versionado e testado, mas o deploy live atual foi concluído fora dele. Antes do próximo deploy pelo Actions, crie/proteja `staging-deploy` e configure os três valores acima.
 
-Depois do push, confirme que a última versão listada em `supabase migration list --linked` é a mesma migration mais recente do diretório local. Só então execute os testes de staging e os advisors de segurança/performance.
+### Secrets das Edge Functions
+
+Além das variáveis fornecidas automaticamente pelo Supabase hospedado, os fluxos atuais usam configuração de runtime como:
+
+```text
+APP_ORIGIN
+GOOGLE_CLIENT_ID
+GOOGLE_CLIENT_SECRET
+GOOGLE_DRIVE_REDIRECT_URI
+GOOGLE_DRIVE_ROOT_FOLDER_NAME
+GEMINI_API_KEY
+OCR_MODEL_PRIMARY
+OCR_PROMPT_VERSION
+```
+
+Também existem ajustes opcionais do OCR, como limites de páginas/bytes e timeout de request. Não versionar os valores desses secrets.
+
+O conector usado na auditoria não expõe enumeração de Edge Function secrets. Assim, a presença de todos os valores customizados não foi inferida a partir do deploy. Quando o environment administrativo estiver disponível, confirme a configuração com o mecanismo oficial de secrets do Supabase antes do teste end-to-end real.
 
 ## Configurar o environment de verificação do GitHub
 
-Crie um environment chamado `staging` no repositório e cadastre os seguintes secrets:
+Crie um environment separado chamado `staging` e cadastre:
 
 ```text
 STAGING_SUPABASE_URL
@@ -67,22 +126,24 @@ Quando disponível, configure aprovação obrigatória para o environment. O job
 
 ## Executar
 
-Para aplicar migrations no GitHub Actions:
+Para implantar schema + Edge runtime no GitHub Actions:
 
-1. abra `Deploy Supabase staging migrations`;
+1. abra `Deploy Supabase staging`;
 2. escolha `Run workflow` na branch ou SHA desejado;
 3. aprove o environment `staging-deploy`;
-4. confira no log a lista de migrations e o dry-run antes da etapa de aplicação;
-5. confirme que `Confirm linked migration history` termina com o histórico local/remoto alinhado.
+4. confira a lista de migrations e o dry-run;
+5. confirme `Confirm linked migration history`;
+6. confirme `Deploy versioned Edge Functions`;
+7. confira `Confirm deployed Edge Functions`.
 
 Depois, para verificar Auth/RLS/Storage:
 
 1. abra `Verify Supabase staging`;
 2. escolha `Run workflow` na mesma branch ou SHA;
-3. aprove o environment `staging`, caso exista proteção;
+3. aprove o environment `staging`;
 4. confirme o resultado do job `verify`.
 
-Também é possível executar a verificação localmente com as mesmas variáveis:
+A verificação também pode ser executada localmente:
 
 ```bash
 STAGING_SUPABASE_URL=https://PROJECT.supabase.co \
@@ -98,10 +159,10 @@ Evite inserir secrets diretamente no histórico do shell. Prefira um gerenciador
 
 ## Contratos verificados
 
-O gate:
+O gate remoto de Auth/RLS/Storage:
 
 - autentica as duas contas com a API pública;
-- exige que os UUIDs Auth sejam distintos;
+- exige UUIDs Auth distintos;
 - confirma `is_authorized_user() = true` para a conta permitida;
 - confirma `is_authorized_user() = false` para a segunda conta;
 - verifica que a conta permitida lê a própria linha ativa de `app_users`;
@@ -110,34 +171,36 @@ O gate:
 - confirma que a segunda conta recebe zero linhas ao consultar o mesmo UUID;
 - envia um PNG sintético de 1 × 1 para `documents/<uuid>/__staging_probe_<uuid>/probe.png`;
 - exige que somente a conta proprietária liste e baixe o objeto;
-- compara os bytes baixados com o payload original, sem coerção para texto;
-- cria uma URL assinada de 60 segundos e confirma origem, caminho, token e bytes retornados;
-- cria uma segunda URL de 2 segundos, confirma os bytes antes do prazo e exige negação 4xx após a expiração, com cache desabilitado;
+- compara os bytes baixados com o payload original;
+- cria URL assinada curta e valida origem, caminho, token, bytes e expiração;
 - exige que a segunda conta não consiga baixar nem assinar o objeto da proprietária;
 - remove objeto e caderno antes de encerrar as sessões;
-- preserva simultaneamente falhas da verificação e da limpeza, sem mascarar a causa original.
+- preserva simultaneamente falhas da verificação e da limpeza.
 
-As sentinelas possuem prefixo `__staging_probe_`, usam somente dados sintéticos e não contêm conteúdo do usuário. Tokens de URLs assinadas não são escritos nos logs.
+As sentinelas usam prefixo `__staging_probe_`, somente dados sintéticos e nenhum conteúdo do usuário. Tokens de URLs assinadas não são escritos nos logs.
 
-## O que este gate não cobre
+Os contratos locais/remotos de banco também cobrem RLS, privilégios, SECURITY DEFINER/INVOKER, quotas, manifests OCR e cobertura da FK composta de `ocr_batches`.
 
-A verificação não substitui:
+## O que os gates ainda não provam
 
-- execução real das Edge Functions;
-- OCR com Gemini, coberto separadamente por `Verify OCR staging`;
-- injeção de 429, 503, timeout ou payload inválido;
+A sincronização de schema/runtime e os contratos atuais não substituem:
+
+- OAuth Google completo com credenciais reais de staging;
+- leitura/alteração real de arquivos no Google Drive;
+- OCR real com Gemini;
+- injeção end-to-end de 429, 503, timeout ou payload inválido;
 - instalação PWA e headers do host final;
 - teste em tablet/celular;
-- confirmação de billing desativado.
+- confirmação operacional de billing.
 
-Esses gates permanecem etapas separadas da preparação de release.
+Esses cenários devem permanecer separados dos contratos determinísticos de banco e frontend.
 
 ## Recuperação
 
-Se o job for interrompido depois de criar sentinelas:
+Se o gate for interrompido depois de criar sentinelas:
 
-1. procure na tabela `notebooks` da conta autorizada por nomes iniciados com `__staging_probe_`;
-2. procure no bucket `documents`, dentro do prefixo do UUID dessa conta, por pastas `__staging_probe_`;
+1. procure em `notebooks` por nomes iniciados com `__staging_probe_` da conta de teste;
+2. procure no bucket `documents`, sob o UUID dessa conta, por pastas `__staging_probe_`;
 3. remova somente os registros e objetos sintéticos correspondentes.
 
-Nunca automatize essa recuperação com service-role key dentro do workflow. Uma sentinela residual é preferível a conceder privilégios administrativos ao gate.
+Nunca automatize essa limpeza do gate público com service-role key. Uma sentinela residual é preferível a ampliar o privilégio do workflow de verificação.
