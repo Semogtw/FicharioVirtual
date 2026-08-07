@@ -64,7 +64,6 @@ type DocumentLike = {
 const DRIVE_ID = /^[A-Za-z0-9_-]{10,256}$/;
 const API_KEY = /^AIza[A-Za-z0-9_-]{20,252}$/;
 const PROJECT_NUMBER = /^\d{6,20}$/;
-const MAX_PICKER_FILE_BYTES = 50 * 1024 * 1024;
 let pickerLoad: Promise<GooglePickerRuntime> | null = null;
 
 function hasExactKeys(record: Record<string, unknown>, expected: readonly string[]) {
@@ -167,7 +166,7 @@ export function parsePickerSelection(value: unknown): GooglePickerSelection | nu
 	}
 	const sizeBytes = Number(record.sizeBytes);
 	const modifiedAt = new Date(record.lastEditedUtc).toISOString();
-	if (!Number.isSafeInteger(sizeBytes) || sizeBytes < 1 || sizeBytes > MAX_PICKER_FILE_BYTES) {
+	if (!Number.isSafeInteger(sizeBytes) || sizeBytes < 1) {
 		throw new TypeError('Invalid Google Picker response');
 	}
 	return Object.freeze({
