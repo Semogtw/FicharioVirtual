@@ -1,24 +1,39 @@
+<script lang="ts">
+	import { page } from '$app/state';
+	import NavigationIcon from './NavigationIcon.svelte';
+
+	const navigation = [
+		{ href: '/', label: 'Início', icon: 'home' },
+		{ href: '/library/', label: 'Biblioteca', icon: 'library' },
+		{ href: '/import/', label: 'Importar', icon: 'import' },
+		{ href: '/review/', label: 'Revisar', icon: 'review' },
+		{ href: '/drive/', label: 'Drive', icon: 'drive' }
+	] as const;
+
+	function normalizePath(pathname: string) {
+		const normalized = pathname.replace(/\/+$/, '');
+		return normalized || '/';
+	}
+
+	function isCurrent(href: string) {
+		const pathname = normalizePath(page.url.pathname);
+		const target = normalizePath(href);
+		return target === '/' ? pathname === '/' : pathname === target || pathname.startsWith(`${target}/`);
+	}
+</script>
+
 <nav class="mobile-navigation" aria-label="Navegação principal">
-	<a href="/" aria-label="Início">
-		<span aria-hidden="true">⌂</span>
-		<small>Início</small>
-	</a>
-	<a href="/library/" aria-label="Biblioteca">
-		<span aria-hidden="true">▤</span>
-		<small>Biblioteca</small>
-	</a>
-	<a class="import" href="/import/" aria-label="Importar">
-		<span aria-hidden="true">＋</span>
-		<small>Importar</small>
-	</a>
-	<a href="/review/" aria-label="Revisar">
-		<span aria-hidden="true">✓</span>
-		<small>Revisar</small>
-	</a>
-	<a href="/drive/" aria-label="Google Drive">
-		<span aria-hidden="true">☁</span>
-		<small>Drive</small>
-	</a>
+	{#each navigation as item}
+		<a
+			href={item.href}
+			aria-label={item.label}
+			class:active={isCurrent(item.href)}
+			aria-current={isCurrent(item.href) ? 'page' : undefined}
+		>
+			<NavigationIcon name={item.icon} />
+			<small>{item.label}</small>
+		</a>
+	{/each}
 </nav>
 
 <style>
@@ -47,22 +62,19 @@
 		color: var(--muted);
 	}
 
-	a:active {
+	a:active,
+	a.active {
 		background: var(--archive-soft);
+		color: var(--archive);
 	}
 
-	span {
-		font-size: 1.3rem;
-		line-height: 1;
+	a.active {
+		font-weight: 760;
 	}
 
 	small {
 		font-size: 0.7rem;
 		font-weight: 720;
-	}
-
-	.import {
-		color: var(--accent-strong);
 	}
 
 	@media (min-width: 768px) {
