@@ -29,7 +29,8 @@ describe('DrivePdfDataRangeTransport', () => {
 			downloadRange,
 			onFailure
 		});
-		const onDataRange = vi.spyOn(transport, 'onDataRange');
+		const onDataRange = vi.fn();
+		transport.onDataRange = onDataRange;
 
 		transport.requestDataRange(1024, 1028);
 		await flush();
@@ -62,7 +63,8 @@ describe('DrivePdfDataRangeTransport', () => {
 			downloadRange,
 			onFailure
 		});
-		const onDataRange = vi.spyOn(transport, 'onDataRange');
+		const onDataRange = vi.fn();
+		transport.onDataRange = onDataRange;
 
 		transport.requestDataRange(0, 1024);
 		await flush();
@@ -80,7 +82,10 @@ describe('openDrivePdfRangeDocument', () => {
 	it('disables streaming and automatic prefetch while using the custom range transport', async () => {
 		const document = { numPages: 321 } as never;
 		const destroy = vi.fn().mockResolvedValue(undefined);
-		const createLoadingTask = vi.fn(() => ({ promise: Promise.resolve(document), destroy }));
+		const createLoadingTask = vi.fn((_source: unknown) => ({
+			promise: Promise.resolve(document),
+			destroy
+		}));
 
 		await expect(
 			openDrivePdfRangeDocument({
@@ -95,7 +100,7 @@ describe('openDrivePdfRangeDocument', () => {
 		).resolves.toBe(document);
 
 		expect(createLoadingTask).toHaveBeenCalledTimes(1);
-		const source = createLoadingTask.mock.calls[0]?.[0];
+		const source = createLoadingTask.mock.calls[0]?.[0] as Record<string, unknown>;
 		expect(source).toMatchObject({
 			rangeChunkSize: DRIVE_PDF_RANGE_CHUNK_BYTES,
 			disableStream: true,
@@ -104,7 +109,7 @@ describe('openDrivePdfRangeDocument', () => {
 		});
 		expect(source).not.toHaveProperty('url');
 		expect(source).not.toHaveProperty('data');
-		expect(source?.range).toBeInstanceOf(DrivePdfDataRangeTransport);
+		expect(source.range).toBeInstanceOf(DrivePdfDataRangeTransport);
 		expect(destroy).not.toHaveBeenCalled();
 	});
 });
