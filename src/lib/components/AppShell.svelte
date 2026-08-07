@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import type { Snippet } from 'svelte';
 	import MobileNavigation from './MobileNavigation.svelte';
+	import NavigationIcon from './NavigationIcon.svelte';
 	import TopSearch from './TopSearch.svelte';
 
 	interface AppShellProps {
@@ -17,13 +18,24 @@
 	);
 
 	const navigation = [
-		{ href: '/', label: 'Início', mark: '⌂' },
-		{ href: '/library/', label: 'Biblioteca', mark: '▤' },
-		{ href: '/notebooks/', label: 'Cadernos', mark: '▥' },
-		{ href: '/import/', label: 'Importar', mark: '＋' },
-		{ href: '/review/', label: 'Revisar', mark: '✓' },
-		{ href: '/drive/', label: 'Drive', mark: '☁' }
+		{ href: '/', label: 'Início', icon: 'home' },
+		{ href: '/library/', label: 'Biblioteca', icon: 'library' },
+		{ href: '/notebooks/', label: 'Cadernos', icon: 'notebooks' },
+		{ href: '/import/', label: 'Importar', icon: 'import' },
+		{ href: '/review/', label: 'Revisar', icon: 'review' },
+		{ href: '/drive/', label: 'Drive', icon: 'drive' }
 	] as const;
+
+	function normalizePath(pathname: string) {
+		const normalized = pathname.replace(/\/+$/, '');
+		return normalized || '/';
+	}
+
+	function isCurrent(href: string) {
+		const pathname = normalizePath(page.url.pathname);
+		const target = normalizePath(href);
+		return target === '/' ? pathname === '/' : pathname === target || pathname.startsWith(`${target}/`);
+	}
 
 	function search(query: string) {
 		void goto(`/search/?q=${encodeURIComponent(query)}`);
@@ -44,15 +56,24 @@
 
 		<nav aria-label="Navegação principal">
 			{#each navigation as item}
-				<a href={item.href}>
-					<span class="nav-mark" aria-hidden="true">{item.mark}</span>
+				<a
+					href={item.href}
+					class:active={isCurrent(item.href)}
+					aria-current={isCurrent(item.href) ? 'page' : undefined}
+				>
+					<span class="nav-mark"><NavigationIcon name={item.icon} /></span>
 					<span class="nav-label">{item.label}</span>
 				</a>
 			{/each}
 		</nav>
 
-		<a class="settings" href="/settings/">
-			<span class="nav-mark" aria-hidden="true">⚙</span>
+		<a
+			class="settings"
+			class:active={isCurrent('/settings/')}
+			href="/settings/"
+			aria-current={isCurrent('/settings/') ? 'page' : undefined}
+		>
+			<span class="nav-mark"><NavigationIcon name="settings" /></span>
 			<span class="nav-label">Configurações</span>
 		</a>
 	</aside>
@@ -203,14 +224,23 @@
 		}
 
 		.sidebar nav a:hover,
-		.settings:hover {
+		.settings:hover,
+		.sidebar nav a.active,
+		.settings.active {
 			background: var(--archive-soft);
 			color: var(--archive);
 		}
 
+		.sidebar nav a.active,
+		.settings.active {
+			font-weight: 760;
+		}
+
 		.nav-mark {
-			font-size: 1.25rem;
-			line-height: 1;
+			display: grid;
+			place-items: center;
+			width: 1.4rem;
+			height: 1.4rem;
 		}
 
 		.settings {
