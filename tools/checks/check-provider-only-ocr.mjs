@@ -26,22 +26,13 @@ const requiredByFile = new Map([
 			'requestGeminiOcrBatch',
 			'OCR_BATCH_MAX_PAGES',
 			'OCR_BATCH_MAX_BYTES',
-			"supabase.rpc('register_ocr_batch'",
-			"supabase.rpc('record_ocr_batch_call'"
+			/supabase\.rpc\(\s*['"]register_ocr_batch['"]/u,
+			/supabase\.rpc\(\s*['"]record_ocr_batch_call['"]/u
 		]
 	],
-	[
-		'src/lib/pdf/upload.ts',
-		['runPdfOcrBatches', 'MAX_DERIVED_PAGE_BYTES', 'processOcrBatch']
-	],
-	[
-		'src/lib/services/ocr-resume.ts',
-		['runPdfOcrBatches', 'processOcrBatch']
-	],
-	[
-		'.env.example',
-		['OCR_BATCH_MAX_PAGES', 'OCR_BATCH_MAX_BYTES', 'OCR_REQUEST_TIMEOUT_MS']
-	]
+	['src/lib/pdf/upload.ts', ['runPdfOcrBatches', 'MAX_DERIVED_PAGE_BYTES', 'processOcrBatch']],
+	['src/lib/services/ocr-resume.ts', ['runPdfOcrBatches', 'processOcrBatch']],
+	['.env.example', ['OCR_BATCH_MAX_PAGES', 'OCR_BATCH_MAX_BYTES', 'OCR_REQUEST_TIMEOUT_MS']]
 ]);
 
 const failures = [];
@@ -50,8 +41,10 @@ for (const file of activeFiles) {
 	for (const token of forbidden) {
 		if (source.includes(token)) failures.push(`${file}: forbidden token ${token}`);
 	}
-	for (const token of requiredByFile.get(file) ?? []) {
-		if (!source.includes(token)) failures.push(`${file}: missing required token ${token}`);
+	for (const requirement of requiredByFile.get(file) ?? []) {
+		const present =
+			requirement instanceof RegExp ? requirement.test(source) : source.includes(requirement);
+		if (!present) failures.push(`${file}: missing required token ${requirement}`);
 	}
 }
 
@@ -77,7 +70,9 @@ const historicalQuotaMigration = await readFile(
 	'utf8'
 );
 if (!historicalQuotaMigration.includes('daily_hard_limit')) {
-	failures.push('historical quota migration changed unexpectedly; supersede it instead of rewriting history');
+	failures.push(
+		'historical quota migration changed unexpectedly; supersede it instead of rewriting history'
+	);
 }
 
 if (failures.length > 0) {
