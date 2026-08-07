@@ -10,6 +10,10 @@
 	} from '$lib/drive/picker-service';
 	import { stageDrivePdfReference } from '$lib/pdf/drive-reference';
 	import { importStagedDrivePdfReference } from '$lib/pdf/drive-reference-import';
+	import {
+		listDrivePdfReferences,
+		type ResumableDrivePdfReference
+	} from '$lib/pdf/drive-reference-resume';
 	import { listNotebooks } from '$lib/services/notebooks';
 	import { addImages, importQueue } from '$lib/stores/import-queue.svelte';
 	import { addPdfs, pdfImportQueue } from '$lib/stores/pdf-import-queue.svelte';
@@ -18,9 +22,13 @@
 	let notebooks = $state<readonly NotebookSummary[]>([]);
 	let notebookId = $state('');
 	let loadingNotebooks = $state(true);
+	let loadingReferences = $state(true);
+	let pendingReferences = $state<readonly ResumableDrivePdfReference[]>([]);
+	let resumingDocumentId = $state<string | null>(null);
 	let selecting = $state(false);
 	let consent = $state(false);
 	let error = $state<string | null>(null);
+	let referenceError = $state<string | null>(null);
 	let message = $state<string | null>(null);
 
 	let activeImages = $derived(
@@ -46,13 +54,69 @@
 		}
 	}
 
+	async function loadPendingReferences() {
+		loadingReferences = true;
+		referenceError = null;
+		try {
+			pendingReferences = (await listDrivePdfReferences()).filter(
+				(reference) => reference.status === 'pending_inspection'
+			);
+		} catch (caught) {
+			referenceError =
+				caught instanceof Error
+					? caught.message
+					: 'Não foi possível carregar os PDFs grandes pendentes.';
+		} finally {
+			loadingReferences = false;
+		}
+	}
+
 	function referenceTitle(name: string) {
 		const withoutExtension = name.replace(/\.pdf$/i, '').trim();
 		return (withoutExtension || 'PDF importado').slice(0, 240);
 	}
 
+	function formatSize(bytes: number) {
+		return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+	}
+
+	function referenceMessage(name: string, pending: number) {
+		return pending > 0
+			? `“${name}” foi importado por referência; ${pending} página(s) de OCR permanecem retomáveis.`
+			: `“${name}” foi importado por referência sem baixar o PDF inteiro.`;
+	}
+
+	async function resumeReference(reference: ResumableDrivePdfReference) {
+		if (resumingDocumentId !== null || selecting) return;
+		error = null;
+		message = null;
+		if (!consent) {
+			error = 'Confirme a autorização de OCR antes de retomar o PDF.';
+			return;
+		}
+		resumingDocumentId = reference.documentId;
+		try {
+			const imported = await importStagedDrivePdfReference({
+				staged: {
+					documentId: reference.documentId,
+					driveFileId: reference.driveFileId,
+					sourceSizeBytes: reference.sourceSizeBytes,
+					status: 'pending_inspection'
+				},
+				consentGranted: true
+			});
+			message = referenceMessage(reference.title, imported.ocrPending + imported.ocrFailed);
+		} catch (caught) {
+			error =
+				caught instanceof Error ? caught.message : 'Não foi possível retomar o PDF preservado.';
+		} finally {
+			resumingDocumentId = null;
+			await loadPendingReferences();
+		}
+	}
+
 	async function selectFromDrive() {
-		if (selecting || !pickerConfigured) return;
+		if (selecting || !pickerConfigured || resumingDocumentId !== null) return;
 		error = null;
 		message = null;
 		if (!consent) {
@@ -76,15 +140,16 @@
 					notebookId: notebookId || null,
 					title: referenceTitle(selected.selection.name)
 				});
+				await loadPendingReferences();
 				const imported = await importStagedDrivePdfReference({
 					staged,
 					consentGranted: true
 				});
-				const pending = imported.ocrPending + imported.ocrFailed;
-				message =
-					pending > 0
-						? `“${selected.selection.name}” foi importado por referência; ${pending} página(s) de OCR permanecem retomáveis.`
-						: `“${selected.selection.name}” foi importado por referência sem baixar o PDF inteiro.`;
+				message = referenceMessage(
+					selected.selection.name,
+					imported.ocrPending + imported.ocrFailed
+				);
+				await loadPendingReferences();
 				return;
 			}
 
@@ -108,7 +173,7 @@
 	}
 
 	onMount(() => {
-		void loadNotebooks();
+		void Promise.all([loadNotebooks(), loadPendingReferences()]);
 	});
 </script>
 
@@ -147,7 +212,11 @@
 		</label>
 
 		<label class="consent">
-			<input type="checkbox" bind:checked={consent} disabled={selecting} />
+			<input
+				type="checkbox"
+				bind:checked={consent}
+				disabled={selecting || resumingDocumentId !== null}
+			/>
 			<span>
 				<strong>Permitir OCR somente quando necessário</strong>
 				<small>
@@ -169,10 +238,47 @@
 		</div>
 		<Button
 			label={selecting ? 'Abrindo Drive…' : 'Escolher no Google Drive'}
-			disabled={!pickerConfigured || selecting || loadingNotebooks}
+			disabled={!pickerConfigured || selecting || loadingNotebooks || resumingDocumentId !== null}
 			onclick={() => void selectFromDrive()}
 		/>
 	</section>
+
+	{#if loadingReferences || pendingReferences.length > 0 || referenceError}
+		<section class="resume-card" aria-labelledby="resume-title">
+			<div>
+				<p class="eyebrow">Retomada durável</p>
+				<h2 id="resume-title">PDFs grandes preservados</h2>
+				<p>
+					Esses arquivos já estão na pasta controlada do Drive. Retomar lê somente faixas e páginas
+					necessárias; você não precisa selecionar nem enviar o PDF novamente.
+				</p>
+			</div>
+			{#if loadingReferences}
+				<p class="muted" role="status">Verificando referências pendentes…</p>
+			{:else if referenceError}
+				<div class="reference-error">
+					<p role="alert">{referenceError}</p>
+					<Button label="Tentar carregar novamente" onclick={() => void loadPendingReferences()} />
+				</div>
+			{:else}
+				<div class="reference-list">
+					{#each pendingReferences as reference (reference.documentId)}
+						<article>
+							<div>
+								<strong>{reference.title}</strong>
+								<small>{formatSize(reference.sourceSizeBytes)} · preservado no Google Drive</small>
+							</div>
+							<Button
+								label={resumingDocumentId === reference.documentId ? 'Retomando…' : 'Retomar'}
+								disabled={selecting || resumingDocumentId !== null}
+								onclick={() => void resumeReference(reference)}
+							/>
+						</article>
+					{/each}
+				</div>
+			{/if}
+		</section>
+	{/if}
 
 	{#if error}<p class="error" role="alert">{error}</p>{/if}
 	{#if message}<p class="message" role="status">{message}</p>{/if}
@@ -214,7 +320,8 @@
 	}
 	header p:last-child,
 	.notice p,
-	.picker-card p {
+	.picker-card p,
+	.resume-card > div:first-child > p:last-child {
 		max-width: 56rem;
 		margin: 0;
 		color: var(--muted);
@@ -222,6 +329,7 @@
 	}
 	.options,
 	.picker-card,
+	.resume-card,
 	.notice,
 	.queues a {
 		padding: 1rem;
@@ -269,7 +377,9 @@
 		gap: 0.2rem;
 	}
 	.consent small,
-	.queues span {
+	.queues span,
+	.reference-list small,
+	.muted {
 		color: var(--muted);
 		line-height: 1.45;
 	}
@@ -282,11 +392,50 @@
 		border-left: 0.3rem solid var(--archive);
 	}
 	.picker-card h2,
-	.notice h2 {
+	.notice h2,
+	.resume-card h2 {
 		margin: 0 0 0.4rem;
 	}
 	.notice {
 		border-left: 0.3rem solid var(--danger);
+	}
+	.resume-card {
+		display: grid;
+		gap: 1rem;
+		border-left: 0.3rem solid var(--archive);
+	}
+	.reference-list {
+		display: grid;
+		gap: 0.65rem;
+	}
+	.reference-list article {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.8rem;
+		padding: 0.75rem;
+		border: 1px solid var(--line);
+		border-radius: var(--radius-sm);
+		background: var(--surface-strong);
+	}
+	.reference-list article > div {
+		display: grid;
+		gap: 0.2rem;
+		min-width: 0;
+	}
+	.reference-list strong,
+	.reference-list small {
+		overflow-wrap: anywhere;
+	}
+	.reference-error {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+	}
+	.reference-error p {
+		margin: 0;
+		color: var(--danger);
 	}
 	.queues {
 		display: grid;
@@ -316,7 +465,9 @@
 		.queues {
 			grid-template-columns: 1fr;
 		}
-		.picker-card {
+		.picker-card,
+		.reference-list article,
+		.reference-error {
 			align-items: stretch;
 			flex-direction: column;
 		}
