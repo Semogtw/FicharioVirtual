@@ -13,7 +13,10 @@ type QueryResult = Readonly<{ data: unknown; error: unknown }>;
 export type DrivePdfReferenceRecoveryClient = Readonly<{
 	from(table: string): {
 		select(columns: string): {
-			eq(column: string, value: string): {
+			eq(
+				column: string,
+				value: string
+			): {
 				maybeSingle(): Promise<QueryResult>;
 			};
 		};
