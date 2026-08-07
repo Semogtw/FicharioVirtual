@@ -66,7 +66,7 @@
 			transform 120ms ease;
 	}
 
-	.document-card:hover {
+	.document-card:focus-within {
 		border-color: var(--line-strong);
 		box-shadow: var(--shadow-soft);
 		transform: translateY(-0.125rem);
@@ -157,5 +157,13 @@
 		margin-bottom: 0;
 		color: var(--muted);
 		font-size: 0.8rem;
+	}
+
+	@media (hover: hover) and (pointer: fine) {
+		.document-card:hover {
+			border-color: var(--line-strong);
+			box-shadow: var(--shadow-soft);
+			transform: translateY(-0.125rem);
+		}
 	}
 </style>
