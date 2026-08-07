@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(22);
+select plan(24);
 
 insert into auth.users (id, email)
 values ('11111111-1111-4111-8111-111111111111', 'drive-runner@example.test');
@@ -94,6 +94,7 @@ select is(
   'lease owner completes the folder creation'
 );
 
+reset role;
 select results_eq(
   $$
     select drive_folder_id, drive_version, drive_sync_status::text
@@ -139,6 +140,7 @@ select is(
   true,
   'transient provider failure schedules a retry'
 );
+reset role;
 select results_eq(
   $$
     select status::text, lease_owner, lease_expires_at, next_retry_at > timezone('utc', now()), last_error_code
@@ -152,6 +154,8 @@ select results_eq(
 update public.drive_sync_jobs
 set next_retry_at = timezone('utc', now()) - interval '1 second'
 where id = (select id from rename_claim);
+set local role service_role;
+select set_config('request.jwt.claim.role', 'service_role', true);
 create temporary table retry_claim as
 select *
 from public.claim_drive_sync_job_for_user(
@@ -176,6 +180,7 @@ select is(
   true,
   'retried rename can complete normally'
 );
+reset role;
 select is(
   (select drive_sync_status::text from public.notebooks where id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
   'synced',
@@ -212,6 +217,7 @@ select is(
   true,
   'irreconcilable local mutation becomes an isolated conflict'
 );
+reset role;
 select is(
   (select status::text from public.drive_sync_jobs where id = (select id from conflict_claim)),
   'conflict',
@@ -252,6 +258,8 @@ insert into public.drive_sync_jobs (
   1
 );
 
+set local role service_role;
+select set_config('request.jwt.claim.role', 'service_role', true);
 create temporary table expired_claim as
 select *
 from public.claim_drive_sync_job_for_user(
@@ -276,6 +284,7 @@ select is(
   true,
   'physical deletion job completes without a surviving domain row'
 );
+reset role;
 select is(
   (select status::text from public.drive_sync_jobs where id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'),
   'synced',
