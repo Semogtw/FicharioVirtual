@@ -31,6 +31,20 @@ describe('Supabase staging migration deploy workflow', () => {
 		expect(source).not.toContain('--include-all');
 	});
 
+	it('deploys the versioned Edge Functions only after the database is synchronized', () => {
+		const push = source.indexOf('supabase db push --linked\n');
+		const deployFunctions = source.indexOf(
+			'supabase functions deploy --project-ref "$STAGING_SUPABASE_PROJECT_REF"'
+		);
+		const listFunctions = source.indexOf(
+			'supabase functions list --project-ref "$STAGING_SUPABASE_PROJECT_REF"'
+		);
+
+		expect(deployFunctions).toBeGreaterThan(push);
+		expect(listFunctions).toBeGreaterThan(deployFunctions);
+		expect(source).not.toContain('--no-verify-jwt');
+	});
+
 	it('takes administrative connection material only from protected environment settings', () => {
 		expect(source).toContain('SUPABASE_ACCESS_TOKEN: ${{ secrets.STAGING_SUPABASE_ACCESS_TOKEN }}');
 		expect(source).toContain('SUPABASE_DB_PASSWORD: ${{ secrets.STAGING_SUPABASE_DB_PASSWORD }}');
