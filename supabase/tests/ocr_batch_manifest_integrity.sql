@@ -54,7 +54,7 @@ values (
   '11111111-1111-4111-8111-111111111111',
   '10000000-0000-4000-8000-000000000001',
   'pending',
-  'manifest-page-1'
+  'manifest-page-0001'
 );
 
 set local role authenticated;
@@ -93,7 +93,7 @@ values (
   '11111111-1111-4111-8111-111111111111',
   '10000000-0000-4000-8000-000000000002',
   'pending',
-  'manifest-page-2'
+  'manifest-page-0002'
 );
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
@@ -162,7 +162,7 @@ select is(
     from public.ocr_jobs j
     where j.batch_id = (select id from valid_manifest)
   ),
-  array[1, 2],
+  array[1,2],
   'job ordinals preserve the requested page order'
 );
 
