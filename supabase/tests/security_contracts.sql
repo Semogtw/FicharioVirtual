@@ -60,7 +60,7 @@ select is(
 
 select has_function('public', 'is_authorized_user', array[]::text[], 'authorization function exists');
 select has_function('public', 'search_pages', array['text','uuid','integer','integer'], 'search function exists');
-select has_function('public', 'claim_ocr_job', array['uuid','text','timestamp with time zone','integer'], 'OCR claim function exists');
+select has_function('public', 'claim_ocr_job', array['uuid','text','timestamp with time zone'], 'OCR claim function exists without an application quota argument');
 select has_function('public', 'complete_ocr_job', array['uuid','text','jsonb','text','timestamp with time zone'], 'OCR completion function exists');
 select has_function('public', 'fail_ocr_job', array['uuid','text','text','boolean','timestamp with time zone','timestamp with time zone'], 'OCR failure function exists');
 select has_function('public', 'create_pdf_import', array['uuid','uuid','text','text','text','text','timestamp with time zone','jsonb','integer'], 'PDF import function exists');
