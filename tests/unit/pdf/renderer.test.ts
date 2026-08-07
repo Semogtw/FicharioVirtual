@@ -14,7 +14,7 @@ vi.mock('pdfjs-dist/build/pdf.worker.min.mjs?url', () => ({
 	default: '/pdf.worker.js'
 }));
 
-import { renderPdfPage } from '../../../src/lib/pdf/renderer';
+import { renderPdfDocumentPage, renderPdfPage } from '../../../src/lib/pdf/renderer';
 
 type BlobCallback = (blob: Blob | null) => void;
 
@@ -90,6 +90,29 @@ beforeEach(() => {
 afterEach(() => {
 	if (originalDocument === undefined) Reflect.deleteProperty(globalThis, 'document');
 	else globalThis.document = originalDocument;
+});
+
+describe('renderPdfDocumentPage', () => {
+	it('renders from an already-open document without loading or destroying the document', async () => {
+		const fixture = canvasFixture();
+		globalThis.document = {
+			createElement: vi.fn(() => fixture.canvas)
+		} as unknown as Document;
+		const pdf = successfulPdf({ canvas: fixture });
+
+		const pending = renderPdfDocumentPage(pdf.document as never, 1);
+		await vi.waitFor(() => expect(pdf.page.render).toHaveBeenCalledOnce());
+		pdf.render.resolve();
+		await vi.waitFor(() => expect(fixture.callbacks).toHaveLength(1));
+		const encoded = new Blob(['page'], { type: 'image/webp' });
+		fixture.callbacks[0]?.(encoded);
+
+		await expect(pending).resolves.toBe(encoded);
+		expect(pdfRuntime.getDocument).not.toHaveBeenCalled();
+		expect(pdf.loadingTask.destroy).not.toHaveBeenCalled();
+		expect(pdf.document.cleanup).not.toHaveBeenCalled();
+		expect(pdf.page.cleanup).toHaveBeenCalledOnce();
+	});
 });
 
 describe('renderPdfPage cancellation and cleanup', () => {
