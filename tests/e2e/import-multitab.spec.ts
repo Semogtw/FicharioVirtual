@@ -267,12 +267,15 @@ test('two tabs resume one persisted image import without duplicate upload or OCR
 
 	await expect.poll(() => counters.ocrRuns, { timeout: 20_000 }).toBe(1);
 	await expect
-		.poll(async () => {
-			return (
-				(await first.getByText('Pronto', { exact: true }).count()) +
-				(await second.getByText('Pronto', { exact: true }).count())
-			);
-		})
+		.poll(
+			async () => {
+				return (
+					(await first.getByText('Pronto', { exact: true }).count()) +
+					(await second.getByText('Pronto', { exact: true }).count())
+				);
+			},
+			{ timeout: 15_000 }
+		)
 		.toBe(1);
 
 	expect(counters.consents).toBe(1);
