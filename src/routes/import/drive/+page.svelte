@@ -119,7 +119,9 @@
 
 	async function cancelReference(reference: ResumableDrivePdfReference) {
 		if (deletingDocumentId !== null || resumingDocumentId !== null || selecting) return;
-		if (!globalThis.confirm(`Excluir a cópia preservada de “${reference.title}” do Google Drive?`)) {
+		if (
+			!globalThis.confirm(`Excluir a cópia preservada de “${reference.title}” do Google Drive?`)
+		) {
 			return;
 		}
 		error = null;
@@ -266,7 +268,11 @@
 		</div>
 		<Button
 			label={selecting ? 'Abrindo Drive…' : 'Escolher no Google Drive'}
-			disabled={!pickerConfigured || selecting || loadingNotebooks || resumingDocumentId !== null || deletingDocumentId !== null}
+			disabled={!pickerConfigured ||
+				selecting ||
+				loadingNotebooks ||
+				resumingDocumentId !== null ||
+				deletingDocumentId !== null}
 			onclick={() => void selectFromDrive()}
 		/>
 	</section>
@@ -303,7 +309,9 @@
 									onclick={() => void resumeReference(reference)}
 								/>
 								<Button
-									label={deletingDocumentId === reference.documentId ? 'Excluindo…' : 'Excluir cópia'}
+									label={deletingDocumentId === reference.documentId
+										? 'Excluindo…'
+										: 'Excluir cópia'}
 									disabled={selecting || resumingDocumentId !== null || deletingDocumentId !== null}
 									onclick={() => void cancelReference(reference)}
 								/>
