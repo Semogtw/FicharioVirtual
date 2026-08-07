@@ -14,7 +14,6 @@ describe('usage route request ordering', () => {
 
 	it('invalidates an in-flight usage request when the route is destroyed', () => {
 		expect(source).toContain("import { onDestroy, onMount } from 'svelte';");
-		expect(source).toContain('onDestroy(() => {');
-		expect(source).toContain('refreshRequests.next();');
+		expect(source).toMatch(/onDestroy\(\(\) =>\s*refreshRequests\.next\(\)\);/);
 	});
 });
