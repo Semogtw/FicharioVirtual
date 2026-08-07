@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
+	import NativeSelect from '$lib/components/ui/native-select/NativeSelect.svelte';
 	import type { DocumentSummary } from '$lib/domain/document';
 	import type { NotebookSummary } from '$lib/domain/notebook';
 	import { updateDocumentOrganization } from '$lib/services/document-organization';
@@ -174,7 +175,7 @@
 						</label>
 						<label>
 							<span>Caderno</span>
-							<select
+							<NativeSelect
 								bind:value={row.notebookId}
 								disabled={row.saving || !notebookOptionsReady}
 								onchange={() => changed(row)}
@@ -183,7 +184,7 @@
 								{#each notebooks as notebook}
 									<option value={notebook.id}>{notebook.name}</option>
 								{/each}
-							</select>
+							</NativeSelect>
 						</label>
 					</div>
 					<div class="actions">
@@ -280,8 +281,7 @@
 		font-weight: 720;
 	}
 
-	input,
-	select {
+	input {
 		width: 100%;
 		min-height: 2.65rem;
 		padding: 0.6rem 0.7rem;
