@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(23);
+select plan(22);
 
 insert into auth.users (id, email)
 values ('11111111-1111-4111-8111-111111111111', 'local-queue@example.test');
@@ -274,8 +274,8 @@ select is(
 
 select is(
   (select count(*) from public.drive_sync_jobs where status in ('pending', 'retryable', 'processing')),
-  7::bigint,
-  'all independent local operations remain queued without overwriting one another'
+  5::bigint,
+  'entity-bound work is superseded on deletion while independent Drive deletion receipts remain queued'
 );
 
 select * from finish();
