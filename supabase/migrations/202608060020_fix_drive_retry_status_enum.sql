@@ -73,3 +73,8 @@ begin
   return changed_count = 1;
 end;
 $$;
+
+revoke execute on function public.retry_drive_sync_job(uuid, uuid, text, text, text)
+  from public, anon, authenticated;
+grant execute on function public.retry_drive_sync_job(uuid, uuid, text, text, text)
+  to service_role;
