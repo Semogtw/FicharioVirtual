@@ -7,6 +7,11 @@ export type DrivePdfRangeInspection = Readonly<{
 	ocrReasonsByPage: readonly Readonly<{ pageNumber: number; reasons: readonly string[] }>[];
 }>;
 
+export type DrivePdfRangeInspectionOptions = Readonly<{
+	signal?: AbortSignal;
+	onPage?: (pageNumber: number, pageCount: number) => void;
+}>;
+
 function abortError() {
 	return new DOMException('Drive PDF inspection was cancelled', 'AbortError');
 }
@@ -16,6 +21,18 @@ function safelyCleanup(page: PDFPageProxy | null) {
 		page?.cleanup();
 	} catch {
 		// Page cleanup is best-effort and must not mask the inspection result.
+	}
+}
+
+function safelyReportPage(
+	onPage: DrivePdfRangeInspectionOptions['onPage'],
+	pageNumber: number,
+	pageCount: number
+) {
+	try {
+		onPage?.(pageNumber, pageCount);
+	} catch {
+		// Progress observers are UI-only and must never break the import pipeline.
 	}
 }
 
@@ -48,7 +65,7 @@ function normalizeText(items: readonly unknown[]) {
 
 export async function inspectDrivePdfDocument(
 	pdfDocument: PDFDocumentProxy,
-	options: { signal?: AbortSignal } = {}
+	options: DrivePdfRangeInspectionOptions = {}
 ): Promise<DrivePdfRangeInspection> {
 	if (!Number.isInteger(pdfDocument.numPages) || pdfDocument.numPages < 1) {
 		throw new Error('Não foi possível determinar as páginas do PDF remoto.');
@@ -60,9 +77,7 @@ export async function inspectDrivePdfDocument(
 
 	const nativePages: Array<Readonly<{ pageNumber: number; text: string }>> = [];
 	const pagesNeedingOcr: number[] = [];
-	const ocrReasonsByPage: Array<
-		Readonly<{ pageNumber: number; reasons: readonly string[] }>
-	> = [];
+	const ocrReasonsByPage: Array<Readonly<{ pageNumber: number; reasons: readonly string[] }>> = [];
 
 	for (let pageNumber = 1; pageNumber <= pdfDocument.numPages; pageNumber += 1) {
 		if (options.signal?.aborted) throw abortError();
@@ -87,6 +102,7 @@ export async function inspectDrivePdfDocument(
 		} finally {
 			safelyCleanup(page);
 		}
+		safelyReportPage(options.onPage, pageNumber, pdfDocument.numPages);
 	}
 
 	return Object.freeze({
