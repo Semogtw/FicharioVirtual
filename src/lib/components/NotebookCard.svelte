@@ -42,7 +42,7 @@
 			transform 120ms ease;
 	}
 
-	.notebook-card:hover {
+	.notebook-card:focus-within {
 		box-shadow: var(--shadow-raised);
 		transform: translateY(-0.15rem);
 	}
@@ -110,5 +110,12 @@
 		padding-top: 1.25rem;
 		font-weight: 690;
 		opacity: 0.78;
+	}
+
+	@media (hover: hover) and (pointer: fine) {
+		.notebook-card:hover {
+			box-shadow: var(--shadow-raised);
+			transform: translateY(-0.15rem);
+		}
 	}
 </style>
