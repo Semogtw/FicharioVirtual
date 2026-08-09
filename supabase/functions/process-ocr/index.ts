@@ -3,14 +3,6 @@ import { corsHeaders, parseAppOrigin } from '../_shared/cors.ts';
 import { claimStateHttpStatus, parseOcrClaimResult } from '../_shared/ocr-contract.ts';
 import { planOcrFailure } from '../_shared/ocr-failure.ts';
 import { requestGeminiOcrBatch, type GeminiOcrBatchPage } from '../_shared/gemini-ocr-client.ts';
-import {
-	classifyGeminiDiagnosticFailure,
-	createGeminiDiagnosticResult,
-	decodeGeminiDiagnosticFixture,
-	GEMINI_DIAGNOSTIC_PAGE,
-	hasServiceRoleClaim,
-	isGeminiDiagnosticRequest
-} from '../_shared/gemini-diagnostic-contract.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MODEL = /^[A-Za-z0-9._-]{3,128}$/;
@@ -105,78 +97,6 @@ function retryAt(attemptCount: number, baseSeconds: number) {
 	return new Date(Date.now() + delayMs).toISOString();
 }
 
-async function runGeminiDiagnostic(
-	authorization: string,
-	respond: (status: number, body: Record<string, unknown>) => Response
-) {
-	if (!hasServiceRoleClaim(authorization)) {
-		const result = createGeminiDiagnosticResult({
-			status: 'fail',
-			category: 'authorization',
-			code: 'diagnostic_forbidden',
-			httpStatus: 403
-		});
-		return respond(403, { ...result });
-	}
-
-	const apiKey = Deno.env.get('GEMINI_API_KEY');
-	const model = Deno.env.get('OCR_MODEL_PRIMARY');
-	const promptVersion = Number(Deno.env.get('OCR_PROMPT_VERSION') ?? '1');
-	if (
-		!apiKey ||
-		!model ||
-		!MODEL.test(model) ||
-		!Number.isInteger(promptVersion) ||
-		promptVersion < 1 ||
-		promptVersion > 10_000
-	) {
-		const result = createGeminiDiagnosticResult({
-			status: 'fail',
-			category: 'configuration',
-			code: 'provider_not_configured',
-			httpStatus: 503
-		});
-		return respond(503, { ...result });
-	}
-
-	try {
-		const outcome = await requestGeminiOcrBatch({
-			apiKey,
-			model,
-			promptVersion,
-			pages: [
-				{
-					...GEMINI_DIAGNOSTIC_PAGE,
-					bytes: decodeGeminiDiagnosticFixture()
-				}
-			]
-		});
-		if (!outcome.valid) {
-			const result = createGeminiDiagnosticResult({
-				status: 'fail',
-				category: 'provider',
-				code: 'provider_response_invalid',
-				httpStatus: 200
-			});
-			return respond(502, { ...result });
-		}
-		const result = createGeminiDiagnosticResult({
-			status: 'pass',
-			category: 'provider',
-			code: 'provider_ok',
-			httpStatus: 200
-		});
-		return respond(200, { ...result });
-	} catch (error) {
-		const result = classifyGeminiDiagnosticFailure(error);
-		const status =
-			result.category === 'provider' && result.httpStatus !== null && result.httpStatus >= 400
-				? result.httpStatus
-				: 502;
-		return respond(status, { ...result });
-	}
-}
-
 function aggregateBody(input: {
 	completedPageIds: readonly string[];
 	reviewPageIds: readonly string[];
@@ -217,9 +137,6 @@ Deno.serve(async (request) => {
 		rawBody = await request.json();
 	} catch {
 		return respond(400, { code: 'invalid_json' });
-	}
-	if (isGeminiDiagnosticRequest(rawBody)) {
-		return runGeminiDiagnostic(authorization, respond);
 	}
 	const parsedRequest = parseRequestBody(rawBody);
 	if (!parsedRequest) return respond(400, { code: 'invalid_ocr_request' });
@@ -518,39 +435,40 @@ Deno.serve(async (request) => {
 		if (sourceBlob.size > MAX_INLINE_IMAGE_BYTES || sourceBlob.size > maxBatchBytes) {
 			await failJob(claimed.page.id, {
 				code: 'ocr_source_too_large',
-				message: 'A página excede o limite seguro e precisa ser renderizada novamente.',
+				message: 'A imagem da página excede o limite seguro do OCR.',
 				retryable: false,
 				failedAt: new Date().toISOString(),
 				nextRetryAt: null
 			});
 			failedPageIds.push(claimed.page.id);
+			splitRequiredPageIds.push(claimed.page.id);
 			continue;
 		}
-		if (providerPages.length > 0 && aggregateBytes + sourceBlob.size > maxBatchBytes) {
-			for (const remainder of claimedPages.slice(index)) {
-				const nextRetryAt = retryAt(remainder.attemptCount, 1);
-				await failJob(remainder.page.id, {
-					code: 'ocr_batch_split_required',
-					message: 'O lote excedeu o limite seguro e será dividido automaticamente.',
+		if (aggregateBytes + sourceBlob.size > maxBatchBytes) {
+			for (let pendingIndex = index; pendingIndex < claimedPages.length; pendingIndex += 1) {
+				const pendingClaim = claimedPages[pendingIndex]!;
+				await failJob(pendingClaim.page.id, {
+					code: 'ocr_batch_too_large',
+					message: 'O lote excedeu o limite de bytes e precisa ser dividido.',
 					retryable: true,
 					failedAt: new Date().toISOString(),
-					nextRetryAt
+					nextRetryAt: retryAt(pendingClaim.attemptCount, 5)
 				});
-				pendingPageIds.push(remainder.page.id);
-				splitRequiredPageIds.push(remainder.page.id);
+				pendingPageIds.push(pendingClaim.page.id);
+				splitRequiredPageIds.push(pendingClaim.page.id);
 			}
 			break;
 		}
 
 		const bytes = new Uint8Array(await sourceBlob.arrayBuffer());
+		aggregateBytes += bytes.byteLength;
 		providerPages.push({
 			pageId: claimed.page.id,
 			pageNumber: claimed.page.page_number,
-			mimeType: sourceBlob.type || 'image/jpeg',
+			mimeType: sourceBlob.type || 'image/webp',
 			bytes
 		});
 		providerClaims.set(claimed.page.id, claimed);
-		aggregateBytes += sourceBlob.size;
 	}
 
 	if (providerPages.length === 0) {
@@ -564,146 +482,67 @@ Deno.serve(async (request) => {
 		return respond(pendingPageIds.length > 0 ? 202 : 200, result);
 	}
 
-	let activeBatchId = parsedRequest.batchId;
-	if (!activeBatchId) {
-		const { data: registeredBatchId, error: registerError } = await supabase.rpc(
-			'register_ocr_batch',
-			{
-				target_document_id: documentId,
-				target_route: 'gemini',
-				target_page_ids: providerPages.map((page) => page.pageId),
-				target_page_numbers: providerPages.map((page) => page.pageNumber),
-				target_source_bytes: 0,
-				target_derived_bytes: aggregateBytes,
-				target_split_depth: 0,
-				target_parent_batch_id: null,
-				target_model: model,
-				target_prompt_version: promptVersion,
-				registered_at: new Date().toISOString()
-			}
-		);
-		if (registerError || typeof registeredBatchId !== 'string' || !UUID.test(registeredBatchId)) {
-			for (const providerPage of providerPages) {
-				const claimed = providerClaims.get(providerPage.pageId)!;
-				await failJob(providerPage.pageId, {
-					code: 'ocr_batch_registration_failed',
-					message: 'O manifesto do lote não pôde ser persistido.',
-					retryable: true,
-					failedAt: new Date().toISOString(),
-					nextRetryAt: retryAt(claimed.attemptCount, 5)
-				});
-			}
-			providerPages.forEach((page) => page.bytes.fill(0));
-			return respond(503, { code: 'ocr_batch_registration_failed' });
-		}
-		activeBatchId = registeredBatchId;
-	}
-
-	const { data: callRecorded, error: callError } = await supabase.rpc('record_ocr_batch_call', {
-		target_batch_id: activeBatchId,
-		attempted_pages: providerPages.length,
-		called_at: new Date().toISOString()
-	});
-	if (callError || callRecorded !== true) {
-		for (const providerPage of providerPages) {
-			const claimed = providerClaims.get(providerPage.pageId)!;
-			await failJob(providerPage.pageId, {
-				code: 'ocr_batch_telemetry_failed',
-				message: 'A chamada não foi iniciada porque sua telemetria não pôde ser registrada.',
-				retryable: true,
-				failedAt: new Date().toISOString(),
-				nextRetryAt: retryAt(claimed.attemptCount, 5)
-			});
-		}
-		providerPages.forEach((page) => page.bytes.fill(0));
-		return respond(503, { code: 'ocr_batch_telemetry_failed' });
-	}
-
-	const timeout = new AbortController();
-	const timeoutId = setTimeout(() => timeout.abort(), requestTimeoutMs);
+	const abortController = new AbortController();
+	const timeout = setTimeout(() => abortController.abort(), requestTimeoutMs);
 	try {
 		const outcome = await requestGeminiOcrBatch({
 			apiKey,
 			model,
-			pages: providerPages,
 			promptVersion,
-			signal: timeout.signal
+			pages: providerPages,
+			signal: abortController.signal
 		});
-		const completedAt = new Date().toISOString();
-		for (const pageResult of outcome.pages) {
-			const claimed = providerClaims.get(pageResult.pageId);
+		const validIds = new Set<string>();
+		for (const result of outcome.pages) {
+			const claimed = providerClaims.get(result.pageId);
 			if (!claimed) continue;
+			validIds.add(result.pageId);
 			const { data: completed, error: completionError } = await supabase.rpc('complete_ocr_job', {
-				target_page_id: pageResult.pageId,
-				extracted_text: pageResult.text,
-				extraction_warnings: pageResult.warnings,
-				terminal_status: pageResult.needsReview ? 'needs_review' : 'ready',
-				completed_at: completedAt
+				target_page_id: result.pageId,
+				ocr_text: result.text,
+				review_required: result.needsReview,
+				provider_model: model,
+				processed_at: new Date().toISOString(),
+				warning_payload: result.warnings
 			});
 			if (completionError || completed !== true) {
-				await failJob(pageResult.pageId, {
-					code: 'ocr_completion_failed',
-					message: 'A transcrição foi recebida, mas ainda não pôde ser persistida.',
+				await failJob(result.pageId, {
+					code: 'ocr_persistence_failed',
+					message: 'O resultado não pôde ser salvo com segurança.',
 					retryable: true,
-					failedAt: completedAt,
-					nextRetryAt: retryAt(claimed.attemptCount, 5)
+					failedAt: new Date().toISOString(),
+					nextRetryAt: retryAt(claimed.attemptCount, 15)
 				});
-				pendingPageIds.push(pageResult.pageId);
+				pendingPageIds.push(result.pageId);
 				continue;
 			}
-			completedPageIds.push(pageResult.pageId);
-			if (pageResult.needsReview) reviewPageIds.push(pageResult.pageId);
-			await cleanupTemporaryImage(pageResult.pageId, claimed.page.temporary_image_path);
+			completedPageIds.push(result.pageId);
+			if (result.needsReview) reviewPageIds.push(result.pageId);
+			await cleanupTemporaryImage(result.pageId, claimed.page.temporary_image_path);
 		}
 
-		const affected = new Set([...outcome.missingPageIds, ...outcome.duplicatePageIds]);
-		for (const pageId of affected) {
+		const splitIds = new Set([
+			...outcome.missingPageIds,
+			...outcome.duplicatePageIds,
+			...providerPages
+				.map((page) => page.pageId)
+				.filter((pageId) => !validIds.has(pageId) && !outcome.unexpectedPageIds.includes(pageId))
+		]);
+		for (const pageId of splitIds) {
 			const claimed = providerClaims.get(pageId);
 			if (!claimed) continue;
 			await failJob(pageId, {
-				code: 'ocr_batch_split_required',
-				message: 'A resposta não preservou esta página; o subconjunto será dividido e repetido.',
+				code: 'ocr_batch_response_incomplete',
+				message: 'O lote retornou uma página ausente ou ambígua e será dividido.',
 				retryable: true,
-				failedAt: completedAt,
-				nextRetryAt: retryAt(claimed.attemptCount, 1)
+				failedAt: new Date().toISOString(),
+				nextRetryAt: retryAt(claimed.attemptCount, 5)
 			});
 			pendingPageIds.push(pageId);
 			splitRequiredPageIds.push(pageId);
 		}
 
-		const batchHasPending = pendingPageIds.length > 0;
-		const batchHasFailed = failedPageIds.length > 0;
-		const batchFinished = await finishBatch(
-			activeBatchId,
-			batchHasPending ? 'retryable' : batchHasFailed ? 'failed' : 'ready',
-			batchHasPending
-				? 'ocr_batch_split_required'
-				: batchHasFailed
-					? 'ocr_batch_page_failed'
-					: null,
-			batchHasPending
-				? 'Parte do lote continuará pendente em um subconjunto menor.'
-				: batchHasFailed
-					? 'Uma ou mais páginas falharam permanentemente.'
-					: null,
-			batchHasPending ? retryAt(1, 1) : null
-		);
-		if (!batchFinished) return respond(503, { code: 'ocr_batch_completion_failed' });
-
-		if (parsedRequest.legacy) {
-			const pageId = parsedRequest.pageIds[0]!;
-			if (completedPageIds.includes(pageId)) {
-				return respond(200, {
-					state: 'complete',
-					needsReview: reviewPageIds.includes(pageId),
-					warningCount: outcome.pages[0]?.warnings.length ?? 0
-				});
-			}
-			if (pendingPageIds.includes(pageId)) return respond(202, { state: 'retry_later' });
-			return respond(409, { code: 'ocr_not_retryable', retryable: false });
-		}
-
-		const result = aggregateBody({
+		const body = aggregateBody({
 			completedPageIds,
 			reviewPageIds,
 			pendingPageIds,
@@ -711,71 +550,80 @@ Deno.serve(async (request) => {
 			splitRequiredPageIds,
 			unexpectedResultPageIds: outcome.unexpectedPageIds
 		});
-		return respond(pendingPageIds.length > 0 ? 202 : 200, result);
-	} catch (error) {
-		const maximumAttempt = Math.max(
-			...providerPages.map((page) => providerClaims.get(page.pageId)?.attemptCount ?? 1)
-		);
-		const responseDecision = planOcrFailure(error, {
-			attemptCount: maximumAttempt,
-			failedAt: new Date()
-		});
-		let persistenceFailed = false;
-		for (const providerPage of providerPages) {
-			const attemptCount = providerClaims.get(providerPage.pageId)?.attemptCount ?? 1;
-			const decision = planOcrFailure(error, { attemptCount, failedAt: new Date() });
-			const persisted =
-				decision.persistence.kind === 'block_quota'
-					? await blockQuota(
-							providerPage.pageId,
-							decision.persistence.code,
-							decision.persistence.failedAt
-						)
-					: await failJob(providerPage.pageId, decision.persistence);
-			persistenceFailed ||= !persisted;
-			if (decision.persistence.kind === 'block_quota' || decision.persistence.retryable) {
-				pendingPageIds.push(providerPage.pageId);
-			} else {
-				failedPageIds.push(providerPage.pageId);
-			}
+		if (parsedRequest.legacy && completedPageIds.includes(parsedRequest.pageIds[0]!)) {
+			return respond(200, { state: 'complete', needsReview: reviewPageIds.length > 0 });
 		}
-		if (persistenceFailed) return respond(503, { code: 'ocr_failure_persistence_failed' });
-
-		const batchStatus =
-			responseDecision.persistence.kind === 'block_quota'
-				? 'blocked_quota'
-				: responseDecision.persistence.retryable
-					? 'retryable'
-					: 'failed';
-		const retryAtValue =
-			responseDecision.persistence.kind === 'block_quota'
-				? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-				: responseDecision.persistence.nextRetryAt;
 		await finishBatch(
-			activeBatchId,
-			batchStatus,
-			responseDecision.persistence.code,
-			responseDecision.persistence.kind === 'block_quota'
-				? 'A cota real do provedor foi atingida.'
-				: responseDecision.persistence.message,
-			retryAtValue
+			parsedRequest.batchId,
+			body.state === 'complete' ? 'ready' : 'retryable',
+			body.state === 'complete' ? null : 'ocr_batch_response_incomplete',
+			body.state === 'complete' ? null : 'O lote precisa ser dividido ou repetido.',
+			body.state === 'complete' ? null : retryAt(1, 5)
 		);
-
-		if (parsedRequest.legacy) {
-			return respond(responseDecision.response.status, responseDecision.response.body);
+		return respond(body.state === 'complete' ? 200 : 202, body);
+	} catch (error) {
+		const sharedFailedAt = new Date().toISOString();
+		const decisions = providerPages.map((page) => {
+			const claimed = providerClaims.get(page.pageId)!;
+			return {
+				pageId: page.pageId,
+				decision: planOcrFailure(error, {
+					attemptCount: claimed.attemptCount,
+					failedAt: new Date(sharedFailedAt),
+					jitterMs: 0
+				})
+			};
+		});
+		const batchQuotaBlocked = decisions.some(
+			(entry) => entry.decision.persistence.kind === 'block_quota'
+		);
+		let batchRetryAt: string | null = null;
+		let terminalStatus: 'retryable' | 'blocked_quota' | 'failed' = 'failed';
+		let terminalCode = 'ocr_request_failed';
+		let terminalMessage = 'O lote de OCR falhou.';
+		for (const { pageId, decision } of decisions) {
+			if (decision.persistence.kind === 'block_quota') {
+				await blockQuota(pageId, decision.persistence.code, decision.persistence.failedAt);
+				pendingPageIds.push(pageId);
+				terminalStatus = 'blocked_quota';
+				terminalCode = decision.persistence.code;
+				terminalMessage = 'A cota diária do provedor foi atingida.';
+				continue;
+			}
+			await failJob(pageId, decision.persistence);
+			if (decision.persistence.retryable) {
+				pendingPageIds.push(pageId);
+				batchRetryAt = decision.persistence.nextRetryAt;
+				if (!batchQuotaBlocked) terminalStatus = 'retryable';
+			} else {
+				failedPageIds.push(pageId);
+			}
+			terminalCode = decision.persistence.code;
+			terminalMessage = decision.persistence.message;
 		}
+		await finishBatch(
+			parsedRequest.batchId,
+			terminalStatus,
+			terminalCode,
+			terminalMessage,
+			batchRetryAt
+		);
+		if (parsedRequest.legacy) {
+			const firstDecision = decisions[0]!.decision;
+			return respond(firstDecision.response.status, firstDecision.response.body);
+		}
+		const body = aggregateBody({
+			completedPageIds,
+			reviewPageIds,
+			pendingPageIds,
+			failedPageIds,
+			splitRequiredPageIds
+		});
 		return respond(
-			responseDecision.response.status,
-			aggregateBody({
-				completedPageIds,
-				reviewPageIds,
-				pendingPageIds,
-				failedPageIds,
-				splitRequiredPageIds
-			})
+			terminalStatus === 'failed' && pendingPageIds.length === 0 ? 503 : 202,
+			body
 		);
 	} finally {
-		clearTimeout(timeoutId);
-		providerPages.forEach((page) => page.bytes.fill(0));
+		clearTimeout(timeout);
 	}
 });

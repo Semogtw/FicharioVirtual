@@ -72,5 +72,8 @@ jobs:
       - name: Deploy versioned Edge Functions
         run: supabase functions deploy --project-ref "$STAGING_SUPABASE_PROJECT_REF"
 
+      - name: Remove temporary OCR boundary probe
+        run: supabase functions delete ocr-boundary-probe --project-ref "$STAGING_SUPABASE_PROJECT_REF" --yes
+
       - name: Confirm deployed Edge Functions
         run: supabase functions list --project-ref "$STAGING_SUPABASE_PROJECT_REF"
