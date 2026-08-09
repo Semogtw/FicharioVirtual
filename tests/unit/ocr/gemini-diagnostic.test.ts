@@ -62,7 +62,7 @@ describe('temporary OCR boundary diagnostic contract', () => {
 
 	it('redacts provider body, credentials, prompt and model from classified failures', () => {
 		const raw =
-			'secret-body key=AIza-not-output Authorization: Bearer secret prompt=private model=private';
+			'secret-body key=TEST_KEY_MARKER-not-output Authorization: Bearer secret prompt=private model=private';
 		const result = classifyGeminiDiagnosticFailure(new GeminiHttpError(400, raw));
 		expect(result).toEqual({
 			httpStatus: 400,
@@ -70,7 +70,9 @@ describe('temporary OCR boundary diagnostic contract', () => {
 			code: 'gemini_invalid_request',
 			success: false
 		});
-		expect(JSON.stringify(result)).not.toMatch(/secret|AIza|Authorization|prompt|model|private/i);
+		expect(JSON.stringify(result)).not.toMatch(
+			/secret|TEST_KEY_MARKER|Authorization|prompt|model|private/i
+		);
 
 		const malformed = classifyGeminiDiagnosticFailure(new GeminiResponseError());
 		expect(malformed).toEqual({
@@ -88,7 +90,7 @@ describe('temporary OCR boundary diagnostic contract', () => {
 				JSON.stringify({
 					error: {
 						status: 'INVALID_ARGUMENT',
-						message: 'API key not valid: AIza-secret-must-not-escape',
+						message: 'API key not valid: TEST_KEY_MARKER-secret-must-not-escape',
 						details: [{ reason: 'API_KEY_INVALID', metadata: { secret: 'private' } }]
 					}
 				})
@@ -100,7 +102,9 @@ describe('temporary OCR boundary diagnostic contract', () => {
 			code: 'gemini_api_key_invalid',
 			success: false
 		});
-		expect(JSON.stringify(result)).not.toMatch(/AIza|secret|private|message|metadata/i);
+		expect(JSON.stringify(result)).not.toMatch(
+			/TEST_KEY_MARKER|secret|private|message|metadata/i
+		);
 	});
 
 	it('distinguishes provider preconditions and known rejected request surfaces', () => {
