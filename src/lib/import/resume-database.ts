@@ -6,7 +6,7 @@ export type ResumeStoreName = (typeof STORE_NAMES)[number];
 
 export interface ResumeObjectStore<T> {
 	put(value: T): Promise<void>;
-	list(): Promise<readonly unknown[]>;
+	list(userId?: string): Promise<readonly unknown[]>;
 	delete(id: string): Promise<void>;
 }
 
@@ -61,10 +61,13 @@ class BrowserResumeObjectStore<T> implements ResumeObjectStore<T> {
 		await transactionDone(transaction);
 	}
 
-	async list() {
+	async list(userId?: string) {
 		const database = await openResumeDatabase();
 		const transaction = database.transaction(this.storeName, 'readonly');
-		const result = await requestResult(transaction.objectStore(this.storeName).getAll());
+		const store = transaction.objectStore(this.storeName);
+		const result = await requestResult(
+			userId === undefined ? store.getAll() : store.index('userId').getAll(userId)
+		);
 		await transactionDone(transaction);
 		return result;
 	}
