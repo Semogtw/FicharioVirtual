@@ -36,9 +36,9 @@ describe('bounded provider response reader', () => {
 	});
 
 	it('rejects chunked responses once cumulative bytes exceed the ceiling', async () => {
-		await expect(readBoundedResponseText(chunkedResponse(['abcd', 'efgh']), 7)).rejects.toBeInstanceOf(
-			ResponseBodyTooLargeError
-		);
+		await expect(
+			readBoundedResponseText(chunkedResponse(['abcd', 'efgh']), 7)
+		).rejects.toBeInstanceOf(ResponseBodyTooLargeError);
 	});
 
 	it('rejects malformed JSON and invalid UTF-8', async () => {
@@ -46,10 +46,7 @@ describe('bounded provider response reader', () => {
 			InvalidResponseBodyError
 		);
 		await expect(
-			readBoundedResponseText(
-				new Response(new Uint8Array([0xc3, 0x28]), { status: 200 }),
-				64
-			)
+			readBoundedResponseText(new Response(new Uint8Array([0xc3, 0x28]), { status: 200 }), 64)
 		).rejects.toBeInstanceOf(InvalidResponseBodyError);
 	});
 });
