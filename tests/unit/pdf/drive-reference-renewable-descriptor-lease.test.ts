@@ -89,7 +89,7 @@ describe('renewable Drive PDF descriptor lease', () => {
 	});
 
 	it('stages through the leased batch RPC and finalizes the same attempt', async () => {
-		let currentTime = start;
+		const currentTime = start;
 		const rpcClient = client(() => currentTime);
 		const lease = await acquireDrivePdfReferenceDescriptorLease({
 			documentId,
