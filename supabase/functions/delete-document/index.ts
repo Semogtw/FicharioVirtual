@@ -1,9 +1,11 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { RequestBodyTooLargeError, readBoundedJson } from '../_shared/bounded-json.ts';
 import { corsHeaders, parseAppOrigin } from '../_shared/cors.ts';
 import { deleteDriveFile } from '../_shared/google-drive-client.ts';
 import { refreshGoogleAccessToken } from '../_shared/google-oauth-http.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MAX_REQUEST_BODY_BYTES = 1024;
 
 function response(status: number, appOrigin: string | null, code?: string) {
 	return new Response(code ? JSON.stringify({ code }) : null, {
@@ -29,9 +31,11 @@ Deno.serve(async (request) => {
 
 	let body: unknown;
 	try {
-		body = await request.json();
-	} catch {
-		return respond(400, 'invalid_json');
+		body = await readBoundedJson(request, MAX_REQUEST_BODY_BYTES);
+	} catch (error) {
+		return error instanceof RequestBodyTooLargeError
+			? respond(413, 'request_too_large')
+			: respond(400, 'invalid_json');
 	}
 	const documentId =
 		body && typeof body === 'object' && 'documentId' in body
