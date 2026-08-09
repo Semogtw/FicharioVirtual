@@ -45,13 +45,16 @@ describe('private OCR environment', () => {
 		});
 	});
 
-	it('rejects controls that exceed the Edge Function safety envelope', () => {
+	it('rejects controls that exceed the Edge Function and Gemini inline safety envelope', () => {
 		expect(() => parsePrivateEnv({ ...required, OCR_BATCH_MAX_PAGES: '101' })).toThrow(
 			'Invalid private environment'
 		);
 		expect(() => parsePrivateEnv({ ...required, OCR_BATCH_MAX_BYTES: '1024' })).toThrow(
 			'Invalid private environment'
 		);
+		expect(() =>
+			parsePrivateEnv({ ...required, OCR_BATCH_MAX_BYTES: String(15 * 1024 * 1024) })
+		).toThrow('Invalid private environment');
 		expect(() => parsePrivateEnv({ ...required, OCR_REQUEST_TIMEOUT_MS: '5000' })).toThrow(
 			'Invalid private environment'
 		);
