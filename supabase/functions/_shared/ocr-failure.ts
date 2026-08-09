@@ -1,5 +1,6 @@
 import { classifyGeminiFailure, geminiFailureResponse } from './ocr-contract.ts';
 import { GeminiHttpError, GeminiResponseError, GeminiTransportError } from './gemini-ocr-client.ts';
+import { randomJitterMs } from './random-jitter.ts';
 
 export type OcrFailurePersistence =
 	| {
@@ -32,10 +33,6 @@ export type OcrFailureOptions = {
 
 export function parseOcrAttemptCount(value: unknown): number | null {
 	return typeof value === 'number' && Number.isInteger(value) && value >= 1 ? value : null;
-}
-
-function randomJitterMs(): number {
-	return crypto.getRandomValues(new Uint16Array(1))[0] % 1000;
 }
 
 function validateOptions(options: OcrFailureOptions): number {
