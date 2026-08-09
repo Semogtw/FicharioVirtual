@@ -83,7 +83,9 @@ const warningSchema = {
 					'empty_page'
 				]
 			},
-			message: { type: 'string', maxLength: 300 }
+			// Gemini's structured-output schema does not support maxLength; the
+			// response parser enforces the 300-character safety limit instead.
+			message: { type: 'string' }
 		},
 		required: ['code', 'message']
 	}

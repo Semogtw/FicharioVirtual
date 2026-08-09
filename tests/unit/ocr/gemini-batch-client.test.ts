@@ -66,6 +66,47 @@ describe('requestGeminiOcrBatch', () => {
 		expect(body.generationConfig.responseFormat.text.schema.required).toEqual(['pages']);
 	});
 
+	it('keeps structured-output schema within Gemini supported constraints', async () => {
+		let captured: RequestInit | undefined;
+		await requestGeminiOcrBatch({
+			apiKey: 'test-key',
+			model: 'gemini-test',
+			pages: [pages[0]],
+			promptVersion: 1,
+			fetchImpl: async (_url, init) => {
+				captured = init;
+				return providerResponse([
+					{
+						pageId: pages[0].pageId,
+						pageNumber: pages[0].pageNumber,
+						text: 'Página',
+						warnings: []
+					}
+				]);
+			}
+		});
+
+		const body = JSON.parse(String(captured?.body)) as {
+			generationConfig: { responseFormat: { text: { schema: unknown } } };
+		};
+		const unsupportedKeys = new Set(['minLength', 'maxLength', 'pattern']);
+		const found: string[] = [];
+		const visit = (value: unknown, path: string) => {
+			if (Array.isArray(value)) {
+				value.forEach((entry, index) => visit(entry, `${path}[${index}]`));
+				return;
+			}
+			if (value === null || typeof value !== 'object') return;
+			for (const [key, child] of Object.entries(value)) {
+				if (unsupportedKeys.has(key)) found.push(`${path}.${key}`);
+				visit(child, `${path}.${key}`);
+			}
+		};
+		visit(body.generationConfig.responseFormat.text.schema, 'schema');
+
+		expect(found).toEqual([]);
+	});
+
 	it('returns valid pages and integrity metadata when the provider omits a page', async () => {
 		const outcome = await requestGeminiOcrBatch({
 			apiKey: 'test-key',
