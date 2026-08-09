@@ -26,7 +26,6 @@
 		"test:deployment:artifact": "node tools/checks/check-deployment-artifact.mjs",
 		"test:staging:supabase": "node tools/checks/check-supabase-staging.mjs",
 		"test:staging:ocr": "node tools/checks/check-ocr-staging.mjs",
-		"test:staging:gemini-boundary": "node tools/checks/check-gemini-boundary-staging.mjs",
 		"verify": "pnpm lint && pnpm check && pnpm test && pnpm build",
 		"verify:full": "pnpm verify && pnpm test:e2e && pnpm test:source:offline && pnpm test:functions:check && pnpm test:db:local"
 	},
