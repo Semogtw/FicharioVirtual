@@ -12,8 +12,9 @@ describe('process-ocr provider delegation', () => {
 		expect(source).toContain('requestGeminiOcrBatch');
 		expect(source).toContain('parseOcrClaimResult');
 		expect(source).toContain('planOcrFailure');
-		expect(source).toMatch(rpc('register_ocr_batch'));
-		expect(source).toMatch(rpc('record_ocr_batch_call'));
+		expect(source).toContain(".from('ocr_batches')");
+		expect(source).toContain("code: 'ocr_batch_manifest_mismatch'");
+		expect(source).toMatch(rpc('finish_ocr_batch'));
 	});
 
 	it('keeps both the legacy one-page body and the new exact batch body', () => {
@@ -46,18 +47,18 @@ describe('process-ocr provider delegation', () => {
 	});
 
 	it('persists valid pages independently and requests a split only for affected identities', () => {
-		expect(source).toContain('for (const pageResult of outcome.pages)');
-		expect(source).toContain("'complete_ocr_job'");
+		expect(source).toContain('for (const result of outcome.pages)');
+		expect(source).toMatch(rpc('complete_ocr_job'));
 		expect(source).toContain('outcome.missingPageIds');
 		expect(source).toContain('outcome.duplicatePageIds');
-		expect(source).toContain("code: 'ocr_batch_split_required'");
+		expect(source).toContain("code: 'ocr_batch_response_incomplete'");
 		expect(source).toContain('splitRequiredPageIds.push(pageId)');
 	});
 
 	it('cleans temporary images only after a page is already or newly complete', () => {
 		expect(source).toContain('await cleanupTemporaryImage(page.id, page.temporary_image_path)');
 		expect(source).toContain(
-			'await cleanupTemporaryImage(pageResult.pageId, claimed.page.temporary_image_path)'
+			'await cleanupTemporaryImage(result.pageId, claimed.page.temporary_image_path)'
 		);
 		expect(source).not.toContain('await cleanupTemporaryImage(sourcePath)');
 	});
