@@ -1,5 +1,6 @@
 import { createResumeStore, type ResumeObjectStore } from '$lib/import/resume-database';
 import { isIsoTimestamp } from '$lib/validation/iso-timestamp';
+import { MAX_LOCAL_PDF_BYTES } from './limits';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const LOCAL_ID = /^[A-Za-z0-9_-]{1,160}$/;
@@ -107,6 +108,7 @@ export function parseStoredPdfImport(data: unknown): StoredPdfImportRecord {
 		!(file instanceof File) ||
 		file.type !== 'application/pdf' ||
 		file.size < 1 ||
+		file.size > MAX_LOCAL_PDF_BYTES ||
 		(notebookId !== null && (typeof notebookId !== 'string' || !UUID.test(notebookId))) ||
 		typeof consentGranted !== 'boolean' ||
 		typeof status !== 'string' ||
