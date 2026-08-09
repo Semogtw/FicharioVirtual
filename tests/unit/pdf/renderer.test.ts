@@ -116,6 +116,26 @@ describe('renderPdfDocumentPage', () => {
 });
 
 describe('renderPdfPage cancellation and cleanup', () => {
+	it('disables PDF scripting while loading untrusted local files', async () => {
+		const loading = deferred<never>();
+		const loadingTask = {
+			promise: loading.promise,
+			destroy: vi.fn(async () => {
+				loading.reject(new Error('loading destroyed'));
+			})
+		};
+		pdfRuntime.getDocument.mockReturnValue(loadingTask);
+		const controller = new AbortController();
+
+		const pending = renderPdfPage(pdfFile(), 1, { signal: controller.signal });
+		await vi.waitFor(() => expect(pdfRuntime.getDocument).toHaveBeenCalledOnce());
+		expect(pdfRuntime.getDocument).toHaveBeenCalledWith(
+			expect.objectContaining({ enableScripting: false, useSystemFonts: true })
+		);
+		controller.abort();
+		await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+	});
+
 	it('reports AbortError when cancellation interrupts PDF loading', async () => {
 		const loading = deferred<never>();
 		const loadingTask = {
