@@ -1,22 +1,24 @@
 # Prontidão do Fichário Virtual
 
-_Atualizado em 6 de agosto de 2026._
+_Atualizado em 8 de agosto de 2026._
 
 Esta página não publica porcentagem global. Prontidão significa evidência reproduzível no mesmo SHA, não quantidade de arquivos implementados.
 
 ## Matriz atual
 
-| Dimensão                    | Código                        | Evidência externa                  | Estado                 |
-| --------------------------- | ----------------------------- | ---------------------------------- | ---------------------- |
-| Produto privado             | Implementado                  | CI atual e dispositivos pendentes  | Bloqueado para release |
-| OCR Gemini por lotes        | Implementado                  | Staging real pendente              | Não promovido          |
-| Quota exclusiva do provedor | Implementada                  | `429` real pendente                | Não promovida          |
-| Google Drive-first          | Implementado                  | Conta Google real pendente         | Não promovido          |
-| Picker até 50 MiB           | Implementado                  | Navegadores reais pendentes        | Não promovido          |
-| Picker acima de 50 MiB      | Não implementado              | Arquitetura remota pendente        | Lacuna funcional       |
-| Cloudflare Pages            | Runbook e gates implementados | Deployment real pendente           | Não implantado         |
-| Worker desktop              | Somente arquitetura           | Implementação e hardware pendentes | Não iniciado           |
-| RX 6600                     | Não implementada              | Benchmark pendente                 | Não validada           |
+| Dimensão                     | Código                                     | Evidência externa                             | Estado                 |
+| ---------------------------- | ------------------------------------------ | --------------------------------------------- | ---------------------- |
+| Produto privado              | Implementado                               | CI atual e dispositivos pendentes             | Bloqueado para release |
+| OCR Gemini por lotes         | Implementado                               | Staging real pendente                         | Não promovido          |
+| Quota exclusiva do provedor  | Implementada                               | `429` real pendente                           | Não promovida          |
+| Google Drive-first           | Implementado                               | Conta Google real pendente                    | Não promovido          |
+| Picker até 50 MiB            | Implementado                               | Navegadores reais pendentes                   | Não promovido          |
+| Picker acima de 50 MiB       | Implementado por referência/ranges         | CI do SHA atual + PDF grande real pendentes   | Não promovido          |
+| Recuperação crash copy→stage | Implementada com `appProperties`           | Interrupção real do navegador pendente        | Não promovida          |
+| Lease de descritores         | Implementado e conectado ao orquestrador   | pgTAP/concorrência real no SHA atual pendente | Não promovido          |
+| Cloudflare Pages             | Runbook e gates implementados              | Deployment real pendente                      | Não implantado         |
+| Worker desktop               | Somente arquitetura                        | Implementação e hardware pendentes            | Não iniciado           |
+| RX 6600                      | Não implementada                           | Benchmark pendente                            | Não validada           |
 
 ## Evidência presente no repositório
 
@@ -50,7 +52,7 @@ Esta página não publica porcentagem global. Prontidão significa evidência re
 - telemetria de páginas, lotes, chamadas e tentativas;
 - compatibilidade com chamada unitária antiga.
 
-### Google Drive-first
+### Google Drive-first e PDFs grandes
 
 - OAuth start, callback e token efêmero;
 - refresh token armazenado somente no backend;
@@ -59,6 +61,18 @@ Esta página não publica porcentagem global. Prontidão significa evidência re
 - upload retomável;
 - Google Picker explícito;
 - download direto com limite técnico de 50 MiB;
+- PDFs externos acima de 50 MiB copiados para área controlada e processados por referência sem download integral;
+- transporte por ranges com validação estrita e PDF.js `PDFDataRangeTransport`;
+- inspeção sequencial e renderização seletiva somente das páginas que precisam de OCR;
+- identidade física da cópia verificada antes da leitura;
+- `appProperties` privadas permitem reconciliar a cópia se o navegador morrer entre `files.copy` e staging no banco;
+- descritores de página persistidos em lotes limitados por quantidade e bytes, sem transformar tamanho de RPC em limite lógico do PDF;
+- lease renovável por tentativa, com takeover somente após expiração;
+- renovação forte imediatamente antes do upload de cada derivado compartilhado;
+- abandono/cleanup condicionado à confirmação de ownership da tentativa;
+- RPCs legados de publicação direta revogados para `authenticated`;
+- finalização atômica continua delegada ao finalizador endurecido;
+- recuperação de resposta perdida após commit preservada;
 - feed paginado de mudanças;
 - checkpoint depois da persistência;
 - ausência e reconexão sem perda de OCR;
@@ -80,22 +94,7 @@ Esta página não publica porcentagem global. Prontidão significa evidência re
 - R2 desativado por padrão;
 - nenhum documento privado destinado à Cloudflare.
 
-## Pendência funcional em código
-
-### Importar arquivo externo do Drive acima de 50 MiB
-
-O fluxo atual do Picker materializa um `File` local antes da inspeção. Aumentar o teto de download apenas transfere o problema para memória, tempo e rede do navegador.
-
-A próxima arquitetura precisa oferecer leitura remota por intervalos ou mecanismo equivalente para:
-
-1. manter o arquivo dentro do escopo `drive.file`;
-2. inspecionar estrutura e texto sem download integral;
-3. renderizar somente páginas necessárias;
-4. retomar intervalos interrompidos;
-5. impedir cache e vazamento de tokens;
-6. preservar identidade e hash do original.
-
-Uma simples cópia server-side no Drive não satisfaz esses requisitos.
+## Pendências funcionais em código
 
 ### Worker desktop
 
@@ -120,23 +119,25 @@ O worker nunca deve receber service-role, chave Gemini ou refresh token do Drive
 Obrigatório:
 
 ```text
-format:check
+Prettier/ESLint
 Svelte/TypeScript
-ESLint
 Vitest
 Deno
-source gates
+source/offline gates
 Supabase local + pgTAP
 build
 Chromium E2E
 ```
 
-Os reparos determinísticos de Prettier identificados pelos artifacts anteriores foram aplicados, inclusive ao runner do Drive, aos documentos históricos e aos testes afetados. Ainda falta um `Validate current head` completo no SHA final; recibos intermediários não aprovam os commits posteriores.
+O último recibo completo conhecido permanece no SHA `50897346272269642d95d75aa249f6a96b9479f6`, de 7 de agosto de 2026. O protocolo mais recente de recuperação distribuída, staging paginado e lease renovável foi desenvolvido depois desse SHA. Portanto, ainda falta um `Validate current head`/toolchain completo no HEAD final; recibos intermediários não aprovam commits posteriores.
+
+Nesta continuação, o ambiente local não conseguiu resolver `github.com`, então não foi possível materializar um checkout funcional para instalar dependências e executar os gates. A ausência desse gate está documentada e não deve ser convertida em afirmação de sucesso.
 
 ### Supabase
 
 - aplicar todas as migrations em banco limpo;
-- executar pgTAP completo;
+- executar pgTAP completo, incluindo o novo teste de ownership/takeover do lease;
+- confirmar que `authenticated` não executa os finalizadores legados revogados;
 - regenerar `src/lib/types/database.ts` pelo schema implantado;
 - comparar o tipo gerado com o espelho versionado;
 - verificar bucket, RLS e funções no projeto real.
@@ -147,6 +148,9 @@ Os reparos determinísticos de Prettier identificados pelos artifacts anteriores
 - executar OAuth com a conta autorizada;
 - validar criação ou reconexão da raiz;
 - testar upload retomável, Picker, mudanças, ausência e conflito;
+- testar PDF real acima de 50 MiB por ranges;
+- matar/recarregar o navegador entre cópia e staging e confirmar reconciliação por `appProperties`;
+- abrir duas sessões e validar expiração/takeover do lease sem remoção/sobrescrita stale de derivados;
 - executar migração e rollback com originais reais;
 - confirmar que tokens não aparecem em logs, URL ou navegador.
 
@@ -179,6 +183,9 @@ OAuth drive.file real: PASS
 Pasta Fichário Digital: PASS
 Upload retomável: PASS
 Picker até 50 MiB: PASS
+Picker acima de 50 MiB por ranges: PASS
+Crash copy→stage reconciliado: PASS
+Lease/takeover de descritores em duas sessões: PASS
 Feed de mudanças: PASS
 Ausência, reconexão e conflitos: PASS
 Migração e rollback: PASS
@@ -191,4 +198,4 @@ Nenhum conteúdo privado na Cloudflare: PASS
 Billing desativado, backup e rollback: PASS
 ```
 
-A importação externa acima de 50 MiB e o worker desktop podem ser tratados como marcos posteriores somente se a release declarar explicitamente essas limitações. A ausência de defeitos conhecidos não substitui os recibos acima.
+O worker desktop pode ser tratado como marco posterior se a release declarar explicitamente essa limitação. A ausência de defeitos conhecidos não substitui os recibos acima.
