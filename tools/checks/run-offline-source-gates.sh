@@ -5,6 +5,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$repo_root"
 
 node tools/checks/check-tracked-secrets.mjs
+node tools/checks/check-workflow-security.mjs
 node tools/checks/check-source-security.mjs
 node tools/checks/check-drive-pdf-descriptor-security.mjs
 node tools/checks/check-desktop-worker-boundary.mjs
