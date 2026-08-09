@@ -21,17 +21,23 @@ for (const required of [
 	}
 }
 if (/\bresponse\.blob\s*\(/.test(download)) {
-	failures.push('src/lib/drive/bounded-download.ts: response.blob() is forbidden for bounded downloads');
+	failures.push(
+		'src/lib/drive/bounded-download.ts: response.blob() is forbidden for bounded downloads'
+	);
 }
 if (!picker.includes("import { downloadBoundedBrowserDriveFile } from './bounded-download';")) {
 	failures.push('src/lib/drive/picker-service.ts: picker must use the bounded Drive downloader');
 }
 if (picker.includes("from './browser-files'")) {
-	failures.push('src/lib/drive/picker-service.ts: picker must not use the legacy whole-response downloader');
+	failures.push(
+		'src/lib/drive/picker-service.ts: picker must not use the legacy whole-response downloader'
+	);
 }
 const boundedDefaults = picker.match(/download:\s*downloadBoundedBrowserDriveFile/g) ?? [];
 if (boundedDefaults.length < 2) {
-	failures.push('src/lib/drive/picker-service.ts: all default direct-download paths must be bounded');
+	failures.push(
+		'src/lib/drive/picker-service.ts: all default direct-download paths must be bounded'
+	);
 }
 
 if (failures.length > 0) {
