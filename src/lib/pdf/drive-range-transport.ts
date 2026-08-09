@@ -173,7 +173,8 @@ export async function openDrivePdfRangeDocument({
 			rangeChunkSize: DRIVE_PDF_RANGE_CHUNK_BYTES,
 			disableRange: false,
 			disableStream: true,
-			disableAutoFetch: true
+			disableAutoFetch: true,
+			enableScripting: false
 		});
 		const document = await Promise.race([loadingTask.promise, rangeFailure]);
 		return Object.freeze({ document, destroy: destroyLoadingTask });
