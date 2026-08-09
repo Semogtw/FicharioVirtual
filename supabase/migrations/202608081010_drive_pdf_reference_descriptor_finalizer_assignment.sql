@@ -10,7 +10,7 @@ create or replace function public.finalize_drive_pdf_reference_descriptor_attemp
 returns jsonb
 language plpgsql
 security definer
-set search_path = public, pg_temp
+set search_path = ''
 as $$
 declare
   current_user_id uuid := auth.uid();
@@ -89,7 +89,7 @@ begin
 end;
 $$;
 
-revoke all on function public.finalize_drive_pdf_reference_descriptor_attempt(uuid, uuid, integer) from public;
-revoke all on function public.finalize_drive_pdf_reference_descriptor_attempt(uuid, uuid, integer) from anon;
+revoke execute on function public.finalize_drive_pdf_reference_descriptor_attempt(uuid, uuid, integer) from public;
+revoke execute on function public.finalize_drive_pdf_reference_descriptor_attempt(uuid, uuid, integer) from anon;
 grant execute on function public.finalize_drive_pdf_reference_descriptor_attempt(uuid, uuid, integer) to authenticated;
 grant execute on function public.finalize_drive_pdf_reference_descriptor_attempt(uuid, uuid, integer) to service_role;
