@@ -209,7 +209,7 @@ export async function listStoredImageImports(
 	store: ImportResumeStore = defaultStore()
 ): Promise<readonly StoredImageImportRecord[]> {
 	const ownerId = validOwnerId(userId);
-	const records = (await store.list())
+	const records = (await store.list(ownerId))
 		.map(parseStoredImageImport)
 		.filter((record) => record.userId === ownerId)
 		.sort((left, right) => left.updatedAt.localeCompare(right.updatedAt));
