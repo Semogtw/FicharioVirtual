@@ -1,7 +1,7 @@
 import { env } from '$env/dynamic/public';
 import { parsePublicEnv } from '$lib/env/public';
 import { getSupabaseClient } from '$lib/services/supabase';
-import { downloadBrowserDriveFile } from './browser-files';
+import { downloadBoundedBrowserDriveFile } from './bounded-download';
 import { requestDriveAccessToken, type DriveTokenClientLike } from './browser-upload';
 import {
 	GOOGLE_PICKER_MIME_TYPES,
@@ -149,7 +149,7 @@ export async function selectGoogleDriveImportSource({
 	client = defaultClient(),
 	dependencies = {
 		select: (input) => selectGoogleDriveFile(input),
-		download: downloadBrowserDriveFile
+		download: downloadBoundedBrowserDriveFile
 	}
 }: {
 	mimeTypes: readonly GooglePickerMimeType[];
@@ -190,7 +190,7 @@ export async function selectAndDownloadGoogleDriveFile({
 	client = defaultClient(),
 	dependencies = {
 		select: (input) => selectGoogleDriveFile(input),
-		download: downloadBrowserDriveFile
+		download: downloadBoundedBrowserDriveFile
 	}
 }: {
 	mimeTypes: readonly GooglePickerMimeType[];
