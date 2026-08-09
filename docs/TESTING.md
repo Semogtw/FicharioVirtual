@@ -28,15 +28,15 @@ O workflow e o recibo estão verdes para esse SHA, mas o E2E não foi completame
 
 ## Estado do HEAD atual
 
-O HEAD `255c28c` contém a correção tipada da instrumentação sanitizada e a correção de serialização dos verificadores. A causa do `401` entre verificadores de staging foi a concorrência de workflows que compartilham uma conta protegida: `auth.signOut()` é global e invalida a sessão do outro workflow. A correção serializa ambos em `staging-contract-verification`, com `cancel-in-progress: false`.
+O HEAD `86dd393` contém a limpeza da sonda temporária de fronteira Gemini. A causa do `401` entre verificadores de staging foi a concorrência de workflows que compartilham uma conta protegida: `auth.signOut()` é global e invalida a sessão do outro workflow. A correção serializa ambos em `staging-contract-verification`, com `cancel-in-progress: false`.
 
-Gates finais do HEAD: `pnpm check` **PASS** (0 erros/0 avisos), `pnpm lint` **PASS**, Vitest **PASS** (940 testes em 236 arquivos), build/PWA **PASS** (131 entradas precache, com aviso de chunks acima de 500 kB) e source/offline **PASS**. E2E está `BLOCKED` sem Chromium. A suíte local completa permanece `BLOCKED` somente pelo fixture desktop não rastreado.
+Gates finais do HEAD: `pnpm check` **PASS** (0 erros/0 avisos), `pnpm lint` **PASS**, Vitest **PASS** (940/940 testes em 236 arquivos), build/PWA **PASS** (131 entradas precache, com aviso de chunks acima de 500 kB) e source/offline **PASS**. Deno está ausente localmente (**NOT RUN/BLOCKED**) e E2E está **BLOCKED** sem Chromium. A suíte local completa não deve ser promovida a `PASS` por causa desses bloqueios.
 
-O deploy `31297694093` terminou com sucesso e registra `process-ocr` `ACTIVE v9`. O `Verify OCR staging` do HEAD, run `31298144753`, está `PENDING`, sem jobs, artifact ou conclusão consultáveis; não há OCR aprovado.
+O deploy `31299646430` terminou com sucesso e registra `process-ocr` `ACTIVE v11`. O Verify OCR staging permanece **PENDING/UNKNOWN**, sem jobs, artifact ou conclusão terminal evidenciada; não há OCR aprovado.
 
-A instrumentação de diagnóstico aceita somente códigos Gemini de allowlist, limita o corpo inspecionado a 4 KiB e não registra corpo/headers completos, modelo ou tokens em logs/artifacts.
+A instrumentação anterior de diagnóstico aceitava somente códigos Gemini de allowlist, limitava o corpo inspecionado a 4 KiB e não registrava corpo/headers completos, modelo ou tokens em logs/artifacts. A sonda temporária foi removida no HEAD. O diagnóstico Gemini direto está **BLOCKED** porque falta `STAGING_SERVICE_ROLE_KEY` ou equivalente no environment `staging`; nomes confirmados: `STAGING_SUPABASE_URL`, `STAGING_SUPABASE_PUBLISHABLE_KEY`, `STAGING_AUTHORIZED_EMAIL` e `STAGING_AUTHORIZED_PASSWORD`. Nenhuma chamada Gemini foi feita.
 
-O `Verify Supabase staging` verde mais recente foi executado no SHA `b39e3eb` (`31296568886`) e cobriu Auth, RLS e Storage. No mesmo SHA, `Deploy Supabase staging` (`31296564374`) terminou com sucesso e `Verify OCR staging` (`31296573162`) falhou. No HEAD `255c28c`, `Deploy Supabase staging` (`31297694093`) terminou com `process-ocr` `ACTIVE v9`; `Verify OCR staging` (`31298144753`) está `PENDING`, sem jobs/artifact/conclusão.
+O `Verify Supabase staging` verde mais recente foi executado no SHA `b39e3eb` (`31296568886`) e cobriu Auth, RLS e Storage. No mesmo SHA, `Deploy Supabase staging` (`31296564374`) terminou com sucesso e `Verify OCR staging` (`31296573162`) falhou. No HEAD `86dd393`, `Deploy Supabase staging` (`31299646430`) terminou com `process-ocr` `ACTIVE v11`; Verify OCR permanece `PENDING/UNKNOWN`, sem jobs/artifact/conclusão terminal evidenciada.
 
 ## Ambiente mínimo
 
@@ -64,7 +64,7 @@ A toolchain offline fixa o ambiente de frontend e Edge. Docker e as imagens do S
 | `pnpm verify:full`          | Suíte completa mais banco local           | Antes de release ou checkpoint operacional   |
 | workflows de staging        | Supabase remoto, OCR real e host          | Antes de release privada                     |
 
-No SHA `b39e3eb`, `pnpm verify`, `pnpm test:source:offline`, `pnpm test:functions:check`, `pnpm test:e2e` e `pnpm test:db:local` possuem `PASS` no workflow acima. No HEAD `255c28c`, check/lint/test/build/source passam conforme os gates acima, mas E2E está `BLOCKED` sem Chromium e OCR está `PENDING` sem jobs/artifact/conclusão. Google Drive, Gemini real, deployment/headers do host, billing e dispositivos físicos permanecem `NOT RUN`, `PENDING` ou `BLOCKED`.
+No SHA `b39e3eb`, `pnpm verify`, `pnpm test:source:offline`, `pnpm test:functions:check`, `pnpm test:e2e` e `pnpm test:db:local` possuem `PASS` no workflow acima. No HEAD `86dd393`, check/lint/test/build/source passam conforme os gates acima; Deno está ausente localmente e E2E está `BLOCKED` sem Chromium. OCR permanece `PENDING/UNKNOWN` sem aprovação. Google Drive, Gemini real, deployment/headers do host, billing e dispositivos físicos permanecem `NOT RUN`, `PENDING` ou `BLOCKED`.
 
 ## Testes unitários
 

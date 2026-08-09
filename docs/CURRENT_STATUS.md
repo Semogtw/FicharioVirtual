@@ -2,7 +2,7 @@
 
 _Atualizado: 2026-08-09_<br>
 _Branch ativa: `main`_<br>
-_Estado: Drive-first, OCR seletivo por lotes, importação de PDFs grandes por ranges, recuperação distribuída da cópia, lease renovável de publicação e a fronteira backend do worker estão integrados em código. O HEAD atual é `255c28c`; o último CI completo conhecido é do SHA `b39e3eb` (run `31296404993`). Os gates locais do HEAD passaram onde executáveis, mas E2E permanece `BLOCKED` sem Chromium e o Verify OCR está pendente sem jobs/artifact/conclusão. Release ainda depende de staging externo, serviços reais, dispositivos reais e da investigação de uma flakiness E2E._
+_Estado: Drive-first, OCR seletivo por lotes, importação de PDFs grandes por ranges, recuperação distribuída da cópia, lease renovável de publicação e a fronteira backend do worker estão integrados em código. O HEAD atual é `86dd393`; o último CI completo conhecido é do SHA `b39e3eb` (run `31296404993`). No HEAD atual, check/lint, 940/940 testes e source/offline passaram; Deno está ausente localmente, E2E permanece `BLOCKED` sem Chromium e OCR não foi aprovado. Release ainda depende de staging externo, serviços reais e dispositivos reais._
 
 ## Resumo executivo
 
@@ -138,17 +138,20 @@ No mesmo SHA passaram:
 
 Esse recibo valida somente o SHA indicado. O resultado verde não prova deploy Supabase, OAuth Google, interoperabilidade Drive/Gemini, host publicado, billing ou dispositivos físicos. O E2E deve ser tratado como verde com ressalva até a flakiness ser entendida.
 
-### Validação incremental do HEAD `255c28c`
+### Validação incremental do HEAD `86dd393`
 
 - `pnpm check`: **PASS**, 0 erros e 0 avisos; `pnpm lint`: **PASS**.
 - Vitest: **PASS**, 940 testes em 236 arquivos.
 - Build/PWA: **PASS**, 131 entradas precache; permanece o aviso de chunks acima de 500 kB.
 - Gates source/offline: **PASS**.
 - E2E: **BLOCKED** porque Chromium não está disponível; não converter esse bloqueio em falha funcional do produto.
-- O deploy de staging `31297694093` terminou com sucesso e registra `process-ocr` `ACTIVE v9`; isso não é evidência de OCR completo.
-- O `Verify OCR staging` `31298144753` está `PENDING`, sem jobs, artifact ou conclusão consultáveis. Não declarar OCR aprovado.
-- A instrumentação é sanitizada: somente códigos Gemini de allowlist, corpo limitado a 4 KiB, sem corpo/headers completos, modelo ou tokens em logs/artifacts.
-- A suíte local completa continua `BLOCKED` somente pelo fixture desktop não rastreado; isso não é um `PASS` da suíte completa.
+- Deno: **NOT RUN/BLOCKED** localmente porque o executável não está instalado; o resultado não substitui o gate remoto.
+- A sonda temporária de fronteira Gemini foi removida neste HEAD, incluindo seu workflow e rota; nenhuma chamada Gemini foi feita.
+- O deploy de staging `31299646430` terminou com sucesso e registra `process-ocr` `ACTIVE v11`; isso não é evidência de OCR completo.
+- O Verify OCR staging permanece **PENDING/UNKNOWN**, sem evidência de jobs, artifact ou conclusão terminal consultável. Não declarar OCR aprovado.
+- O diagnóstico Gemini direto está **BLOCKED**: o environment staging não possui `STAGING_SERVICE_ROLE_KEY` nem equivalente. Os nomes públicos confirmados são `STAGING_SUPABASE_URL`, `STAGING_SUPABASE_PUBLISHABLE_KEY`, `STAGING_AUTHORIZED_EMAIL` e `STAGING_AUTHORIZED_PASSWORD`; nenhum valor foi exposto.
+- A instrumentação sanitizada, quando existente, permite somente códigos Gemini de allowlist e corpo limitado a 4 KiB, sem corpo/headers completos, modelo ou tokens em logs/artifacts.
+- Google Drive real, Cloudflare publicado e worker desktop local permanecem **NOT RUN/BLOCKED**.
 
 ### Gates obrigatórios
 
@@ -167,13 +170,13 @@ pnpm test:db:local
 
 ### Limitação do ambiente local atual
 
-Os gates executáveis do HEAD `255c28c` registram check 0/0, lint, 236/940 testes, build/PWA com 131 entradas e source/offline `PASS`. E2E está `BLOCKED` sem Chromium. A suíte local completa ficou `BLOCKED` somente pelo fixture desktop não rastreado; não se deve converter esse resultado em `PASS` da suíte completa. O Verify OCR `31298144753` está `PENDING`, sem jobs/artifact/conclusão.
+Os gates executáveis do HEAD `86dd393` registram check 0/0, lint, 940/940 testes, build/PWA com 131 entradas e source/offline `PASS`. Deno está ausente localmente (`NOT RUN/BLOCKED`) e E2E está `BLOCKED` sem Chromium. O Verify OCR continua `PENDING/UNKNOWN`, sem evidência terminal; não se deve converter esse estado em `PASS`. A sonda Gemini temporária foi limpa e nenhuma chamada ao provedor foi feita.
 
 ## Pendências reais
 
 ### Staging e serviços externos
 
-No SHA anterior `b39e3eb`, `Deploy Supabase staging` (`31296564374`) e `Verify Supabase staging` (`31296568886`) terminaram com sucesso; `Verify OCR staging` (`31296573162`) falhou e não aprovou OCR. No HEAD `255c28c`, o deploy `31297694093` registra `process-ocr` `ACTIVE v9`, enquanto o `Verify OCR staging` `31298144753` está `PENDING`, sem jobs/artifact/conclusão; não converter esse estado em `PASS`.
+No SHA anterior `b39e3eb`, `Deploy Supabase staging` (`31296564374`) e `Verify Supabase staging` (`31296568886`) terminaram com sucesso; `Verify OCR staging` (`31296573162`) falhou e não aprovou OCR. No HEAD `86dd393`, o deploy `31299646430` registra `process-ocr` `ACTIVE v11`; o Verify OCR permanece `PENDING/UNKNOWN`, sem evidência terminal e sem aprovação.
 
 Ainda são obrigatórios antes de release:
 
@@ -200,11 +203,11 @@ A fronteira backend está implementada em código: pareamento, credencial por di
 
 ## Pendências imediatas
 
-1. obter execução, jobs, artifact e conclusão do `Verify OCR staging` `31298144753`;
+1. obter execução, jobs, artifact e conclusão terminal do Verify OCR staging, sem tratar ausência de evidência como aprovação;
 2. investigar a flakiness E2E e repetir o gate se a política de release exigir execução sem retry;
 3. aplicar e validar o schema/runtime do HEAD atual em Supabase staging limpo, incluindo os pgTAPs de OCR/lease;
 4. regenerar tipos pelo schema real aplicado;
-5. executar staging Google Drive + Gemini, incluindo crash/recovery e duas sessões concorrentes;
+5. configurar, com autorização, o segredo de serviço ausente e executar staging Google Drive + Gemini, incluindo crash/recovery e duas sessões concorrentes; nenhuma chamada Gemini foi feita neste HEAD;
 6. validar PDFs grandes reais e dispositivos móveis/tablet;
 7. implantar e verificar Cloudflare;
 8. implementar o worker desktop em etapa separada.
