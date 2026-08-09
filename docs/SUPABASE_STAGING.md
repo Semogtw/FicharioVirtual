@@ -7,26 +7,17 @@ O staging do Fichário separa duas responsabilidades:
 
 ## Estado confirmado
 
-No HEAD `86dd3938f75e42ef4d0c5f0ee4b0c380ce94c676`, o deploy `31299646430` terminou com sucesso e registra `process-ocr` `ACTIVE v11`. O Verify OCR staging permanece `PENDING/UNKNOWN`, sem evidência de jobs, artifact ou conclusão terminal consultável; este documento não afirma OCR aprovado.
+O checkpoint `f87e1edc47268b4e0d2ea0742dac690c96d93646` foi validado pelo `Validate current head` `31333367357` e implantado pelo `Deploy Supabase staging` `31333367356`, ambos com **success**.
 
-O `Verify Supabase staging` verde mais recente foi o [run 31296568886](https://github.com/Semogtw/FicharioVirtual/actions/runs/31296568886), executado no SHA anterior `b39e3eb`. Esse run validou apenas Auth, allowlist, RLS e Storage privado com dados sintéticos. Ele não valida OCR, Google Drive, Gemini ou o runtime do HEAD atual.
+A sonda protegida `31333418948` confirmou a fronteira Gemini sem persistência: o job validou `STAGING_SERVICE_ROLE_KEY` como não vazio, rejeitou requisição anônima com HTTP 401 e registrou somente o envelope sanitizado. O resultado final foi `direct=429 gemini_daily_quota` e `process=200 provider_ok`. Isso prova que o caminho `process-ocr` alcançou o Gemini e validou uma resposta real após a correção do request; não equivale a um job normal persistido.
 
-No SHA anterior `b39e3eb`, o `Deploy Supabase staging` `31296564374` e o `Verify Supabase staging` `31296568886` terminaram com sucesso; o `Verify OCR staging` `31296573162` falhou. No HEAD `86dd393`, o deploy `31299646430` terminou com sucesso e `process-ocr` está `ACTIVE v11`; o Verify OCR permanece `PENDING/UNKNOWN` e não constitui sucesso.
+O diagnóstico reproduziu que `responseFormat` e campos de schema em `generationConfig` eram rejeitados com HTTP 400 pelo endpoint/modelo de staging. O cliente corrigido envia `responseMimeType: application/json`, carrega o contrato JSON no prompt e mantém o parser local fail-closed.
 
-O `401` observado no OCR anterior foi causado por workflows concorrentes compartilhando a mesma conta protegida: `auth.signOut()` invalida a sessão globalmente. A correção serializa os verificadores no grupo `staging-contract-verification`, com `cancel-in-progress: false`.
+O cleanup `31333977753` terminou com **success**, incluindo a exclusão explícita e exclusiva de `ocr-boundary-probe`. A consulta posterior ao projeto registra `process-ocr` `ACTIVE v19`, não lista `ocr-boundary-probe` e preserva as funções Drive/desktop. O workflow administrativo permanente foi restaurado no commit `9ff4975bc046004628635834bdedadce8bb5e264` para `workflow_dispatch` apenas e `cancel-in-progress: false`.
 
-O HEAD anterior continha instrumentação segura para falhas do provedor: somente códigos Gemini de allowlist, corpo inspecionado limitado a 4 KiB, sem persistir corpo/headers completos, modelo ou tokens em logs/artifacts. A sonda temporária de fronteira Gemini foi removida no HEAD `86dd393`; nenhum diagnóstico direto nem chamada Gemini foi executado.
+O `401` histórico entre verificadores de staging tinha outra causa: workflows concorrentes compartilhavam a mesma conta protegida e `auth.signOut()` invalidava a sessão global. A serialização em `staging-contract-verification` continua sendo a correção desse problema separado.
 
-O diagnóstico Gemini direto está `BLOCKED`: o environment `staging` não possui `STAGING_SERVICE_ROLE_KEY` nem equivalente. Os nomes públicos confirmados, sem valores, são:
-
-```text
-STAGING_SUPABASE_URL
-STAGING_SUPABASE_PUBLISHABLE_KEY
-STAGING_AUTHORIZED_EMAIL
-STAGING_AUTHORIZED_PASSWORD
-```
-
-O nome ausente é `STAGING_SERVICE_ROLE_KEY`. Nenhum valor de secret foi exposto e nenhuma chamada Gemini foi feita.
+Nenhum valor de secret foi registrado. `STAGING_SERVICE_ROLE_KEY` e `GEMINI_API_KEY` são citados somente por nome/estado.
 
 ## Preparar o projeto
 
@@ -50,14 +41,14 @@ O workflow manual `Deploy Supabase staging` executa, nessa ordem:
 ```bash
 supabase link --project-ref "$STAGING_SUPABASE_PROJECT_REF"
 supabase migration list --linked
-supabase db push --linked --dry-run
-supabase db push --linked
+supabase db push --linked --dry-run --include-all
+supabase db push --linked --include-all
 supabase migration list --linked
 supabase functions deploy --project-ref "$STAGING_SUPABASE_PROJECT_REF"
 supabase functions list --project-ref "$STAGING_SUPABASE_PROJECT_REF"
 ```
 
-Não use `--include-all` para contornar drift de histórico e não use `--no-verify-jwt` global no deploy de funções. As políticas individuais de JWT pertencem ao `supabase/config.toml` versionado.
+O workflow usa `--include-all` deliberadamente para reconciliar arquivos locais pendentes mesmo quando uma migration remota posterior já existe. O dry-run continua failure-visible antes da aplicação. Não use `--no-verify-jwt` global; as políticas individuais de JWT pertencem ao `supabase/config.toml` versionado.
 
 Não aplique somente a migration mais nova quando o staging estiver atrasado. Também não substitua o fluxo versionado por uma sequência de DDLs avulsos que deixe `supabase_migrations.schema_migrations` divergente do Git. Um `db push` posterior depende desse histórico estar correto.
 
@@ -75,7 +66,7 @@ Variable: STAGING_SUPABASE_PROJECT_REF
 
 O workflow usa `contents: read`, checkout com `persist-credentials: false` e `supabase/setup-cli@v2` com CLI `2.111.0`.
 
-Não há evidência atual neste repositório de GitHub Environment protegido ou de execução live desse workflow. Antes do próximo deploy pelo Actions, crie/proteja `staging-deploy` e configure os três valores acima; o deploy só poderá ser considerado confirmado com um recibo do mesmo SHA promovido.
+O environment `staging-deploy` está protegido e foi usado nos deploys `31333367356` e `31333977753`. A aprovação manual continua sendo parte do procedimento administrativo.
 
 ### Secrets das Edge Functions
 
@@ -94,7 +85,7 @@ OCR_PROMPT_VERSION
 
 Também existem ajustes opcionais do OCR, como limites de páginas/bytes e timeout de request. Não versionar os valores desses secrets.
 
-O conector usado na auditoria não expõe enumeração de Edge Function secrets. Assim, a presença de todos os valores customizados não foi inferida a partir do deploy. Quando o environment administrativo estiver disponível, confirme a configuração com o mecanismo oficial de secrets do Supabase antes do teste end-to-end real.
+A auditoria não expõe valores de Edge Function secrets. O runtime comprovou que `GEMINI_API_KEY`, modelo e prompt estão configurados em nível suficiente para `process-ocr` completar a chamada sintética real; isso não autoriza registrar seus valores.
 
 ## Configurar o environment de verificação do GitHub
 
@@ -109,7 +100,9 @@ STAGING_UNAUTHORIZED_EMAIL
 STAGING_UNAUTHORIZED_PASSWORD
 ```
 
-A chave deve ser a publicável/anon do projeto. Não cadastre service-role key neste workflow.
+O environment `staging` também possui `STAGING_SERVICE_ROLE_KEY`, validado como não vazio pela sonda protegida temporária. O gate comum de Auth/RLS/Storage deve continuar usando somente a chave publicável/anon; service-role fica reservado a ações administrativas explicitamente protegidas e não deve aparecer em logs.
+
+A chave usada pelo verificador comum deve ser a publicável/anon do projeto.
 
 Quando disponível, configure aprovação obrigatória para o environment. O job só recebe os secrets depois da liberação do environment.
 
@@ -176,7 +169,7 @@ A verificação histórica de Auth/RLS/Storage e os contratos do repositório n�
 
 - OAuth Google completo com credenciais reais de staging;
 - leitura/alteração real de arquivos no Google Drive;
-- OCR real com Gemini;
+- fluxo OCR normal com página/job, Storage e persistência real;
 - injeção end-to-end de 429, 503, timeout ou payload inválido;
 - instalação PWA e headers do host final;
 - teste em tablet/celular;

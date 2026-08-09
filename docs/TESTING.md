@@ -4,39 +4,28 @@ Este documento define a cobertura do Fichário Virtual e serve como checklist de
 
 ## Último recibo completo conhecido
 
-Source commit: `b39e3eb55caec06a4cd40aa20833634c32a463d3`<br>
-Workflow: [`Validate current head`](https://github.com/Semogtw/FicharioVirtual/actions/runs/31296404993)<br>
-Run: `31296404993`<br>
-Data: 2026-08-09
+Source commit: `f87e1edc47268b4e0d2ea0742dac690c96d93646`<br>
+Workflow: [`Validate current head`](https://github.com/Semogtw/FicharioVirtual/actions/runs/31333367357)<br>
+Run: `31333367357`<br>
+Conclusão terminal: **success**
 
-Esse recibo cobre exatamente o SHA `b39e3eb`. Não atribua o resultado a outros SHAs.
+Esse recibo cobre frontend/`pnpm verify`, source/offline, Chromium E2E, Deno/Edge Functions e Supabase local + pgTAP do mesmo SHA. Não atribua o resultado a commits posteriores.
 
-Evidência executada no GitHub Actions com o mesmo SHA:
+## Estado do OCR em staging
 
-```text
-Prettier + ESLint: PASS
-svelte-check: PASS — 0 erros, 0 warnings
-Vitest: PASS — 938 testes em 236 arquivos
-build estático/PWA: PASS
-gates offline de fonte: PASS
-Edge Functions via Deno: PASS
-Playwright Chromium: PASS no comando — 4 testes passaram; 1 teste foi flaky na primeira tentativa e passou no retry
-Supabase local + pgTAP: PASS — 35 arquivos, 434 testes
+O deploy `31333367356` do mesmo SHA terminou com **success**. A sonda protegida `31333418948` também terminou com **success**: configuração protegida validada, chamada anônima rejeitada com 401 e envelope final sanitizado:
+
+```json
+{"direct":{"httpStatus":429,"category":"provider","code":"gemini_daily_quota","success":false},"process":{"httpStatus":200,"category":"provider","code":"provider_ok","success":true}}
 ```
 
-O workflow e o recibo estão verdes para esse SHA, mas o E2E não foi completamente livre de flakiness. Esse resultado não autoriza inferir interoperabilidade com Google Drive/Gemini, deploy Supabase, host publicado ou dispositivos físicos.
+A sequência de diagnóstico isolou o HTTP 400 nos campos de schema/structured-output enviados em `generationConfig`. O cliente corrigido mantém JSON MIME, move o contrato de schema para o prompt e conserva os parsers fail-closed. O `process-ocr` da sonda obteve resposta real válida do Gemini; a chamada direta separada encontrou quota e permaneceu marcada como falha, sem maquiar o resultado.
 
-## Estado do HEAD atual
+O cleanup `31333977753` terminou com **success** e removeu explicitamente apenas `ocr-boundary-probe`. Depois dele, `process-ocr` está `ACTIVE v19` e a sonda não aparece na lista de Edge Functions. O workflow de deploy foi restaurado para manual-only em `9ff4975`.
 
-O HEAD `86dd393` contém a limpeza da sonda temporária de fronteira Gemini. A causa do `401` entre verificadores de staging foi a concorrência de workflows que compartilham uma conta protegida: `auth.signOut()` é global e invalida a sessão do outro workflow. A correção serializa ambos em `staging-contract-verification`, com `cancel-in-progress: false`.
+`STAGING_SERVICE_ROLE_KEY` foi validado como presente sem expor valor. `GEMINI_API_KEY` também nunca é registrada; seu funcionamento é evidenciado apenas pelo sucesso do caminho real do provider.
 
-Gates finais do HEAD: `pnpm check` **PASS** (0 erros/0 avisos), `pnpm lint` **PASS**, Vitest **PASS** (940/940 testes em 236 arquivos), build/PWA **PASS** (131 entradas precache, com aviso de chunks acima de 500 kB) e source/offline **PASS**. Deno está ausente localmente (**NOT RUN/BLOCKED**) e E2E está **BLOCKED** sem Chromium. A suíte local completa não deve ser promovida a `PASS` por causa desses bloqueios.
-
-O deploy `31299646430` terminou com sucesso e registra `process-ocr` `ACTIVE v11`. O Verify OCR staging permanece **PENDING/UNKNOWN**, sem jobs, artifact ou conclusão terminal evidenciada; não há OCR aprovado.
-
-A instrumentação anterior de diagnóstico aceitava somente códigos Gemini de allowlist, limitava o corpo inspecionado a 4 KiB e não registrava corpo/headers completos, modelo ou tokens em logs/artifacts. A sonda temporária foi removida no HEAD. O diagnóstico Gemini direto está **BLOCKED** porque falta `STAGING_SERVICE_ROLE_KEY` ou equivalente no environment `staging`; nomes confirmados: `STAGING_SUPABASE_URL`, `STAGING_SUPABASE_PUBLISHABLE_KEY`, `STAGING_AUTHORIZED_EMAIL` e `STAGING_AUTHORIZED_PASSWORD`. Nenhuma chamada Gemini foi feita.
-
-O `Verify Supabase staging` verde mais recente foi executado no SHA `b39e3eb` (`31296568886`) e cobriu Auth, RLS e Storage. No mesmo SHA, `Deploy Supabase staging` (`31296564374`) terminou com sucesso e `Verify OCR staging` (`31296573162`) falhou. No HEAD `86dd393`, `Deploy Supabase staging` (`31299646430`) terminou com `process-ocr` `ACTIVE v11`; Verify OCR permanece `PENDING/UNKNOWN`, sem jobs/artifact/conclusão terminal evidenciada.
+A causa histórica do `401` entre verificadores era independente: concorrência de workflows compartilhando uma sessão e `auth.signOut()` global. A serialização existente continua sendo a mitigação.
 
 ## Ambiente mínimo
 
@@ -64,7 +53,7 @@ A toolchain offline fixa o ambiente de frontend e Edge. Docker e as imagens do S
 | `pnpm verify:full`          | Suíte completa mais banco local           | Antes de release ou checkpoint operacional   |
 | workflows de staging        | Supabase remoto, OCR real e host          | Antes de release privada                     |
 
-No SHA `b39e3eb`, `pnpm verify`, `pnpm test:source:offline`, `pnpm test:functions:check`, `pnpm test:e2e` e `pnpm test:db:local` possuem `PASS` no workflow acima. No HEAD `86dd393`, check/lint/test/build/source passam conforme os gates acima; Deno está ausente localmente e E2E está `BLOCKED` sem Chromium. OCR permanece `PENDING/UNKNOWN` sem aprovação. Google Drive, Gemini real, deployment/headers do host, billing e dispositivos físicos permanecem `NOT RUN`, `PENDING` ou `BLOCKED`.
+No SHA `f87e1edc`, `Validate current head` `31333367357` fornece PASS terminal para frontend, source/offline, Chromium, Deno/Edge e banco local. A fronteira Gemini sintética de staging também passou via `process-ocr`, mas o fluxo normal com página/job e persistência ainda deve ser executado antes de release. Google Drive real, deployment/headers do host, billing e dispositivos físicos permanecem `NOT RUN`, `PENDING` ou `BLOCKED` conforme seus gates próprios.
 
 ## Testes unitários
 
@@ -225,15 +214,21 @@ Validar:
 
 ### OCR staging
 
-Validar:
+Já comprovado por `31333418948`:
 
-1. processamento seletivo;
-2. quota e 429;
-3. 503;
-4. timeout;
-5. payload inválido;
-6. retry sem reupload;
-7. cleanup de resultado transitório.
+1. proteção de gateway/JWT e rejeição anônima 401;
+2. chamada Gemini real pelo `process-ocr` com HTTP 200;
+3. parser real do wrapper aceitando a resposta (`provider_ok`);
+4. observação separada de quota do provedor (`429 gemini_daily_quota`);
+5. ausência de secrets, prompt, modelo ou texto OCR no envelope publicado.
+
+Ainda validar no fluxo normal do produto:
+
+1. página/job + Storage + persistência;
+2. lote visual multipágina;
+3. 503 e timeout end-to-end;
+4. retry sem reupload;
+5. cleanup de derivado transitório.
 
 ### Host publicado
 
