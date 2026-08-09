@@ -35,4 +35,14 @@ describe('Supabase staging verification workflow', () => {
 		expect(workflow).toContain('name: Verify Auth, RLS, and private Storage');
 		expect(workflow).toContain('pnpm test:staging:supabase');
 	});
+
+	it('serializes the shared staging account with the OCR verifier', () => {
+		const workflow = read('.github/workflows/verify-supabase-staging.yml');
+		const ocrWorkflow = read('.github/workflows/verify-ocr-staging.yml');
+
+		for (const source of [workflow, ocrWorkflow]) {
+			expect(source).toContain('group: staging-contract-verification');
+			expect(source).toContain('cancel-in-progress: false');
+		}
+	});
 });

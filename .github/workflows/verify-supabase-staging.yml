@@ -6,6 +6,12 @@ on:
 permissions:
   contents: read
 
+# Both staging verifiers use the same protected account. Serialize them so a
+# global sign-out in one verifier cannot revoke the other verifier's session.
+concurrency:
+  group: staging-contract-verification
+  cancel-in-progress: false
+
 jobs:
   verify:
     runs-on: ubuntu-24.04

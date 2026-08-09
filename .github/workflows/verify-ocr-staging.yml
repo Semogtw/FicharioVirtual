@@ -13,7 +13,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: verify-ocr-staging
+  # Verify Supabase uses the same protected account and signs it out globally.
+  group: staging-contract-verification
   cancel-in-progress: false
 
 jobs:
