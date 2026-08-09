@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { z } from 'npm:zod@4';
+import { RequestBodyTooLargeError, readBoundedJson } from '../_shared/bounded-json.ts';
 import { corsHeaders, parseAppOrigin } from '../_shared/cors.ts';
 import { buildNotebookFolderChain, parseDriveNotebookRows } from '../_shared/drive-folder-chain.ts';
 import { ensureDriveFolder } from '../_shared/google-drive-client.ts';
@@ -11,6 +12,7 @@ const inputSchema = z
 	})
 	.strict();
 const DRIVE_ID = /^[A-Za-z0-9_-]{10,256}$/;
+const MAX_REQUEST_BODY_BYTES = 1024;
 
 function json(status: number, body: Record<string, unknown>, appOrigin: string | null) {
 	return new Response(JSON.stringify(body), {
@@ -43,9 +45,11 @@ Deno.serve(async (request) => {
 	}
 	let input: z.infer<typeof inputSchema>;
 	try {
-		input = inputSchema.parse(await request.json());
-	} catch {
-		return respond(400, { code: 'invalid_drive_folder_request' });
+		input = inputSchema.parse(await readBoundedJson(request, MAX_REQUEST_BODY_BYTES));
+	} catch (error) {
+		return error instanceof RequestBodyTooLargeError
+			? respond(413, { code: 'drive_folder_request_too_large' })
+			: respond(400, { code: 'invalid_drive_folder_request' });
 	}
 
 	const supabaseUrl = Deno.env.get('SUPABASE_URL');
