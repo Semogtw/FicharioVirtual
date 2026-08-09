@@ -8,6 +8,7 @@
 	} from '$lib/review/draft-index';
 	import { createLatestSerialExecutor } from '$lib/review/latest-serial-executor';
 	import { savePageCorrection } from '$lib/services/document-detail';
+	import { sessionState } from '$lib/stores/session.svelte';
 	import { RequestVersion } from '$lib/services/request-version';
 
 	interface CorrectionEditorProps {
@@ -26,26 +27,33 @@
 		version: number;
 		text: string;
 		backedUp: boolean;
+		draftOwnerUserId: string | null;
 	};
 
 	const editorLifecycle = new RequestVersion();
 	const lifecycleVersion = editorLifecycle.next();
 	const remoteSaves = createLatestSerialExecutor<SaveRequest>(performRemoteSave);
 
-	function storeDraft(draftText = text): boolean {
+	function storeDraft(draftText = text): string | null {
+		const userId = sessionState.user?.id;
+		if (!userId) {
+			saveState = 'error';
+			error = 'Não foi possível associar o rascunho local à sessão atual.';
+			return null;
+		}
 		try {
-			writeCorrectionDraft({
+			writeCorrectionDraft(userId, {
 				pageId: page.id,
 				text: draftText,
 				updatedAt: new Date().toISOString()
 			});
 			saveState = 'draft';
 			error = null;
-			return true;
+			return userId;
 		} catch {
 			saveState = 'error';
 			error = 'Não foi possível criar um rascunho local. O salvamento remoto ainda será tentado.';
-			return false;
+			return null;
 		}
 	}
 
@@ -55,7 +63,7 @@
 			if (!editorLifecycle.isCurrent(lifecycleVersion)) return;
 			if (request.version !== editVersion) return;
 			try {
-				discardCorrectionDraft(page.id);
+				if (request.draftOwnerUserId) discardCorrectionDraft(request.draftOwnerUserId, page.id);
 				error = null;
 			} catch {
 				error = 'A correção foi salva no servidor, mas o rascunho local não pôde ser removido.';
@@ -76,10 +84,11 @@
 		if (timer) clearTimeout(timer);
 		timer = null;
 		const snapshot = text;
-		const backedUp = storeDraft(snapshot);
+		const draftOwnerUserId = storeDraft(snapshot);
+		const backedUp = draftOwnerUserId !== null;
 		saveState = 'saving';
 		if (backedUp) error = null;
-		await remoteSaves.enqueue({ version, text: snapshot, backedUp });
+		await remoteSaves.enqueue({ version, text: snapshot, backedUp, draftOwnerUserId });
 	}
 
 	function changed() {
@@ -92,7 +101,8 @@
 
 	onMount(() => {
 		try {
-			const draft = readCorrectionDraft(page.id);
+			const userId = sessionState.user?.id;
+			const draft = userId ? readCorrectionDraft(userId, page.id) : null;
 			if (draft && Date.parse(draft.updatedAt) > Date.parse(page.updatedAt)) {
 				text = draft.text;
 				saveState = 'draft';
