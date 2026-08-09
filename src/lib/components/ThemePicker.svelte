@@ -5,15 +5,15 @@
 		THEMES,
 		THEME_STORAGE_KEY,
 		isThemeId,
-		readStoredTheme,
-		selectTheme as persistTheme,
+		readBrowserTheme,
+		selectBrowserTheme,
 		type ThemeId
 	} from '$lib/theme/theme';
 
 	let activeTheme = $state<ThemeId>(DEFAULT_THEME);
 
 	function selectTheme(theme: ThemeId) {
-		persistTheme(theme, localStorage, document);
+		selectBrowserTheme(theme, document);
 		activeTheme = theme;
 	}
 
@@ -46,7 +46,7 @@
 
 	onMount(() => {
 		const rootTheme = document.documentElement.dataset.theme;
-		activeTheme = isThemeId(rootTheme) ? rootTheme : readStoredTheme(localStorage);
+		activeTheme = isThemeId(rootTheme) ? rootTheme : readBrowserTheme();
 
 		function syncTheme(event: StorageEvent) {
 			if (event.key !== THEME_STORAGE_KEY) return;
