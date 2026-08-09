@@ -1,8 +1,30 @@
 alter table public.pages
   add column accepted_ocr_result_id uuid;
 
-alter table public.pages
-  add constraint pages_id_user_id_key unique (id, user_id);
+do $$
+begin
+  if exists (
+    select 1
+      from pg_constraint
+     where conrelid = 'public.pages'::regclass
+       and conname = 'pages_id_user_id_key'
+       and contype = 'u'
+       and pg_get_constraintdef(oid) = 'UNIQUE (id, user_id)'
+  ) then
+    null;
+  elsif exists (
+    select 1
+      from pg_constraint
+     where conrelid = 'public.pages'::regclass
+       and conname = 'pages_id_user_id_key'
+  ) then
+    raise exception 'pages_id_user_id_key exists with an incompatible definition';
+  else
+    alter table public.pages
+      add constraint pages_id_user_id_key unique (id, user_id);
+  end if;
+end;
+$$;
 
 create table public.ocr_results (
   id uuid primary key default gen_random_uuid(),

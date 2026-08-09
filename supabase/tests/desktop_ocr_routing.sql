@@ -109,6 +109,17 @@ select public.finalize_drive_pdf_reference_descriptor_attempt(
   3
 );
 
+reset role;
+update public.pages
+   set status = 'processing'::public.page_status
+ where id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+update public.ocr_jobs
+   set status = 'processing'::public.ocr_status,
+       model = 'gemini-2.5-flash'
+ where id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
+
 select results_eq(
   $$
     select page_id, route::text

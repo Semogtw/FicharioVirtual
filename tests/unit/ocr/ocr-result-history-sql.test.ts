@@ -26,6 +26,14 @@ describe('OCR result history migration', () => {
 		expect(source).toContain('references public.ocr_results(id, page_id, user_id)');
 	});
 
+	it('adopts only the expected pre-existing pages key', () => {
+		expect(source).toContain('do $$');
+		expect(source).toContain("conrelid = 'public.pages'::regclass");
+		expect(source).toContain("conname = 'pages_id_user_id_key'");
+		expect(source).toContain("pg_get_constraintdef(oid) = 'UNIQUE (id, user_id)'");
+		expect(source).toContain('pages_id_user_id_key exists with an incompatible definition');
+	});
+
 	it('keeps authenticated result access read-only and owner-scoped', () => {
 		expect(source).toContain('alter table public.ocr_results enable row level security');
 		expect(source).toContain('user_id = (select auth.uid())');

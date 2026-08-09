@@ -41,61 +41,61 @@ select ok(
 
 select results_eq(
   $$
-    select enumlabel::text
+    select enumlabel::text collate "C"
       from pg_catalog.pg_enum
      where enumtypid = 'public.page_status'::regtype
      order by enumsortorder
   $$,
   $$
     values
-      ('pending'::text),
-      ('processing'::text),
-      ('ready'::text),
-      ('retryable'::text),
-      ('blocked_quota'::text),
-      ('needs_review'::text),
-      ('failed'::text)
+      ('pending'::text collate "C"),
+      ('processing'::text collate "C"),
+      ('ready'::text collate "C"),
+      ('retryable'::text collate "C"),
+      ('blocked_quota'::text collate "C"),
+      ('needs_review'::text collate "C"),
+      ('failed'::text collate "C")
   $$,
   'page_status contains only states that can describe a page summary'
 );
 
 select results_eq(
   $$
-    select enumlabel::text
+    select enumlabel::text collate "C"
       from pg_catalog.pg_enum
      where enumtypid = 'public.ocr_status'::regtype
      order by enumsortorder
   $$,
   $$
     values
-      ('pending'::text),
-      ('processing'::text),
-      ('ready'::text),
-      ('retryable'::text),
-      ('blocked_quota'::text),
-      ('needs_review'::text),
-      ('failed'::text),
-      ('waiting_desktop'::text)
+      ('pending'::text collate "C"),
+      ('processing'::text collate "C"),
+      ('ready'::text collate "C"),
+      ('retryable'::text collate "C"),
+      ('blocked_quota'::text collate "C"),
+      ('needs_review'::text collate "C"),
+      ('failed'::text collate "C"),
+      ('waiting_desktop'::text collate "C")
   $$,
   'ocr_status owns the desktop-only waiting state'
 );
 
 select results_eq(
   $$
-    select enumlabel::text
+    select enumlabel::text collate "C"
       from pg_catalog.pg_enum
      where enumtypid = 'public.processing_status'::regtype
      order by enumsortorder
   $$,
   $$
     values
-      ('pending'::text),
-      ('processing'::text),
-      ('ready'::text),
-      ('retryable'::text),
-      ('blocked_quota'::text),
-      ('needs_review'::text),
-      ('failed'::text)
+      ('pending'::text collate "C"),
+      ('processing'::text collate "C"),
+      ('ready'::text collate "C"),
+      ('retryable'::text collate "C"),
+      ('blocked_quota'::text collate "C"),
+      ('needs_review'::text collate "C"),
+      ('failed'::text collate "C")
   $$,
   'legacy processing_status never gains desktop-only job states'
 );
@@ -105,7 +105,7 @@ select results_eq(
     select
       castsource = 'public.processing_status'::regtype,
       casttarget in ('public.page_status'::regtype, 'public.ocr_status'::regtype),
-      castcontext::text
+      castcontext::text collate "C"
       from pg_catalog.pg_cast
      where castsource = 'public.processing_status'::regtype
        and casttarget in ('public.page_status'::regtype, 'public.ocr_status'::regtype)
@@ -113,8 +113,8 @@ select results_eq(
   $$,
   $$
     values
-      (true, true, 'a'::text),
-      (true, true, 'a'::text)
+      (true, true, 'a'::text collate "C"),
+      (true, true, 'a'::text collate "C")
   $$,
   'legacy status values have assignment-only compatibility into both split domains'
 );

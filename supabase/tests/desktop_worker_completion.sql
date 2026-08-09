@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(15);
+select plan(16);
 
 insert into auth.users (id, email)
 values ('11111111-1111-4111-8111-111111111111', 'desktop-completion@example.test');
@@ -135,7 +135,7 @@ select lives_ok(
       '2026.08.1+cpu',
       'Texto OCR local',
       'Texto OCR local corrigido',
-      'text/plain',
+      'printed',
       '[{"code":"low_contrast","message":"Baixo contraste detectado."}]'::jsonb,
       true,
       1432
@@ -168,7 +168,7 @@ select results_eq(
       'microsoft/trocr-base-printed'::text,
       'Texto OCR local'::text,
       'Texto OCR local corrigido'::text,
-      'text/plain'::text,
+      'printed'::text,
       '[{"code":"low_contrast","message":"Baixo contraste detectado."}]'::jsonb,
       'desktop_worker'::text,
       repeat('ab', 32)::text,
@@ -255,7 +255,7 @@ select lives_ok(
       '2026.08.1+cpu',
       'Texto OCR local',
       'Texto OCR local corrigido',
-      'text/plain',
+      'printed',
       '[{"code":"low_contrast","message":"Baixo contraste detectado."}]'::jsonb,
       true,
       1432
@@ -285,7 +285,7 @@ select throws_ok(
       '2026.08.1+cpu',
       'Texto conflitante',
       'Texto OCR local corrigido',
-      'text/plain',
+      'printed',
       '[{"code":"low_contrast","message":"Baixo contraste detectado."}]'::jsonb,
       true,
       1432
@@ -330,7 +330,7 @@ select lives_ok(
       '2026.08.1+cpu',
       'Texto OCR local',
       'Texto OCR local corrigido',
-      'text/plain',
+      'printed',
       '[{"code":"low_contrast","message":"Baixo contraste detectado."}]'::jsonb,
       true,
       1432
@@ -375,7 +375,7 @@ select throws_ok(
       '2026.08.1+cpu',
       'Texto OCR local',
       'Texto OCR local corrigido',
-      'text/plain',
+      'printed',
       '[{"code":"low_contrast","message":"Baixo contraste detectado."}]'::jsonb,
       true,
       1432

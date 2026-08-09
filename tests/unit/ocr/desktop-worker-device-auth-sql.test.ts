@@ -50,7 +50,7 @@ describe('desktop worker device authentication boundary', () => {
 		expect(sql).toContain("job.route = 'desktop'::public.ocr_route");
 		expect(sql).toContain("job.status = 'processing'::public.ocr_status");
 		expect(sql).toContain("device.status = 'active'");
-		expect(sql).toContain('page.storage_path');
+		expect(sql).toContain('page.temporary_image_path as storage_path');
 		expect(sql).not.toContain('refresh_token');
 	});
 

@@ -34,11 +34,17 @@ drop index if exists public.ocr_jobs_runnable_idx;
 drop index if exists public.ocr_jobs_user_status_idx;
 
 alter table public.pages alter column status drop default;
+-- UPDATE OF status is part of this trigger's dependency metadata, so the
+-- trigger must be rebuilt while the column changes enum type.
+drop trigger if exists pages_roll_up_document_status on public.pages;
 alter table public.pages
   alter column status type public.page_status
   using status::text::public.page_status;
 alter table public.pages
   alter column status set default 'pending'::public.page_status;
+create trigger pages_roll_up_document_status
+  after insert or delete or update of status on public.pages
+  for each row execute function public.refresh_document_status_from_pages();
 
 alter table public.ocr_jobs alter column status drop default;
 alter table public.ocr_jobs

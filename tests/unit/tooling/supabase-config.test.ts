@@ -35,13 +35,16 @@ describe('Supabase local configuration', () => {
 		}
 	});
 
-	it('allows only the Google OAuth callback through the gateway without a Supabase JWT', () => {
+	it('allows only explicit non-JWT service endpoints through the gateway', () => {
 		const config = read('supabase/config.toml');
 
 		expect(config).toMatch(/\[functions\.drive-oauth-callback\]\s+verify_jwt\s*=\s*false/);
 		const disabledJwtEntries = [
 			...config.matchAll(/\[functions\.([^\]]+)\]\s+verify_jwt\s*=\s*false/g)
 		];
-		expect(disabledJwtEntries.map((entry) => entry[1])).toEqual(['drive-oauth-callback']);
+		expect(disabledJwtEntries.map((entry) => entry[1])).toEqual([
+			'drive-oauth-callback',
+			'desktop-ocr-worker'
+		]);
 	});
 });

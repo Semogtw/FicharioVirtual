@@ -1,48 +1,5 @@
-alter table public.ocr_jobs
-  add column desktop_source_sha256 text,
-  add column desktop_source_bound_at timestamptz;
-
-alter table public.ocr_jobs
-  add constraint desktop_ocr_source_binding_shape check (
-    (
-      desktop_source_sha256 is null
-      and desktop_source_bound_at is null
-    )
-    or (
-      route = 'desktop'::public.ocr_route
-      and status = 'processing'::public.ocr_status
-      and desktop_lease_device_id is not null
-      and desktop_lease_id is not null
-      and desktop_lease_expires_at is not null
-      and desktop_source_sha256 ~ '^[0-9a-f]{64}$'
-      and desktop_source_bound_at is not null
-    )
-  );
-
-create or replace function public.clear_desktop_ocr_source_binding_on_lease_change()
-returns trigger
-language plpgsql
-set search_path = ''
-as $$
-begin
-  if new.desktop_lease_id is distinct from old.desktop_lease_id
-    or new.desktop_lease_device_id is distinct from old.desktop_lease_device_id
-    or new.route <> 'desktop'::public.ocr_route
-    or new.status <> 'processing'::public.ocr_status then
-    new.desktop_source_sha256 := null;
-    new.desktop_source_bound_at := null;
-  end if;
-
-  return new;
-end;
-$$;
-
-create trigger clear_desktop_ocr_source_binding_on_lease_change
-before update of desktop_lease_id, desktop_lease_device_id, route, status
-on public.ocr_jobs
-for each row
-execute function public.clear_desktop_ocr_source_binding_on_lease_change();
-
+-- 202608081028 resolved its timestamp variable as a time-of-day expression,
+-- which compared a time-of-day to lease timestamps.
 create or replace function public.bind_desktop_ocr_job_source_hash(
   target_job_id uuid,
   target_device_id uuid,
