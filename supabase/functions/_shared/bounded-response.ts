@@ -21,7 +21,10 @@ function declaredLength(response: Response): number | null {
 	return value;
 }
 
-export async function readBoundedResponseText(response: Response, maxBytes: number): Promise<string> {
+export async function readBoundedResponseText(
+	response: Response,
+	maxBytes: number
+): Promise<string> {
 	if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) {
 		throw new TypeError('Invalid response body size limit');
 	}
