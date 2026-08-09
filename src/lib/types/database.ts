@@ -6,6 +6,9 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 export type DocumentKind = 'image' | 'pdf';
 export type DocumentStatus =
 	'uploading' | 'pending' | 'processing' | 'ready' | 'partially_ready' | 'needs_review' | 'failed';
+export type DrivePhysicalState = 'available' | 'missing' | 'reconnecting';
+export type DriveSyncStatus =
+	'pending' | 'processing' | 'retryable' | 'synced' | 'conflict' | 'failed' | 'cancelled';
 export type ProcessingStatus =
 	'pending' | 'processing' | 'ready' | 'retryable' | 'blocked_quota' | 'needs_review' | 'failed';
 export type ExtractionSource = 'native_pdf' | 'ocr' | 'manual';
@@ -53,7 +56,15 @@ type DocumentRow = {
 	title: string;
 	kind: DocumentKind;
 	original_filename: string;
-	storage_path: string;
+	storage_path: string | null;
+	drive_file_id: string | null;
+	drive_parent_folder_id: string | null;
+	drive_mime_type: string | null;
+	drive_modified_time: string | null;
+	drive_version: string | null;
+	drive_md5_checksum: string | null;
+	physical_state: DrivePhysicalState;
+	drive_sync_status: DriveSyncStatus;
 	thumbnail_path: string | null;
 	page_count: number;
 	status: DocumentStatus;
@@ -225,7 +236,15 @@ export type Database = {
 					title: string;
 					kind: DocumentKind;
 					original_filename: string;
-					storage_path: string;
+					storage_path?: string | null;
+					drive_file_id?: string | null;
+					drive_parent_folder_id?: string | null;
+					drive_mime_type?: string | null;
+					drive_modified_time?: string | null;
+					drive_version?: string | null;
+					drive_md5_checksum?: string | null;
+					physical_state?: DrivePhysicalState;
+					drive_sync_status?: DriveSyncStatus;
 					thumbnail_path?: string | null;
 					page_count?: number;
 					status?: DocumentStatus;

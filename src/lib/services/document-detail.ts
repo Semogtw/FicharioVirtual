@@ -1,7 +1,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { mapPageRecord, type PageDetail, type PageRecord } from '$lib/domain/page';
-import type { Database, DocumentKind, DocumentStatus, ProcessingStatus } from '$lib/types/database';
+import type {
+	Database,
+	DocumentKind,
+	DocumentStatus,
+	DrivePhysicalState,
+	ProcessingStatus
+} from '$lib/types/database';
 import { isIsoTimestamp } from '$lib/validation/iso-timestamp';
 import { getSupabaseClient } from './supabase';
 
@@ -40,6 +46,7 @@ const pageRecordSchema = z
 	})
 	.strict();
 const pageRecordsSchema = z.array(pageRecordSchema).max(10_000);
+const driveFileIdSchema = z.string().regex(/^[A-Za-z0-9_-]{10,256}$/);
 const documentRecordSchema = z
 	.object({
 		id: z.string().regex(UUID),
@@ -49,7 +56,9 @@ const documentRecordSchema = z
 		page_count: z.number().int().min(0).max(10_000),
 		notebook_id: z.string().regex(UUID).nullable(),
 		original_filename: z.string().min(1).max(512),
-		storage_path: z.string().min(1).max(1_024),
+		storage_path: z.string().min(1).max(1_024).nullable(),
+		drive_file_id: driveFileIdSchema.nullable().optional(),
+		physical_state: z.enum(['available', 'missing', 'reconnecting']).optional(),
 		created_at: timestamp,
 		updated_at: timestamp
 	})
@@ -63,7 +72,9 @@ export type DocumentDetailRecord = {
 	page_count: number;
 	notebook_id: string | null;
 	original_filename: string;
-	storage_path: string;
+	storage_path: string | null;
+	drive_file_id?: string | null;
+	physical_state?: DrivePhysicalState;
 	created_at: string;
 	updated_at: string;
 };
@@ -76,7 +87,13 @@ export type DocumentDetail = {
 	pageCount: number;
 	notebookId: string | null;
 	originalFilename: string;
-	originalUrl: string;
+	originalUrl: string | null;
+	originalReference: Readonly<{
+		provider: 'supabase' | 'google_drive' | 'missing';
+		url: string | null;
+		driveFileId: string | null;
+	}>;
+	physicalState: DrivePhysicalState;
 	pages: readonly PageDetail[];
 	createdAt: string;
 	updatedAt: string;
@@ -118,6 +135,33 @@ function signedUrl(value: string) {
 	return value;
 }
 
+export function driveReferenceUrl(driveFileId: string): string {
+	if (!driveFileIdSchema.safeParse(driveFileId).success) {
+		throw new TypeError('Invalid Google Drive file identifier');
+	}
+	return `https://drive.google.com/file/d/${driveFileId}/view`;
+}
+
+async function resolveOriginalReference(
+	document: z.infer<typeof documentRecordSchema>,
+	gateway: DocumentDetailGateway
+) {
+	const physicalState: DrivePhysicalState = document.physical_state ?? 'available';
+	const driveFileId = document.drive_file_id ?? null;
+	if (document.storage_path !== null) {
+		const url = signedUrl(await gateway.createSignedUrl(document.storage_path));
+		return Object.freeze({ provider: 'supabase' as const, url, driveFileId });
+	}
+	if (physicalState !== 'available' || driveFileId === null) {
+		return Object.freeze({ provider: 'missing' as const, url: null, driveFileId });
+	}
+	return Object.freeze({
+		provider: 'google_drive' as const,
+		url: driveReferenceUrl(driveFileId),
+		driveFileId
+	});
+}
+
 function preserveNotFound(error: unknown): never {
 	if (error instanceof DocumentDetailError && error.code === 'not_found') throw error;
 	throw new DocumentDetailError('unavailable');
@@ -133,9 +177,9 @@ export async function loadDocumentDetailWithGateway(
 		if (rawDocument === null) throw new DocumentDetailError('not_found');
 		const document = documentRecordSchema.parse(rawDocument);
 		if (document.id !== validatedDocumentId) throw new DocumentDetailError('unavailable');
-		const [rawPages, originalUrl] = await Promise.all([
+		const [rawPages, originalReference] = await Promise.all([
 			gateway.listPages(validatedDocumentId),
-			gateway.createSignedUrl(document.storage_path)
+			resolveOriginalReference(document, gateway)
 		]);
 		const pages = pageRecordsSchema.parse(rawPages);
 		if (pages.length !== document.page_count) throw new DocumentDetailError('unavailable');
@@ -160,7 +204,9 @@ export async function loadDocumentDetailWithGateway(
 			pageCount: document.page_count,
 			notebookId: document.notebook_id,
 			originalFilename: document.original_filename,
-			originalUrl: signedUrl(originalUrl),
+			originalUrl: originalReference.url,
+			originalReference,
+			physicalState: document.physical_state ?? 'available',
 			pages: Object.freeze(
 				pages
 					.map((page) => mapPageRecord(page))

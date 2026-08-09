@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
 	loadDocumentDetailWithGateway,
 	savePageCorrectionWithGateway,
-	type DocumentDetailGateway
+	type DocumentDetailGateway,
+	type DocumentDetailRecord
 } from '../../../src/lib/services/document-detail';
 import type { PageRecord } from '../../../src/lib/domain/page';
 
@@ -25,7 +26,7 @@ function pageRecord(overrides: Partial<PageRecord> = {}): PageRecord {
 	};
 }
 
-function gateway() {
+function gateway(documentOverrides: Partial<DocumentDetailRecord> = {}) {
 	let correction: Record<string, unknown> | null = null;
 	const value: DocumentDetailGateway = {
 		async loadDocument() {
@@ -39,7 +40,8 @@ function gateway() {
 				original_filename: 'apostila.pdf',
 				storage_path: 'user/document/original.pdf',
 				created_at: '2026-08-02T03:00:00.000Z',
-				updated_at: '2026-08-02T04:00:00.000Z'
+				updated_at: '2026-08-02T04:00:00.000Z',
+				...documentOverrides
 			};
 		},
 		async listPages() {
@@ -72,8 +74,49 @@ describe('loadDocumentDetailWithGateway', () => {
 		const detail = await loadDocumentDetailWithGateway(documentId, fixture.value);
 
 		expect(detail.originalUrl).toContain('signed=1');
+		expect(detail.originalReference).toEqual({
+			provider: 'supabase',
+			url: detail.originalUrl,
+			driveFileId: null
+		});
 		expect(detail.pages[0]?.text).toBe('Texto nativo');
 		expect(detail).not.toHaveProperty('storagePath');
+	});
+
+	it('resolves a Drive reference when no Storage copy exists without persisting a token', async () => {
+		const fixture = gateway({
+			storage_path: null,
+			drive_file_id: '1AbCdEfGhIjKlMnOpQrStUvWxYz_123456',
+			physical_state: 'available'
+		});
+		const detail = await loadDocumentDetailWithGateway(documentId, fixture.value);
+
+		expect(detail.originalUrl).toBe(
+			'https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQrStUvWxYz_123456/view'
+		);
+		expect(detail.originalReference).toEqual({
+			provider: 'google_drive',
+			url: detail.originalUrl,
+			driveFileId: '1AbCdEfGhIjKlMnOpQrStUvWxYz_123456'
+		});
+		expect(detail.originalUrl).not.toContain('token');
+	});
+
+	it('keeps an absent Drive original visible without trying to sign a null Storage path', async () => {
+		const fixture = gateway({
+			storage_path: null,
+			drive_file_id: '1AbCdEfGhIjKlMnOpQrStUvWxYz_123456',
+			physical_state: 'missing'
+		});
+		const detail = await loadDocumentDetailWithGateway(documentId, fixture.value);
+
+		expect(detail.originalUrl).toBeNull();
+		expect(detail.physicalState).toBe('missing');
+		expect(detail.originalReference).toEqual({
+			provider: 'missing',
+			url: null,
+			driveFileId: '1AbCdEfGhIjKlMnOpQrStUvWxYz_123456'
+		});
 	});
 });
 
