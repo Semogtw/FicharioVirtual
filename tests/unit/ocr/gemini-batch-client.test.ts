@@ -52,7 +52,9 @@ describe('requestGeminiOcrBatch', () => {
 			}>;
 			generationConfig: {
 				maxOutputTokens: number;
-				responseFormat: { text: { mimeType: string; schema: { required: string[] } } };
+				responseFormat: {
+					text: { mimeType: string; schema: { required: string[]; properties: { pages: { maxItems: number } } } };
+				};
 			};
 		};
 		const parts = body.contents[0]!.parts;
@@ -63,8 +65,9 @@ describe('requestGeminiOcrBatch', () => {
 		expect(parts[3]?.text).toContain(`${pages[1].pageId}`);
 		expect(parts[4]?.inlineData).toEqual({ mimeType: 'image/jpeg', data: 'BAU=' });
 		expect(body.generationConfig.maxOutputTokens).toBeGreaterThanOrEqual(8192);
-		expect(body.generationConfig.responseFormat.text.mimeType).toBe('APPLICATION_JSON');
+		expect(body.generationConfig.responseFormat.text.mimeType).toBe('application/json');
 		expect(body.generationConfig.responseFormat.text.schema.required).toEqual(['pages']);
+		expect(body.generationConfig.responseFormat.text.schema.properties.pages.maxItems).toBe(100);
 	});
 
 	it('keeps structured-output schema within Gemini supported constraints', async () => {
@@ -106,6 +109,26 @@ describe('requestGeminiOcrBatch', () => {
 		visit(body.generationConfig.responseFormat.text.schema, 'schema');
 
 		expect(found).toEqual([]);
+	});
+
+	it('rejects aggregate raw bytes that cannot fit the documented inline request ceiling', async () => {
+		let called = false;
+		await expect(
+			requestGeminiOcrBatch({
+				apiKey: 'test-key',
+				model: 'gemini-test',
+				pages: [
+					{ ...pages[0], bytes: new Uint8Array(8 * 1024 * 1024) },
+					{ ...pages[1], bytes: new Uint8Array(7 * 1024 * 1024) }
+				],
+				promptVersion: 1,
+				fetchImpl: async () => {
+					called = true;
+					return providerResponse([]);
+				}
+			})
+		).rejects.toThrow('Gemini OCR batch is too large');
+		expect(called).toBe(false);
 	});
 
 	it('returns valid pages and integrity metadata when the provider omits a page', async () => {
