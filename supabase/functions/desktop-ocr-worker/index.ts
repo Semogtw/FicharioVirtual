@@ -4,6 +4,10 @@ import {
 	hashDesktopWorkerCredential,
 	parseDesktopWorkerAuthorization
 } from '../_shared/desktop-worker-auth.ts';
+import {
+	parseDesktopWorkerRequest,
+	type DesktopWorkerRequest
+} from '../_shared/desktop-worker-contract.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHA256_HEX = /^[0-9a-f]{64}$/;
@@ -14,14 +18,13 @@ const SOURCE_URL_SECONDS = 60;
 const MAX_SOURCE_BYTES = 12 * 1024 * 1024;
 const SOURCE_MIME_TYPES = new Set(['image/webp', 'image/jpeg']);
 
-type WorkerRequest =
-	| Readonly<{ action: 'claim' }>
-	| Readonly<{ action: 'renew' | 'source'; jobId: string; leaseId: string }>;
-
 type DeviceIdentity = Readonly<{
 	deviceId: string;
 	userId: string;
 }>;
+
+type SourceRequest = Extract<DesktopWorkerRequest, { action: 'source' }>;
+type CompleteRequest = Extract<DesktopWorkerRequest, { action: 'complete' }>;
 
 function responseHeaders(appOrigin: string | null) {
 	return {
@@ -40,31 +43,6 @@ function json(status: number, body: Record<string, unknown>, appOrigin: string |
 
 function empty(status: number, appOrigin: string | null) {
 	return new Response(null, { status, headers: responseHeaders(appOrigin) });
-}
-
-function hasExactKeys(record: Record<string, unknown>, expected: readonly string[]) {
-	const actual = Object.keys(record).sort();
-	const wanted = [...expected].sort();
-	return actual.length === wanted.length && actual.every((key, index) => key === wanted[index]);
-}
-
-function parseWorkerRequest(value: unknown): WorkerRequest | null {
-	if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
-	const record = value as Record<string, unknown>;
-	if (record.action === 'claim' && hasExactKeys(record, ['action'])) {
-		return Object.freeze({ action: 'claim' });
-	}
-	if (
-		(record.action === 'renew' || record.action === 'source') &&
-		hasExactKeys(record, ['action', 'jobId', 'leaseId']) &&
-		typeof record.jobId === 'string' &&
-		UUID.test(record.jobId) &&
-		typeof record.leaseId === 'string' &&
-		UUID.test(record.leaseId)
-	) {
-		return Object.freeze({ action: record.action, jobId: record.jobId, leaseId: record.leaseId });
-	}
-	return null;
 }
 
 function envLeaseSeconds() {
@@ -121,7 +99,7 @@ function parseLease(value: unknown, expectedDeviceId: string): Readonly<{
 	});
 }
 
-function parseSource(value: unknown, expected: WorkerRequest & { action: 'source' }, deviceId: string) {
+function parseSource(value: unknown, expected: SourceRequest, deviceId: string) {
 	if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
 	const record = value as Record<string, unknown>;
 	if (
@@ -173,6 +151,34 @@ function sourceBindingMatches(
 	);
 }
 
+function parseCompletion(value: unknown, expected: CompleteRequest) {
+	if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+	const record = value as Record<string, unknown>;
+	if (
+		record.jobId !== expected.jobId ||
+		typeof record.pageId !== 'string' ||
+		!UUID.test(record.pageId) ||
+		typeof record.resultId !== 'string' ||
+		!UUID.test(record.resultId) ||
+		(record.status !== 'ready' && record.status !== 'needs_review') ||
+		(record.sourceStoragePath !== null &&
+			(typeof record.sourceStoragePath !== 'string' ||
+				record.sourceStoragePath.length < 3 ||
+				record.sourceStoragePath.length > 1024)) ||
+		typeof record.idempotentReplay !== 'boolean'
+	) {
+		return null;
+	}
+	return Object.freeze({
+		jobId: expected.jobId,
+		pageId: record.pageId,
+		resultId: record.resultId,
+		status: record.status,
+		sourceStoragePath: record.sourceStoragePath,
+		idempotentReplay: record.idempotentReplay
+	});
+}
+
 async function sha256Hex(blob: Blob) {
 	const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer());
 	const value = [...new Uint8Array(digest)]
@@ -201,7 +207,7 @@ Deno.serve(async (request) => {
 	} catch {
 		return respond(400, { code: 'invalid_json' });
 	}
-	const input = parseWorkerRequest(rawBody);
+	const input = parseDesktopWorkerRequest(rawBody);
 	if (!input) return respond(400, { code: 'invalid_worker_request' });
 
 	const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -251,6 +257,54 @@ Deno.serve(async (request) => {
 			return respond(503, { code: 'desktop_ocr_renew_failed' });
 		}
 		return respond(200, lease);
+	}
+
+	if (input.action === 'complete') {
+		const { data, error } = await admin.rpc('complete_desktop_ocr_job', {
+			target_job_id: input.jobId,
+			target_device_id: device.deviceId,
+			target_lease_id: input.leaseId,
+			target_source_sha256: input.sourceSha256,
+			target_backend: input.backend,
+			target_model: input.modelId,
+			target_model_version: input.modelVersion,
+			extracted_text: input.rawText,
+			target_corrected_text: input.correctedText,
+			target_content_type: input.contentType,
+			extraction_warnings: input.warnings,
+			needs_review: input.needsReview,
+			timing_ms: input.timingMs
+		});
+		if (error) return respond(409, { code: 'desktop_ocr_completion_rejected' });
+		const completion = parseCompletion(data, input);
+		if (!completion) return respond(503, { code: 'desktop_ocr_completion_failed' });
+
+		let cleanupPending = completion.sourceStoragePath !== null;
+		if (completion.sourceStoragePath !== null) {
+			const { error: removeError } = await admin.storage
+				.from('documents')
+				.remove([completion.sourceStoragePath]);
+			if (!removeError) {
+				const { data: cleared, error: clearError } = await admin.rpc(
+					'clear_desktop_ocr_completed_source',
+					{
+						target_job_id: completion.jobId,
+						target_result_id: completion.resultId,
+						expected_storage_path: completion.sourceStoragePath
+					}
+				);
+				cleanupPending = clearError !== null || cleared !== true;
+			}
+		}
+
+		return respond(200, {
+			jobId: completion.jobId,
+			pageId: completion.pageId,
+			resultId: completion.resultId,
+			status: completion.status,
+			idempotentReplay: completion.idempotentReplay,
+			cleanupPending
+		});
 	}
 
 	const { data, error } = await admin.rpc('get_desktop_ocr_job_source', {
