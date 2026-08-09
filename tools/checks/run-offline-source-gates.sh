@@ -11,6 +11,7 @@ node tools/checks/check-pdfjs-security.mjs
 node tools/checks/check-pdf-upload-security.mjs
 node tools/checks/check-source-security.mjs
 node tools/checks/check-browser-storage-security.mjs
+node tools/checks/check-edge-request-body-security.mjs
 node tools/checks/check-drive-pdf-descriptor-security.mjs
 node tools/checks/check-desktop-worker-boundary.mjs
 node tools/checks/check-ocr-status-split.mjs
