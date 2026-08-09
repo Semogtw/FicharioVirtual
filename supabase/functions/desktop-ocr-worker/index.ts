@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { RequestBodyTooLargeError, readBoundedJson } from '../_shared/bounded-json.ts';
 import { corsHeaders, parseAppOrigin } from '../_shared/cors.ts';
 import {
 	hashDesktopWorkerCredential,
@@ -16,13 +17,13 @@ const MIN_LEASE_SECONDS = 30;
 const MAX_LEASE_SECONDS = 900;
 const SOURCE_URL_SECONDS = 60;
 const MAX_SOURCE_BYTES = 12 * 1024 * 1024;
+const MAX_REQUEST_BODY_BYTES = 8 * 1024 * 1024;
 const SOURCE_MIME_TYPES = new Set(['image/webp', 'image/jpeg']);
 
 type DeviceIdentity = Readonly<{
 	deviceId: string;
 	userId: string;
 }>;
-
 type SourceRequest = Extract<DesktopWorkerRequest, { action: 'source' }>;
 type CompleteRequest = Extract<DesktopWorkerRequest, { action: 'complete' }>;
 
@@ -212,9 +213,11 @@ Deno.serve(async (request) => {
 
 	let rawBody: unknown;
 	try {
-		rawBody = await request.json();
-	} catch {
-		return respond(400, { code: 'invalid_json' });
+		rawBody = await readBoundedJson(request, MAX_REQUEST_BODY_BYTES);
+	} catch (error) {
+		return error instanceof RequestBodyTooLargeError
+			? respond(413, { code: 'worker_request_too_large' })
+			: respond(400, { code: 'invalid_json' });
 	}
 	const input = parseDesktopWorkerRequest(rawBody);
 	if (!input) return respond(400, { code: 'invalid_worker_request' });
