@@ -36,9 +36,7 @@ describe('readBoundedJson', () => {
 			headers: { 'Content-Length': '4097' },
 			body: '{}'
 		});
-		await expect(readBoundedJson(request, 4096)).rejects.toBeInstanceOf(
-			RequestBodyTooLargeError
-		);
+		await expect(readBoundedJson(request, 4096)).rejects.toBeInstanceOf(RequestBodyTooLargeError);
 	});
 
 	it('rejects a chunked body as soon as cumulative bytes exceed the limit', async () => {
