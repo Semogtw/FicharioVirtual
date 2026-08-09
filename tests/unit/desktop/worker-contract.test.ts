@@ -15,7 +15,7 @@ const completion = {
 	modelVersion: '2026.08.1+cpu',
 	rawText: 'Texto OCR local',
 	correctedText: null,
-	contentType: 'text/plain',
+	contentType: 'handwritten',
 	warnings: [{ code: 'low_contrast', message: 'Baixo contraste detectado.' }],
 	needsReview: true,
 	timingMs: 1432
@@ -41,7 +41,14 @@ describe('desktop worker request contract', () => {
 		expect(parsed).toEqual(completion);
 		if (parsed?.action === 'complete') {
 			expect(parsed.rawText).toBe('Texto OCR local');
+			expect(parsed.contentType).toBe('handwritten');
 			expect(parsed.warnings).toEqual(completion.warnings);
+		}
+	});
+
+	it('accepts every approved semantic content classification', () => {
+		for (const contentType of ['printed', 'handwritten', 'mixed', 'unknown'] as const) {
+			expect(parseDesktopWorkerRequest({ ...completion, contentType })?.action).toBe('complete');
 		}
 	});
 
@@ -77,10 +84,11 @@ describe('desktop worker request contract', () => {
 		).toBeNull();
 	});
 
-	it('enforces text, model, content-type, and timing ceilings', () => {
+	it('enforces text, model, semantic content-type, and timing ceilings', () => {
 		expect(parseDesktopWorkerRequest({ ...completion, rawText: 'x'.repeat(1_000_001) })).toBeNull();
 		expect(parseDesktopWorkerRequest({ ...completion, modelId: 'bad model' })).toBeNull();
-		expect(parseDesktopWorkerRequest({ ...completion, contentType: 'text/plain; charset=utf-8' })).toBeNull();
+		expect(parseDesktopWorkerRequest({ ...completion, contentType: 'text/plain' })).toBeNull();
+		expect(parseDesktopWorkerRequest({ ...completion, contentType: 'diagram' })).toBeNull();
 		expect(parseDesktopWorkerRequest({ ...completion, timingMs: 86_400_001 })).toBeNull();
 		expect(parseDesktopWorkerRequest({ ...completion, timingMs: 0.5 })).toBeNull();
 	});
