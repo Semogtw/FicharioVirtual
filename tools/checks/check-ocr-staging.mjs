@@ -191,7 +191,13 @@ async function main() {
 	let probe = null;
 	let operationError = null;
 	let failureStage = null;
-	let diagnostic = { httpStatus: null, errorKind: null };
+	let diagnostic = {
+		httpStatus: null,
+		errorKind: null,
+		providerStatus: null,
+		providerErrorKind: null,
+		providerErrorCode: null
+	};
 	let currentStage = 'configuration';
 
 	try {
@@ -226,7 +232,7 @@ async function main() {
 			body: { pageId: probe.pageId }
 		});
 		if (invocation.error) {
-			diagnostic = createOcrInvocationDiagnostic({
+			diagnostic = await createOcrInvocationDiagnostic({
 				error: invocation.error,
 				response: invocation.response
 			});

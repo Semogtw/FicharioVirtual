@@ -30,7 +30,7 @@ describe('OCR staging runner evidence', () => {
 		expect(result.stderr).toContain('Missing required environment variable');
 		const report = JSON.parse(readFileSync(reportPath, 'utf8'));
 		expect(report).toMatchObject({
-			schemaVersion: 1,
+			schemaVersion: 2,
 			status: 'fail',
 			failureStage: 'configuration',
 			cleanup: { document: 'not_required', session: 'not_required' }

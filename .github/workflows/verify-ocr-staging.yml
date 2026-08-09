@@ -34,7 +34,7 @@ jobs:
       - name: Initialize sanitized OCR report
         run: |
           cat > "$OCR_STAGING_REPORT_PATH" <<'JSON'
-          {"schemaVersion":1,"status":"not_run","failureStage":"confirmation","stages":{"authenticated":false,"authorized":false,"consentRecorded":false,"importCreated":false,"functionCompleted":false,"persistenceVerified":false},"outcome":{"documentStatus":null,"pageStatus":null,"jobStatus":null,"needsReview":null,"warningCount":null,"attemptCount":null,"tokens":{"fichario":null,"ocr":null,"numericProbe":null}},"diagnostic":{"httpStatus":null,"errorKind":null},"cleanup":{"document":"not_required","session":"not_required"}}
+          {"schemaVersion":2,"status":"not_run","failureStage":"confirmation","stages":{"authenticated":false,"authorized":false,"consentRecorded":false,"importCreated":false,"functionCompleted":false,"persistenceVerified":false},"outcome":{"documentStatus":null,"pageStatus":null,"jobStatus":null,"needsReview":null,"warningCount":null,"attemptCount":null,"tokens":{"fichario":null,"ocr":null,"numericProbe":null}},"diagnostic":{"httpStatus":null,"errorKind":null,"providerStatus":null,"providerErrorKind":null,"providerErrorCode":null},"cleanup":{"document":"not_required","session":"not_required"}}
           JSON
           chmod 600 "$OCR_STAGING_REPORT_PATH"
 

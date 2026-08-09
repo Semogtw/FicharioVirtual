@@ -44,12 +44,18 @@ describe('OCR staging contract', () => {
 				attemptCount: 1,
 				tokens: { fichario: true, ocr: true, numericProbe: true }
 			},
-			diagnostic: { httpStatus: null, errorKind: null },
+			diagnostic: {
+				httpStatus: null,
+				errorKind: null,
+				providerStatus: null,
+				providerErrorKind: null,
+				providerErrorCode: null
+			},
 			cleanup: { document: 'success', session: 'success' }
 		});
 
 		expect(report).toEqual({
-			schemaVersion: 1,
+			schemaVersion: 2,
 			status: 'pass',
 			failureStage: null,
 			stages: {
@@ -69,7 +75,13 @@ describe('OCR staging contract', () => {
 				attemptCount: 1,
 				tokens: { fichario: true, ocr: true, numericProbe: true }
 			},
-			diagnostic: { httpStatus: null, errorKind: null },
+			diagnostic: {
+				httpStatus: null,
+				errorKind: null,
+				providerStatus: null,
+				providerErrorKind: null,
+				providerErrorCode: null
+			},
 			cleanup: { document: 'success', session: 'success' }
 		});
 		const serialized = JSON.stringify(report);
@@ -109,7 +121,13 @@ describe('OCR staging contract', () => {
 				attemptCount: null,
 				tokens: { fichario: null, ocr: null, numericProbe: null }
 			},
-			diagnostic: { httpStatus: null, errorKind: null },
+			diagnostic: {
+				httpStatus: null,
+				errorKind: null,
+				providerStatus: null,
+				providerErrorKind: null,
+				providerErrorCode: null
+			},
 			cleanup: { document: 'not_required', session: 'not_required' }
 		});
 
@@ -117,22 +135,41 @@ describe('OCR staging contract', () => {
 		expect(JSON.stringify(report)).not.toContain('secret.example');
 	});
 
-	it('records only the HTTP status and SDK error kind for non-2xx invocations', () => {
-		const diagnostic = createOcrInvocationDiagnostic({
+	it('records only safe provider classification from a non-2xx body', async () => {
+		const diagnostic = await createOcrInvocationDiagnostic({
 			error: { name: 'FunctionsHttpError' },
-			response: { status: 500 }
+			response: new Response(
+				JSON.stringify({
+					code: 'gemini_invalid_request',
+					message: 'provider secret https://secret.example/raw body'
+				}),
+				{ status: 400, headers: { 'content-type': 'application/json' } }
+			)
 		});
 
-		expect(diagnostic).toEqual({ httpStatus: 500, errorKind: 'FunctionsHttpError' });
+		expect(diagnostic).toEqual({
+			httpStatus: 400,
+			errorKind: 'FunctionsHttpError',
+			providerStatus: 400,
+			providerErrorKind: 'invalid_request',
+			providerErrorCode: 'gemini_invalid_request'
+		});
 		expect(formatOcrInvocationFailure(diagnostic)).toBe(
-			'process-ocr failed: HTTP 500 (FunctionsHttpError)'
+			'process-ocr failed: HTTP 400 (FunctionsHttpError); provider=invalid_request/gemini_invalid_request'
 		);
 		expect(
-			createOcrInvocationDiagnostic({
+			await createOcrInvocationDiagnostic({
 				error: { name: 'UnexpectedProviderError' },
-				response: { status: 700 }
+				response: new Response(JSON.stringify({ code: 'raw-secret-code' }), { status: 400 })
 			})
-		).toEqual({ httpStatus: null, errorKind: null });
+		).toEqual({
+			httpStatus: 400,
+			errorKind: null,
+			providerStatus: null,
+			providerErrorKind: null,
+			providerErrorCode: null
+		});
+		expect(JSON.stringify(diagnostic)).not.toContain('secret.example');
 	});
 
 	it('normalizes accents and punctuation before token checks', () => {
