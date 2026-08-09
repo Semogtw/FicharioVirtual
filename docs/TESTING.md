@@ -16,7 +16,15 @@ Esse recibo cobre frontend/`pnpm verify`, source/offline, Chromium E2E, Deno/Edg
 O deploy `31333367356` do mesmo SHA terminou com **success**. A sonda protegida `31333418948` também terminou com **success**: configuração protegida validada, chamada anônima rejeitada com 401 e envelope final sanitizado:
 
 ```json
-{"direct":{"httpStatus":429,"category":"provider","code":"gemini_daily_quota","success":false},"process":{"httpStatus":200,"category":"provider","code":"provider_ok","success":true}}
+{
+	"direct": {
+		"httpStatus": 429,
+		"category": "provider",
+		"code": "gemini_daily_quota",
+		"success": false
+	},
+	"process": { "httpStatus": 200, "category": "provider", "code": "provider_ok", "success": true }
+}
 ```
 
 A sequência de diagnóstico isolou o HTTP 400 nos campos de schema/structured-output enviados em `generationConfig`. O cliente corrigido mantém JSON MIME, move o contrato de schema para o prompt e conserva os parsers fail-closed. O `process-ocr` da sonda obteve resposta real válida do Gemini; a chamada direta separada encontrou quota e permaneceu marcada como falha, sem maquiar o resultado.
