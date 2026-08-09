@@ -3,6 +3,8 @@ export type DesktopWorkerWarning = Readonly<{
 	message: string;
 }>;
 
+export type DesktopOcrContentType = 'printed' | 'handwritten' | 'mixed' | 'unknown';
+
 export type DesktopWorkerRequest =
 	| Readonly<{ action: 'claim' }>
 	| Readonly<{ action: 'renew' | 'source'; jobId: string; leaseId: string }>
@@ -16,7 +18,7 @@ export type DesktopWorkerRequest =
 			modelVersion: string;
 			rawText: string;
 			correctedText: string | null;
-			contentType: string;
+			contentType: DesktopOcrContentType;
 			warnings: readonly DesktopWorkerWarning[];
 			needsReview: boolean;
 			timingMs: number;
@@ -26,7 +28,12 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const SHA256_HEX = /^[0-9a-f]{64}$/;
 const MODEL = /^[A-Za-z0-9._:/-]+$/;
 const MODEL_VERSION = /^[A-Za-z0-9._:/+-]+$/;
-const CONTENT_TYPE = /^[A-Za-z0-9.+_-]+\/[A-Za-z0-9.+_-]+$/;
+const CONTENT_TYPES = Object.freeze<readonly DesktopOcrContentType[]>([
+	'printed',
+	'handwritten',
+	'mixed',
+	'unknown'
+]);
 const WARNING_CODE = /^[a-z][a-z0-9_]{1,63}$/;
 const MAX_TEXT_LENGTH = 1_000_000;
 const MAX_WARNINGS = 100;
@@ -37,6 +44,12 @@ function hasExactKeys(record: Record<string, unknown>, expected: readonly string
 	const actual = Object.keys(record).sort();
 	const wanted = [...expected].sort();
 	return actual.length === wanted.length && actual.every((key, index) => key === wanted[index]);
+}
+
+function isContentType(value: unknown): value is DesktopOcrContentType {
+	return (
+		typeof value === 'string' && CONTENT_TYPES.includes(value as DesktopOcrContentType)
+	);
 }
 
 function parseWarnings(value: unknown): readonly DesktopWorkerWarning[] | null {
@@ -116,10 +129,7 @@ export function parseDesktopWorkerRequest(value: unknown): DesktopWorkerRequest 
 		record.rawText.length > MAX_TEXT_LENGTH ||
 		(record.correctedText !== null &&
 			(typeof record.correctedText !== 'string' || record.correctedText.length > MAX_TEXT_LENGTH)) ||
-		typeof record.contentType !== 'string' ||
-		record.contentType.length < 1 ||
-		record.contentType.length > 64 ||
-		!CONTENT_TYPE.test(record.contentType) ||
+		!isContentType(record.contentType) ||
 		typeof record.needsReview !== 'boolean' ||
 		typeof record.timingMs !== 'number' ||
 		!Number.isInteger(record.timingMs) ||
