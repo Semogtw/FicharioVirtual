@@ -34,7 +34,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
 
@@ -42,7 +42,7 @@ jobs:
         run: git archive --format=zip --output=/tmp/fichario-source.zip HEAD
 
       - name: Upload source archive
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: fichario-source-${{ github.sha }}
           path: /tmp/fichario-source.zip
@@ -74,12 +74,12 @@ jobs:
           echo "RECEIPT_ISSUE=$issue_number" >> "$GITHUB_ENV"
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
         with:
           version: 10
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 22.16.0
           cache: pnpm
@@ -97,7 +97,7 @@ jobs:
 
       - name: Upload frontend failure log
         if: steps.frontend.outcome == 'failure'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: frontend-failure-${{ github.sha }}
           path: /tmp/frontend-verification.log
@@ -115,7 +115,7 @@ jobs:
 
       - name: Upload Prettier repair patch
         if: steps.formatting.outcome == 'success'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: prettier-repair-${{ github.sha }}
           path: /tmp/prettier-repair.patch
@@ -142,7 +142,7 @@ jobs:
       - name: Upload browser failure evidence
         if: always()
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: playwright-evidence-${{ github.sha }}
           path: |
@@ -154,7 +154,7 @@ jobs:
       - name: Set up Deno
         id: deno
         continue-on-error: true
-        uses: denoland/setup-deno@v2
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
         with:
           deno-version: 2.8.1
 
@@ -167,7 +167,7 @@ jobs:
       - name: Set up Supabase CLI
         id: supabase
         continue-on-error: true
-        uses: supabase/setup-cli@v2
+        uses: supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf # v2
         with:
           version: 2.111.0
 
@@ -181,7 +181,7 @@ jobs:
 
       - name: Upload database failure log
         if: steps.database.outcome == 'failure'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: database-failure-${{ github.sha }}
           path: /tmp/database-verification.log
