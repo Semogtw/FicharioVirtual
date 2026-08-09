@@ -4,9 +4,10 @@ import process from 'node:process';
 
 const root = resolve(new URL('../..', import.meta.url).pathname);
 const failures = [];
-const [helper, gemini] = await Promise.all([
+const [helper, gemini, probe] = await Promise.all([
 	readFile(join(root, 'supabase/functions/_shared/bounded-response.ts'), 'utf8'),
-	readFile(join(root, 'supabase/functions/_shared/gemini-ocr-client.ts'), 'utf8')
+	readFile(join(root, 'supabase/functions/_shared/gemini-ocr-client.ts'), 'utf8'),
+	readFile(join(root, 'supabase/functions/ocr-boundary-probe/index.ts'), 'utf8')
 ]);
 
 for (const required of [
@@ -38,6 +39,19 @@ if (!gemini.includes('maxOutputTokens: 8192')) {
 }
 if (!gemini.includes('Math.min(65_536, Math.max(8_192, request.pages.length * 2_048))')) {
 	failures.push('Gemini batch output token ceiling changed without security review');
+}
+
+if (!probe.includes("from '../_shared/bounded-response.ts'")) {
+	failures.push('OCR boundary probe must use the bounded response reader');
+}
+if (!probe.includes('MAX_WRAPPER_RESPONSE_BYTES = 16 * 1024')) {
+	failures.push('OCR boundary probe wrapper response limit changed without security review');
+}
+if (!probe.includes('readBoundedResponseJson(response, MAX_WRAPPER_RESPONSE_BYTES)')) {
+	failures.push('OCR boundary probe must bound the internal process-ocr response');
+}
+if (/\bresponse\.(?:json|text)\s*\(/.test(probe)) {
+	failures.push('OCR boundary probe must not materialize unbounded wrapper responses');
 }
 
 if (failures.length > 0) {
