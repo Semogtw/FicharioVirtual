@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 
 const source = [
 	'supabase/migrations/202608071748_drive_pdf_reference_descriptor_attempts.sql',
-	'supabase/migrations/202608081000_drive_pdf_reference_descriptor_attempt_permissions.sql'
+	'supabase/migrations/202608081000_drive_pdf_reference_descriptor_attempt_permissions.sql',
+	'supabase/migrations/202608081010_drive_pdf_reference_descriptor_finalizer_assignment.sql'
 ]
 	.map((path) => readFileSync(path, 'utf8'))
 	.join('\n');
@@ -35,6 +36,7 @@ describe('Drive PDF reference page descriptor attempt migration', () => {
 		expect(source).toContain('minimum_page <> 1');
 		expect(source).toContain('maximum_page <> expected_page_count');
 		expect(source).toContain('from public.finalize_drive_pdf_reference_import');
+		expect(source).toContain('publication := public.finalize_drive_pdf_reference_import(');
 	});
 
 	it('removes authenticated bypasses around the leased publication protocol', () => {
