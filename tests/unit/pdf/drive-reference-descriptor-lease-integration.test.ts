@@ -84,6 +84,13 @@ describe('Drive PDF descriptor lease integration', () => {
 			deps.renderPage.mock.invocationCallOrder[0]!
 		);
 		expect(deps.lease.renewIfNeeded).toHaveBeenCalledTimes(4);
+		expect(deps.lease.renew).toHaveBeenCalledTimes(2);
+		expect(deps.lease.renew.mock.invocationCallOrder[0]).toBeLessThan(
+			deps.upload.mock.invocationCallOrder[0]!
+		);
+		expect(deps.lease.renew.mock.invocationCallOrder[1]).toBeLessThan(
+			deps.upload.mock.invocationCallOrder[1]!
+		);
 		expect(deps.lease.stageAndFinalize).toHaveBeenCalledWith(
 			expect.objectContaining({
 				pages: expect.arrayContaining([expect.objectContaining({ pageNumber: 1 })]),
@@ -113,6 +120,25 @@ describe('Drive PDF descriptor lease integration', () => {
 
 		expect(deps.upload).toHaveBeenCalledTimes(1);
 		expect(deps.lease.abandon).toHaveBeenCalledOnce();
+		expect(deps.remove).not.toHaveBeenCalled();
+	});
+
+	it('refuses to upload a rendered derivative after the lease can no longer be renewed', async () => {
+		const deps = dependencies(1);
+		deps.lease.renew.mockRejectedValueOnce(new Error('lease expired'));
+		deps.lease.abandon.mockResolvedValueOnce(false);
+
+		await expect(
+			importStagedDrivePdfReference({
+				staged,
+				consentGranted: true,
+				client: {} as never,
+				dependencies: deps
+			})
+		).rejects.toThrow('Não foi possível concluir a importação do PDF grande.');
+
+		expect(deps.renderPage).toHaveBeenCalledOnce();
+		expect(deps.upload).not.toHaveBeenCalled();
 		expect(deps.remove).not.toHaveBeenCalled();
 	});
 
