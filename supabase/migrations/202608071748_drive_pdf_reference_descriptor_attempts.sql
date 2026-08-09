@@ -47,7 +47,7 @@ create or replace function public.begin_drive_pdf_reference_descriptor_attempt(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public, pg_temp
+set search_path = ''
 as $$
 declare
   current_user_id uuid := auth.uid();
@@ -140,7 +140,7 @@ create or replace function public.renew_drive_pdf_reference_descriptor_attempt(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public, pg_temp
+set search_path = ''
 as $$
 declare
   current_user_id uuid := auth.uid();
@@ -196,7 +196,7 @@ create or replace function public.stage_drive_pdf_reference_descriptor_batch(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public, pg_temp
+set search_path = ''
 as $$
 declare
   current_user_id uuid := auth.uid();
@@ -318,7 +318,7 @@ create or replace function public.finalize_drive_pdf_reference_descriptor_attemp
 returns jsonb
 language plpgsql
 security definer
-set search_path = public, pg_temp
+set search_path = ''
 as $$
 declare
   current_user_id uuid := auth.uid();
@@ -406,7 +406,7 @@ create or replace function public.abandon_drive_pdf_reference_descriptor_attempt
 returns boolean
 language plpgsql
 security definer
-set search_path = public, pg_temp
+set search_path = ''
 as $$
 declare
   current_user_id uuid := auth.uid();
