@@ -17,7 +17,7 @@ type DirectVariant =
 	| 'production'
 	| 'without_response_format'
 	| 'minimal_response_format'
-	| 'legacy_response_schema'
+	| 'response_json_schema'
 	| 'without_generation_config'
 	| 'text_only';
 
@@ -93,10 +93,10 @@ function transformProviderBody(body: Record<string, unknown>, variant: DirectVar
 			: null;
 	const productionSchema = textFormat?.schema;
 
-	if (variant === 'legacy_response_schema') {
+	if (variant === 'response_json_schema') {
 		delete generationConfig.responseFormat;
 		generationConfig.responseMimeType = 'application/json';
-		if (productionSchema !== undefined) generationConfig.responseSchema = productionSchema;
+		if (productionSchema !== undefined) generationConfig.responseJsonSchema = productionSchema;
 		return transformed;
 	}
 
@@ -106,22 +106,8 @@ function transformProviderBody(body: Record<string, unknown>, variant: DirectVar
 				mimeType: 'application/json',
 				schema: {
 					type: 'object',
-					properties: {
-						pages: {
-							type: 'array',
-							items: {
-								type: 'object',
-								properties: {
-									pageId: { type: 'string' },
-									pageNumber: { type: 'integer' },
-									text: { type: 'string' },
-									warnings: { type: 'array', items: { type: 'object' } }
-								},
-								required: ['pageId', 'pageNumber', 'text', 'warnings']
-							}
-						}
-					},
-					required: ['pages']
+					properties: { ok: { type: 'boolean' } },
+					required: ['ok']
 				}
 			}
 		};
@@ -240,11 +226,11 @@ async function runDirectGemini(): Promise<GeminiDiagnosticResult> {
 		}
 		if (minimalResponseFormat.code !== 'gemini_invalid_request') return minimalResponseFormat;
 
-		const legacyResponseSchema = await attempt('legacy_response_schema');
-		if (legacyResponseSchema.success) {
+		const responseJsonSchema = await attempt('response_json_schema');
+		if (responseJsonSchema.success) {
 			return isolatedFailure('gemini_response_format_rejected', production.httpStatus);
 		}
-		if (legacyResponseSchema.code !== 'gemini_invalid_request') return legacyResponseSchema;
+		if (responseJsonSchema.code !== 'gemini_invalid_request') return responseJsonSchema;
 		return isolatedFailure('gemini_response_format_rejected', production.httpStatus);
 	}
 	if (withoutResponseFormat.code !== 'gemini_invalid_request') return withoutResponseFormat;
