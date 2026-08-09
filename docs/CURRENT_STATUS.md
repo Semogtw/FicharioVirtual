@@ -128,7 +128,15 @@ O workflow [`Validate current head`](https://github.com/Semogtw/FicharioVirtual/
 O deploy [`31333367356`](https://github.com/Semogtw/FicharioVirtual/actions/runs/31333367356) do mesmo SHA terminou com **success**. A sonda protegida [`31333418948`](https://github.com/Semogtw/FicharioVirtual/actions/runs/31333418948) também terminou com **success**: validou `STAGING_SERVICE_ROLE_KEY` como não vazio sem expor seu valor, rejeitou a chamada anônima com HTTP 401 e registrou somente o envelope sanitizado:
 
 ```json
-{"direct":{"httpStatus":429,"category":"provider","code":"gemini_daily_quota","success":false},"process":{"httpStatus":200,"category":"provider","code":"provider_ok","success":true}}
+{
+	"direct": {
+		"httpStatus": 429,
+		"category": "provider",
+		"code": "gemini_daily_quota",
+		"success": false
+	},
+	"process": { "httpStatus": 200, "category": "provider", "code": "provider_ok", "success": true }
+}
 ```
 
 A sequência anterior de sondas mostrou que `responseFormat` e os campos de schema enviados em `generationConfig` eram rejeitados pelo endpoint/modelo real com HTTP 400. O cliente de produção agora envia `responseMimeType: application/json` sem schema de provedor, mantém o contrato JSON explícito no prompt e preserva os parsers locais fail-closed. O `process-ocr` da sonda recebeu e validou uma resposta Gemini real com HTTP 200; a tentativa direta separada atingiu quota do provedor e não foi convertida em sucesso.
