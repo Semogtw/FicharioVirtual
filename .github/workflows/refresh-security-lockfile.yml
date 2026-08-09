@@ -1,0 +1,16 @@
+name: Refresh security lockfile
+
+on:
+  push:
+    branches:
+      - codex-security/deep-audit-2026-08-09
+    paths:
+      - .github/workflows/refresh-security-lockfile.yml
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    if: github.event.head_commit.message == 'ci: invoke pinned toolchain lockfile refresh'
+    uses: Semogtw/Offline-Toolchains/.github/workflows/refresh-fichario-lockfile.yml@f4d9e093c91c988ccfcc44357a868a4457265c5a
