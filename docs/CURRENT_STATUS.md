@@ -2,7 +2,7 @@
 
 _Atualizado: 2026-08-09_<br>
 _Branch ativa: `main`_<br>
-_Estado: Drive-first, OCR seletivo por lotes, importação de PDFs grandes por ranges, recuperação distribuída da cópia, lease renovável de publicação e a fronteira backend do worker estão integrados em código. O HEAD atual é `a8fdd0d`; o último CI completo é do SHA `b39e3eb` (run `31296404993`) e a validação do HEAD atual está em andamento no run `31296977135`. Release ainda depende de staging externo, serviços reais, dispositivos reais e da investigação de uma flakiness E2E._
+_Estado: Drive-first, OCR seletivo por lotes, importação de PDFs grandes por ranges, recuperação distribuída da cópia, lease renovável de publicação e a fronteira backend do worker estão integrados em código. O HEAD atual é `651f6cc`; o último CI completo conhecido é do SHA `b39e3eb` (run `31296404993`). O deploy de staging do HEAD está concluído com `process-ocr` ativo, mas o recibo terminal/artifact do OCR permanece desconhecido. Release ainda depende de staging externo, serviços reais, dispositivos reais e da investigação de uma flakiness E2E._
 
 ## Resumo executivo
 
@@ -138,13 +138,14 @@ No mesmo SHA passaram:
 
 Esse recibo valida somente o SHA indicado. O resultado verde não prova deploy Supabase, OAuth Google, interoperabilidade Drive/Gemini, host publicado, billing ou dispositivos físicos. O E2E deve ser tratado como verde com ressalva até a flakiness ser entendida.
 
-### Validação incremental do HEAD `a8fdd0d`
+### Validação incremental do HEAD `651f6cc`
 
-- A causa do `401` observado entre os verificadores de staging foi a execução concorrente de workflows que compartilham a mesma conta protegida; `auth.signOut()` invalida globalmente a sessão usada pelo outro workflow.
-- A correção adiciona a serialização `staging-contract-verification` aos verificadores compartilhados, com `cancel-in-progress: false`, para impedir essa colisão.
-- Os testes direcionados dos contratos de staging passaram: **14/14**.
-- A suíte local completa ficou `BLOCKED` somente pelo fixture desktop não rastreado; isso não é um `PASS` da suíte completa.
-- O `Verify OCR staging` do HEAD, run `31296994849`, permanece `WAITING/approval`; não há OCR staging aprovado.
+- A causa do `401` observado entre os verificadores de staging foi a execução concorrente de workflows que compartilham a mesma conta protegida; `auth.signOut()` invalida globalmente a sessão usada pelo outro workflow. A correção de serialização permanece no grupo `staging-contract-verification`, com `cancel-in-progress: false`.
+- O deploy de staging `31297694093` terminou com sucesso e registra `process-ocr` como `ACTIVE`; isso não é evidência de OCR completo.
+- O `Verify OCR staging` `31297743219` foi aprovado no environment `staging`, mas o estado terminal e o artifact estão `UNKNOWN` porque a API do GitHub não permitiu confirmá-los. Não declarar OCR aprovado.
+- Os testes direcionados passaram: **11/11**.
+- A instrumentação é sanitizada: somente códigos Gemini de allowlist, corpo limitado a 4 KiB, sem corpo/headers completos, modelo ou tokens em logs/artifacts.
+- A suíte local completa continua `BLOCKED` somente pelo fixture desktop não rastreado; isso não é um `PASS` da suíte completa.
 
 ### Gates obrigatórios
 
@@ -163,13 +164,13 @@ pnpm test:db:local
 
 ### Limitação do ambiente local atual
 
-Os testes direcionados dos contratos de staging passaram 14/14. A suíte local completa do HEAD `a8fdd0d` ficou `BLOCKED` somente pelo fixture desktop não rastreado; não se deve converter esse resultado em `PASS` da suíte completa. O CI do HEAD ainda está em andamento no run `31296977135`.
+Os testes direcionados do HEAD `651f6cc` passaram 11/11. A suíte local completa ficou `BLOCKED` somente pelo fixture desktop não rastreado; não se deve converter esse resultado em `PASS` da suíte completa. O estado terminal e o artifact do OCR permanecem `UNKNOWN` por limitação da API do GitHub.
 
 ## Pendências reais
 
 ### Staging e serviços externos
 
-No SHA anterior `b39e3eb`, `Deploy Supabase staging` (`31296564374`) e `Verify Supabase staging` (`31296568886`) terminaram com sucesso; `Verify OCR staging` (`31296573162`) falhou e não aprovou OCR. No HEAD `a8fdd0d`, o `Verify OCR staging` (`31296994849`) está `WAITING/approval`; não converter esse estado em `PASS`.
+No SHA anterior `b39e3eb`, `Deploy Supabase staging` (`31296564374`) e `Verify Supabase staging` (`31296568886`) terminaram com sucesso; `Verify OCR staging` (`31296573162`) falhou e não aprovou OCR. No HEAD `651f6cc`, o deploy `31297694093` terminou com `process-ocr` `ACTIVE`, enquanto o `Verify OCR staging` `31297743219` tem environment aprovado, mas estado terminal/artifact `UNKNOWN`; não converter esse estado em `PASS`.
 
 Ainda são obrigatórios antes de release:
 
@@ -196,7 +197,7 @@ A fronteira backend está implementada em código: pareamento, credencial por di
 
 ## Pendências imediatas
 
-1. aguardar e concluir a validação do HEAD `a8fdd0d`, incluindo o `Verify OCR staging` pendente;
+1. obter confirmação terminal e artifact do `Verify OCR staging` `31297743219`;
 2. investigar a flakiness E2E e repetir o gate se a política de release exigir execução sem retry;
 3. aplicar e validar o schema/runtime do HEAD atual em Supabase staging limpo, incluindo os pgTAPs de OCR/lease;
 4. regenerar tipos pelo schema real aplicado;

@@ -7,13 +7,15 @@ O staging do Fichário separa duas responsabilidades:
 
 ## Estado confirmado
 
-Não há evidência de sucesso de OCR staging no HEAD `a8fdd0dda551def9af7bc7f256bc515f273542b4`. O `Verify OCR staging` `31296994849` está `WAITING/approval`; este documento não afirma OCR aprovado, histórico remoto de OCR, status live de funções ou configuração de secrets como concluídos.
+No HEAD `651f6cc5fb95828f6cee72c7a33b1937ee90cb5a`, o deploy `31297694093` terminou com sucesso e registra `process-ocr` `ACTIVE`. O `Verify OCR staging` `31297743219` foi aprovado no environment `staging`, mas o estado terminal e o artifact estão `UNKNOWN` porque a API do GitHub não permitiu confirmá-los; este documento não afirma OCR aprovado.
 
 O `Verify Supabase staging` verde mais recente foi o [run 31296568886](https://github.com/Semogtw/FicharioVirtual/actions/runs/31296568886), executado no SHA anterior `b39e3eb`. Esse run validou apenas Auth, allowlist, RLS e Storage privado com dados sintéticos. Ele não valida OCR, Google Drive, Gemini ou o runtime do HEAD atual.
 
-No SHA anterior `b39e3eb`, o `Deploy Supabase staging` `31296564374` e o `Verify Supabase staging` `31296568886` terminaram com sucesso; o `Verify OCR staging` `31296573162` falhou. No HEAD `a8fdd0d`, o `Verify OCR staging` `31296994849` está `WAITING/approval` e não constitui sucesso.
+No SHA anterior `b39e3eb`, o `Deploy Supabase staging` `31296564374` e o `Verify Supabase staging` `31296568886` terminaram com sucesso; o `Verify OCR staging` `31296573162` falhou. No HEAD `651f6cc`, o `Verify OCR staging` `31297743219` tem environment aprovado, mas estado terminal/artifact `UNKNOWN` e não constitui sucesso.
 
-O `401` observado no OCR anterior foi causado por workflows concorrentes compartilhando a mesma conta protegida: `auth.signOut()` invalida a sessão globalmente. A correção no HEAD serializa os verificadores no grupo `staging-contract-verification`, com `cancel-in-progress: false`. Essa correção ainda precisa de um run concluído; não declarar OCR aprovado.
+O `401` observado no OCR anterior foi causado por workflows concorrentes compartilhando a mesma conta protegida: `auth.signOut()` invalida a sessão globalmente. A correção serializa os verificadores no grupo `staging-contract-verification`, com `cancel-in-progress: false`.
+
+O HEAD também adiciona instrumentação segura para falhas do provedor: somente códigos Gemini de allowlist, corpo inspecionado limitado a 4 KiB, sem persistir corpo/headers completos, modelo ou tokens em logs/artifacts. A instrumentação não transforma um artifact desconhecido em aprovação de OCR.
 
 ## Preparar o projeto
 

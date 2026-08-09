@@ -28,11 +28,13 @@ O workflow e o recibo estão verdes para esse SHA, mas o E2E não foi completame
 
 ## Estado do HEAD atual
 
-O HEAD `a8fdd0d` está em validação no run [`31296977135`](https://github.com/Semogtw/FicharioVirtual/actions/runs/31296977135), ainda sem recibo final. A causa do `401` entre verificadores de staging foi a concorrência de workflows que compartilham uma conta protegida: `auth.signOut()` é global e invalida a sessão do outro workflow. A correção serializa ambos em `staging-contract-verification`, com `cancel-in-progress: false`.
+O HEAD `651f6cc` contém a instrumentação sanitizada e a correção de serialização dos verificadores. A causa do `401` entre verificadores de staging foi a concorrência de workflows que compartilham uma conta protegida: `auth.signOut()` é global e invalida a sessão do outro workflow. A correção serializa ambos em `staging-contract-verification`, com `cancel-in-progress: false`.
 
-Os testes direcionados dos contratos de staging passaram **14/14**. A suíte local completa ficou `BLOCKED` somente pelo fixture desktop não rastreado. O `Verify OCR staging` do HEAD, run [`31296994849`](https://github.com/Semogtw/FicharioVirtual/actions/runs/31296994849), está `WAITING/approval`; não há OCR aprovado.
+Os testes direcionados passaram **11/11**. A suíte local completa ficou `BLOCKED` somente pelo fixture desktop não rastreado. O deploy `31297694093` terminou com sucesso e registra `process-ocr` `ACTIVE`. O `Verify OCR staging` do HEAD, run `31297743219`, foi aprovado no environment `staging`, mas o estado terminal e o artifact estão `UNKNOWN` por indisponibilidade da API do GitHub; não há OCR aprovado.
 
-O `Verify Supabase staging` verde mais recente foi executado no SHA `b39e3eb` (`31296568886`) e cobriu Auth, RLS e Storage. No mesmo SHA, `Deploy Supabase staging` (`31296564374`) terminou com sucesso e `Verify OCR staging` (`31296573162`) falhou. No HEAD `a8fdd0d`, `Verify OCR staging` (`31296994849`) está `WAITING/approval`; esses estados não são aprovação de OCR.
+A instrumentação de diagnóstico aceita somente códigos Gemini de allowlist, limita o corpo inspecionado a 4 KiB e não registra corpo/headers completos, modelo ou tokens em logs/artifacts.
+
+O `Verify Supabase staging` verde mais recente foi executado no SHA `b39e3eb` (`31296568886`) e cobriu Auth, RLS e Storage. No mesmo SHA, `Deploy Supabase staging` (`31296564374`) terminou com sucesso e `Verify OCR staging` (`31296573162`) falhou. No HEAD `651f6cc`, `Deploy Supabase staging` (`31297694093`) terminou com `process-ocr` `ACTIVE`; `Verify OCR staging` (`31297743219`) tem environment aprovado, mas estado terminal/artifact `UNKNOWN`.
 
 ## Ambiente mínimo
 
@@ -60,7 +62,7 @@ A toolchain offline fixa o ambiente de frontend e Edge. Docker e as imagens do S
 | `pnpm verify:full`          | Suíte completa mais banco local           | Antes de release ou checkpoint operacional   |
 | workflows de staging        | Supabase remoto, OCR real e host          | Antes de release privada                     |
 
-No SHA `b39e3eb`, `pnpm verify`, `pnpm test:source:offline`, `pnpm test:functions:check`, `pnpm test:e2e` e `pnpm test:db:local` possuem `PASS` no workflow acima. No HEAD `a8fdd0d`, os testes direcionados passam 14/14, mas a suíte local completa está `BLOCKED` pelo fixture desktop não rastreado e o CI ainda está em andamento. OCR real, deployment/headers do host, Google Drive, Gemini, billing e dispositivos físicos permanecem `NOT RUN`, `WAITING` ou `BLOCKED`.
+No SHA `b39e3eb`, `pnpm verify`, `pnpm test:source:offline`, `pnpm test:functions:check`, `pnpm test:e2e` e `pnpm test:db:local` possuem `PASS` no workflow acima. No HEAD `651f6cc`, os testes direcionados passam 11/11, mas a suíte local completa está `BLOCKED` pelo fixture desktop não rastreado e o estado terminal/artifact do OCR é `UNKNOWN`. OCR real, Google Drive, Gemini, deployment/headers do host, billing e dispositivos físicos permanecem `NOT RUN`, `UNKNOWN` ou `BLOCKED`.
 
 ## Testes unitários
 
