@@ -106,6 +106,17 @@ export function selectTheme(
 	applyTheme(theme, documentLike);
 }
 
+export function readBrowserTheme(): ThemeId {
+	return readStoredTheme(globalThis.localStorage);
+}
+
+export function selectBrowserTheme(
+	theme: ThemeId,
+	documentLike: ThemeDocument = globalThis.document as unknown as ThemeDocument
+): void {
+	selectTheme(theme, globalThis.localStorage, documentLike);
+}
+
 export function initializeTheme(
 	storage: ThemeStorageReader | null | undefined = globalThis.localStorage,
 	documentLike: ThemeDocument = globalThis.document as unknown as ThemeDocument,
