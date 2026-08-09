@@ -165,7 +165,7 @@ begin
 
   if current_job.route <> 'desktop'::public.ocr_route
     or current_job.status <> 'processing'::public.ocr_status
-    or current_page.status <> 'processing'::public.page_status
+    or current_page.status not in ('pending'::public.page_status, 'processing'::public.page_status)
     or current_job.desktop_lease_device_id is distinct from target_device_id
     or current_job.desktop_lease_id is distinct from target_lease_id
     or current_job.desktop_lease_expires_at is null
