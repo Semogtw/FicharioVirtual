@@ -9,7 +9,9 @@ const failures = [];
 function parsePinnedSemver(value, dependency) {
 	const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(value ?? '');
 	if (!match) {
-		failures.push(`${dependency}: security-sensitive dependency must use an exact semantic version`);
+		failures.push(
+			`${dependency}: security-sensitive dependency must use an exact semantic version`
+		);
 		return null;
 	}
 	return match.slice(1).map(Number);
@@ -29,7 +31,10 @@ if (pdfjsVersion && compareVersion(pdfjsVersion, [6, 2, 108]) < 0) {
 	);
 }
 
-const nanoidOverride = parsePinnedSemver(packageJson.pnpm?.overrides?.nanoid, 'pnpm.overrides.nanoid');
+const nanoidOverride = parsePinnedSemver(
+	packageJson.pnpm?.overrides?.nanoid,
+	'pnpm.overrides.nanoid'
+);
 if (nanoidOverride && compareVersion(nanoidOverride, [3, 3, 17]) < 0) {
 	failures.push(
 		'pnpm.overrides.nanoid: versions below 3.3.17 are forbidden because they include the CVE-2026-67213 vulnerable 3.x range'
