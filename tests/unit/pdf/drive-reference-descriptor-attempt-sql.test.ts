@@ -1,10 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const source = readFileSync(
+const source = [
 	'supabase/migrations/202608071748_drive_pdf_reference_descriptor_attempts.sql',
-	'utf8'
-);
+	'supabase/migrations/202608081000_drive_pdf_reference_descriptor_attempt_permissions.sql'
+]
+	.map((path) => readFileSync(path, 'utf8'))
+	.join('\n');
 
 describe('Drive PDF reference page descriptor attempt migration', () => {
 	it('adds an ownership lease to staged Drive PDF references', () => {
@@ -37,8 +39,9 @@ describe('Drive PDF reference page descriptor attempt migration', () => {
 
 	it('removes authenticated bypasses around the leased publication protocol', () => {
 		expect(source).toContain(
-			'revoke execute on function public.finalize_drive_pdf_reference_import(uuid, jsonb, integer) from authenticated'
+			'revoke execute on function public.finalize_drive_pdf_reference_import(uuid, jsonb, integer)'
 		);
+		expect(source).toContain('from authenticated, anon');
 		expect(source).toContain(
 			'revoke execute on function public.stage_drive_pdf_reference_page_batch(uuid, jsonb) from authenticated'
 		);
