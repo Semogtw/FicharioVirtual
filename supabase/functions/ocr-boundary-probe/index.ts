@@ -13,6 +13,14 @@ import { requestGeminiOcrBatch } from '../_shared/gemini-ocr-client.ts';
 
 const MODEL = /^[A-Za-z0-9._-]{3,128}$/;
 
+type DirectVariant =
+	| 'production'
+	| 'without_response_format'
+	| 'minimal_response_format'
+	| 'legacy_response_schema'
+	| 'without_generation_config'
+	| 'text_only';
+
 function json(status: number, body: Record<string, unknown>) {
 	return new Response(JSON.stringify(body), {
 		status,
@@ -29,6 +37,171 @@ function configurationFailure(): GeminiDiagnosticResult {
 		category: 'configuration',
 		code: 'provider_not_configured',
 		httpStatus: null
+	});
+}
+
+function syntheticSuccess(page: { pageId: string; pageNumber: number }, status: number) {
+	const syntheticText = JSON.stringify({
+		pages: [
+			{
+				pageId: page.pageId,
+				pageNumber: page.pageNumber,
+				text: '',
+				warnings: []
+			}
+		]
+	});
+	return new Response(
+		JSON.stringify({
+			candidates: [{ content: { parts: [{ text: syntheticText }] } }]
+		}),
+		{ status, headers: { 'Content-Type': 'application/json' } }
+	);
+}
+
+function transformProviderBody(body: Record<string, unknown>, variant: DirectVariant) {
+	if (variant === 'production') return body;
+	const transformed = structuredClone(body) as Record<string, unknown>;
+	const generationConfig =
+		transformed.generationConfig && typeof transformed.generationConfig === 'object'
+			? (transformed.generationConfig as Record<string, unknown>)
+			: null;
+
+	if (variant === 'text_only') {
+		transformed.contents = [{ role: 'user', parts: [{ text: 'diagnostic' }] }];
+		delete transformed.generationConfig;
+		return transformed;
+	}
+	if (variant === 'without_generation_config') {
+		delete transformed.generationConfig;
+		return transformed;
+	}
+	if (!generationConfig) return transformed;
+
+	if (variant === 'without_response_format') {
+		delete generationConfig.responseFormat;
+		return transformed;
+	}
+
+	const responseFormat =
+		generationConfig.responseFormat && typeof generationConfig.responseFormat === 'object'
+			? (generationConfig.responseFormat as Record<string, unknown>)
+			: null;
+	const textFormat =
+		responseFormat?.text && typeof responseFormat.text === 'object'
+			? (responseFormat.text as Record<string, unknown>)
+			: null;
+	const productionSchema = textFormat?.schema;
+
+	if (variant === 'legacy_response_schema') {
+		delete generationConfig.responseFormat;
+		generationConfig.responseMimeType = 'application/json';
+		if (productionSchema !== undefined) generationConfig.responseSchema = productionSchema;
+		return transformed;
+	}
+
+	if (variant === 'minimal_response_format') {
+		generationConfig.responseFormat = {
+			text: {
+				mimeType: 'application/json',
+				schema: {
+					type: 'object',
+					properties: {
+						pages: {
+							type: 'array',
+							items: {
+								type: 'object',
+								properties: {
+									pageId: { type: 'string' },
+									pageNumber: { type: 'integer' },
+									text: { type: 'string' },
+									warnings: { type: 'array', items: { type: 'object' } }
+								},
+								required: ['pageId', 'pageNumber', 'text', 'warnings']
+							}
+						}
+					},
+					required: ['pages']
+				}
+			}
+		};
+	}
+	return transformed;
+}
+
+async function attemptDirectVariant(input: {
+	apiKey: string;
+	model: string;
+	promptVersion: number;
+	page: {
+		pageId: string;
+		pageNumber: number;
+		mimeType: string;
+		bytes: Uint8Array;
+	};
+	variant: DirectVariant;
+}): Promise<GeminiDiagnosticResult> {
+	let providerStatus: number | null = null;
+	const providerFetch: typeof fetch = async (url, init) => {
+		let nextInit = init;
+		if (input.variant !== 'production' && typeof init?.body === 'string') {
+			const parsed = JSON.parse(init.body) as Record<string, unknown>;
+			nextInit = {
+				...init,
+				body: JSON.stringify(transformProviderBody(parsed, input.variant))
+			};
+		}
+		const response = await fetch(url, nextInit);
+		providerStatus = response.status;
+		if (!response.ok) return response;
+		try {
+			await response.body?.cancel();
+		} catch {
+			// Provider output is deliberately discarded; diagnostics only need HTTP acceptance.
+		}
+		return syntheticSuccess(input.page, response.status);
+	};
+
+	try {
+		const outcome = await requestGeminiOcrBatch({
+			apiKey: input.apiKey,
+			model: input.model,
+			promptVersion: input.promptVersion,
+			pages: [input.page],
+			fetchImpl: providerFetch
+		});
+		if (!outcome.valid) {
+			return createGeminiDiagnosticResult({
+				status: 'fail',
+				category: 'provider',
+				code: 'provider_response_invalid',
+				httpStatus: providerStatus
+			});
+		}
+		return createGeminiDiagnosticResult({
+			status: 'pass',
+			category: 'provider',
+			code: 'provider_ok',
+			httpStatus: providerStatus
+		});
+	} catch (error) {
+		return classifyGeminiDiagnosticFailure(error);
+	}
+}
+
+function isolatedFailure(
+	code:
+		| 'gemini_response_format_rejected'
+		| 'gemini_schema_rejected'
+		| 'gemini_image_input_rejected'
+		| 'gemini_output_limit_rejected',
+	httpStatus: number | null
+): GeminiDiagnosticResult {
+	return createGeminiDiagnosticResult({
+		status: 'fail',
+		category: 'request',
+		code,
+		httpStatus
 	});
 }
 
@@ -51,59 +224,42 @@ async function runDirectGemini(): Promise<GeminiDiagnosticResult> {
 		...GEMINI_DIAGNOSTIC_PAGE,
 		bytes: decodeGeminiDiagnosticFixture()
 	};
-	let providerStatus: number | null = null;
-	const providerFetch: typeof fetch = async (input, init) => {
-		const response = await fetch(input, init);
-		providerStatus = response.status;
-		if (!response.ok) return response;
-		try {
-			await response.body?.cancel();
-		} catch {
-			// No diagnostic output depends on the provider response body.
-		}
-		const syntheticText = JSON.stringify({
-			pages: [
-				{
-					pageId: page.pageId,
-					pageNumber: page.pageNumber,
-					text: '',
-					warnings: []
-				}
-			]
-		});
-		return new Response(
-			JSON.stringify({
-				candidates: [{ content: { parts: [{ text: syntheticText }] } }]
-			}),
-			{ status: response.status, headers: { 'Content-Type': 'application/json' } }
-		);
-	};
+	const attempt = (variant: DirectVariant) =>
+		attemptDirectVariant({ apiKey, model, promptVersion, page, variant });
 
-	try {
-		const outcome = await requestGeminiOcrBatch({
-			apiKey,
-			model,
-			promptVersion,
-			pages: [page],
-			fetchImpl: providerFetch
-		});
-		if (!outcome.valid) {
-			return createGeminiDiagnosticResult({
-				status: 'fail',
-				category: 'provider',
-				code: 'provider_response_invalid',
-				httpStatus: providerStatus
-			});
+	const production = await attempt('production');
+	if (production.success || production.code !== 'gemini_invalid_request') return production;
+
+	// Only a generic provider 400/422 reaches this matrix. Each fallback changes
+	// one request surface while keeping the same model, key and fixed fixture.
+	const withoutResponseFormat = await attempt('without_response_format');
+	if (withoutResponseFormat.success) {
+		const minimalResponseFormat = await attempt('minimal_response_format');
+		if (minimalResponseFormat.success) {
+			return isolatedFailure('gemini_schema_rejected', production.httpStatus);
 		}
-		return createGeminiDiagnosticResult({
-			status: 'pass',
-			category: 'provider',
-			code: 'provider_ok',
-			httpStatus: providerStatus
-		});
-	} catch (error) {
-		return classifyGeminiDiagnosticFailure(error);
+		if (minimalResponseFormat.code !== 'gemini_invalid_request') return minimalResponseFormat;
+
+		const legacyResponseSchema = await attempt('legacy_response_schema');
+		if (legacyResponseSchema.success) {
+			return isolatedFailure('gemini_response_format_rejected', production.httpStatus);
+		}
+		if (legacyResponseSchema.code !== 'gemini_invalid_request') return legacyResponseSchema;
+		return isolatedFailure('gemini_response_format_rejected', production.httpStatus);
 	}
+	if (withoutResponseFormat.code !== 'gemini_invalid_request') return withoutResponseFormat;
+
+	const withoutGenerationConfig = await attempt('without_generation_config');
+	if (withoutGenerationConfig.success) {
+		return isolatedFailure('gemini_output_limit_rejected', production.httpStatus);
+	}
+	if (withoutGenerationConfig.code !== 'gemini_invalid_request') return withoutGenerationConfig;
+
+	const textOnly = await attempt('text_only');
+	if (textOnly.success) {
+		return isolatedFailure('gemini_image_input_rejected', production.httpStatus);
+	}
+	return textOnly.code === 'gemini_invalid_request' ? production : textOnly;
 }
 
 async function runProcessOcr(authorization: string): Promise<GeminiDiagnosticResult> {
@@ -205,6 +361,8 @@ Deno.serve(async (request) => {
 		});
 	}
 
-	const [direct, process] = await Promise.all([runDirectGemini(), runProcessOcr(authorization!)]);
+	// Run sequentially to avoid the probe itself creating concurrent provider load.
+	const direct = await runDirectGemini();
+	const process = await runProcessOcr(authorization!);
 	return json(200, { direct, process });
 });
