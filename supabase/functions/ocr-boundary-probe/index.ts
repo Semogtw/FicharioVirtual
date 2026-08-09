@@ -346,7 +346,7 @@ async function runProcessOcr(authorization: string): Promise<GeminiDiagnosticRes
 			status: 'fail',
 			category: 'wrapper',
 			code: 'wrapper_response_invalid',
-				httpStatus: response.status
+			httpStatus: response.status
 		});
 	}
 	const parsed = parseGeminiDiagnosticResult(body);
