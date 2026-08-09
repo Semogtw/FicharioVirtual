@@ -2,7 +2,7 @@
 
 _Atualizado: 2026-08-09_<br>
 _Branch ativa: `main`_<br>
-_Estado: Drive-first, OCR seletivo por lotes, importação de PDFs grandes por ranges, recuperação distribuída da cópia, lease renovável de publicação e a fronteira backend do worker estão integrados em código. O HEAD atual é `651f6cc`; o último CI completo conhecido é do SHA `b39e3eb` (run `31296404993`). O deploy de staging do HEAD está concluído com `process-ocr` ativo, mas o recibo terminal/artifact do OCR permanece desconhecido. Release ainda depende de staging externo, serviços reais, dispositivos reais e da investigação de uma flakiness E2E._
+_Estado: Drive-first, OCR seletivo por lotes, importação de PDFs grandes por ranges, recuperação distribuída da cópia, lease renovável de publicação e a fronteira backend do worker estão integrados em código. O HEAD atual é `255c28c`; o último CI completo conhecido é do SHA `b39e3eb` (run `31296404993`). Os gates locais do HEAD passaram onde executáveis, mas E2E permanece `BLOCKED` sem Chromium e o Verify OCR está pendente sem jobs/artifact/conclusão. Release ainda depende de staging externo, serviços reais, dispositivos reais e da investigação de uma flakiness E2E._
 
 ## Resumo executivo
 
@@ -138,12 +138,15 @@ No mesmo SHA passaram:
 
 Esse recibo valida somente o SHA indicado. O resultado verde não prova deploy Supabase, OAuth Google, interoperabilidade Drive/Gemini, host publicado, billing ou dispositivos físicos. O E2E deve ser tratado como verde com ressalva até a flakiness ser entendida.
 
-### Validação incremental do HEAD `651f6cc`
+### Validação incremental do HEAD `255c28c`
 
-- A causa do `401` observado entre os verificadores de staging foi a execução concorrente de workflows que compartilham a mesma conta protegida; `auth.signOut()` invalida globalmente a sessão usada pelo outro workflow. A correção de serialização permanece no grupo `staging-contract-verification`, com `cancel-in-progress: false`.
-- O deploy de staging `31297694093` terminou com sucesso e registra `process-ocr` como `ACTIVE`; isso não é evidência de OCR completo.
-- O `Verify OCR staging` `31297743219` foi aprovado no environment `staging`, mas o estado terminal e o artifact estão `UNKNOWN` porque a API do GitHub não permitiu confirmá-los. Não declarar OCR aprovado.
-- Os testes direcionados passaram: **11/11**.
+- `pnpm check`: **PASS**, 0 erros e 0 avisos; `pnpm lint`: **PASS**.
+- Vitest: **PASS**, 940 testes em 236 arquivos.
+- Build/PWA: **PASS**, 131 entradas precache; permanece o aviso de chunks acima de 500 kB.
+- Gates source/offline: **PASS**.
+- E2E: **BLOCKED** porque Chromium não está disponível; não converter esse bloqueio em falha funcional do produto.
+- O deploy de staging `31297694093` terminou com sucesso e registra `process-ocr` `ACTIVE v9`; isso não é evidência de OCR completo.
+- O `Verify OCR staging` `31298144753` está `PENDING`, sem jobs, artifact ou conclusão consultáveis. Não declarar OCR aprovado.
 - A instrumentação é sanitizada: somente códigos Gemini de allowlist, corpo limitado a 4 KiB, sem corpo/headers completos, modelo ou tokens em logs/artifacts.
 - A suíte local completa continua `BLOCKED` somente pelo fixture desktop não rastreado; isso não é um `PASS` da suíte completa.
 
@@ -164,13 +167,13 @@ pnpm test:db:local
 
 ### Limitação do ambiente local atual
 
-Os testes direcionados do HEAD `651f6cc` passaram 11/11. A suíte local completa ficou `BLOCKED` somente pelo fixture desktop não rastreado; não se deve converter esse resultado em `PASS` da suíte completa. O estado terminal e o artifact do OCR permanecem `UNKNOWN` por limitação da API do GitHub.
+Os gates executáveis do HEAD `255c28c` registram check 0/0, lint, 236/940 testes, build/PWA com 131 entradas e source/offline `PASS`. E2E está `BLOCKED` sem Chromium. A suíte local completa ficou `BLOCKED` somente pelo fixture desktop não rastreado; não se deve converter esse resultado em `PASS` da suíte completa. O Verify OCR `31298144753` está `PENDING`, sem jobs/artifact/conclusão.
 
 ## Pendências reais
 
 ### Staging e serviços externos
 
-No SHA anterior `b39e3eb`, `Deploy Supabase staging` (`31296564374`) e `Verify Supabase staging` (`31296568886`) terminaram com sucesso; `Verify OCR staging` (`31296573162`) falhou e não aprovou OCR. No HEAD `651f6cc`, o deploy `31297694093` terminou com `process-ocr` `ACTIVE`, enquanto o `Verify OCR staging` `31297743219` tem environment aprovado, mas estado terminal/artifact `UNKNOWN`; não converter esse estado em `PASS`.
+No SHA anterior `b39e3eb`, `Deploy Supabase staging` (`31296564374`) e `Verify Supabase staging` (`31296568886`) terminaram com sucesso; `Verify OCR staging` (`31296573162`) falhou e não aprovou OCR. No HEAD `255c28c`, o deploy `31297694093` registra `process-ocr` `ACTIVE v9`, enquanto o `Verify OCR staging` `31298144753` está `PENDING`, sem jobs/artifact/conclusão; não converter esse estado em `PASS`.
 
 Ainda são obrigatórios antes de release:
 
@@ -197,7 +200,7 @@ A fronteira backend está implementada em código: pareamento, credencial por di
 
 ## Pendências imediatas
 
-1. obter confirmação terminal e artifact do `Verify OCR staging` `31297743219`;
+1. obter execução, jobs, artifact e conclusão do `Verify OCR staging` `31298144753`;
 2. investigar a flakiness E2E e repetir o gate se a política de release exigir execução sem retry;
 3. aplicar e validar o schema/runtime do HEAD atual em Supabase staging limpo, incluindo os pgTAPs de OCR/lease;
 4. regenerar tipos pelo schema real aplicado;

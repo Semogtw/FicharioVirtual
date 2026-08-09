@@ -6,19 +6,19 @@ Esta página não publica porcentagem global. Prontidão significa evidência re
 
 ## Matriz atual
 
-| Dimensão                     | Código                                   | Evidência externa                                                          | Estado                 |
-| ---------------------------- | ---------------------------------------- | -------------------------------------------------------------------------- | ---------------------- |
-| Produto privado              | Implementado                             | CI completo `b39e3eb`; HEAD `651f6cc` com recibo OCR terminal desconhecido | Bloqueado para release |
-| OCR Gemini por lotes         | Implementado                             | Staging real pendente                                                      | Não promovido          |
-| Quota exclusiva do provedor  | Implementada                             | `429` real pendente                                                        | Não promovida          |
-| Google Drive-first           | Implementado                             | Conta Google real pendente                                                 | Não promovido          |
-| Picker até 50 MiB            | Implementado                             | Navegadores reais pendentes                                                | Não promovido          |
-| Picker acima de 50 MiB       | Implementado por referência/ranges       | CI `b39e3eb` verde; PDF grande real pendente                               | Não promovido          |
-| Recuperação crash copy→stage | Implementada com `appProperties`         | Contratos no CI; interrupção real pendente                                 | Não promovida          |
-| Lease de descritores         | Implementado e conectado ao orquestrador | Banco local no CI; duas sessões reais pendentes                            | Não promovido          |
-| Cloudflare Pages             | Runbook e gates implementados            | Deployment real pendente                                                   | Não implantado         |
-| Worker desktop               | Fronteira backend implementada           | Worker local e hardware pendentes                                          | Não iniciado           |
-| RX 6600                      | Não implementada                         | Benchmark pendente                                                         | Não validada           |
+| Dimensão                     | Código                                   | Evidência externa                                                      | Estado                 |
+| ---------------------------- | ---------------------------------------- | ---------------------------------------------------------------------- | ---------------------- |
+| Produto privado              | Implementado                             | CI completo `b39e3eb`; HEAD `255c28c` com E2E bloqueado e OCR pendente | Bloqueado para release |
+| OCR Gemini por lotes         | Implementado                             | Staging real pendente                                                  | Não promovido          |
+| Quota exclusiva do provedor  | Implementada                             | `429` real pendente                                                    | Não promovida          |
+| Google Drive-first           | Implementado                             | Conta Google real pendente                                             | Não promovido          |
+| Picker até 50 MiB            | Implementado                             | Navegadores reais pendentes                                            | Não promovido          |
+| Picker acima de 50 MiB       | Implementado por referência/ranges       | CI `b39e3eb` verde; PDF grande real pendente                           | Não promovido          |
+| Recuperação crash copy→stage | Implementada com `appProperties`         | Contratos no CI; interrupção real pendente                             | Não promovida          |
+| Lease de descritores         | Implementado e conectado ao orquestrador | Banco local no CI; duas sessões reais pendentes                        | Não promovido          |
+| Cloudflare Pages             | Runbook e gates implementados            | Deployment real pendente                                               | Não implantado         |
+| Worker desktop               | Fronteira backend implementada           | Worker local e hardware pendentes                                      | Não iniciado           |
+| RX 6600                      | Não implementada                         | Benchmark pendente                                                     | Não validada           |
 
 ## Evidência presente no repositório
 
@@ -36,7 +36,7 @@ Esta página não publica porcentagem global. Prontidão significa evidência re
 - callback protegido por origem, `state` de uso único e PKCE;
 - gates que proíbem secrets no frontend e workflows com escrita automática no repositório;
 - recibo CI completo do SHA `b39e3eb` (run `31296404993`) com lint, tipos, Vitest, build, source/offline, Deno e banco local aprovados; o E2E passou após um retry;
-- HEAD `651f6cc` com instrumentação sanitizada de diagnósticos Gemini; testes direcionados 11/11.
+- HEAD `255c28c` com check 0/0, lint, 236/940 testes, build/PWA com 131 entradas e source/offline aprovados; E2E `BLOCKED` sem Chromium e aviso de chunks acima de 500 kB.
 
 ### Importação e OCR
 
@@ -132,11 +132,11 @@ Chromium E2E
 
 O recibo [`Validate current head`](https://github.com/Semogtw/FicharioVirtual/actions/runs/31296404993) do SHA `b39e3eb55caec06a4cd40aa20833634c32a463d3` terminou com sucesso em 9 de agosto de 2026. Ele registra 236 arquivos/938 testes Vitest, source/offline, Deno e 35 arquivos/434 testes de banco. O E2E teve 4 testes aprovados e 1 flake na primeira tentativa, aprovado no retry; a flakiness permanece uma ressalva.
 
-No HEAD `651f6cc`, o deploy `31297694093` terminou com sucesso e registra `process-ocr` `ACTIVE`. O `Verify OCR staging` `31297743219` foi aprovado no environment `staging`, mas seu estado terminal e artifact estão `UNKNOWN` por indisponibilidade da API do GitHub; não há aprovação de OCR. Os testes direcionados passaram 11/11. A suíte local completa permanece `BLOCKED` somente pelo fixture desktop não rastreado.
+No HEAD `255c28c`, check 0/0, lint, 236/940 testes, build/PWA com 131 entradas e source/offline passaram; o build mantém o aviso de chunks acima de 500 kB. E2E está `BLOCKED` sem Chromium. O deploy `31297694093` terminou com sucesso e registra `process-ocr` `ACTIVE v9`. O `Verify OCR staging` `31298144753` está `PENDING`, sem jobs, artifact ou conclusão; não há aprovação de OCR. A suíte local completa permanece `BLOCKED` somente pelo fixture desktop não rastreado.
 
 ### Supabase
 
-- No SHA `b39e3eb`, `Deploy Supabase staging` (`31296564374`) e `Verify Supabase staging` (`31296568886`) terminaram com sucesso, enquanto `Verify OCR staging` (`31296573162`) falhou. No HEAD `651f6cc`, `Deploy Supabase staging` (`31297694093`) terminou com `process-ocr` `ACTIVE`; `Verify OCR staging` (`31297743219`) tem environment aprovado, mas estado terminal/artifact `UNKNOWN`, sem aprovação de OCR.
+- No SHA `b39e3eb`, `Deploy Supabase staging` (`31296564374`) e `Verify Supabase staging` (`31296568886`) terminaram com sucesso, enquanto `Verify OCR staging` (`31296573162`) falhou. No HEAD `255c28c`, `Deploy Supabase staging` (`31297694093`) registra `process-ocr` `ACTIVE v9`; `Verify OCR staging` (`31298144753`) está `PENDING`, sem jobs/artifact/conclusão e sem aprovação de OCR.
 - O `Verify Supabase staging` verde mais recente é o run `31296568886` do SHA `b39e3eb` e cobriu somente Auth, RLS e Storage; ele não aprova OCR ou serviços reais.
 - aplicar todas as migrations em banco limpo;
 - executar pgTAP completo, incluindo o novo teste de ownership/takeover do lease;
@@ -180,7 +180,8 @@ No HEAD `651f6cc`, o deploy `31297694093` terminou com sucesso e registra `proce
 
 ```text
 Validate current head no SHA `b39e3eb`: PASS com ressalva de flakiness E2E
-Verify OCR staging no SHA `651f6cc`: environment aprovado; estado terminal/artifact UNKNOWN
+HEAD `255c28c`: gates locais PASS onde executáveis; E2E BLOCKED sem Chromium
+Verify OCR staging no SHA `255c28c`: PENDING, sem jobs/artifact/conclusão
 Supabase limpo e pgTAP: PASS
 Tipos gerados pelo schema implantado: PASS
 OAuth drive.file real: PASS
