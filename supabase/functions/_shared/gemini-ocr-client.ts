@@ -1,3 +1,7 @@
+import {
+	readBoundedResponseJson,
+	readBoundedResponseText
+} from './bounded-response.ts';
 import { parseOcrBatchPayload, type OcrBatchParseOutcome } from './ocr-batch-contract.ts';
 import { parseOcrPayload, type OcrPayload } from './ocr-contract.ts';
 
@@ -58,6 +62,8 @@ const MIME = /^(?:image\/(?:jpeg|png|webp)|application\/pdf)$/;
 const MAX_BATCH_PAGES = 1_000;
 const MAX_PAGE_BYTES = 14 * 1024 * 1024;
 const MAX_BATCH_BYTES = 48 * 1024 * 1024;
+const MAX_PROVIDER_ERROR_BYTES = 64 * 1024;
+const MAX_PROVIDER_RESPONSE_BYTES = 4 * 1024 * 1024;
 
 const prompt = `Você é um transcritor literal de anotações acadêmicas.
 Transcreva todo texto visível da imagem em português, preservando ordem de leitura, títulos, listas, quebras relevantes, símbolos e fórmulas em texto quando possível.
@@ -163,9 +169,17 @@ function candidateText(payload: unknown): string | null {
 }
 
 async function providerJson(response: Response) {
-	if (!response.ok) throw new GeminiHttpError(response.status, await response.text());
+	if (!response.ok) {
+		let responseBody = '';
+		try {
+			responseBody = await readBoundedResponseText(response, MAX_PROVIDER_ERROR_BYTES);
+		} catch {
+			// Provider error bodies are diagnostic only. Status remains authoritative.
+		}
+		throw new GeminiHttpError(response.status, responseBody);
+	}
 	try {
-		return await response.json();
+		return await readBoundedResponseJson(response, MAX_PROVIDER_RESPONSE_BYTES);
 	} catch {
 		throw new GeminiResponseError();
 	}
