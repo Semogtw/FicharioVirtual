@@ -56,7 +56,7 @@ returns table (
 )
 language plpgsql
 security definer
-set search_path = public, pg_temp
+set search_path = ''
 as $$
 declare
   current_user_id uuid := auth.uid();
@@ -258,7 +258,7 @@ begin
 end;
 $$;
 
-revoke all on function public.stage_drive_pdf_reference_page_batch(uuid, jsonb) from public;
-revoke all on function public.stage_drive_pdf_reference_page_batch(uuid, jsonb) from anon;
+revoke execute on function public.stage_drive_pdf_reference_page_batch(uuid, jsonb) from public;
+revoke execute on function public.stage_drive_pdf_reference_page_batch(uuid, jsonb) from anon;
 grant execute on function public.stage_drive_pdf_reference_page_batch(uuid, jsonb) to authenticated;
 grant execute on function public.stage_drive_pdf_reference_page_batch(uuid, jsonb) to service_role;
