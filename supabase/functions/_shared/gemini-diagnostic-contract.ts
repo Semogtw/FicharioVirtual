@@ -1,9 +1,5 @@
 import { classifyGeminiFailure, type GeminiFailure } from './ocr-contract.ts';
-import {
-	GeminiHttpError,
-	GeminiResponseError,
-	GeminiTransportError
-} from './gemini-ocr-client.ts';
+import { GeminiHttpError, GeminiResponseError, GeminiTransportError } from './gemini-ocr-client.ts';
 
 export const GEMINI_DIAGNOSTIC_BODY = Object.freeze({
 	diagnostic: 'gemini-provider-v2'
@@ -61,8 +57,7 @@ export type GeminiDiagnosticCode =
 	| 'wrapper_response_invalid'
 	| 'wrapper_http_failed';
 
-export type GeminiDiagnosticCategory =
-	(typeof DIAGNOSTIC_CATEGORIES)[number];
+export type GeminiDiagnosticCategory = (typeof DIAGNOSTIC_CATEGORIES)[number];
 
 export type GeminiDiagnosticResult = Readonly<{
 	httpStatus: number | null;
@@ -150,9 +145,7 @@ export function createGeminiDiagnosticResult(input: {
 	});
 }
 
-export function parseGeminiDiagnosticResult(
-	value: unknown
-): GeminiDiagnosticResult | null {
+export function parseGeminiDiagnosticResult(value: unknown): GeminiDiagnosticResult | null {
 	if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
 	const record = value as Record<string, unknown>;
 	if (!hasExactKeys(record, ['httpStatus', 'category', 'code', 'success'])) return null;
@@ -167,9 +160,7 @@ export function parseGeminiDiagnosticResult(
 	}
 	if (
 		typeof record.category !== 'string' ||
-		!DIAGNOSTIC_CATEGORIES.includes(
-			record.category as (typeof DIAGNOSTIC_CATEGORIES)[number]
-		) ||
+		!DIAGNOSTIC_CATEGORIES.includes(record.category as (typeof DIAGNOSTIC_CATEGORIES)[number]) ||
 		typeof record.code !== 'string' ||
 		!DIAGNOSTIC_CODES.includes(record.code as (typeof DIAGNOSTIC_CODES)[number]) ||
 		typeof record.success !== 'boolean'

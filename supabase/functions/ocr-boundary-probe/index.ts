@@ -205,9 +205,6 @@ Deno.serve(async (request) => {
 		});
 	}
 
-	const [direct, process] = await Promise.all([
-		runDirectGemini(),
-		runProcessOcr(authorization!)
-	]);
+	const [direct, process] = await Promise.all([runDirectGemini(), runProcessOcr(authorization!)]);
 	return json(200, { direct, process });
 });
