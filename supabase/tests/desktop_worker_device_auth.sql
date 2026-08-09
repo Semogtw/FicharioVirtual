@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(15);
+select plan(20);
 
 insert into auth.users (id, email)
 values
@@ -43,6 +43,15 @@ select ok(
     'EXECUTE'
   ),
   'browser role cannot call the service-only digest authenticator'
+);
+
+select ok(
+  not has_function_privilege(
+    'authenticated',
+    'public.bind_desktop_ocr_job_source_hash(uuid,uuid,uuid,text)',
+    'EXECUTE'
+  ),
+  'browser role cannot bind a desktop source digest'
 );
 
 set local role authenticated;
@@ -157,6 +166,63 @@ select results_eq(
   'exact active lease resolves only its expected private derivative path'
 );
 
+select lives_ok(
+  $$
+    select public.bind_desktop_ocr_job_source_hash(
+      'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      (
+        select id from public.ocr_worker_devices
+         where credential_hash = decode(repeat('11', 32), 'hex')
+      ),
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+      repeat('ab', 32)
+    )
+  $$,
+  'service boundary can bind the downloaded derivative digest to the active lease'
+);
+
+select results_eq(
+  $$
+    select desktop_source_sha256, desktop_source_bound_at is not null
+      from public.ocr_jobs
+     where id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
+  $$,
+  $$ values (repeat('ab', 32)::text, true) $$,
+  'the active lease persists exactly one source digest and binding timestamp'
+);
+
+select lives_ok(
+  $$
+    select public.bind_desktop_ocr_job_source_hash(
+      'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      (
+        select id from public.ocr_worker_devices
+         where credential_hash = decode(repeat('11', 32), 'hex')
+      ),
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+      repeat('ab', 32)
+    )
+  $$,
+  'repeating the same source digest is idempotent for the active lease'
+);
+
+select throws_ok(
+  $$
+    select public.bind_desktop_ocr_job_source_hash(
+      'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      (
+        select id from public.ocr_worker_devices
+         where credential_hash = decode(repeat('11', 32), 'hex')
+      ),
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+      repeat('cd', 32)
+    )
+  $$,
+  '22023',
+  'Desktop OCR source binding conflicts with the active lease',
+  'the same lease cannot be rebound to different source bytes'
+);
+
 select throws_ok(
   $$
     select public.get_desktop_ocr_job_source(
@@ -209,12 +275,25 @@ select lives_ok(
 reset role;
 select results_eq(
   $$
-    select status::text, desktop_lease_device_id, desktop_lease_id
+    select
+      status::text,
+      desktop_lease_device_id,
+      desktop_lease_id,
+      desktop_source_sha256,
+      desktop_source_bound_at
       from public.ocr_jobs
      where id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
   $$,
-  $$ values ('waiting_desktop'::text, null::uuid, null::uuid) $$,
-  'revocation atomically requeues the active job and clears its lease'
+  $$
+    values (
+      'waiting_desktop'::text,
+      null::uuid,
+      null::uuid,
+      null::text,
+      null::timestamptz
+    )
+  $$,
+  'revocation atomically requeues the active job and clears its lease-bound source digest'
 );
 
 select is(
