@@ -13,5 +13,8 @@ permissions:
 jobs:
   refresh:
     if: github.event.head_commit.message == 'ci: invoke pinned toolchain lockfile refresh'
-    # Pin the reusable workflow so the write-capable caller cannot drift to mutable toolchain code.
-    uses: Semogtw/Offline-Toolchains/.github/workflows/refresh-fichario-lockfile.yml@f4d9e093c91c988ccfcc44357a868a4457265c5a
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Refresh lockfile through pinned Offline-Toolchains action
+        uses: Semogtw/Offline-Toolchains/.github/actions/refresh-fichario-lockfile@0377d8947bdcfdda975e3763ddece498db1f566d
