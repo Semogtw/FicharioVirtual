@@ -26,7 +26,7 @@ function validProviderResponse() {
 }
 
 describe('requestGeminiOcr', () => {
-	it('sends the image and strict structured-output contract without putting the API key in the URL', async () => {
+	it('sends the image and strict prompt contract without putting the API key in the URL', async () => {
 		let capturedUrl = '';
 		let capturedInit: RequestInit | undefined;
 
@@ -56,7 +56,6 @@ describe('requestGeminiOcr', () => {
 			generationConfig: {
 				maxOutputTokens: number;
 				responseMimeType: string;
-				responseJsonSchema: { required: string[] };
 				[key: string]: unknown;
 			};
 		};
@@ -64,18 +63,19 @@ describe('requestGeminiOcr', () => {
 			mimeType: 'image/webp',
 			data: 'AQID'
 		});
+		expect(body.contents[0]?.parts[1]?.text).toContain('Contrato JSON obrigatório');
+		expect(body.contents[0]?.parts[1]?.text).toContain('"required":["text","warnings"]');
 		expect(body.contents[0]?.parts[1]?.text).toContain('Versão do prompt: 1.');
 		expect(body.generationConfig).not.toHaveProperty('temperature');
 		expect(body.generationConfig).not.toHaveProperty('topP');
 		expect(body.generationConfig).not.toHaveProperty('topK');
+		expect(body.generationConfig).toEqual({
+			maxOutputTokens: 8192,
+			responseMimeType: 'application/json'
+		});
 		expect(body.generationConfig).not.toHaveProperty('responseFormat');
-		expect(body.generationConfig).toEqual(
-			expect.objectContaining({
-				maxOutputTokens: 8192,
-				responseMimeType: 'application/json',
-				responseJsonSchema: expect.objectContaining({ required: ['text', 'warnings'] })
-			})
-		);
+		expect(body.generationConfig).not.toHaveProperty('responseJsonSchema');
+		expect(body.generationConfig).not.toHaveProperty('responseSchema');
 	});
 
 	it('classifies a rejected fetch as a transport failure', async () => {

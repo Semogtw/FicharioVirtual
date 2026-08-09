@@ -26,7 +26,7 @@ function providerResponse(resultPages: unknown[]) {
 }
 
 describe('requestGeminiOcrBatch', () => {
-	it('labels every inline image with stable page identity and uses a page-keyed schema', async () => {
+	it('labels every inline image with stable page identity and a page-keyed prompt contract', async () => {
 		let captured: RequestInit | undefined;
 		await requestGeminiOcrBatch({
 			apiKey: 'test-key',
@@ -53,10 +53,11 @@ describe('requestGeminiOcrBatch', () => {
 			generationConfig: {
 				maxOutputTokens: number;
 				responseMimeType: string;
-				responseJsonSchema: { required: string[]; properties: { pages: { maxItems: number } } };
 			};
 		};
 		const parts = body.contents[0]!.parts;
+		expect(parts[0]?.text).toContain('Contrato JSON obrigatório');
+		expect(parts[0]?.text).toContain('"required":["pages"]');
 		expect(parts[0]?.text).toContain('Versão do prompt: 2.');
 		expect(parts[1]?.text).toContain(`${pages[0].pageId}`);
 		expect(parts[1]?.text).toContain('página original 4');
@@ -64,13 +65,16 @@ describe('requestGeminiOcrBatch', () => {
 		expect(parts[3]?.text).toContain(`${pages[1].pageId}`);
 		expect(parts[4]?.inlineData).toEqual({ mimeType: 'image/jpeg', data: 'BAU=' });
 		expect(body.generationConfig.maxOutputTokens).toBeGreaterThanOrEqual(8192);
-		expect(body.generationConfig.responseMimeType).toBe('application/json');
-		expect(body.generationConfig.responseJsonSchema.required).toEqual(['pages']);
-		expect(body.generationConfig.responseJsonSchema.properties.pages.maxItems).toBe(100);
+		expect(body.generationConfig).toEqual({
+			maxOutputTokens: expect.any(Number),
+			responseMimeType: 'application/json'
+		});
 		expect(body.generationConfig).not.toHaveProperty('responseFormat');
+		expect(body.generationConfig).not.toHaveProperty('responseJsonSchema');
+		expect(body.generationConfig).not.toHaveProperty('responseSchema');
 	});
 
-	it('keeps structured-output schema within Gemini supported constraints', async () => {
+	it('keeps the strict schema as prompt text instead of a rejected provider config field', async () => {
 		let captured: RequestInit | undefined;
 		await requestGeminiOcrBatch({
 			apiKey: 'test-key',
@@ -91,24 +95,16 @@ describe('requestGeminiOcrBatch', () => {
 		});
 
 		const body = JSON.parse(String(captured?.body)) as {
-			generationConfig: { responseJsonSchema: unknown };
+			contents: Array<{ parts: Array<{ text?: string }> }>;
+			generationConfig: Record<string, unknown>;
 		};
-		const unsupportedKeys = new Set(['minLength', 'maxLength', 'pattern']);
-		const found: string[] = [];
-		const visit = (value: unknown, path: string) => {
-			if (Array.isArray(value)) {
-				value.forEach((entry, index) => visit(entry, `${path}[${index}]`));
-				return;
-			}
-			if (value === null || typeof value !== 'object') return;
-			for (const [key, child] of Object.entries(value)) {
-				if (unsupportedKeys.has(key)) found.push(`${path}.${key}`);
-				visit(child, `${path}.${key}`);
-			}
-		};
-		visit(body.generationConfig.responseJsonSchema, 'schema');
-
-		expect(found).toEqual([]);
+		const instruction = body.contents[0]?.parts[0]?.text ?? '';
+		expect(instruction).toContain('"maxItems":100');
+		expect(instruction).toContain('"additionalProperties":false');
+		expect(body.generationConfig).toEqual({
+			maxOutputTokens: 8192,
+			responseMimeType: 'application/json'
+		});
 	});
 
 	it('rejects aggregate raw bytes that cannot fit the documented inline request ceiling', async () => {

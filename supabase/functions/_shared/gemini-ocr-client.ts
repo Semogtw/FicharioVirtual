@@ -66,7 +66,7 @@ const prompt = `Você é um transcritor literal de anotações acadêmicas.
 Transcreva todo texto visível da imagem em português, preservando ordem de leitura, títulos, listas, quebras relevantes, símbolos e fórmulas em texto quando possível.
 Não resuma, não explique, não complete lacunas e não adivinhe palavras ilegíveis.
 Quando algo não puder ser lido com segurança, mantenha o trecho mais conservador possível e adicione um aviso curto.
-Retorne exclusivamente o objeto JSON exigido pelo schema.`;
+Retorne exclusivamente JSON válido e cumpra exatamente o contrato JSON descrito na instrução da requisição.`;
 
 const warningSchema = {
 	type: 'array',
@@ -132,6 +132,10 @@ const batchResponseSchema = {
 	},
 	required: ['pages']
 } as const;
+
+function outputContract(schema: unknown) {
+	return `Contrato JSON obrigatório (não repita o schema; devolva apenas o objeto final): ${JSON.stringify(schema)}. Não inclua propriedades extras.`;
+}
 
 function base64(bytes: Uint8Array) {
 	let binary = '';
@@ -235,7 +239,7 @@ export async function requestGeminiOcrBatch(
 	validateBatchPages(request.pages);
 	const parts: Array<Record<string, unknown>> = [
 		{
-			text: `${prompt}\nCada imagem é precedida por seu pageId e número original. Não omita, duplique, reordene a identidade nem combine páginas. Retorne um item para cada imagem.\nVersão do prompt: ${request.promptVersion}.`
+			text: `${prompt}\nCada imagem é precedida por seu pageId e número original. Não omita, duplique, reordene a identidade nem combine páginas. Retorne um item para cada imagem.\n${outputContract(batchResponseSchema)}\nVersão do prompt: ${request.promptVersion}.`
 		}
 	];
 	for (const page of request.pages) {
@@ -254,8 +258,7 @@ export async function requestGeminiOcrBatch(
 		contents: [{ role: 'user', parts }],
 		generationConfig: {
 			maxOutputTokens: Math.min(65_536, Math.max(8_192, request.pages.length * 2_048)),
-			responseMimeType: 'application/json',
-			responseJsonSchema: batchResponseSchema
+			responseMimeType: 'application/json'
 		}
 	});
 	const text = candidateText(payload);
@@ -282,14 +285,15 @@ export async function requestGeminiOcr(request: GeminiOcrRequest): Promise<OcrPa
 							data: base64(request.bytes)
 						}
 					},
-					{ text: `${prompt}\nVersão do prompt: ${request.promptVersion}.` }
+					{
+						text: `${prompt}\n${outputContract(responseSchema)}\nVersão do prompt: ${request.promptVersion}.`
+					}
 				]
 			}
 		],
 		generationConfig: {
 			maxOutputTokens: 8192,
-			responseMimeType: 'application/json',
-			responseJsonSchema: responseSchema
+			responseMimeType: 'application/json'
 		}
 	});
 	const text = candidateText(payload);
