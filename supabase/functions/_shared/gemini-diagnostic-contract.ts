@@ -19,10 +19,10 @@ export const GEMINI_DIAGNOSTIC_PAGE = Object.freeze({
 	mimeType: 'image/png'
 });
 
-// Deterministic 1x1 PNG. It contains no user data, is never accepted from callers,
-// and is never persisted.
+// Deterministic 128x128 PNG with a simple high-contrast synthetic pattern. It
+// contains no user data, is never accepted from callers, and is never persisted.
 export const GEMINI_DIAGNOSTIC_FIXTURE_BASE64 =
-	'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+	'iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAIAAABMXPacAAABPUlEQVR42u3aSw6EIBBAQdp4/yvjCTBI+LRJve0kLKZCDzpErbXoXJevAAAAAQAgAAC0v7v1QUT4dibWet6yA4wgAMr4G9Azv/Rez++oHWAEARAAAAIAQFmfA2adhVc8T/x9fTvACAIgAAAEAIAAABAAANrYtHdBPf9/rr5rtHn9Ka+G7AAjCIAAANDfT0GtI4F/xOwAI0gAAAgAAAEAIAAABACAAAAQAAAAdDT3gsbXdy/ICBIAAALgFFTcC7IDjCABACAAAAQAgAAAEAAAAgBAAAAIQNLcCxpf370gI0gAAAiAU1BxL8gOMIIEAIAAABAAAAIAQAAACAAAAQAgAElzL2h8ffeCjCABACAATkHFvSA7wAjS0RH0dTRZ3w4wgtQ5gla/Y7EDBACAjhSrj1myAwAIAAABACAA6XoAf5tbJfunWF4AAAAASUVORK5CYII=';
 
 const DIAGNOSTIC_CODES = Object.freeze([
 	'provider_ok',
