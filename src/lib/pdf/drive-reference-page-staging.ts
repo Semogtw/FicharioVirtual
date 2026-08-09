@@ -6,6 +6,7 @@ const MAX_BATCH_SIZE = 100;
 const MAX_TEMPORARY_PATH_CHARS = 1024;
 
 export const DEFAULT_DRIVE_PDF_DESCRIPTOR_BATCH_SIZE = 64;
+export const MAX_DRIVE_PDF_DESCRIPTOR_BATCH_BYTES = 3 * 1024 * 1024;
 
 export type DrivePdfReferencePageDescriptor = Readonly<{
 	id: string;
@@ -61,8 +62,8 @@ function validatePages(pages: readonly PdfImportPagePlan[]) {
 				typeof page.temporaryImagePath !== 'string' ||
 				page.temporaryImagePath.length < 1 ||
 				!validString(page.temporaryImagePath, MAX_TEMPORARY_PATH_CHARS) ||
-				!page.temporaryImagePath.endsWith(`/pages/${page.pageNumber}.webp`) &&
-					!page.temporaryImagePath.endsWith(`/pages/${page.pageNumber}.jpg`) ||
+				(!page.temporaryImagePath.endsWith(`/pages/${page.pageNumber}.webp`) &&
+					!page.temporaryImagePath.endsWith(`/pages/${page.pageNumber}.jpg`)) ||
 				temporaryPaths.has(page.temporaryImagePath) ||
 				typeof page.jobId !== 'string' ||
 				!UUID.test(page.jobId) ||
@@ -92,7 +93,47 @@ function validatePages(pages: readonly PdfImportPagePlan[]) {
 			})
 		);
 	}
-	return descriptors;
+	return Object.freeze(descriptors);
+}
+
+function buildTransportBatches(
+	descriptors: readonly DrivePdfReferencePageDescriptor[],
+	batchSize: number
+) {
+	const encoder = new TextEncoder();
+	const batches: ReadonlyArray<DrivePdfReferencePageDescriptor>[] = [];
+	let current: DrivePdfReferencePageDescriptor[] = [];
+	let currentBytes = 2; // JSON array brackets.
+
+	for (const descriptor of descriptors) {
+		const descriptorBytes = encoder.encode(JSON.stringify(descriptor)).byteLength;
+		if (descriptorBytes + 2 > MAX_DRIVE_PDF_DESCRIPTOR_BATCH_BYTES) invalidPlan();
+
+		const separatorBytes = current.length === 0 ? 0 : 1;
+		const exceedsCount = current.length >= batchSize;
+		const exceedsBytes =
+			currentBytes + separatorBytes + descriptorBytes > MAX_DRIVE_PDF_DESCRIPTOR_BATCH_BYTES;
+
+		if (exceedsCount || exceedsBytes) {
+			if (current.length === 0) invalidPlan();
+			batches.push(Object.freeze(current));
+			current = [];
+			currentBytes = 2;
+		}
+
+		const nextSeparatorBytes = current.length === 0 ? 0 : 1;
+		if (
+			currentBytes + nextSeparatorBytes + descriptorBytes >
+			MAX_DRIVE_PDF_DESCRIPTOR_BATCH_BYTES
+		) {
+			invalidPlan();
+		}
+		current.push(descriptor);
+		currentBytes += nextSeparatorBytes + descriptorBytes;
+	}
+
+	if (current.length > 0) batches.push(Object.freeze(current));
+	return Object.freeze(batches);
 }
 
 function safelyReportBatch(
@@ -130,19 +171,16 @@ export async function stageDrivePdfReferencePageDescriptors({
 	if (!UUID.test(documentId)) throw new TypeError('Invalid Drive PDF reference document id');
 	const batchSize = validateBatchSize(requestedBatchSize);
 	const descriptors = validatePages(pages);
-	const totalBatches = Math.ceil(descriptors.length / batchSize);
+	const batches = buildTransportBatches(descriptors, batchSize);
+	let stagedPages = 0;
 
-	for (let batchIndex = 0; batchIndex < totalBatches; batchIndex += 1) {
+	for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
 		if (signal?.aborted) throw abortError();
-		const start = batchIndex * batchSize;
-		const batch = Object.freeze(descriptors.slice(start, start + batchSize));
+		const batch = batches[batchIndex];
+		if (!batch) continue;
 		await stageBatch({ documentId, descriptors: batch });
 		if (signal?.aborted) throw abortError();
-		safelyReportBatch(
-			onBatch,
-			batchIndex + 1,
-			totalBatches,
-			Math.min(descriptors.length, start + batch.length)
-		);
+		stagedPages += batch.length;
+		safelyReportBatch(onBatch, batchIndex + 1, batches.length, stagedPages);
 	}
 }
