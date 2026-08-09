@@ -79,6 +79,23 @@ export type DocumentDetailRecord = {
 	updated_at: string;
 };
 
+export type DocumentOriginalReference =
+	| Readonly<{
+			provider: 'supabase';
+			url: string;
+			driveFileId: string | null;
+	  }>
+	| Readonly<{
+			provider: 'google_drive';
+			url: string;
+			driveFileId: string;
+	  }>
+	| Readonly<{
+			provider: 'missing';
+			url: null;
+			driveFileId: string | null;
+	  }>;
+
 export type DocumentDetail = {
 	id: string;
 	title: string;
@@ -88,11 +105,7 @@ export type DocumentDetail = {
 	notebookId: string | null;
 	originalFilename: string;
 	originalUrl: string | null;
-	originalReference: Readonly<{
-		provider: 'supabase' | 'google_drive' | 'missing';
-		url: string | null;
-		driveFileId: string | null;
-	}>;
+	originalReference: DocumentOriginalReference;
 	physicalState: DrivePhysicalState;
 	pages: readonly PageDetail[];
 	createdAt: string;

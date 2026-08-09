@@ -194,18 +194,33 @@
 				<div class="original-panel">
 					<div class="panel-heading">
 						<h2>Original</h2>
-						<a href={detail.originalUrl} target="_blank" rel="noreferrer">Abrir em nova aba</a>
-					</div>
-					<div class="viewer">
-						{#if detail.kind === 'image'}
-							<img src={detail.originalUrl} alt={`Original de ${detail.title}`} />
-						{:else}
-							<iframe
-								src={`${detail.originalUrl}#page=${selectedPage.pageNumber}&zoom=page-width`}
-								title={`Página ${selectedPage.pageNumber} do PDF ${detail.title}`}
-							></iframe>
+						{#if detail.originalReference.provider === 'supabase'}
+							<a href={detail.originalReference.url} target="_blank" rel="noreferrer"
+								>Abrir em nova aba</a
+							>
 						{/if}
 					</div>
+					{#if detail.originalReference.provider === 'missing'}
+						<p class="original-status" role="status">O original não está disponível.</p>
+					{:else if detail.originalReference.provider === 'google_drive'}
+						<div class="original-status drive-reference" role="status">
+							<p>O original está preservado no Google Drive.</p>
+							<a href={detail.originalReference.url} target="_blank" rel="noreferrer"
+								>Abrir no Google Drive</a
+							>
+						</div>
+					{:else}
+						<div class="viewer">
+							{#if detail.kind === 'image'}
+								<img src={detail.originalReference.url} alt={`Original de ${detail.title}`} />
+							{:else}
+								<iframe
+									src={`${detail.originalReference.url}#page=${selectedPage.pageNumber}&zoom=page-width`}
+									title={`Página ${selectedPage.pageNumber} do PDF ${detail.title}`}
+								></iframe>
+							{/if}
+						</div>
+					{/if}
 				</div>
 
 				{#key selectedPage.id}
@@ -366,6 +381,37 @@
 		border: 1px solid var(--line);
 		border-radius: var(--radius-sm);
 		background: #d8d6d0;
+	}
+
+	.original-status {
+		min-height: 28rem;
+		display: grid;
+		place-content: center;
+		gap: 0.8rem;
+		margin: 0;
+		padding: 1.5rem;
+		border: 1px solid var(--line);
+		border-radius: var(--radius-sm);
+		background: var(--archive-soft);
+		color: var(--muted);
+		text-align: center;
+	}
+
+	.original-status p {
+		margin: 0;
+	}
+
+	.original-status a {
+		justify-self: center;
+		min-height: 2.25rem;
+		display: inline-flex;
+		align-items: center;
+		padding: 0.45rem 0.65rem;
+		border-radius: var(--radius-sm);
+		background: var(--archive);
+		color: white;
+		font-size: 0.76rem;
+		font-weight: 720;
 	}
 
 	.viewer img {
