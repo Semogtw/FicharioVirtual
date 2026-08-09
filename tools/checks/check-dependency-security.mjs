@@ -29,6 +29,13 @@ if (pdfjsVersion && compareVersion(pdfjsVersion, [6, 2, 108]) < 0) {
 	);
 }
 
+const nanoidOverride = parsePinnedSemver(packageJson.pnpm?.overrides?.nanoid, 'pnpm.overrides.nanoid');
+if (nanoidOverride && compareVersion(nanoidOverride, [3, 3, 17]) < 0) {
+	failures.push(
+		'pnpm.overrides.nanoid: versions below 3.3.17 are forbidden because they include the CVE-2026-67213 vulnerable 3.x range'
+	);
+}
+
 if (failures.length > 0) {
 	console.error(`Dependency security checks failed (${failures.length}):`);
 	for (const failure of failures) console.error(`- ${failure}`);
