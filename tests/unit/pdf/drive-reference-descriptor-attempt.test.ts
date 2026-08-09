@@ -4,6 +4,13 @@ import type { PdfImportPagePlan } from '../../../src/lib/pdf/import-plan';
 
 const documentId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const attemptId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const publication = Object.freeze({
+	documentId,
+	pageCount: 3,
+	ocrPageCount: 0,
+	reviewPageCount: 0,
+	status: 'ready'
+});
 
 function pages(count: number): readonly PdfImportPagePlan[] {
 	return Array.from({ length: count }, (_, index) => {
@@ -25,13 +32,7 @@ function dependencies() {
 		createAttemptId: vi.fn(() => attemptId),
 		begin: vi.fn().mockResolvedValue(undefined),
 		stageBatch: vi.fn().mockResolvedValue(undefined),
-		finalize: vi.fn().mockResolvedValue({
-			documentId,
-			pageCount: 3,
-			ocrPageCount: 0,
-			reviewPageCount: 0,
-			status: 'ready'
-		}),
+		finalize: vi.fn().mockResolvedValue(publication),
 		abandon: vi.fn().mockResolvedValue(undefined)
 	};
 }
@@ -49,7 +50,7 @@ describe('Drive PDF descriptor attempt client', () => {
 				batchSize: 2,
 				dependencies: deps
 			})
-		).resolves.toEqual(deps.finalize.mock.results[0]?.value);
+		).resolves.toEqual(publication);
 
 		expect(deps.begin).toHaveBeenCalledWith({
 			documentId,
