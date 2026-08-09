@@ -68,7 +68,10 @@ function parseDeviceIdentity(value: unknown): DeviceIdentity | null {
 	return Object.freeze({ deviceId: record.deviceId, userId: record.userId });
 }
 
-function parseLease(value: unknown, expectedDeviceId: string): Readonly<{
+function parseLease(
+	value: unknown,
+	expectedDeviceId: string
+): Readonly<{
 	jobId: string;
 	pageId: string;
 	deviceId: string;
@@ -136,7 +139,13 @@ function parseSource(value: unknown, expected: SourceRequest, deviceId: string) 
 
 function sourceBindingMatches(
 	value: unknown,
-	expected: Readonly<{ jobId: string; pageId: string; deviceId: string; leaseId: string; sha256: string }>
+	expected: Readonly<{
+		jobId: string;
+		pageId: string;
+		deviceId: string;
+		leaseId: string;
+		sha256: string;
+	}>
 ) {
 	if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
 	const record = value as Record<string, unknown>;

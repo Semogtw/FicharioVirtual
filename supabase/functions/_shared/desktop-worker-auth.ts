@@ -26,6 +26,12 @@ function hex(bytes: ArrayBuffer): string {
 	return [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
+function digestSha256(bytes: Uint8Array): Promise<ArrayBuffer> {
+	const input = new ArrayBuffer(bytes.byteLength);
+	new Uint8Array(input).set(bytes);
+	return crypto.subtle.digest('SHA-256', input);
+}
+
 export function parseDesktopWorkerAuthorization(value: string | null): string | null {
 	if (!value?.startsWith(AUTHORIZATION_PREFIX)) return null;
 	const credential = value.slice(AUTHORIZATION_PREFIX.length);
@@ -35,16 +41,18 @@ export function parseDesktopWorkerAuthorization(value: string | null): string | 
 export async function hashDesktopWorkerCredential(credential: string): Promise<string | null> {
 	const bytes = decodeBase64Url(credential);
 	if (!bytes) return null;
-	return hex(await crypto.subtle.digest('SHA-256', bytes));
+	return hex(await digestSha256(bytes));
 }
 
-export async function generateDesktopWorkerCredential(): Promise<Readonly<{
-	credential: string;
-	digestHex: string;
-}>> {
+export async function generateDesktopWorkerCredential(): Promise<
+	Readonly<{
+		credential: string;
+		digestHex: string;
+	}>
+> {
 	const bytes = crypto.getRandomValues(new Uint8Array(RAW_CREDENTIAL_BYTES));
 	const credential = encodeBase64Url(bytes);
-	const digestHex = hex(await crypto.subtle.digest('SHA-256', bytes));
+	const digestHex = hex(await digestSha256(bytes));
 	bytes.fill(0);
 	return Object.freeze({ credential, digestHex });
 }

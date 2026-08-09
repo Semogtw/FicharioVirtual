@@ -58,7 +58,9 @@ describe('desktop worker request contract', () => {
 	});
 
 	it('rejects malformed source identity and unsupported backends', () => {
-		expect(parseDesktopWorkerRequest({ ...completion, sourceSha256: sourceSha256.toUpperCase() })).toBeNull();
+		expect(
+			parseDesktopWorkerRequest({ ...completion, sourceSha256: sourceSha256.toUpperCase() })
+		).toBeNull();
 		expect(parseDesktopWorkerRequest({ ...completion, backend: 'shell' })).toBeNull();
 		expect(parseDesktopWorkerRequest({ ...completion, leaseId: 'not-a-uuid' })).toBeNull();
 	});

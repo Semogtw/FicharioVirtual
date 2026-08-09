@@ -23,13 +23,15 @@ function functionBody(name: string, sql: string) {
 describe('desktop OCR routing and lease migrations', () => {
 	it('adds waiting_desktop in an isolated enum migration before route consumers', () => {
 		expect(statusEnumSource).toContain(
-		"alter type public.ocr_status add value if not exists 'waiting_desktop'"
-	);
+			"alter type public.ocr_status add value if not exists 'waiting_desktop'"
+		);
 		expect(statusEnumSource).not.toContain('ocr_jobs');
-		expect(deviceRouteSource).toContain("create type public.ocr_route as enum ('gemini', 'desktop')");
 		expect(deviceRouteSource).toContain(
-		"add column route public.ocr_route not null default 'gemini'"
-	);
+			"create type public.ocr_route as enum ('gemini', 'desktop')"
+		);
+		expect(deviceRouteSource).toContain(
+			"add column route public.ocr_route not null default 'gemini'"
+		);
 	});
 
 	it('keeps worker credential digests inside a service-private device table', () => {
@@ -41,11 +43,11 @@ describe('desktop OCR routing and lease migrations', () => {
 		expect(deviceRouteSource).toContain('unique (id, user_id)');
 		expect(deviceRouteSource).toContain('enable row level security');
 		expect(deviceRouteSource).toContain(
-		'revoke all on table public.ocr_worker_devices from public, anon, authenticated'
-	);
+			'revoke all on table public.ocr_worker_devices from public, anon, authenticated'
+		);
 		expect(deviceRouteSource).not.toContain(
-		'grant select on public.ocr_worker_devices to authenticated'
-	);
+			'grant select on public.ocr_worker_devices to authenticated'
+		);
 	});
 
 	it('exposes only safe device metadata through the authenticated list RPC', () => {
@@ -58,11 +60,11 @@ describe('desktop OCR routing and lease migrations', () => {
 		expect(body).toContain('device.last_seen_at');
 		expect(body).not.toContain('credential_hash');
 		expect(deviceRouteSource).toContain(
-		'revoke execute on function public.list_ocr_worker_devices() from public'
-	);
+			'revoke execute on function public.list_ocr_worker_devices() from public'
+		);
 		expect(deviceRouteSource).toContain(
-		'grant execute on function public.list_ocr_worker_devices() to authenticated'
-	);
+			'grant execute on function public.list_ocr_worker_devices() to authenticated'
+		);
 	});
 
 	it('binds desktop lease ownership to a same-user active device', () => {

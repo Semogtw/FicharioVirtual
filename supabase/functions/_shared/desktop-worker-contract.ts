@@ -47,9 +47,7 @@ function hasExactKeys(record: Record<string, unknown>, expected: readonly string
 }
 
 function isContentType(value: unknown): value is DesktopOcrContentType {
-	return (
-		typeof value === 'string' && CONTENT_TYPES.includes(value as DesktopOcrContentType)
-	);
+	return typeof value === 'string' && CONTENT_TYPES.includes(value as DesktopOcrContentType);
 }
 
 function parseWarnings(value: unknown): readonly DesktopWorkerWarning[] | null {
@@ -65,6 +63,7 @@ function parseWarnings(value: unknown): readonly DesktopWorkerWarning[] | null {
 			warning.message !== warning.message.trim() ||
 			warning.message.length < 1 ||
 			warning.message.length > MAX_WARNING_MESSAGE_LENGTH ||
+			// eslint-disable-next-line no-control-regex -- reject ASCII controls from user-visible warning text
 			/[\u0000-\u001f\u007f]/.test(warning.message)
 		) {
 			return null;
@@ -128,7 +127,8 @@ export function parseDesktopWorkerRequest(value: unknown): DesktopWorkerRequest 
 		typeof record.rawText !== 'string' ||
 		record.rawText.length > MAX_TEXT_LENGTH ||
 		(record.correctedText !== null &&
-			(typeof record.correctedText !== 'string' || record.correctedText.length > MAX_TEXT_LENGTH)) ||
+			(typeof record.correctedText !== 'string' ||
+				record.correctedText.length > MAX_TEXT_LENGTH)) ||
 		!isContentType(record.contentType) ||
 		typeof record.needsReview !== 'boolean' ||
 		typeof record.timingMs !== 'number' ||

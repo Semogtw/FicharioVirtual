@@ -13,7 +13,9 @@ describe('desktop worker credential boundary', () => {
 		const generated = await generateDesktopWorkerCredential();
 		expect(generated.credential).toMatch(BASE64URL_43);
 		expect(generated.digestHex).toMatch(SHA256_HEX);
-		await expect(hashDesktopWorkerCredential(generated.credential)).resolves.toBe(generated.digestHex);
+		await expect(hashDesktopWorkerCredential(generated.credential)).resolves.toBe(
+			generated.digestHex
+		);
 	});
 
 	it('uses an explicit worker authorization scheme rather than browser Bearer JWT semantics', async () => {

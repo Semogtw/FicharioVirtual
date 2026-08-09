@@ -24,6 +24,7 @@
 ### Task 1: Specify the immutable result schema as RED
 
 **Files:**
+
 - Add: `tests/unit/ocr/ocr-result-history-sql.test.ts`
 - Add: `supabase/tests/ocr_result_history.sql`
 - Update as needed: `tools/checks/test-ocr-idempotency.sh`
@@ -38,9 +39,11 @@
 ### Task 2: Add `ocr_results` and backfill existing completed OCR pages
 
 **Files:**
+
 - Add: `supabase/migrations/202608081020_ocr_result_history.sql`
 
 **Schema:**
+
 - `ocr_results.id uuid primary key default gen_random_uuid()`
 - `ocr_results.user_id uuid not null`
 - `ocr_results.page_id uuid not null`
@@ -66,6 +69,7 @@
 ### Task 3: Make OCR completion append/reuse a result transactionally
 
 **Files:**
+
 - Continue in: `supabase/migrations/202608081020_ocr_result_history.sql` or a narrowly scoped follow-up migration if clarity requires it.
 - Update tests from Task 1.
 
@@ -82,6 +86,7 @@
 ### Task 4: Validate compatibility and document the new boundary
 
 **Files:**
+
 - Update: `docs/CURRENT_STATUS.md`
 - Update: `docs/READINESS.md`
 - Add checkpoint: `docs/checkpoints/2026-08-08-ocr-result-history-foundation.md`

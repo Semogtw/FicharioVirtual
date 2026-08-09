@@ -5,12 +5,20 @@ import process from 'node:process';
 const root = resolve(new URL('../..', import.meta.url).pathname);
 const splitPath = join(root, 'supabase/migrations/202608081019_split_page_and_ocr_status.sql');
 const historyPath = join(root, 'supabase/migrations/202608081020_ocr_result_history.sql');
-const desktopStatusPath = join(root, 'supabase/migrations/202608081022_desktop_ocr_status_enum.sql');
+const desktopStatusPath = join(
+	root,
+	'supabase/migrations/202608081022_desktop_ocr_status_enum.sql'
+);
 const routePath = join(root, 'supabase/migrations/202608081024_desktop_ocr_job_leases.sql');
-const authPath = join(root, 'supabase/migrations/202608081027_desktop_ocr_device_auth_boundary.sql');
+const authPath = join(
+	root,
+	'supabase/migrations/202608081027_desktop_ocr_device_auth_boundary.sql'
+);
 
 const [split, history, desktopStatus, route, auth] = await Promise.all(
-	[splitPath, historyPath, desktopStatusPath, routePath, authPath].map((path) => readFile(path, 'utf8'))
+	[splitPath, historyPath, desktopStatusPath, routePath, authPath].map((path) =>
+		readFile(path, 'utf8')
+	)
 );
 const failures = [];
 
@@ -22,8 +30,16 @@ function forbidSource(source, pattern, message) {
 	if (pattern.test(source)) failures.push(message);
 }
 
-requireSource(split, /create type public\.page_status as enum/, 'migration 1019 must create page_status before result history');
-requireSource(split, /create type public\.ocr_status as enum/, 'migration 1019 must create ocr_status before desktop job states');
+requireSource(
+	split,
+	/create type public\.page_status as enum/,
+	'migration 1019 must create page_status before result history'
+);
+requireSource(
+	split,
+	/create type public\.ocr_status as enum/,
+	'migration 1019 must create ocr_status before desktop job states'
+);
 requireSource(
 	split,
 	/alter table public\.pages[\s\S]*?alter column status type public\.page_status/,
@@ -60,15 +76,27 @@ requireSource(
 	/alter function public\.complete_ocr_job\(uuid, text, jsonb, public\.page_status, timestamptz\)/,
 	'result history must wrap the typed page completion RPC'
 );
-requireSource(history, /current_job\.batch_id\b/, 'result history metadata must reference the real OCR batch column');
-forbidSource(history, /current_job\.ocr_batch_id\b/, 'result history must not reference the nonexistent ocr_batch_id column');
+requireSource(
+	history,
+	/current_job\.batch_id\b/,
+	'result history metadata must reference the real OCR batch column'
+);
+forbidSource(
+	history,
+	/current_job\.ocr_batch_id\b/,
+	'result history must not reference the nonexistent ocr_batch_id column'
+);
 
 requireSource(
 	desktopStatus,
 	/alter type public\.ocr_status add value if not exists 'waiting_desktop'/,
 	'desktop-only waiting state must extend ocr_status only'
 );
-forbidSource(desktopStatus, /page_status[\s\S]*waiting_desktop/, 'waiting_desktop must never become a page status');
+forbidSource(
+	desktopStatus,
+	/page_status[\s\S]*waiting_desktop/,
+	'waiting_desktop must never become a page status'
+);
 
 requireSource(
 	route,
@@ -80,14 +108,22 @@ requireSource(
 	/current_job\.status = 'waiting_desktop'::public\.ocr_status[\s\S]*?next_status := 'pending'::public\.ocr_status/,
 	'desktop waiting work must be routable back to the Gemini pending queue'
 );
-forbidSource(route, /'queued'::public\.ocr_status/, 'desktop routing must not depend on the nonexistent queued OCR state');
+forbidSource(
+	route,
+	/'queued'::public\.ocr_status/,
+	'desktop routing must not depend on the nonexistent queued OCR state'
+);
 
 requireSource(
 	auth,
 	/page\.temporary_image_path\s+as\s+storage_path/,
 	'desktop source resolver must use pages.temporary_image_path'
 );
-forbidSource(auth, /page\.storage_path/, 'desktop source resolver must not use nonexistent pages.storage_path');
+forbidSource(
+	auth,
+	/page\.storage_path/,
+	'desktop source resolver must not use nonexistent pages.storage_path'
+);
 
 if (failures.length > 0) {
 	console.error(`OCR status split checks failed (${failures.length}):`);

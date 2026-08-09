@@ -20,9 +20,7 @@ describe('OCR result history migration', () => {
 	it('constrains the accepted result pointer to the same page and owner', () => {
 		expect(source).toContain('add column accepted_ocr_result_id uuid');
 		expect(source).toContain('unique (id, page_id, user_id)');
-		expect(source).toContain(
-			'foreign key (accepted_ocr_result_id, id, user_id)'
-		);
+		expect(source).toContain('foreign key (accepted_ocr_result_id, id, user_id)');
 		expect(source).toContain('references public.ocr_results(id, page_id, user_id)');
 	});
 
@@ -38,7 +36,9 @@ describe('OCR result history migration', () => {
 		expect(source).toContain('alter table public.ocr_results enable row level security');
 		expect(source).toContain('user_id = (select auth.uid())');
 		expect(source).toContain('grant select on public.ocr_results to authenticated');
-		expect(source).toContain('revoke insert, update, delete on public.ocr_results from authenticated');
+		expect(source).toContain(
+			'revoke insert, update, delete on public.ocr_results from authenticated'
+		);
 	});
 
 	it('backfills existing terminal OCR summaries before attaching the accepted pointer', () => {

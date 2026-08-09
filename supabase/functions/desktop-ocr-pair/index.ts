@@ -44,7 +44,12 @@ function parsePairRequest(value: unknown): PairRequest | null {
 	const record = value as Record<string, unknown>;
 	if (!hasExactKeys(record, ['label', 'capabilities'])) return null;
 	if (typeof record.label !== 'string' || record.label !== record.label.trim()) return null;
-	if (record.label.length < 1 || record.label.length > 80 || /[\u0000-\u001f\u007f]/.test(record.label)) {
+	if (
+		record.label.length < 1 ||
+		record.label.length > 80 ||
+		// eslint-disable-next-line no-control-regex -- reject ASCII controls from a device label
+		/[\u0000-\u001f\u007f]/.test(record.label)
+	) {
 		return null;
 	}
 	if (
