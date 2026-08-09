@@ -55,9 +55,12 @@ export type GeminiOcrBatchRequest = {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MIME = /^(?:image\/(?:jpeg|png|webp)|application\/pdf)$/;
-const MAX_BATCH_PAGES = 1_000;
+const MAX_BATCH_PAGES = 100;
 const MAX_PAGE_BYTES = 14 * 1024 * 1024;
-const MAX_BATCH_BYTES = 48 * 1024 * 1024;
+// Gemini limits the entire inline request to 20 MB. Raw bytes expand by roughly
+// one third when encoded as Base64, so the aggregate raw ceiling must stay well
+// below 20 MB even before prompt/schema JSON overhead is added.
+const MAX_BATCH_BYTES = 14 * 1024 * 1024;
 
 const prompt = `Você é um transcritor literal de anotações acadêmicas.
 Transcreva todo texto visível da imagem em português, preservando ordem de leitura, títulos, listas, quebras relevantes, símbolos e fórmulas em texto quando possível.
@@ -252,7 +255,7 @@ export async function requestGeminiOcrBatch(
 		generationConfig: {
 			maxOutputTokens: Math.min(65_536, Math.max(8_192, request.pages.length * 2_048)),
 			responseFormat: {
-				text: { mimeType: 'APPLICATION_JSON', schema: batchResponseSchema }
+				text: { mimeType: 'application/json', schema: batchResponseSchema }
 			}
 		}
 	});
@@ -287,7 +290,7 @@ export async function requestGeminiOcr(request: GeminiOcrRequest): Promise<OcrPa
 		generationConfig: {
 			maxOutputTokens: 8192,
 			responseFormat: {
-				text: { mimeType: 'APPLICATION_JSON', schema: responseSchema }
+				text: { mimeType: 'application/json', schema: responseSchema }
 			}
 		}
 	});
