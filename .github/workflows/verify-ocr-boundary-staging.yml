@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: ocr-boundary-staging-probe
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   probe:
@@ -38,6 +38,8 @@ jobs:
           set -euo pipefail
           status="$(
             curl --silent --show-error \
+              --connect-timeout 10 \
+              --max-time 90 \
               --output /dev/null \
               --write-out '%{http_code}' \
               --request POST \
@@ -56,6 +58,8 @@ jobs:
           trap 'rm -f "$report"' EXIT
           status="$(
             curl --silent --show-error \
+              --connect-timeout 10 \
+              --max-time 150 \
               --output "$report" \
               --write-out '%{http_code}' \
               --request POST \
@@ -86,6 +90,13 @@ jobs:
             'gemini_model_unavailable',
             'gemini_invalid_request',
             'gemini_service_unavailable',
+            'gemini_api_key_invalid',
+            'gemini_provider_precondition_failed',
+            'gemini_response_format_rejected',
+            'gemini_schema_rejected',
+            'gemini_image_input_rejected',
+            'gemini_output_limit_rejected',
+            'gemini_contents_rejected',
             'provider_response_invalid',
             'provider_transport_failed',
             'provider_not_configured',
