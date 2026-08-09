@@ -40,12 +40,16 @@ async function handleRequest(incoming: IncomingMessage, response: ServerResponse
 	}
 	const body = JSON.parse(await readBody(incoming)) as {
 		contents?: Array<{ parts?: Array<{ inlineData?: { mimeType?: string; data?: string } }> }>;
-		generationConfig?: { responseFormat?: { text?: { mimeType?: string } } };
+		generationConfig?: { responseMimeType?: string; responseJsonSchema?: unknown };
 	};
 	if (body.contents?.[0]?.parts?.[0]?.inlineData?.data !== 'AQID') {
 		throw new Error('Gemini request did not contain the expected image bytes');
 	}
-	if (body.generationConfig?.responseFormat?.text?.mimeType !== 'application/json') {
+	if (
+		body.generationConfig?.responseMimeType !== 'application/json' ||
+		body.generationConfig.responseJsonSchema === null ||
+		typeof body.generationConfig.responseJsonSchema !== 'object'
+	) {
 		throw new Error('Gemini request did not require structured JSON output');
 	}
 
