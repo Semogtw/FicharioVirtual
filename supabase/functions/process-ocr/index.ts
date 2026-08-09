@@ -1,7 +1,9 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { RequestBodyTooLargeError, readBoundedJson } from '../_shared/bounded-json.ts';
 import { corsHeaders, parseAppOrigin } from '../_shared/cors.ts';
 import { claimStateHttpStatus, parseOcrClaimResult } from '../_shared/ocr-contract.ts';
 import { planOcrFailure } from '../_shared/ocr-failure.ts';
+import { randomJitterMs } from '../_shared/random-jitter.ts';
 import { requestGeminiOcrBatch, type GeminiOcrBatchPage } from '../_shared/gemini-ocr-client.ts';
 import {
 	classifyGeminiDiagnosticFailure,
@@ -17,6 +19,7 @@ const MODEL = /^[A-Za-z0-9._-]{3,128}$/;
 const MAX_INLINE_IMAGE_BYTES = 14 * 1024 * 1024;
 const ABSOLUTE_MAX_BATCH_PAGES = 100;
 const ABSOLUTE_MAX_BATCH_BYTES = 48 * 1024 * 1024;
+const MAX_REQUEST_BODY_BYTES = 16 * 1024;
 
 type ParsedRequest = {
 	pageIds: readonly string[];
@@ -100,7 +103,7 @@ function envInteger(name: string, fallback: number, minimum: number, maximum: nu
 
 function retryAt(attemptCount: number, baseSeconds: number) {
 	const exponent = Math.min(Math.max(attemptCount - 1, 0), 6);
-	const jitter = crypto.getRandomValues(new Uint16Array(1))[0] % 1000;
+	const jitter = randomJitterMs();
 	const delayMs = Math.min(60 * 60 * 1000, baseSeconds * 1000 * 2 ** exponent + jitter);
 	return new Date(Date.now() + delayMs).toISOString();
 }
@@ -214,9 +217,11 @@ Deno.serve(async (request) => {
 
 	let rawBody: unknown;
 	try {
-		rawBody = await request.json();
-	} catch {
-		return respond(400, { code: 'invalid_json' });
+		rawBody = await readBoundedJson(request, MAX_REQUEST_BODY_BYTES);
+	} catch (error) {
+		return error instanceof RequestBodyTooLargeError
+			? respond(413, { code: 'ocr_request_too_large' })
+			: respond(400, { code: 'invalid_json' });
 	}
 	if (isGeminiDiagnosticRequest(rawBody)) {
 		return runGeminiDiagnostic(authorization, respond);
