@@ -7,6 +7,19 @@ const directory = join(root, 'supabase/migrations');
 const names = (await readdir(directory)).filter((name) => name.endsWith('.sql')).sort();
 const failures = [];
 const prefixes = new Set();
+const FUNCTION_START = /create\s+or\s+replace\s+function\s+public\.([a-z_][a-z0-9_]*)\s*\(/giu;
+
+function escapeRegex(value) {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function functionDefinitions(content) {
+	const matches = [...content.matchAll(FUNCTION_START)];
+	return matches.map((match, index) => ({
+		name: match[1],
+		body: content.slice(match.index, matches[index + 1]?.index ?? content.length)
+	}));
+}
 
 for (const name of names) {
 	const match = name.match(/^(\d{12})_[a-z0-9_]+\.sql$/);
@@ -20,14 +33,27 @@ for (const name of names) {
 	if (/\b(drop\s+(?:table|schema|type)|truncate\s+table)\b/i.test(content)) {
 		failures.push(`${name}: destructive schema operation requires explicit reviewed exception`);
 	}
-	if (
-		/create\s+or\s+replace\s+function/i.test(content) &&
-		!/set\s+search_path\s*=\s*''/i.test(content)
-	) {
-		failures.push(`${name}: function definition missing explicit empty search_path`);
+
+	for (const definition of functionDefinitions(content)) {
+		if (!/set\s+search_path\s*=\s*''/i.test(definition.body)) {
+			failures.push(`${name}: function ${definition.name} missing explicit empty search_path`);
+		}
+		if (/security\s+definer/i.test(definition.body)) {
+			const escapedName = escapeRegex(definition.name);
+			const revoke = new RegExp(
+				`revoke\\s+execute\\s+on\\s+function\\s+public\\.${escapedName}\\s*\\(`,
+				'iu'
+			);
+			if (!revoke.test(content)) {
+				failures.push(
+					`${name}: SECURITY DEFINER function ${definition.name} missing its own execute revocation`
+				);
+			}
+		}
 	}
-	if (/security\s+definer/i.test(content) && !/revoke\s+execute/i.test(content)) {
-		failures.push(`${name}: SECURITY DEFINER function missing explicit execute revocation`);
+
+	if (/grant\s+execute\s+on\s+function\s+[^;]+?\s+to\s+(?:public|anon)\b[^;]*;/iu.test(content)) {
+		failures.push(`${name}: function execution must never be granted to public or anon`);
 	}
 }
 
