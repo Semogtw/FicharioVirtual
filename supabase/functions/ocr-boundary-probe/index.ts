@@ -77,9 +77,10 @@ function toLegacyResponseSchema(value: unknown): unknown {
 		// The legacy Schema surface does not need this JSON-Schema-only strictness;
 		// the application parser still rejects unexpected provider fields.
 		if (key === 'additionalProperties') continue;
-		converted[key] = key === 'type' && typeof child === 'string'
-			? child.toUpperCase()
-			: toLegacyResponseSchema(child);
+		converted[key] =
+			key === 'type' && typeof child === 'string'
+				? child.toUpperCase()
+				: toLegacyResponseSchema(child);
 	}
 	return converted;
 }
