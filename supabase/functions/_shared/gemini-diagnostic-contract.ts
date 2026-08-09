@@ -1,4 +1,8 @@
-import { classifyGeminiFailure, type GeminiFailure } from './ocr-contract.ts';
+import {
+	classifyGeminiFailure,
+	parseGeminiProviderErrorMetadata,
+	type GeminiFailure
+} from './ocr-contract.ts';
 import { GeminiHttpError, GeminiResponseError, GeminiTransportError } from './gemini-ocr-client.ts';
 
 export const GEMINI_DIAGNOSTIC_BODY = Object.freeze({
@@ -28,6 +32,13 @@ const DIAGNOSTIC_CODES = Object.freeze([
 	'gemini_model_unavailable',
 	'gemini_invalid_request',
 	'gemini_service_unavailable',
+	'gemini_api_key_invalid',
+	'gemini_provider_precondition_failed',
+	'gemini_response_format_rejected',
+	'gemini_schema_rejected',
+	'gemini_image_input_rejected',
+	'gemini_output_limit_rejected',
+	'gemini_contents_rejected',
 	'provider_response_invalid',
 	'provider_transport_failed',
 	'provider_not_configured',
@@ -49,6 +60,13 @@ const DIAGNOSTIC_CATEGORIES = Object.freeze([
 export type GeminiDiagnosticCode =
 	| 'provider_ok'
 	| GeminiFailure['code']
+	| 'gemini_api_key_invalid'
+	| 'gemini_provider_precondition_failed'
+	| 'gemini_response_format_rejected'
+	| 'gemini_schema_rejected'
+	| 'gemini_image_input_rejected'
+	| 'gemini_output_limit_rejected'
+	| 'gemini_contents_rejected'
 	| 'provider_response_invalid'
 	| 'provider_transport_failed'
 	| 'provider_not_configured'
@@ -175,8 +193,50 @@ export function parseGeminiDiagnosticResult(value: unknown): GeminiDiagnosticRes
 	});
 }
 
+function rejectedRequestCode(responseBody: string): GeminiDiagnosticCode | null {
+	const summary = responseBody.slice(0, 8_000).toLowerCase();
+	if (/response[_ ]?format|responseformat/.test(summary)) return 'gemini_response_format_rejected';
+	if (/\bresponse[_ ]?schema\b|\bjson[_ ]?schema\b|\bschema\b/.test(summary)) {
+		return 'gemini_schema_rejected';
+	}
+	if (/inline[_ ]?data|inlinedata/.test(summary)) return 'gemini_image_input_rejected';
+	if (/max[_ ]?output[_ ]?tokens|maxoutputtokens/.test(summary)) {
+		return 'gemini_output_limit_rejected';
+	}
+	if (/\bcontents?\b|\bparts?\b/.test(summary)) return 'gemini_contents_rejected';
+	return null;
+}
+
 export function classifyGeminiDiagnosticFailure(error: unknown): GeminiDiagnosticResult {
 	if (error instanceof GeminiHttpError) {
+		const metadata = parseGeminiProviderErrorMetadata(error.responseBody);
+		if (metadata.reason === 'API_KEY_INVALID') {
+			return createGeminiDiagnosticResult({
+				status: 'fail',
+				category: 'configuration',
+				code: 'gemini_api_key_invalid',
+				httpStatus: error.status
+			});
+		}
+		if (metadata.status === 'FAILED_PRECONDITION') {
+			return createGeminiDiagnosticResult({
+				status: 'fail',
+				category: 'configuration',
+				code: 'gemini_provider_precondition_failed',
+				httpStatus: error.status
+			});
+		}
+		if (error.status === 400 || error.status === 422) {
+			const requestCode = rejectedRequestCode(error.responseBody);
+			if (requestCode) {
+				return createGeminiDiagnosticResult({
+					status: 'fail',
+					category: 'request',
+					code: requestCode,
+					httpStatus: error.status
+				});
+			}
+		}
 		const failure = classifyGeminiFailure(error.status, error.responseBody);
 		return createGeminiDiagnosticResult({
 			status: 'fail',
