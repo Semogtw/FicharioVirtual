@@ -41,6 +41,12 @@ select public.stage_drive_pdf_reference(
   '2026-08-05T12:00:00Z'
 );
 
+-- The browser-facing direct finalizer is revoked after the renewable lease
+-- migration. Run these payload-hardening assertions as the database owner so
+-- they continue validating the hardened implementation itself, while the
+-- descriptor privilege gate separately proves authenticated cannot bypass it.
+reset role;
+
 select throws_ok(
   $$
     select public.finalize_drive_pdf_reference_import(
