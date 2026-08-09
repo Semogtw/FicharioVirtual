@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { MAX_LOCAL_PDF_BYTES } from '../../../src/lib/pdf/limits';
 import {
 	deleteStoredPdfImport,
 	listStoredPdfImports,
@@ -65,9 +66,13 @@ describe('parseStoredPdfImport', () => {
 		expect(Object.isFrozen(result)).toBe(true);
 	});
 
-	it('accepts resumable PDFs above the obsolete 20 MiB ceiling', () => {
-		const result = parseStoredPdfImport(record({ file: reportedSizePdf(21 * 1024 * 1024) }));
-		expect(result.file.size).toBe(21 * 1024 * 1024);
+	it('rejects resumable PDFs above the 20 MiB ceiling', () => {
+		expect(() =>
+			parseStoredPdfImport(record({ file: reportedSizePdf(MAX_LOCAL_PDF_BYTES + 1) }))
+		).toThrow('Invalid stored PDF import');
+		expect(
+			parseStoredPdfImport(record({ file: reportedSizePdf(MAX_LOCAL_PDF_BYTES) })).file.size
+		).toBe(MAX_LOCAL_PDF_BYTES);
 	});
 
 	it('rejects unsupported versions, unsafe files, extra keys and malformed ownership', () => {
