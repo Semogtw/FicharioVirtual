@@ -6,19 +6,19 @@ Esta página não publica porcentagem global. Prontidão significa evidência re
 
 ## Matriz atual
 
-| Dimensão                     | Código                                   | Evidência externa                                                                 | Estado                 |
-| ---------------------------- | ---------------------------------------- | --------------------------------------------------------------------------------- | ---------------------- |
-| Produto privado              | Implementado                             | CI completo `f87e1edc` / run `31333367357`                                       | Bloqueado para release |
-| OCR Gemini por lotes         | Implementado e corrigido                 | `process-ocr` provider + parser HTTP 200 em `31333418948`; runtime `ACTIVE v19`   | Fronteira aprovada     |
-| Quota exclusiva do provedor  | Implementada                             | `429 gemini_daily_quota` observado na chamada direta protegida                    | Evidenciada            |
-| Google Drive-first           | Implementado                             | Conta Google real ainda pendente                                                   | Não promovido          |
-| Picker até 50 MiB            | Implementado                             | Navegadores reais pendentes                                                       | Não promovido          |
-| Picker acima de 50 MiB       | Implementado por referência/ranges       | PDF grande real pendente                                                          | Não promovido          |
-| Recuperação crash copy→stage | Implementada com `appProperties`         | Contratos no CI; interrupção real pendente                                        | Não promovida          |
-| Lease de descritores         | Implementado e conectado ao orquestrador | Banco local no CI; duas sessões reais pendentes                                   | Não promovido          |
-| Cloudflare Pages             | Runbook e gates implementados            | Deployment real pendente                                                          | Não implantado         |
-| Worker desktop               | Fronteira backend implementada           | Worker local e hardware pendentes                                                 | Não iniciado           |
-| RX 6600                      | Não implementada                         | Benchmark pendente                                                                | Não validada           |
+| Dimensão                     | Código                                   | Evidência externa                                                               | Estado                 |
+| ---------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------- | ---------------------- |
+| Produto privado              | Implementado                             | CI completo `f87e1edc` / run `31333367357`                                      | Bloqueado para release |
+| OCR Gemini por lotes         | Implementado e corrigido                 | `process-ocr` provider + parser HTTP 200 em `31333418948`; runtime `ACTIVE v19` | Fronteira aprovada     |
+| Quota exclusiva do provedor  | Implementada                             | `429 gemini_daily_quota` observado na chamada direta protegida                  | Evidenciada            |
+| Google Drive-first           | Implementado                             | Conta Google real ainda pendente                                                | Não promovido          |
+| Picker até 50 MiB            | Implementado                             | Navegadores reais pendentes                                                     | Não promovido          |
+| Picker acima de 50 MiB       | Implementado por referência/ranges       | PDF grande real pendente                                                        | Não promovido          |
+| Recuperação crash copy→stage | Implementada com `appProperties`         | Contratos no CI; interrupção real pendente                                      | Não promovida          |
+| Lease de descritores         | Implementado e conectado ao orquestrador | Banco local no CI; duas sessões reais pendentes                                 | Não promovido          |
+| Cloudflare Pages             | Runbook e gates implementados            | Deployment real pendente                                                        | Não implantado         |
+| Worker desktop               | Fronteira backend implementada           | Worker local e hardware pendentes                                               | Não iniciado           |
+| RX 6600                      | Não implementada                         | Benchmark pendente                                                              | Não validada           |
 
 ## Evidência presente no repositório
 

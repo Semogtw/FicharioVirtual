@@ -619,10 +619,7 @@ Deno.serve(async (request) => {
 			failedPageIds,
 			splitRequiredPageIds
 		});
-		return respond(
-			terminalStatus === 'failed' && pendingPageIds.length === 0 ? 503 : 202,
-			body
-		);
+		return respond(terminalStatus === 'failed' && pendingPageIds.length === 0 ? 503 : 202, body);
 	} finally {
 		clearTimeout(timeout);
 	}
