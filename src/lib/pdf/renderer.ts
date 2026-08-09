@@ -140,7 +140,7 @@ export async function renderPdfPage(
 		bytes.fill(0);
 		throw abortError();
 	}
-	const loadingTask = getDocument({ data: bytes, useSystemFonts: true });
+	const loadingTask = getDocument({ data: bytes, useSystemFonts: true, enableScripting: false });
 	let pdfDocument: PDFDocumentProxy | null = null;
 	let destroyPromise: Promise<void> | null = null;
 	const destroyLoadingTask = () => {
