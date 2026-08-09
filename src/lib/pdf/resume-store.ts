@@ -179,7 +179,7 @@ export async function listStoredPdfImports(
 	store: PdfResumeStore = defaultStore()
 ): Promise<readonly StoredPdfImportRecord[]> {
 	const ownerId = validOwnerId(userId);
-	const records = (await store.list())
+	const records = (await store.list(ownerId))
 		.map(parseStoredPdfImport)
 		.filter((record) => record.userId === ownerId)
 		.sort((left, right) => left.updatedAt.localeCompare(right.updatedAt));
