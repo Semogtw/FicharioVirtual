@@ -36,9 +36,6 @@ declare
   quota_claim jsonb;
   same_day_claim jsonb;
   next_day_claim jsonb;
-  completed boolean;
-  completed_again boolean;
-  conflicting_completion boolean;
   blocked boolean;
   provider_retry_at timestamptz;
   persisted_text text;
@@ -63,38 +60,35 @@ begin
     raise exception 'first claim contract drifted: %', first_claim;
   end if;
 
-  completed := public.complete_ocr_job(
+  perform public.complete_ocr_job(
     '22222222-2222-4222-8222-222222222222'::uuid,
     'Texto confirmado',
     '[]'::jsonb,
     'ready',
     '2026-08-01T12:01:00Z'::timestamptz
   );
-  if completed is distinct from true then
-    raise exception 'first completion was not accepted';
-  end if;
 
-  completed_again := public.complete_ocr_job(
+  perform public.complete_ocr_job(
     '22222222-2222-4222-8222-222222222222'::uuid,
     'Texto confirmado',
     '[]'::jsonb,
     'ready',
     '2026-08-01T12:01:00Z'::timestamptz
   );
-  if completed_again is distinct from true then
-    raise exception 'exact completion replay was not idempotent';
-  end if;
 
-  conflicting_completion := public.complete_ocr_job(
-    '22222222-2222-4222-8222-222222222222'::uuid,
-    'Texto divergente',
-    '[]'::jsonb,
-    'ready',
-    '2026-08-01T12:01:00Z'::timestamptz
-  );
-  if conflicting_completion is distinct from false then
+  begin
+    perform public.complete_ocr_job(
+      '22222222-2222-4222-8222-222222222222'::uuid,
+      'Texto divergente',
+      '[]'::jsonb,
+      'ready',
+      '2026-08-01T12:01:00Z'::timestamptz
+    );
     raise exception 'conflicting completion replay was accepted';
-  end if;
+  exception
+    when sqlstate '22023' then
+      null;
+  end;
 
   select ocr_raw_text into persisted_text
   from public.pages

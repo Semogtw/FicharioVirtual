@@ -7,7 +7,8 @@ export type DesktopOcrContentType = 'printed' | 'handwritten' | 'mixed' | 'unkno
 
 export type DesktopWorkerRequest =
 	| Readonly<{ action: 'claim' }>
-	| Readonly<{ action: 'renew' | 'source'; jobId: string; leaseId: string }>
+	| Readonly<{ action: 'renew'; jobId: string; leaseId: string }>
+	| Readonly<{ action: 'source'; jobId: string; leaseId: string }>
 	| Readonly<{
 			action: 'complete';
 			jobId: string;
