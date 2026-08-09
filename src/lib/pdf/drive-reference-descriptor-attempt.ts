@@ -28,17 +28,17 @@ type DrivePdfReferenceDescriptorFinalizeInput = Readonly<{
 
 export interface DrivePdfReferenceDescriptorAttemptDependencies {
 	createAttemptId(): string;
-	begin(input: {
-		documentId: string;
-		attemptId: string;
-		expectedPageCount: number;
-	}): Promise<void>;
+	begin(input: { documentId: string; attemptId: string; expectedPageCount: number }): Promise<void>;
 	stageBatch(input: {
 		documentId: string;
 		attemptId: string;
 		descriptors: readonly DrivePdfReferencePageDescriptor[];
 	}): Promise<void>;
-	finalize(input: { documentId: string; attemptId: string; promptVersion: number }): Promise<unknown>;
+	finalize(input: {
+		documentId: string;
+		attemptId: string;
+		promptVersion: number;
+	}): Promise<unknown>;
 	abandon(input: { documentId: string; attemptId: string }): Promise<void>;
 }
 
