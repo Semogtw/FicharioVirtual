@@ -55,32 +55,44 @@ select public.stage_drive_pdf_reference(
   '2026-08-05T12:00:00Z'
 );
 
+select public.begin_drive_pdf_reference_descriptor_attempt(
+  'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  '99999999-9999-4999-8999-999999999999',
+  2
+);
+
+select public.stage_drive_pdf_reference_descriptor_batch(
+  'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  '99999999-9999-4999-8999-999999999999',
+  jsonb_build_array(
+    jsonb_build_object(
+      'id', 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      'pageNumber', 1,
+      'nativeText', 'Texto nativo da primeira página',
+      'needsOcr', false,
+      'temporaryImagePath', null,
+      'jobId', null
+    ),
+    jsonb_build_object(
+      'id', 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      'pageNumber', 2,
+      'nativeText', null,
+      'needsOcr', true,
+      'temporaryImagePath', '11111111-1111-4111-8111-111111111111/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/pages/2.webp',
+      'jobId', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
+    )
+  )
+);
+
 select lives_ok(
   $$
-    select public.finalize_drive_pdf_reference_import(
+    select public.finalize_drive_pdf_reference_descriptor_attempt(
       'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-      jsonb_build_array(
-        jsonb_build_object(
-          'id', 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-          'pageNumber', 1,
-          'nativeText', 'Texto nativo da primeira página',
-          'needsOcr', false,
-          'temporaryImagePath', null,
-          'jobId', null
-        ),
-        jsonb_build_object(
-          'id', 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
-          'pageNumber', 2,
-          'nativeText', null,
-          'needsOcr', true,
-          'temporaryImagePath', '11111111-1111-4111-8111-111111111111/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/pages/2.webp',
-          'jobId', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
-        )
-      ),
+      '99999999-9999-4999-8999-999999999999',
       1
     )
   $$,
-  'staged Drive PDF can be finalized atomically from range-inspection descriptors'
+  'staged Drive PDF can be finalized atomically through its renewable descriptor lease'
 );
 
 select results_eq(
@@ -141,24 +153,15 @@ select is(
 
 select throws_ok(
   $$
-    select public.finalize_drive_pdf_reference_import(
+    select public.finalize_drive_pdf_reference_descriptor_attempt(
       'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-      jsonb_build_array(
-        jsonb_build_object(
-          'id', 'ffffffff-ffff-4fff-8fff-ffffffffffff',
-          'pageNumber', 1,
-          'nativeText', 'Duplicado',
-          'needsOcr', false,
-          'temporaryImagePath', null,
-          'jobId', null
-        )
-      ),
+      '99999999-9999-4999-8999-999999999999',
       1
     )
   $$,
-  '55000',
+  '55P03',
   null,
-  'a finalized reference cannot publish pages twice'
+  'a finalized leased reference cannot publish pages twice'
 );
 
 select * from finish();
