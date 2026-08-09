@@ -2,32 +2,31 @@
 
 Este documento define a cobertura do Fichário Virtual e serve como checklist de prontidão técnica.
 
-## Último checkpoint integral
+## Último recibo completo conhecido
 
-Source commit: `62b7dd03fa23d9adbf0ecdf0bf95110de170028e`  
-Workflow: `Validate current head`  
-Run: `30930617779`  
-Data: 2026-08-04
+Source commit: `482d3af9b46eea81076e591bc188e6164b4658be`<br>
+Workflow: [`Validate current head`](https://github.com/Semogtw/FicharioVirtual/actions/runs/31294232506)<br>
+Run: `31294232506`<br>
+Data: 2026-08-09
+
+Esse recibo cobre exatamente o SHA `482d3af`. A branch `main` avançou depois dele com commits locais sem novo recibo completo; não atribua o resultado aos commits posteriores.
 
 Evidência executada no GitHub Actions com o mesmo SHA:
 
 ```text
-Prettier: PASS
-ESLint: PASS
+Prettier + ESLint: PASS
 svelte-check: PASS — 0 erros, 0 warnings
-Vitest: PASS — 478 testes em 112 arquivos
+Vitest: PASS — 933 testes em 235 arquivos
 build estático/PWA: PASS
 gates offline de fonte: PASS
 Edge Functions via Deno: PASS
-Playwright Chromium: PASS — 3/3
-Supabase local: PASS — migrations, RLS, Storage e 54 testes de banco
+Playwright Chromium: PASS no comando — 4 testes passaram; 1 teste foi flaky na primeira tentativa e passou no retry
+Supabase local + pgTAP: PASS — 35 arquivos, 434 testes
 ```
 
-Esse resultado pertence somente ao SHA indicado. Commits posteriores devem ser considerados validados apenas quando o recibo `Semogtw/FicharioVirtual#1` registrar sucesso para o mesmo commit.
+O workflow e o recibo estão verdes para esse SHA, mas o E2E não foi completamente livre de flakiness. Esse resultado não autoriza inferir interoperabilidade com Google Drive/Gemini, deploy Supabase, host publicado ou dispositivos físicos.
 
-O workspace offline ainda precisa ser reconstruído para o checkpoint novo. O trigger de `Semogtw/Offline-Toolchains` deve apontar para um SHA do Fichário já verde antes de o recibo `Semogtw/Offline-Toolchains#28` ser tratado como aprovado.
-
-Supabase de staging, OCR real, host publicado e dispositivos físicos continuam sendo gates externos distintos.
+O `Verify Supabase staging` verde mais recente foi executado no SHA antigo `93d76ea9de3d29fb573b3b508a84deef560a0ff7` e cobriu somente Auth, RLS e Storage com dados sintéticos. Não existe neste documento evidência de deploy/verify de staging no SHA atual; esses gates permanecem `NOT RUN` para `482d3af`.
 
 ## Ambiente mínimo
 
@@ -54,6 +53,8 @@ A toolchain offline fixa o ambiente de frontend e Edge. Docker e as imagens do S
 | `pnpm verify`               | Lint, tipos, Vitest e build               | Em todo checkpoint de desenvolvimento        |
 | `pnpm verify:full`          | Suíte completa mais banco local           | Antes de release ou checkpoint operacional   |
 | workflows de staging        | Supabase remoto, OCR real e host          | Antes de release privada                     |
+
+No SHA `482d3af`, `pnpm verify`, `pnpm test:source:offline`, `pnpm test:functions:check`, `pnpm test:e2e` e `pnpm test:db:local` possuem `PASS` no workflow acima. O gate E2E tem a flakiness registrada. Deploy/verify Supabase remoto, OCR real, deployment/headers do host, Google Drive, Gemini, billing e dispositivos físicos estão `NOT RUN` ou `BLOCKED` por dependerem de credenciais, serviços ou hardware externos.
 
 ## Testes unitários
 

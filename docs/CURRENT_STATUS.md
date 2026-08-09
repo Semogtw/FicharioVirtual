@@ -1,8 +1,8 @@
 # Estado atual do Fichário Virtual
 
-_Atualizado: 2026-08-08_  
-_Branch ativa: `main`_  
-_Estado: Drive-first, OCR seletivo por lotes e importação de PDFs grandes por ranges implementados; recuperação distribuída da cópia e lease renovável de publicação também estão integrados em código. Release ainda depende de um novo recibo completo no SHA atual, staging externo, serviços reais e dispositivos reais._
+_Atualizado: 2026-08-09_<br>
+_Branch ativa: `main`_<br>
+_Estado: Drive-first, OCR seletivo por lotes, importação de PDFs grandes por ranges, recuperação distribuída da cópia, lease renovável de publicação e a fronteira backend do worker estão integrados em código. O último CI verde é do SHA `482d3af`; a branch avançou sem novo recibo no mesmo SHA. Release ainda depende de staging externo, serviços reais, dispositivos reais e da investigação de uma flakiness E2E._
 
 ## Resumo executivo
 
@@ -123,20 +123,20 @@ A existência do código não substitui validação com uma conta Google real. O
 
 ### Último recibo completo de CI conhecido
 
-O workflow `Validate current head` no SHA `50897346272269642d95d75aa249f6a96b9479f6` terminou com **success** em 2026-08-07.
+O workflow [`Validate current head`](https://github.com/Semogtw/FicharioVirtual/actions/runs/31294232506) no SHA `482d3af9b46eea81076e591bc188e6164b4658be` terminou com **success** em 2026-08-09.
 
 No mesmo SHA passaram:
 
 - Prettier e ESLint;
 - `svelte-check` com 0 erros e 0 warnings;
-- 212 arquivos de testes unitários, totalizando 834 testes;
+- 235 arquivos de testes unitários, totalizando 933 testes;
 - build de produção;
 - gates offline/source;
-- instalação do Chromium e E2E;
+- instalação do Chromium e E2E: 4 testes passaram; 1 teste foi flaky na primeira tentativa e passou no retry;
 - type-check das Edge Functions com Deno;
-- Supabase CLI e gates locais de banco/pgTAP.
+- Supabase CLI e gates locais de banco/pgTAP: 35 arquivos e 434 testes.
 
-Esse recibo valida somente aquele SHA. A recuperação distribuída mais recente, o protocolo paginado de descritores e o lease renovável possuem commits posteriores e **ainda precisam de um novo recibo completo no mesmo SHA** antes de qualquer afirmação de release pronta.
+Esse recibo valida somente o SHA indicado. A branch contém commits posteriores sem recibo equivalente. O resultado verde não prova deploy Supabase, OAuth Google, interoperabilidade Drive/Gemini, host publicado, billing ou dispositivos físicos. O E2E deve ser tratado como verde com ressalva até a flakiness ser entendida.
 
 ### Gates obrigatórios
 
@@ -153,9 +153,9 @@ pnpm test:db:local
 
 `pnpm verify` cobre lint, check, unit tests e build; `pnpm verify:full` acrescenta E2E, source/offline, Edge Functions e banco local.
 
-### Limitação do ambiente desta continuação
+### Limitação do ambiente local atual
 
-O ambiente local desta sessão não consegue resolver `github.com`, portanto não foi possível clonar/atualizar o checkout nem instalar dependências para reexecutar os gates localmente. O desenvolvimento prosseguiu pelo conector GitHub com commits pequenos e frequentes. Isso é uma limitação de validação, não evidência de sucesso dos gates; o próximo recibo deve vir do runner/toolchain configurado ou de um ambiente local funcional.
+Foi possível validar a formatação da documentação localmente. Os gates locais completos ficam `NOT RUN`/`BLOCKED` nesta máquina porque a toolchain necessária para banco, Edge e navegador não está disponível de forma comprovada (`supabase`, Deno, Docker e Chromium). O recibo CI acima é a evidência do HEAD; não se deve convertê-lo em validação local.
 
 ## Pendências reais
 
@@ -182,12 +182,12 @@ Ainda são obrigatórios antes de release:
 
 ### Worker desktop
 
-A arquitetura está documentada, mas o worker local ainda não foi implementado. Permanecem pendentes pareamento, credenciais por dispositivo, claim, lease, heartbeat, spool, backend CPU, modelos verificados, serviço systemd e benchmark da GPU local.
+A fronteira backend está implementada em código: pareamento, credencial por dispositivo, claim/source/renew/complete e proteção por lease possuem contratos, migrations, testes e Edge Functions. O worker local ainda não foi implementado. Permanecem pendentes spool, backend CPU, modelos verificados, serviço systemd, UI de dispositivos, retomada local e benchmark da GPU.
 
 ## Pendências imediatas
 
-1. obter `Validate current head`/toolchain completo no SHA atual;
-2. aplicar e validar o schema em Supabase staging limpo, incluindo os novos pgTAPs do lease;
+1. investigar a flakiness E2E e repetir o gate se a política de release exigir execução sem retry;
+2. aplicar e validar o schema/runtime do HEAD atual em Supabase staging limpo, incluindo os pgTAPs de OCR/lease;
 3. regenerar tipos pelo schema real aplicado;
 4. executar staging Google Drive + Gemini, incluindo crash/recovery e duas sessões concorrentes;
 5. validar PDFs grandes reais e dispositivos móveis/tablet;

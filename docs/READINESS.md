@@ -1,24 +1,24 @@
 # Prontidão do Fichário Virtual
 
-_Atualizado em 8 de agosto de 2026._
+_Atualizado em 9 de agosto de 2026._
 
 Esta página não publica porcentagem global. Prontidão significa evidência reproduzível no mesmo SHA, não quantidade de arquivos implementados.
 
 ## Matriz atual
 
-| Dimensão                     | Código                                   | Evidência externa                             | Estado                 |
-| ---------------------------- | ---------------------------------------- | --------------------------------------------- | ---------------------- |
-| Produto privado              | Implementado                             | CI atual e dispositivos pendentes             | Bloqueado para release |
-| OCR Gemini por lotes         | Implementado                             | Staging real pendente                         | Não promovido          |
-| Quota exclusiva do provedor  | Implementada                             | `429` real pendente                           | Não promovida          |
-| Google Drive-first           | Implementado                             | Conta Google real pendente                    | Não promovido          |
-| Picker até 50 MiB            | Implementado                             | Navegadores reais pendentes                   | Não promovido          |
-| Picker acima de 50 MiB       | Implementado por referência/ranges       | CI do SHA atual + PDF grande real pendentes   | Não promovido          |
-| Recuperação crash copy→stage | Implementada com `appProperties`         | Interrupção real do navegador pendente        | Não promovida          |
-| Lease de descritores         | Implementado e conectado ao orquestrador | pgTAP/concorrência real no SHA atual pendente | Não promovido          |
-| Cloudflare Pages             | Runbook e gates implementados            | Deployment real pendente                      | Não implantado         |
-| Worker desktop               | Somente arquitetura                      | Implementação e hardware pendentes            | Não iniciado           |
-| RX 6600                      | Não implementada                         | Benchmark pendente                            | Não validada           |
+| Dimensão                     | Código                                   | Evidência externa                                                          | Estado                 |
+| ---------------------------- | ---------------------------------------- | -------------------------------------------------------------------------- | ---------------------- |
+| Produto privado              | Implementado                             | CI `482d3af` verde; commits posteriores, serviços e dispositivos pendentes | Bloqueado para release |
+| OCR Gemini por lotes         | Implementado                             | Staging real pendente                                                      | Não promovido          |
+| Quota exclusiva do provedor  | Implementada                             | `429` real pendente                                                        | Não promovida          |
+| Google Drive-first           | Implementado                             | Conta Google real pendente                                                 | Não promovido          |
+| Picker até 50 MiB            | Implementado                             | Navegadores reais pendentes                                                | Não promovido          |
+| Picker acima de 50 MiB       | Implementado por referência/ranges       | CI `482d3af` verde; PDF grande real pendente                               | Não promovido          |
+| Recuperação crash copy→stage | Implementada com `appProperties`         | Contratos no CI; interrupção real pendente                                 | Não promovida          |
+| Lease de descritores         | Implementado e conectado ao orquestrador | Banco local no CI; duas sessões reais pendentes                            | Não promovido          |
+| Cloudflare Pages             | Runbook e gates implementados            | Deployment real pendente                                                   | Não implantado         |
+| Worker desktop               | Fronteira backend implementada           | Worker local e hardware pendentes                                          | Não iniciado           |
+| RX 6600                      | Não implementada                         | Benchmark pendente                                                         | Não validada           |
 
 ## Evidência presente no repositório
 
@@ -34,7 +34,8 @@ Esta página não publica porcentagem global. Prontidão significa evidência re
 - JWT explícito em `supabase/config.toml`;
 - somente o callback OAuth sem JWT de gateway;
 - callback protegido por origem, `state` de uso único e PKCE;
-- gates que proíbem secrets no frontend e workflows com escrita automática no repositório.
+- gates que proíbem secrets no frontend e workflows com escrita automática no repositório;
+- recibo CI do SHA `482d3af` com lint, tipos, Vitest, build, source/offline, Deno e banco local aprovados; o E2E passou após um retry.
 
 ### Importação e OCR
 
@@ -100,9 +101,8 @@ Esta página não publica porcentagem global. Prontidão significa evidência re
 
 Ainda faltam:
 
-- tabelas de dispositivos, pareamento e eventos;
-- Edge Functions de claim, source, heartbeat, complete e fail;
-- credencial por hash no servidor e keyring local;
+- worker local e integração de produção com as tabelas/Edge Functions de dispositivos;
+- credencial no keyring local;
 - serviço systemd do usuário;
 - backend CPU funcional;
 - cache e verificação de modelos;
@@ -129,12 +129,14 @@ build
 Chromium E2E
 ```
 
-O último recibo completo conhecido permanece no SHA `50897346272269642d95d75aa249f6a96b9479f6`, de 7 de agosto de 2026. O protocolo mais recente de recuperação distribuída, staging paginado e lease renovável foi desenvolvido depois desse SHA. Portanto, ainda falta um `Validate current head`/toolchain completo no HEAD final; recibos intermediários não aprovam commits posteriores.
+O recibo [`Validate current head`](https://github.com/Semogtw/FicharioVirtual/actions/runs/31294232506) do SHA `482d3af9b46eea81076e591bc188e6164b4658be` terminou com sucesso em 9 de agosto de 2026. Ele registra 235 arquivos/933 testes Vitest, source/offline, Deno e 35 arquivos/434 testes de banco. O E2E teve 4 testes aprovados e 1 flake na primeira tentativa, aprovado no retry; a flakiness permanece uma ressalva. A branch avançou depois desse SHA sem novo recibo completo.
 
-Nesta continuação, o ambiente local não conseguiu resolver `github.com`, então não foi possível materializar um checkout funcional para instalar dependências e executar os gates. A ausência desse gate está documentada e não deve ser convertida em afirmação de sucesso.
+O ambiente local desta sessão validou apenas a formatação documental. Supabase CLI, Deno, Docker e Chromium não estão disponíveis de forma comprovada localmente; gates correspondentes são `NOT RUN`/`BLOCKED` nesta máquina. O recibo CI não deve ser convertido em validação local.
 
 ### Supabase
 
+- Não há deploy ou verificação de staging comprovados no SHA `482d3af`.
+- O último `Verify Supabase staging` verde conhecido foi no SHA `93d76ea9de3d29fb573b3b508a84deef560a0ff7` e cobriu somente Auth, RLS e Storage sintéticos.
 - aplicar todas as migrations em banco limpo;
 - executar pgTAP completo, incluindo o novo teste de ownership/takeover do lease;
 - confirmar que `authenticated` não executa os finalizadores legados revogados;
@@ -176,7 +178,7 @@ Nesta continuação, o ambiente local não conseguiu resolver `github.com`, ent�
 ## Critérios de promoção
 
 ```text
-Validate current head no SHA final: PASS
+Validate current head no SHA `482d3af`: PASS com ressalva de flakiness E2E
 Supabase limpo e pgTAP: PASS
 Tipos gerados pelo schema implantado: PASS
 OAuth drive.file real: PASS

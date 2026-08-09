@@ -6,15 +6,15 @@ O Google Drive é o armazenamento permanente dos arquivos originais. O Supabase 
 
 ## Estado atual
 
-A base funcional anterior do Fichário está implementada, mas o plano original ainda **não está pronto para release** porque a integração real com Google Drive continua em desenvolvimento.
+A base funcional do Fichário está implementada em código, mas o produto ainda **não está pronto para release**. O SHA `482d3af` possui recibo verde de CI para os gates locais; a branch avançou depois dele sem novo recibo no mesmo SHA, e staging Supabase, Google Drive/Gemini reais, host publicado e dispositivos físicos ainda não foram validados.
 
-Também foi aprovada uma evolução arquitetural ainda não implementada:
+As responsabilidades da arquitetura permanecem separadas:
 
 - Cloudflare Pages como host preferencial da PWA estática;
 - projeto Pages separado para artefatos públicos e fragmentados de modelos;
 - Gemini para OCR geral e transcrição imediata;
 - fila opcional para manuscritos e páginas difíceis;
-- worker no computador do usuário, sem porta pública, que consulta a fila, processa localmente e devolve o resultado ao Supabase.
+- worker no computador do usuário, sem porta pública, que consulta a fila, processa localmente e devolve o resultado ao Supabase. A fronteira backend do worker já está em código; o executável local e o hardware ainda não.
 
 Já existem na `main`:
 
@@ -28,9 +28,12 @@ Já existem na `main`:
 - reconciliação de arquivo disponível/ausente sem apagar OCR e metadados;
 - sincronizador paginado que só avança o token depois de persistir a página;
 - modelo PostgreSQL para conexão, hierarquia de pastas, fila idempotente, conflitos e reconexão;
-- testes unitários e pgTAP da nova arquitetura.
+- histórico imutável de resultados OCR, separação dos status de página/OCR, roteamento desktop e lease de jobs;
+- testes unitários, contratos SQL/pgTAP locais, gates offline e type-check das Edge Functions.
 
-Ainda faltam OAuth real, cliente Drive implantado, upload retomável conectado às filas de importação, Google Picker, migração dos originais existentes, migração do host, fila desktop, worker local e validação remota.
+Ainda faltam execução com OAuth/Google Drive/Gemini reais, deploy e verificação do schema/runtime Supabase no HEAD atual, migração dos originais reais, migração do host, worker local, dispositivos móveis e validação remota. O código não é tratado como prova desses ambientes.
+
+O último recibo completo está registrado em [`docs/TESTING.md`](docs/TESTING.md); ele inclui uma execução E2E que passou após uma primeira tentativa flaky. Isso mantém o SHA validado verde, mas não elimina a pendência de investigar a flakiness nem valida commits posteriores.
 
 O estado canônico fica em [`docs/CURRENT_STATUS.md`](docs/CURRENT_STATUS.md). A prontidão real fica em [`docs/READINESS.md`](docs/READINESS.md).
 

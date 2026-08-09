@@ -5,39 +5,13 @@ O staging do Fichário separa duas responsabilidades:
 - `Deploy Supabase staging`: deploy administrativo manual de migrations e Edge Functions versionadas;
 - `Verify Supabase staging`: verificação de Auth, allowlist, RLS e Storage privado usando apenas credenciais públicas e contas sintéticas de teste.
 
-## Estado live em 2026-08-07
+## Estado confirmado
 
-O projeto remoto foi sincronizado manualmente e está com o histórico canônico de migrations aplicado até:
+Não há evidência de deploy ou verificação de Supabase staging no HEAD `482d3af9b46eea81076e591bc188e6164b4658be`. Portanto, este documento não afirma histórico remoto de migrations, status de Edge Functions, advisors ou configuração de secrets para esse SHA.
 
-```text
-202608070009_cover_ocr_batches_document_foreign_key
-```
+O último `Verify Supabase staging` verde conhecido foi o [run 31292512306](https://github.com/Semogtw/FicharioVirtual/actions/runs/31292512306), executado no SHA antigo `93d76ea9de3d29fb573b3b508a84deef560a0ff7`. Esse run validou apenas Auth, allowlist, RLS e Storage privado com dados sintéticos. Ele não valida as migrations, funções, OCR ou o runtime do HEAD atual.
 
-O histórico remoto foi conferido depois do deploy e não possui versões temporárias geradas pelo mecanismo de aplicação usado durante a recuperação do staging.
-
-Os contratos pgTAP foram executados diretamente no staging com rollback:
-
-- segurança: 47/47 checks aprovados;
-- performance: 1/1 check aprovado para a cobertura da FK composta de `ocr_batches`.
-
-O advisor de segurança agora mantém somente os avisos de `SECURITY DEFINER` correspondentes aos RPCs OCR que atuam deliberadamente como capability boundaries. O advisor de performance não aponta mais FK sem índice; os avisos restantes são apenas índices ainda não usados e não devem ser removidos sem carga representativa e evidência de plano de consulta.
-
-O runtime Edge também está sincronizado. As oito funções versionadas estão `ACTIVE`:
-
-```text
-process-ocr
-delete-document
-drive-oauth-start
-drive-oauth-callback
-drive-access-token
-drive-resolve-folder
-drive-run-jobs
-drive-sync
-```
-
-`process-ocr` e `delete-document` foram atualizadas para o runtime compatível com o schema atual. `drive-oauth-callback` é a única função com `verify_jwt = false`; ela recebe o redirect do Google e usa o contrato próprio de `state`/nonce. Todas as outras funções exigem JWT segundo `supabase/config.toml`.
-
-A publicação das funções terminou sem erros de deploy e não havia erros de Edge Function registrados imediatamente após a sincronização. Isso não substitui um teste funcional com Google/Gemini reais.
+O workflow `Deploy Supabase staging` está versionado, mas não há neste registro um run atual que comprove sua execução. Deploy, pgTAP remoto, status live das funções, secrets e advisors ficam `NOT RUN`/`BLOCKED` até um recibo do SHA que será promovido.
 
 ## Preparar o projeto
 
@@ -86,7 +60,7 @@ Variable: STAGING_SUPABASE_PROJECT_REF
 
 O workflow usa `contents: read`, checkout com `persist-credentials: false` e `supabase/setup-cli@v2` com CLI `2.111.0`.
 
-Em 2026-08-07 o repositório ainda não possui GitHub Environments configurados. Portanto o workflow administrativo está versionado e testado, mas o deploy live atual foi concluído fora dele. Antes do próximo deploy pelo Actions, crie/proteja `staging-deploy` e configure os três valores acima.
+Não há evidência atual neste repositório de GitHub Environment protegido ou de execução live desse workflow. Antes do próximo deploy pelo Actions, crie/proteja `staging-deploy` e configure os três valores acima; o deploy só poderá ser considerado confirmado com um recibo do mesmo SHA promovido.
 
 ### Secrets das Edge Functions
 
@@ -157,9 +131,9 @@ pnpm test:staging:supabase
 
 Evite inserir secrets diretamente no histórico do shell. Prefira um gerenciador de secrets ou variáveis temporárias do ambiente de execução.
 
-## Contratos verificados
+## Contrato de verificação já executado
 
-O gate remoto de Auth/RLS/Storage:
+No run `31292512306` (SHA antigo `93d76ea`), o gate remoto de Auth/RLS/Storage executou:
 
 - autentica as duas contas com a API pública;
 - exige UUIDs Auth distintos;
@@ -179,11 +153,11 @@ O gate remoto de Auth/RLS/Storage:
 
 As sentinelas usam prefixo `__staging_probe_`, somente dados sintéticos e nenhum conteúdo do usuário. Tokens de URLs assinadas não são escritos nos logs.
 
-Os contratos locais/remotos de banco também cobrem RLS, privilégios, SECURITY DEFINER/INVOKER, quotas, manifests OCR e cobertura da FK composta de `ocr_batches`.
+Essa execução não cobre os contratos SQL adicionados depois desse SHA. Os contratos locais/remotos de banco do HEAD atual cobrem RLS, privilégios, `SECURITY DEFINER`/`INVOKER`, quotas, manifests OCR e cobertura da FK composta de `ocr_batches`, mas a execução remota correspondente está `NOT RUN`.
 
 ## O que os gates ainda não provam
 
-A sincronização de schema/runtime e os contratos atuais não substituem:
+A verificação histórica de Auth/RLS/Storage e os contratos do repositório não substituem:
 
 - OAuth Google completo com credenciais reais de staging;
 - leitura/alteração real de arquivos no Google Drive;
