@@ -1,8 +1,8 @@
 # Estado atual do Fichário Virtual
 
-_Atualizado: 2026-08-07_  
+_Atualizado: 2026-08-08_  
 _Branch ativa: `main`_  
-_Estado: Drive-first, OCR seletivo por lotes e importação de PDFs grandes por ranges implementados e validados no CI; release ainda depende de staging externo, serviços reais e dispositivos reais._
+_Estado: Drive-first, OCR seletivo por lotes e importação de PDFs grandes por ranges implementados; recuperação distribuída da cópia e lease renovável de publicação também estão integrados em código. Release ainda depende de um novo recibo completo no SHA atual, staging externo, serviços reais e dispositivos reais._
 
 ## Resumo executivo
 
@@ -54,12 +54,19 @@ O aplicativo não possui franquia diária própria de OCR. `blocked_quota` só r
 - segunda renderização conservadora quando um derivado ultrapassa 12 MiB;
 - rejeição final de derivado acima de 12 MiB;
 - staging persistente de referências grandes;
+- marcação privada da cópia gerenciada via `appProperties` e reconciliação distribuída para recuperar a janela em que o navegador morre depois de `files.copy` e antes do staging no banco;
 - verificação da identidade física da cópia no Drive antes da primeira leitura por range;
+- plano de páginas convertido em descritores paginados persistentes, sem enviar o documento lógico inteiro em um único RPC;
+- lotes de descritores limitados simultaneamente por quantidade e por bytes; o cliente usa margem de 3 MiB e o banco rejeita JSONB acima de 4 MiB;
+- lease renovável por tentativa para impedir dois navegadores de publicar ou limpar o mesmo PDF grande ao mesmo tempo;
+- renovação forte do lease imediatamente antes de cada upload de derivado, além de renovações preventivas durante trabalho longo;
+- takeover de lease expirado limpa somente o staging pertencente à tentativa anterior;
+- abandono retorna ownership explícito; derivados só são removidos quando a tentativa falha e o banco confirma que ela ainda era a proprietária do lease;
+- RPCs legados capazes de contornar o lease de publicação foram removidos da superfície `authenticated`;
 - finalização atômica de documento, páginas e jobs OCR;
 - validação estrita dos descritores antes de qualquer mutação;
 - retomada após reload sem reabrir Picker ou copiar novamente;
 - recuperação quando o finalizador efetivamente commitou mas a resposta foi perdida;
-- cleanup fail-closed: derivados só são removidos após falha quando o banco confirma que a referência ainda está finalizável;
 - upload idempotente dos derivados temporários;
 - progresso por fase e por página;
 - `AbortController` na UI para parar processamento ativo sem confundir isso com a ação destrutiva de excluir a cópia;
@@ -107,13 +114,14 @@ Já estão implementados:
 - telas de conexão, jobs, conflitos e migração;
 - migração de originais legados com rollback;
 - cópia controlada e importação por ranges de PDFs grandes;
+- reconciliação de cópias gerenciadas após crash sem ampliar o escopo além de `drive.file`;
 - migrations, pgTAP, contratos TypeScript, testes unitários e gates Deno.
 
-A existência do código não substitui validação com uma conta Google real. OAuth, Picker, ranges, uploads, mudanças, conflitos e migração ainda precisam ser executados no ambiente final.
+A existência do código não substitui validação com uma conta Google real. OAuth, Picker, ranges, uploads, mudanças, conflitos, recuperação distribuída e migração ainda precisam ser executados no ambiente final.
 
 ## Estado de validação
 
-### Recibo completo de CI
+### Último recibo completo de CI conhecido
 
 O workflow `Validate current head` no SHA `50897346272269642d95d75aa249f6a96b9479f6` terminou com **success** em 2026-08-07.
 
@@ -128,21 +136,26 @@ No mesmo SHA passaram:
 - type-check das Edge Functions com Deno;
 - Supabase CLI e gates locais de banco/pgTAP.
 
-Esse recibo valida o código naquele SHA. Commits posteriores precisam de um novo recibo completo antes de uma afirmação de release pronta.
+Esse recibo valida somente aquele SHA. A recuperação distribuída mais recente, o protocolo paginado de descritores e o lease renovável possuem commits posteriores e **ainda precisam de um novo recibo completo no mesmo SHA** antes de qualquer afirmação de release pronta.
 
 ### Gates obrigatórios
 
 ```bash
-pnpm format:check
-pnpm check
 pnpm lint
-pnpm test:unit
-pnpm check:edge
-pnpm check:offline
-pnpm test:db
+pnpm check
+pnpm test
 pnpm build
 pnpm test:e2e
+pnpm test:source:offline
+pnpm test:functions:check
+pnpm test:db:local
 ```
+
+`pnpm verify` cobre lint, check, unit tests e build; `pnpm verify:full` acrescenta E2E, source/offline, Edge Functions e banco local.
+
+### Limitação do ambiente desta continuação
+
+O ambiente local desta sessão não consegue resolver `github.com`, portanto não foi possível clonar/atualizar o checkout nem instalar dependências para reexecutar os gates localmente. O desenvolvimento prosseguiu pelo conector GitHub com commits pequenos e frequentes. Isso é uma limitação de validação, não evidência de sucesso dos gates; o próximo recibo deve vir do runner/toolchain configurado ou de um ambiente local funcional.
 
 ## Pendências reais
 
@@ -150,21 +163,22 @@ pnpm test:e2e
 
 Ainda são obrigatórios antes de release:
 
-- aplicar migrations em um projeto Supabase limpo/staging e verificar drift;
-- regenerar os tipos TypeScript a partir do schema efetivamente implantado;
+- aplicar todas as migrations, inclusive o lease de descritores, em um projeto Supabase limpo/staging e verificar drift;
+- executar pgTAP completo, incluindo ownership, takeover, idempotência e privilégios do lease;
+- regenerar `src/lib/types/database.ts` a partir do schema efetivamente implantado;
 - executar OAuth e Google Drive com conta real;
+- validar `appProperties` e a reconciliação de cópia após interrupção real do navegador;
 - executar smoke Gemini real e lote multipágina;
-- testar PDFs grandes reais, incluindo arquivos acima de 50 MiB e documentos extensos;
+- testar PDFs grandes reais, incluindo arquivos acima de 50 MiB, documentos extensos e páginas com muito texto nativo;
+- validar expiração/takeover do lease em duas sessões reais e confirmar que uma tentativa stale nunca remove nem sobrescreve derivados da nova proprietária;
 - validar hash/identidade do original antes/depois;
 - testar cancelamento/retomada em computador, tablet e celular;
 - validar Cloudflare Pages e headers no domínio final;
 - confirmar administrativamente ausência de billing/fallback pago.
 
-### Janela copy → stage de PDF grande
+### Contratos gerados do banco
 
-O fluxo já remove a cópia do Drive quando o RPC de staging retorna erro. Resta uma janela impossível de capturar com `try/catch`: o navegador pode morrer depois de `files.copy` e antes de `stage_drive_pdf_reference`. Nesse caso a cópia pode ficar órfã no Drive sem registro correspondente no banco.
-
-A próxima camada de resiliência deve identificar cópias gerenciadas pelo app de forma privada e reconciliá-las com o banco sem ampliar o escopo além de `drive.file`. `appProperties` do Drive é uma candidata apropriada porque pode ser gravada no recurso copiado e pesquisada posteriormente pelo mesmo app.
+`src/lib/types/database.ts` continua sendo um espelho provisório por decisão já documentada no próprio arquivo. As novas RPCs são usadas por uma interface estrutural local para não fingir que os tipos foram regenerados. O contrato canônico deve ser regenerado somente a partir do schema limpo realmente aplicado, dentro do gate Supabase.
 
 ### Worker desktop
 
@@ -172,14 +186,13 @@ A arquitetura está documentada, mas o worker local ainda não foi implementado.
 
 ## Pendências imediatas
 
-1. manter CI completo verde nos novos SHAs;
-2. fechar a janela crash entre cópia Drive e staging de PDF grande;
-3. aplicar e validar o schema em Supabase staging limpo;
-4. regenerar tipos pelo schema real;
-5. executar staging Google Drive + Gemini;
-6. validar PDFs grandes reais e dispositivos móveis/tablet;
-7. implantar e verificar Cloudflare;
-8. implementar o worker desktop em etapa separada.
+1. obter `Validate current head`/toolchain completo no SHA atual;
+2. aplicar e validar o schema em Supabase staging limpo, incluindo os novos pgTAPs do lease;
+3. regenerar tipos pelo schema real aplicado;
+4. executar staging Google Drive + Gemini, incluindo crash/recovery e duas sessões concorrentes;
+5. validar PDFs grandes reais e dispositivos móveis/tablet;
+6. implantar e verificar Cloudflare;
+7. implementar o worker desktop em etapa separada.
 
 ## Regras de continuidade
 
@@ -188,6 +201,7 @@ A arquitetura está documentada, mas o worker local ainda não foi implementado.
 - não comprimir nem substituir o original;
 - não repetir páginas já aceitas;
 - não apagar temporário necessário para retry;
+- não apagar derivados de uma tentativa quando ownership do lease estiver ausente ou ambígua;
 - não ampliar além de `drive.file` no MVP;
 - não persistir access/refresh tokens no navegador;
 - não colocar conteúdo privado na Cloudflare;
