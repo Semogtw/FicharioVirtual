@@ -34,4 +34,16 @@ describe('Drive PDF reference page descriptor attempt migration', () => {
 		expect(source).toContain('maximum_page <> expected_page_count');
 		expect(source).toContain('from public.finalize_drive_pdf_reference_import');
 	});
+
+	it('removes authenticated bypasses around the leased publication protocol', () => {
+		expect(source).toContain(
+			'revoke execute on function public.finalize_drive_pdf_reference_import(uuid, jsonb, integer) from authenticated'
+		);
+		expect(source).toContain(
+			'revoke execute on function public.stage_drive_pdf_reference_page_batch(uuid, jsonb) from authenticated'
+		);
+		expect(source).toContain(
+			'revoke execute on function public.finalize_staged_drive_pdf_reference_import(uuid, integer, integer) from authenticated'
+		);
+	});
 });
