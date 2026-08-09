@@ -6,19 +6,19 @@ Esta página não publica porcentagem global. Prontidão significa evidência re
 
 ## Matriz atual
 
-| Dimensão                     | Código                                     | Evidência externa                             | Estado                 |
-| ---------------------------- | ------------------------------------------ | --------------------------------------------- | ---------------------- |
-| Produto privado              | Implementado                               | CI atual e dispositivos pendentes             | Bloqueado para release |
-| OCR Gemini por lotes         | Implementado                               | Staging real pendente                         | Não promovido          |
-| Quota exclusiva do provedor  | Implementada                               | `429` real pendente                           | Não promovida          |
-| Google Drive-first           | Implementado                               | Conta Google real pendente                    | Não promovido          |
-| Picker até 50 MiB            | Implementado                               | Navegadores reais pendentes                   | Não promovido          |
-| Picker acima de 50 MiB       | Implementado por referência/ranges         | CI do SHA atual + PDF grande real pendentes   | Não promovido          |
-| Recuperação crash copy→stage | Implementada com `appProperties`           | Interrupção real do navegador pendente        | Não promovida          |
-| Lease de descritores         | Implementado e conectado ao orquestrador   | pgTAP/concorrência real no SHA atual pendente | Não promovido          |
-| Cloudflare Pages             | Runbook e gates implementados              | Deployment real pendente                      | Não implantado         |
-| Worker desktop               | Somente arquitetura                        | Implementação e hardware pendentes            | Não iniciado           |
-| RX 6600                      | Não implementada                           | Benchmark pendente                            | Não validada           |
+| Dimensão                     | Código                                   | Evidência externa                             | Estado                 |
+| ---------------------------- | ---------------------------------------- | --------------------------------------------- | ---------------------- |
+| Produto privado              | Implementado                             | CI atual e dispositivos pendentes             | Bloqueado para release |
+| OCR Gemini por lotes         | Implementado                             | Staging real pendente                         | Não promovido          |
+| Quota exclusiva do provedor  | Implementada                             | `429` real pendente                           | Não promovida          |
+| Google Drive-first           | Implementado                             | Conta Google real pendente                    | Não promovido          |
+| Picker até 50 MiB            | Implementado                             | Navegadores reais pendentes                   | Não promovido          |
+| Picker acima de 50 MiB       | Implementado por referência/ranges       | CI do SHA atual + PDF grande real pendentes   | Não promovido          |
+| Recuperação crash copy→stage | Implementada com `appProperties`         | Interrupção real do navegador pendente        | Não promovida          |
+| Lease de descritores         | Implementado e conectado ao orquestrador | pgTAP/concorrência real no SHA atual pendente | Não promovido          |
+| Cloudflare Pages             | Runbook e gates implementados            | Deployment real pendente                      | Não implantado         |
+| Worker desktop               | Somente arquitetura                      | Implementação e hardware pendentes            | Não iniciado           |
+| RX 6600                      | Não implementada                         | Benchmark pendente                            | Não validada           |
 
 ## Evidência presente no repositório
 
