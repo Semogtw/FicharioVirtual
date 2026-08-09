@@ -5,6 +5,7 @@
 	import type { CorrectionDraft } from '$lib/review/drafts';
 	import { resolveDraftLocations, type DraftLocation } from '$lib/services/draft-locations';
 	import { RequestVersion } from '$lib/services/request-version';
+	import { sessionState } from '$lib/stores/session.svelte';
 
 	type DraftRow = {
 		draft: CorrectionDraft;
@@ -29,7 +30,9 @@
 
 		let drafts: readonly CorrectionDraft[];
 		try {
-			drafts = listCorrectionDrafts();
+			const userId = sessionState.user?.id;
+			if (!userId) throw new Error('Sessão não disponível para os rascunhos locais.');
+			drafts = listCorrectionDrafts(userId);
 			if (!refreshRequests.isCurrent(version)) return;
 			const localRows = Object.freeze(
 				drafts.map((draft) => Object.freeze({ draft, location: null }))
@@ -78,7 +81,9 @@
 		if (!window.confirm('Descartar somente este rascunho local? O texto remoto não será alterado.'))
 			return;
 		try {
-			discardCorrectionDraft(pageId);
+			const userId = sessionState.user?.id;
+			if (!userId) throw new Error('Sessão não disponível para os rascunhos locais.');
+			discardCorrectionDraft(userId, pageId);
 			rows = rows.filter((row) => row.draft.pageId !== pageId);
 		} catch (caught) {
 			error =
