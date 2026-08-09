@@ -52,7 +52,7 @@ describe('requestGeminiOcrBatch', () => {
 			}>;
 			generationConfig: {
 				maxOutputTokens: number;
-				responseFormat: { text: { schema: { required: string[] } } };
+				responseFormat: { text: { mimeType: string; schema: { required: string[] } } };
 			};
 		};
 		const parts = body.contents[0]!.parts;
@@ -63,6 +63,7 @@ describe('requestGeminiOcrBatch', () => {
 		expect(parts[3]?.text).toContain(`${pages[1].pageId}`);
 		expect(parts[4]?.inlineData).toEqual({ mimeType: 'image/jpeg', data: 'BAU=' });
 		expect(body.generationConfig.maxOutputTokens).toBeGreaterThanOrEqual(8192);
+		expect(body.generationConfig.responseFormat.text.mimeType).toBe('APPLICATION_JSON');
 		expect(body.generationConfig.responseFormat.text.schema.required).toEqual(['pages']);
 	});
 
