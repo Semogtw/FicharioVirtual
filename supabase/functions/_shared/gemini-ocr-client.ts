@@ -1,7 +1,4 @@
-import {
-	readBoundedResponseJson,
-	readBoundedResponseText
-} from './bounded-response.ts';
+import { readBoundedResponseJson, readBoundedResponseText } from './bounded-response.ts';
 import { parseOcrBatchPayload, type OcrBatchParseOutcome } from './ocr-batch-contract.ts';
 import { parseOcrPayload, type OcrPayload } from './ocr-contract.ts';
 
