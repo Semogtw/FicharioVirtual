@@ -74,9 +74,7 @@ describe('Drive PDF page descriptor staging', () => {
 
 	it('rejects non-contiguous page plans before issuing any RPC', async () => {
 		const stageBatch = vi.fn();
-		const broken = pages(3).map((page, index) =>
-			index === 1 ? { ...page, pageNumber: 9 } : page
-		);
+		const broken = pages(3).map((page, index) => (index === 1 ? { ...page, pageNumber: 9 } : page));
 		await expect(
 			stageDrivePdfReferencePageDescriptors({ documentId, pages: broken, stageBatch })
 		).rejects.toThrow('Invalid Drive PDF page descriptor plan');
