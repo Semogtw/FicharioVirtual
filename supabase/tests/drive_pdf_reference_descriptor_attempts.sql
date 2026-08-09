@@ -122,6 +122,9 @@ select lives_ok(
   'an exact descriptor retry is idempotent'
 );
 
+-- The staging table is intentionally service-private. Inspect internal state as
+-- the database owner, then restore the authenticated actor for browser RPCs.
+reset role;
 select is(
   (
     select count(*)
@@ -131,6 +134,8 @@ select is(
   1::bigint,
   'idempotent retries do not duplicate staged pages'
 );
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
 
 select throws_ok(
   $$
@@ -169,6 +174,7 @@ update public.drive_pdf_reference_imports
    set descriptor_attempt_expires_at = timezone('utc', now()) - interval '1 minute'
  where document_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 set local role authenticated;
+select set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
 
 select lives_ok(
   $$
@@ -181,6 +187,7 @@ select lives_ok(
   'a new attempt may take over an expired lease'
 );
 
+reset role;
 select results_eq(
   $$
     select
@@ -193,6 +200,8 @@ select results_eq(
   $$ values ('22222222-2222-4222-8222-222222222222'::uuid, 0::bigint) $$,
   'takeover atomically clears descriptors owned by the expired attempt'
 );
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
 
 select is(
   public.abandon_drive_pdf_reference_descriptor_attempt(
