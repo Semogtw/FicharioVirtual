@@ -66,7 +66,9 @@ if (!supabaseSetup) {
 } else {
 	const [, actionSha, actionVersion, cliVersion] = supabaseSetup;
 	if (actionSha !== EXPECTED_SUPABASE_SETUP_SHA) {
-		fail('workflow must use the reviewed supabase/setup-cli commit SHA; update this gate with intentional upgrades');
+		fail(
+			'workflow must use the reviewed supabase/setup-cli commit SHA; update this gate with intentional upgrades'
+		);
 	}
 	if (actionVersion !== 'v2') fail('workflow must document supabase/setup-cli as v2');
 	if (!/^\d+\.\d+\.\d+$/.test(cliVersion)) {
