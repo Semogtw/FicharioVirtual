@@ -10,6 +10,9 @@ on:
       - supabase/config.toml
       - supabase/functions/_shared/gemini-diagnostic-contract.ts
       - supabase/functions/_shared/gemini-ocr-client.ts
+      - supabase/functions/_shared/ocr-batch-contract.ts
+      - supabase/functions/_shared/ocr-contract.ts
+      - supabase/functions/_shared/ocr-failure.ts
       - supabase/functions/process-ocr/index.ts
       - supabase/functions/ocr-boundary-probe/**
 
