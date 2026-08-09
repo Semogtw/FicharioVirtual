@@ -114,7 +114,9 @@ describe('Gemini failure classification', () => {
 			status: 'INVALID_ARGUMENT',
 			reason: 'API_KEY_INVALID'
 		});
-		expect(JSON.stringify(parseGeminiProviderErrorMetadata(body))).not.toMatch(/secret|message|metadata/i);
+		expect(JSON.stringify(parseGeminiProviderErrorMetadata(body))).not.toMatch(
+			/secret|message|metadata/i
+		);
 		expect(classifyGeminiFailure(400, body)).toEqual(
 			expect.objectContaining({
 				code: 'gemini_authentication_failed',
