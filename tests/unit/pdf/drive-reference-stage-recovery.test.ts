@@ -37,7 +37,7 @@ function client(
 				}))
 			}))
 		}))
-	} as never;
+	};
 }
 
 describe('Drive PDF reference staging recovery', () => {
