@@ -8,6 +8,7 @@ const packagePath = join(root, 'package.json');
 const lockfilePath = join(root, 'pnpm-lock.yaml');
 const gitignorePath = join(root, '.gitignore');
 const failures = [];
+const EXPECTED_SUPABASE_SETUP_SHA = '3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf';
 
 function fail(detail) {
 	failures.push(detail);
@@ -56,13 +57,18 @@ if (!/uses:\s*actions\/checkout@[^\n]+[\s\S]*?persist-credentials:\s*false/.test
 }
 
 const supabaseSetup = workflow.match(
-	/uses:\s*supabase\/setup-cli@(v\d+)\s*\n\s*with:\s*\n\s*version:\s*([^\s#]+)/
+	/uses:\s*supabase\/setup-cli@([0-9a-f]{40})\s+#\s+(v\d+)\s*\r?\n\s*with:\s*\r?\n\s*version:\s*([^\s#]+)/
 );
 if (!supabaseSetup) {
-	fail('workflow must configure Supabase CLI with an explicit action and CLI version');
+	fail(
+		'workflow must configure Supabase CLI with a full commit SHA, documented major version, and exact CLI version'
+	);
 } else {
-	const [, actionVersion, cliVersion] = supabaseSetup;
-	if (actionVersion !== 'v2') fail('workflow must use supabase/setup-cli@v2');
+	const [, actionSha, actionVersion, cliVersion] = supabaseSetup;
+	if (actionSha !== EXPECTED_SUPABASE_SETUP_SHA) {
+		fail('workflow must use the reviewed supabase/setup-cli commit SHA; update this gate with intentional upgrades');
+	}
+	if (actionVersion !== 'v2') fail('workflow must document supabase/setup-cli as v2');
 	if (!/^\d+\.\d+\.\d+$/.test(cliVersion)) {
 		fail('Supabase CLI must use an exact semantic version instead of latest');
 	}
