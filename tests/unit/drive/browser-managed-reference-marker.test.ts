@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { clearBrowserDrivePdfReferenceMarker } from '../../../src/lib/drive/browser-files';
+import { clearBrowserDrivePdfReferenceMarker } from '../../../src/lib/drive/browser-managed-reference-marker';
 
 const accessToken = 'ephemeral-access-token-value';
 const expiresAt = '2026-08-07T23:00:00.000Z';
