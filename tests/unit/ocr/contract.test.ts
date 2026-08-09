@@ -3,6 +3,7 @@ import {
 	claimStateHttpStatus,
 	classifyGeminiFailure,
 	geminiFailureResponse,
+	parseGeminiProviderErrorMetadata,
 	parseOcrClaimState,
 	parseOcrPayload
 } from '../../../supabase/functions/_shared/ocr-contract';
@@ -91,6 +92,52 @@ describe('Gemini failure classification', () => {
 				quotaExhausted: false
 			})
 		);
+	});
+
+	it('recognizes Google API key rejection even when Gemini returns HTTP 400', () => {
+		const body = JSON.stringify({
+			error: {
+				code: 400,
+				message: 'secret provider message that must never escape classification',
+				status: 'INVALID_ARGUMENT',
+				details: [
+					{
+						'@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+						reason: 'API_KEY_INVALID',
+						domain: 'googleapis.com',
+						metadata: { service: 'generativelanguage.googleapis.com', private: 'secret' }
+					}
+				]
+			}
+		});
+		expect(parseGeminiProviderErrorMetadata(body)).toEqual({
+			status: 'INVALID_ARGUMENT',
+			reason: 'API_KEY_INVALID'
+		});
+		expect(JSON.stringify(parseGeminiProviderErrorMetadata(body))).not.toMatch(
+			/secret|message|metadata/i
+		);
+		expect(classifyGeminiFailure(400, body)).toEqual(
+			expect.objectContaining({
+				code: 'gemini_authentication_failed',
+				retryable: false,
+				quotaExhausted: false
+			})
+		);
+	});
+
+	it('discards unknown provider metadata instead of widening the diagnostic surface', () => {
+		expect(
+			parseGeminiProviderErrorMetadata(
+				JSON.stringify({
+					error: {
+						status: 'SOMETHING_NEW',
+						details: [{ reason: 'SENSITIVE_OR_UNKNOWN_REASON' }]
+					}
+				})
+			)
+		).toEqual({ status: null, reason: null });
+		expect(parseGeminiProviderErrorMetadata('not json')).toEqual({ status: null, reason: null });
 	});
 
 	it('retries service failures but not authentication or model errors', () => {

@@ -176,6 +176,68 @@ export type GeminiFailureResponse =
 	| { status: 202; body: { state: 'quota_exhausted' | 'retry_later' } }
 	| { status: number; body: { code: GeminiFailure['code']; retryable: false } };
 
+export type GeminiProviderErrorMetadata = Readonly<{
+	status:
+		| 'INVALID_ARGUMENT'
+		| 'FAILED_PRECONDITION'
+		| 'PERMISSION_DENIED'
+		| 'NOT_FOUND'
+		| 'RESOURCE_EXHAUSTED'
+		| 'UNAVAILABLE'
+		| 'DEADLINE_EXCEEDED'
+		| null;
+	reason: 'API_KEY_INVALID' | null;
+}>;
+
+const GEMINI_PROVIDER_STATUSES = Object.freeze([
+	'INVALID_ARGUMENT',
+	'FAILED_PRECONDITION',
+	'PERMISSION_DENIED',
+	'NOT_FOUND',
+	'RESOURCE_EXHAUSTED',
+	'UNAVAILABLE',
+	'DEADLINE_EXCEEDED'
+] as const);
+
+/**
+ * Parses only non-sensitive, allowlisted Google RPC metadata. Provider messages,
+ * headers, request fields and arbitrary detail values are deliberately discarded.
+ */
+export function parseGeminiProviderErrorMetadata(
+	responseBody: string
+): GeminiProviderErrorMetadata {
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(responseBody.slice(0, 8_000));
+	} catch {
+		return Object.freeze({ status: null, reason: null });
+	}
+	if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+		return Object.freeze({ status: null, reason: null });
+	}
+	const error = (parsed as { error?: unknown }).error;
+	if (!error || typeof error !== 'object' || Array.isArray(error)) {
+		return Object.freeze({ status: null, reason: null });
+	}
+	const record = error as Record<string, unknown>;
+	const status =
+		typeof record.status === 'string' &&
+		GEMINI_PROVIDER_STATUSES.includes(record.status as (typeof GEMINI_PROVIDER_STATUSES)[number])
+			? (record.status as GeminiProviderErrorMetadata['status'])
+			: null;
+	let reason: GeminiProviderErrorMetadata['reason'] = null;
+	if (Array.isArray(record.details)) {
+		for (const detail of record.details) {
+			if (!detail || typeof detail !== 'object' || Array.isArray(detail)) continue;
+			if ((detail as { reason?: unknown }).reason === 'API_KEY_INVALID') {
+				reason = 'API_KEY_INVALID';
+				break;
+			}
+		}
+	}
+	return Object.freeze({ status, reason });
+}
+
 function invalidResponse(): never {
 	throw new TypeError('Invalid OCR response');
 }
@@ -247,6 +309,7 @@ export function geminiFailureResponse(
 }
 
 export function classifyGeminiFailure(status: number, responseBody: string): GeminiFailure {
+	const metadata = parseGeminiProviderErrorMetadata(responseBody);
 	const summary = responseBody.slice(0, 8_000).toLowerCase();
 	const dailyQuota =
 		status === 429 &&
@@ -269,7 +332,7 @@ export function classifyGeminiFailure(status: number, responseBody: string): Gem
 			safeMessage: 'O provedor limitou temporariamente as solicitações.'
 		});
 	}
-	if (status === 401 || status === 403) {
+	if (status === 401 || status === 403 || metadata.reason === 'API_KEY_INVALID') {
 		return Object.freeze({
 			code: 'gemini_authentication_failed',
 			retryable: false,

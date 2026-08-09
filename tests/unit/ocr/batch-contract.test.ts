@@ -70,6 +70,25 @@ describe('parseOcrBatchPayload', () => {
 		expect(() => parseOcrBatchPayload('{}', [first, first])).toThrow('Invalid OCR batch request');
 	});
 
+	it('rejects request and response page counts beyond the runtime ceiling', () => {
+		const oversizedRequest = Array.from({ length: 101 }, (_, index) => ({
+			pageId: `aaaaaaaa-aaaa-4aaa-8aaa-${String(index + 1).padStart(12, '0')}`,
+			pageNumber: index + 1
+		}));
+		expect(() => parseOcrBatchPayload('{"pages":[]}', oversizedRequest)).toThrow(
+			'Invalid OCR batch request'
+		);
+
+		const oversizedResponse = Array.from({ length: 101 }, () => result(first));
+		expect(parseOcrBatchPayload(JSON.stringify({ pages: oversizedResponse }), [first])).toEqual({
+			valid: false,
+			pages: [],
+			missingPageIds: [first.pageId],
+			duplicatePageIds: [],
+			unexpectedPageIds: []
+		});
+	});
+
 	it('derives per-page review state from conservative warnings', () => {
 		const parsed = parseOcrBatchPayload(
 			JSON.stringify({

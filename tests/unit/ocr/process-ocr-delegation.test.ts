@@ -39,6 +39,12 @@ describe('process-ocr provider delegation', () => {
 		expect(source).toContain('OCR_BATCH_MAX_BYTES');
 	});
 
+	it('keeps aggregate inline bytes inside the Gemini request-size safety envelope', () => {
+		expect(source).toContain('const MAX_INLINE_IMAGE_BYTES = 14 * 1024 * 1024;');
+		expect(source).toContain('const ABSOLUTE_MAX_BATCH_BYTES = 14 * 1024 * 1024;');
+		expect(source).not.toContain('const ABSOLUTE_MAX_BATCH_BYTES = 48 * 1024 * 1024;');
+	});
+
 	it('persists valid pages independently and requests a split only for affected identities', () => {
 		expect(source).toContain('for (const pageResult of outcome.pages)');
 		expect(source).toContain("'complete_ocr_job'");

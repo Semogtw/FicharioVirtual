@@ -60,6 +60,38 @@ describe('planOcrFailure', () => {
 		});
 	});
 
+	it('keeps an API key rejection carried by HTTP 400 terminal and non-sensitive', () => {
+		const decision = planOcrFailure(
+			new GeminiHttpError(
+				400,
+				JSON.stringify({
+					error: {
+						status: 'INVALID_ARGUMENT',
+						message: 'private provider message',
+						details: [{ reason: 'API_KEY_INVALID', metadata: { private: 'value' } }]
+					}
+				})
+			),
+			{ attemptCount: 1, failedAt, jitterMs: 0 }
+		);
+
+		expect(decision).toEqual({
+			persistence: {
+				kind: 'fail_job',
+				code: 'gemini_authentication_failed',
+				message: 'A configuração do provedor de leitura foi rejeitada.',
+				retryable: false,
+				failedAt: failedAt.toISOString(),
+				nextRetryAt: null
+			},
+			response: {
+				status: 400,
+				body: { code: 'gemini_authentication_failed', retryable: false }
+			}
+		});
+		expect(JSON.stringify(decision)).not.toMatch(/private provider|metadata|private.*value/i);
+	});
+
 	it('maps provider outages to a 30-second retry base', () => {
 		const decision = planOcrFailure(new GeminiHttpError(503, 'Unavailable'), {
 			attemptCount: 2,
