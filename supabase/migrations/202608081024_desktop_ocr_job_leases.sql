@@ -98,12 +98,12 @@ begin
 
   if target_route = 'desktop'::public.ocr_route
     and current_job.route = 'gemini'::public.ocr_route
-    and current_job.status = 'queued'::public.ocr_status then
+    and current_job.status = 'pending'::public.ocr_status then
     next_status := 'waiting_desktop'::public.ocr_status;
   elsif target_route = 'gemini'::public.ocr_route
     and current_job.route = 'desktop'::public.ocr_route
     and current_job.status = 'waiting_desktop'::public.ocr_status then
-    next_status := 'queued'::public.ocr_status;
+    next_status := 'pending'::public.ocr_status;
   else
     raise exception using errcode = '55000', message = 'OCR job cannot change route in its current state';
   end if;
