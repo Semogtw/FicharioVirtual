@@ -254,9 +254,8 @@ export async function requestGeminiOcrBatch(
 		contents: [{ role: 'user', parts }],
 		generationConfig: {
 			maxOutputTokens: Math.min(65_536, Math.max(8_192, request.pages.length * 2_048)),
-			responseFormat: {
-				text: { mimeType: 'application/json', schema: batchResponseSchema }
-			}
+			responseMimeType: 'application/json',
+			responseJsonSchema: batchResponseSchema
 		}
 	});
 	const text = candidateText(payload);
@@ -289,9 +288,8 @@ export async function requestGeminiOcr(request: GeminiOcrRequest): Promise<OcrPa
 		],
 		generationConfig: {
 			maxOutputTokens: 8192,
-			responseFormat: {
-				text: { mimeType: 'application/json', schema: responseSchema }
-			}
+			responseMimeType: 'application/json',
+			responseJsonSchema: responseSchema
 		}
 	});
 	const text = candidateText(payload);

@@ -55,10 +55,9 @@ describe('requestGeminiOcr', () => {
 			}>;
 			generationConfig: {
 				maxOutputTokens: number;
+				responseMimeType: string;
+				responseJsonSchema: { required: string[] };
 				[key: string]: unknown;
-				responseFormat: {
-					text: { mimeType: string; schema: { required: string[] } };
-				};
 			};
 		};
 		expect(body.contents[0]?.parts[0]?.inlineData).toEqual({
@@ -69,15 +68,12 @@ describe('requestGeminiOcr', () => {
 		expect(body.generationConfig).not.toHaveProperty('temperature');
 		expect(body.generationConfig).not.toHaveProperty('topP');
 		expect(body.generationConfig).not.toHaveProperty('topK');
+		expect(body.generationConfig).not.toHaveProperty('responseFormat');
 		expect(body.generationConfig).toEqual(
 			expect.objectContaining({
 				maxOutputTokens: 8192,
-				responseFormat: {
-					text: expect.objectContaining({
-						mimeType: 'application/json',
-						schema: expect.objectContaining({ required: ['text', 'warnings'] })
-					})
-				}
+				responseMimeType: 'application/json',
+				responseJsonSchema: expect.objectContaining({ required: ['text', 'warnings'] })
 			})
 		);
 	});
