@@ -18,6 +18,14 @@ type DescriptorRpcClient = Readonly<{
 	rpc(name: string, args: Record<string, unknown>): Promise<{ data: unknown; error: unknown }>;
 }>;
 
+type DrivePdfReferenceDescriptorFinalizeInput = Readonly<{
+	pages: readonly PdfImportPagePlan[];
+	promptVersion?: number;
+	batchSize?: number;
+	signal?: AbortSignal;
+	onBatch?: (current: number, total: number, stagedPages: number) => void;
+}>;
+
 export interface DrivePdfReferenceDescriptorAttemptDependencies {
 	createAttemptId(): string;
 	begin(input: {
@@ -38,13 +46,7 @@ export interface DrivePdfReferenceDescriptorLease {
 	readonly attemptId: string;
 	renew(): Promise<void>;
 	renewIfNeeded(): Promise<void>;
-	stageAndFinalize(input: {
-		pages: readonly PdfImportPagePlan[];
-		promptVersion?: number;
-		batchSize?: number;
-		signal?: AbortSignal;
-		onBatch?: (current: number, total: number, stagedPages: number) => void;
-	}): Promise<unknown>;
+	stageAndFinalize(input: DrivePdfReferenceDescriptorFinalizeInput): Promise<unknown>;
 	abandon(): Promise<boolean>;
 }
 
@@ -164,7 +166,13 @@ export async function acquireDrivePdfReferenceDescriptorLease({
 		attemptId,
 		renew,
 		renewIfNeeded,
-		async stageAndFinalize({ pages, promptVersion: requestedPromptVersion, batchSize, signal, onBatch }) {
+		async stageAndFinalize({
+			pages,
+			promptVersion: requestedPromptVersion,
+			batchSize,
+			signal,
+			onBatch
+		}: DrivePdfReferenceDescriptorFinalizeInput) {
 			const promptVersion = validatePromptVersion(requestedPromptVersion);
 			if (pages.length !== expectedPageCount) {
 				throw new TypeError('Invalid Drive PDF descriptor page count');
@@ -270,7 +278,7 @@ export async function stageAndFinalizeDrivePdfReferenceDescriptors({
 	batchSize,
 	signal,
 	onBatch,
-	client = getSupabaseClient() as unknown as DescriptorRpcClient,
+	client,
 	dependencies
 }: {
 	documentId: string;
@@ -298,10 +306,11 @@ export async function stageAndFinalizeDrivePdfReferenceDescriptors({
 		});
 	}
 
+	const rpcClient = client ?? (getSupabaseClient() as unknown as DescriptorRpcClient);
 	const lease = await acquireDrivePdfReferenceDescriptorLease({
 		documentId,
 		expectedPageCount: pages.length,
-		client
+		client: rpcClient
 	});
 	try {
 		return await lease.stageAndFinalize({ pages, promptVersion, batchSize, signal, onBatch });
