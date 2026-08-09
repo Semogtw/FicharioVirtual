@@ -1,11 +1,12 @@
 import {
 	correctionDraftKey,
+	correctionDraftPrefix,
 	parseCorrectionDraft,
 	serializeCorrectionDraft,
 	type CorrectionDraft
 } from './drafts';
 
-const PREFIX = 'fichario:correction-draft:v1:';
+const LEGACY_PREFIX = 'fichario:correction-draft:v1:';
 
 export class CorrectionDraftStorageError extends Error {
 	constructor() {
@@ -14,21 +15,39 @@ export class CorrectionDraftStorageError extends Error {
 	}
 }
 
-export function readCorrectionDraft(
-	pageId: string,
-	storage: Storage = localStorage
-): CorrectionDraft | null {
-	const key = correctionDraftKey(pageId);
+export function purgeLegacyCorrectionDrafts(storage: Storage = localStorage) {
 	try {
-		return parseCorrectionDraft(storage.getItem(key), pageId);
+		const legacyKeys: string[] = [];
+		for (let index = 0; index < storage.length; index += 1) {
+			const key = storage.key(index);
+			if (key?.startsWith(LEGACY_PREFIX)) legacyKeys.push(key);
+		}
+		for (const key of legacyKeys) storage.removeItem(key);
 	} catch {
 		throw new CorrectionDraftStorageError();
 	}
 }
 
-export function writeCorrectionDraft(draft: CorrectionDraft, storage: Storage = localStorage) {
-	const key = correctionDraftKey(draft.pageId);
-	const serialized = serializeCorrectionDraft(draft);
+export function readCorrectionDraft(
+	userId: string,
+	pageId: string,
+	storage: Storage = localStorage
+): CorrectionDraft | null {
+	const key = correctionDraftKey(userId, pageId);
+	try {
+		return parseCorrectionDraft(storage.getItem(key), userId, pageId);
+	} catch {
+		throw new CorrectionDraftStorageError();
+	}
+}
+
+export function writeCorrectionDraft(
+	userId: string,
+	draft: CorrectionDraft,
+	storage: Storage = localStorage
+) {
+	const key = correctionDraftKey(userId, draft.pageId);
+	const serialized = serializeCorrectionDraft(userId, draft);
 	try {
 		storage.setItem(key, serialized);
 	} catch {
@@ -36,14 +55,18 @@ export function writeCorrectionDraft(draft: CorrectionDraft, storage: Storage = 
 	}
 }
 
-export function listCorrectionDrafts(storage: Storage = localStorage): readonly CorrectionDraft[] {
+export function listCorrectionDrafts(
+	userId: string,
+	storage: Storage = localStorage
+): readonly CorrectionDraft[] {
+	const prefix = correctionDraftPrefix(userId);
 	try {
 		const drafts: CorrectionDraft[] = [];
 		for (let index = 0; index < storage.length; index += 1) {
 			const key = storage.key(index);
-			if (!key?.startsWith(PREFIX)) continue;
-			const pageId = key.slice(PREFIX.length);
-			const draft = parseCorrectionDraft(storage.getItem(key), pageId);
+			if (!key?.startsWith(prefix)) continue;
+			const pageId = key.slice(prefix.length);
+			const draft = parseCorrectionDraft(storage.getItem(key), userId, pageId);
 			if (draft) drafts.push(draft);
 		}
 		return Object.freeze(
@@ -54,8 +77,12 @@ export function listCorrectionDrafts(storage: Storage = localStorage): readonly 
 	}
 }
 
-export function discardCorrectionDraft(pageId: string, storage: Storage = localStorage) {
-	const key = correctionDraftKey(pageId);
+export function discardCorrectionDraft(
+	userId: string,
+	pageId: string,
+	storage: Storage = localStorage
+) {
+	const key = correctionDraftKey(userId, pageId);
 	try {
 		storage.removeItem(key);
 	} catch {
