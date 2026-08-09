@@ -109,14 +109,11 @@ describe('renewable Drive PDF descriptor lease', () => {
 				target_attempt_id: attemptId
 			})
 		);
-		expect(rpcClient.rpc).toHaveBeenCalledWith(
-			'finalize_drive_pdf_reference_descriptor_attempt',
-			{
-				target_document_id: documentId,
-				target_attempt_id: attemptId,
-				prompt_version: 3
-			}
-		);
+		expect(rpcClient.rpc).toHaveBeenCalledWith('finalize_drive_pdf_reference_descriptor_attempt', {
+			target_document_id: documentId,
+			target_attempt_id: attemptId,
+			prompt_version: 3
+		});
 	});
 
 	it('returns the server ownership result when abandoning', async () => {
@@ -131,9 +128,12 @@ describe('renewable Drive PDF descriptor lease', () => {
 		});
 
 		await expect(lease.abandon()).resolves.toBe(true);
-		expect(rpcClient.rpc).toHaveBeenLastCalledWith('abandon_drive_pdf_reference_descriptor_attempt', {
-			target_document_id: documentId,
-			target_attempt_id: attemptId
-		});
+		expect(rpcClient.rpc).toHaveBeenLastCalledWith(
+			'abandon_drive_pdf_reference_descriptor_attempt',
+			{
+				target_document_id: documentId,
+				target_attempt_id: attemptId
+			}
+		);
 	});
 });
