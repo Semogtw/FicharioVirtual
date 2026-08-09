@@ -40,17 +40,21 @@ async function handleRequest(incoming: IncomingMessage, response: ServerResponse
 	}
 	const body = JSON.parse(await readBody(incoming)) as {
 		contents?: Array<{ parts?: Array<{ inlineData?: { mimeType?: string; data?: string } }> }>;
-		generationConfig?: { responseMimeType?: string; responseJsonSchema?: unknown };
+		generationConfig?: Record<string, unknown>;
 	};
 	if (body.contents?.[0]?.parts?.[0]?.inlineData?.data !== 'AQID') {
 		throw new Error('Gemini request did not contain the expected image bytes');
 	}
+	const generationConfig = body.generationConfig;
+	if (!generationConfig || generationConfig.responseMimeType !== 'application/json') {
+		throw new Error('Gemini request did not require JSON output');
+	}
 	if (
-		body.generationConfig?.responseMimeType !== 'application/json' ||
-		body.generationConfig.responseJsonSchema === null ||
-		typeof body.generationConfig.responseJsonSchema !== 'object'
+		'responseFormat' in generationConfig ||
+		'responseJsonSchema' in generationConfig ||
+		'responseSchema' in generationConfig
 	) {
-		throw new Error('Gemini request did not require structured JSON output');
+		throw new Error('Gemini request included a provider-rejected schema field');
 	}
 
 	switch (incoming.url) {
