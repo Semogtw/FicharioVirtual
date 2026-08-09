@@ -7,7 +7,9 @@ const source = readFileSync(migrationPath, 'utf8');
 
 describe('staged Drive PDF descriptor finalizer migration', () => {
 	it('publishes from durable descriptor rows instead of accepting a giant JSON request', () => {
-		expect(source).toContain('create or replace function public.finalize_staged_drive_pdf_reference_import');
+		expect(source).toContain(
+			'create or replace function public.finalize_staged_drive_pdf_reference_import'
+		);
 		expect(source).toContain('expected_page_count integer');
 		expect(source).not.toContain('page_descriptors jsonb');
 		expect(source).toContain('public.drive_pdf_reference_page_descriptors');
@@ -32,7 +34,11 @@ describe('staged Drive PDF descriptor finalizer migration', () => {
 	it('keeps the RPC owner-scoped and unavailable to anonymous callers', () => {
 		expect(source).toContain('security definer');
 		expect(source).toContain('auth.uid()');
-		expect(source).toContain('revoke all on function public.finalize_staged_drive_pdf_reference_import');
-		expect(source).toContain('grant execute on function public.finalize_staged_drive_pdf_reference_import');
+		expect(source).toContain(
+			'revoke execute on function public.finalize_staged_drive_pdf_reference_import'
+		);
+		expect(source).toContain(
+			'grant execute on function public.finalize_staged_drive_pdf_reference_import'
+		);
 	});
 });
