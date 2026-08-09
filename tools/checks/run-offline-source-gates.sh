@@ -6,6 +6,7 @@ cd "$repo_root"
 
 node tools/checks/check-tracked-secrets.mjs
 node tools/checks/check-source-security.mjs
+node tools/checks/check-drive-pdf-descriptor-security.mjs
 node tools/checks/check-desktop-worker-boundary.mjs
 node tools/checks/check-ocr-status-split.mjs
 node tools/checks/check-migrations.mjs

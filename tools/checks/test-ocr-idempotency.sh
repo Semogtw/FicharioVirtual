@@ -7,15 +7,8 @@ user_id="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 
 cleanup() {
   psql "$db_url" -v ON_ERROR_STOP=1 >/dev/null <<SQL || true
-delete from public.document_tags where user_id = '$user_id'::uuid;
-delete from public.tags where user_id = '$user_id'::uuid;
-delete from public.usage_daily where user_id = '$user_id'::uuid;
-delete from public.ocr_jobs where user_id = '$user_id'::uuid;
-delete from public.ocr_batches where user_id = '$user_id'::uuid;
-delete from public.pages where user_id = '$user_id'::uuid;
-delete from public.documents where user_id = '$user_id'::uuid;
-delete from public.notebooks where user_id = '$user_id'::uuid;
-delete from public.app_users where user_id = '$user_id'::uuid;
+-- Every fixture-owned table references auth.users with ON DELETE CASCADE.
+-- Delete the owner row so newly added fixture tables cannot survive cleanup.
 delete from auth.users where id = '$user_id'::uuid;
 SQL
 }

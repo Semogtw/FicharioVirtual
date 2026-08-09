@@ -1,5 +1,7 @@
 node_modules/
 .pnpm-store/
+.wrangler/
+supabase/.temp/
 .svelte-kit/
 build/
 coverage/
