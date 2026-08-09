@@ -45,8 +45,7 @@ begin
     or char_length(extracted_text) > 1000000
     or (target_corrected_text is not null and char_length(target_corrected_text) > 1000000)
     or target_content_type is null
-    or char_length(target_content_type) not between 1 and 64
-    or target_content_type !~ '^[A-Za-z0-9.+_-]+/[A-Za-z0-9.+_-]+$'
+    or target_content_type not in ('printed', 'handwritten', 'mixed', 'unknown')
     or extraction_warnings is null
     or jsonb_typeof(extraction_warnings) <> 'array'
     or needs_review is null
