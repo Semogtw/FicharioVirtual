@@ -177,7 +177,15 @@ export type GeminiFailureResponse =
 	| { status: number; body: { code: GeminiFailure['code']; retryable: false } };
 
 export type GeminiProviderErrorMetadata = Readonly<{
-	status: 'INVALID_ARGUMENT' | 'FAILED_PRECONDITION' | 'PERMISSION_DENIED' | 'NOT_FOUND' | 'RESOURCE_EXHAUSTED' | 'UNAVAILABLE' | 'DEADLINE_EXCEEDED' | null;
+	status:
+		| 'INVALID_ARGUMENT'
+		| 'FAILED_PRECONDITION'
+		| 'PERMISSION_DENIED'
+		| 'NOT_FOUND'
+		| 'RESOURCE_EXHAUSTED'
+		| 'UNAVAILABLE'
+		| 'DEADLINE_EXCEEDED'
+		| null;
 	reason: 'API_KEY_INVALID' | null;
 }>;
 
@@ -195,7 +203,9 @@ const GEMINI_PROVIDER_STATUSES = Object.freeze([
  * Parses only non-sensitive, allowlisted Google RPC metadata. Provider messages,
  * headers, request fields and arbitrary detail values are deliberately discarded.
  */
-export function parseGeminiProviderErrorMetadata(responseBody: string): GeminiProviderErrorMetadata {
+export function parseGeminiProviderErrorMetadata(
+	responseBody: string
+): GeminiProviderErrorMetadata {
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(responseBody.slice(0, 8_000));
