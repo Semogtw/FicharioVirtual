@@ -18,7 +18,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const MODEL = /^[A-Za-z0-9._-]{3,128}$/;
 const MAX_INLINE_IMAGE_BYTES = 14 * 1024 * 1024;
 const ABSOLUTE_MAX_BATCH_PAGES = 100;
-const ABSOLUTE_MAX_BATCH_BYTES = 48 * 1024 * 1024;
+const ABSOLUTE_MAX_BATCH_BYTES = 14 * 1024 * 1024;
 const MAX_REQUEST_BODY_BYTES = 16 * 1024;
 
 type ParsedRequest = {
