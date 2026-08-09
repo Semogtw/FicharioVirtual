@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 
 import initPdfInspector, { processPdf } from '@firecrawl/pdf-inspector-wasm';
+import { MAX_LOCAL_PDF_BYTES } from './limits';
 import {
 	routePdfProcessResult,
 	type PdfInspectorProcessResult,
@@ -27,7 +28,11 @@ worker.onmessage = async (event: MessageEvent<PdfWorkerRequest>) => {
 	const request = event.data;
 	if (request?.type !== 'inspect' || typeof request.id !== 'string') return;
 
-	if (request.file.type !== 'application/pdf' || request.file.size < 1) {
+	if (
+		request.file.type !== 'application/pdf' ||
+		request.file.size < 1 ||
+		request.file.size > MAX_LOCAL_PDF_BYTES
+	) {
 		worker.postMessage({
 			type: 'failure',
 			id: request.id,
