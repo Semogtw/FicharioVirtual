@@ -81,6 +81,62 @@ describe('temporary OCR boundary diagnostic contract', () => {
 		});
 	});
 
+	it('distinguishes an API key rejection carried inside HTTP 400 without exposing the key or message', () => {
+		const result = classifyGeminiDiagnosticFailure(
+			new GeminiHttpError(
+				400,
+				JSON.stringify({
+					error: {
+						status: 'INVALID_ARGUMENT',
+						message: 'API key not valid: AIza-secret-must-not-escape',
+						details: [{ reason: 'API_KEY_INVALID', metadata: { secret: 'private' } }]
+					}
+				})
+			)
+		);
+		expect(result).toEqual({
+			httpStatus: 400,
+			category: 'configuration',
+			code: 'gemini_api_key_invalid',
+			success: false
+		});
+		expect(JSON.stringify(result)).not.toMatch(/AIza|secret|private|message|metadata/i);
+	});
+
+	it('distinguishes provider preconditions and known rejected request surfaces', () => {
+		expect(
+			classifyGeminiDiagnosticFailure(
+				new GeminiHttpError(
+					400,
+					JSON.stringify({ error: { status: 'FAILED_PRECONDITION', message: 'billing details' } })
+				)
+			)
+		).toEqual({
+			httpStatus: 400,
+			category: 'configuration',
+			code: 'gemini_provider_precondition_failed',
+			success: false
+		});
+		expect(
+			classifyGeminiDiagnosticFailure(
+				new GeminiHttpError(
+					400,
+					JSON.stringify({
+						error: {
+							status: 'INVALID_ARGUMENT',
+							message: "Invalid value at 'generation_config.response_format.text.mime_type'"
+						}
+					})
+				)
+			)
+		).toEqual({
+			httpStatus: 400,
+			category: 'request',
+			code: 'gemini_response_format_rejected',
+			success: false
+		});
+	});
+
 	it('bounds statuses and falls back to allowlisted category/code values', () => {
 		expect(
 			createGeminiDiagnosticResult({
