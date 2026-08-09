@@ -8,6 +8,9 @@ const names = (await readdir(directory)).filter((name) => name.endsWith('.sql'))
 const failures = [];
 const prefixes = new Set();
 const FUNCTION_START = /create\s+or\s+replace\s+function\s+public\.([a-z_][a-z0-9_]*)\s*\(/giu;
+const migrations = await Promise.all(
+	names.map(async (name) => ({ name, content: await readFile(join(directory, name), 'utf8') }))
+);
 
 function escapeRegex(value) {
 	return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -21,7 +24,26 @@ function functionDefinitions(content) {
 	}));
 }
 
-for (const name of names) {
+function hasEffectivePublicExecuteRevocation(functionName, migrationIndex) {
+	const escapedName = escapeRegex(functionName);
+	const laterSource = migrations
+		.slice(migrationIndex)
+		.map((migration) => migration.content)
+		.join('\n');
+	const explicitRevocation = new RegExp(
+		`revoke\\s+(?:all|execute)\\s+on\\s+function\\s+public\\.${escapedName}\\s*\\([^;]*?\\)\\s+from\\s+(?:[^;]*?\\bpublic\\b)`,
+		'iu'
+	);
+	if (explicitRevocation.test(laterSource)) return true;
+
+	const convertedToInvoker = new RegExp(
+		`alter\\s+function\\s+public\\.${escapedName}\\s*\\([^;]*?\\)\\s+security\\s+invoker\\s*;`,
+		'iu'
+	);
+	return convertedToInvoker.test(laterSource);
+}
+
+for (const [migrationIndex, { name, content }] of migrations.entries()) {
 	const match = name.match(/^(\d{12})_[a-z0-9_]+\.sql$/);
 	if (!match) {
 		failures.push(`${name}: migration name must be YYYYMMDDHHMM_description.sql`);
@@ -29,7 +51,6 @@ for (const name of names) {
 	}
 	if (prefixes.has(match[1])) failures.push(`${name}: duplicate migration timestamp ${match[1]}`);
 	prefixes.add(match[1]);
-	const content = await readFile(join(directory, name), 'utf8');
 	if (/\b(drop\s+(?:table|schema|type)|truncate\s+table)\b/i.test(content)) {
 		failures.push(`${name}: destructive schema operation requires explicit reviewed exception`);
 	}
@@ -38,17 +59,13 @@ for (const name of names) {
 		if (!/set\s+search_path\s*=\s*''/i.test(definition.body)) {
 			failures.push(`${name}: function ${definition.name} missing explicit empty search_path`);
 		}
-		if (/security\s+definer/i.test(definition.body)) {
-			const escapedName = escapeRegex(definition.name);
-			const revoke = new RegExp(
-				`revoke\\s+execute\\s+on\\s+function\\s+public\\.${escapedName}\\s*\\(`,
-				'iu'
+		if (
+			/security\s+definer/i.test(definition.body) &&
+			!hasEffectivePublicExecuteRevocation(definition.name, migrationIndex)
+		) {
+			failures.push(
+				`${name}: SECURITY DEFINER function ${definition.name} remains executable by PUBLIC without a later invoker conversion`
 			);
-			if (!revoke.test(content)) {
-				failures.push(
-					`${name}: SECURITY DEFINER function ${definition.name} missing its own execute revocation`
-				);
-			}
 		}
 	}
 
