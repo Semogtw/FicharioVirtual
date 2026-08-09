@@ -103,9 +103,7 @@ describe('temporary OCR boundary diagnostic contract', () => {
 			code: 'gemini_api_key_invalid',
 			success: false
 		});
-		expect(JSON.stringify(result)).not.toMatch(
-			/TEST_KEY_MARKER|secret|private|message|metadata/i
-		);
+		expect(JSON.stringify(result)).not.toMatch(/TEST_KEY_MARKER|secret|private|message|metadata/i);
 	});
 
 	it('distinguishes provider preconditions and known rejected request surfaces', () => {
