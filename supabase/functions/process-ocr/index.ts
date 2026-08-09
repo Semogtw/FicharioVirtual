@@ -3,6 +3,14 @@ import { corsHeaders, parseAppOrigin } from '../_shared/cors.ts';
 import { claimStateHttpStatus, parseOcrClaimResult } from '../_shared/ocr-contract.ts';
 import { planOcrFailure } from '../_shared/ocr-failure.ts';
 import { requestGeminiOcrBatch, type GeminiOcrBatchPage } from '../_shared/gemini-ocr-client.ts';
+import {
+	classifyGeminiDiagnosticFailure,
+	createGeminiDiagnosticResult,
+	decodeGeminiDiagnosticFixture,
+	GEMINI_DIAGNOSTIC_PAGE,
+	hasServiceRoleClaim,
+	isGeminiDiagnosticRequest
+} from '../_shared/gemini-diagnostic-contract.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MODEL = /^[A-Za-z0-9._-]{3,128}$/;
@@ -97,6 +105,78 @@ function retryAt(attemptCount: number, baseSeconds: number) {
 	return new Date(Date.now() + delayMs).toISOString();
 }
 
+async function runGeminiDiagnostic(
+	authorization: string,
+	respond: (status: number, body: Record<string, unknown>) => Response
+) {
+	if (!hasServiceRoleClaim(authorization)) {
+		const result = createGeminiDiagnosticResult({
+			status: 'fail',
+			category: 'authorization',
+			code: 'diagnostic_forbidden',
+			httpStatus: 403
+		});
+		return respond(403, { ...result });
+	}
+
+	const apiKey = Deno.env.get('GEMINI_API_KEY');
+	const model = Deno.env.get('OCR_MODEL_PRIMARY');
+	const promptVersion = Number(Deno.env.get('OCR_PROMPT_VERSION') ?? '1');
+	if (
+		!apiKey ||
+		!model ||
+		!MODEL.test(model) ||
+		!Number.isInteger(promptVersion) ||
+		promptVersion < 1 ||
+		promptVersion > 10_000
+	) {
+		const result = createGeminiDiagnosticResult({
+			status: 'fail',
+			category: 'configuration',
+			code: 'provider_not_configured',
+			httpStatus: 503
+		});
+		return respond(503, { ...result });
+	}
+
+	try {
+		const outcome = await requestGeminiOcrBatch({
+			apiKey,
+			model,
+			promptVersion,
+			pages: [
+				{
+					...GEMINI_DIAGNOSTIC_PAGE,
+					bytes: decodeGeminiDiagnosticFixture()
+				}
+			]
+		});
+		if (!outcome.valid) {
+			const result = createGeminiDiagnosticResult({
+				status: 'fail',
+				category: 'provider',
+				code: 'provider_response_invalid',
+				httpStatus: 200
+			});
+			return respond(502, { ...result });
+		}
+		const result = createGeminiDiagnosticResult({
+			status: 'pass',
+			category: 'provider',
+			code: 'provider_ok',
+			httpStatus: 200
+		});
+		return respond(200, { ...result });
+	} catch (error) {
+		const result = classifyGeminiDiagnosticFailure(error);
+		const status =
+			result.category === 'provider' && result.httpStatus !== null && result.httpStatus >= 400
+				? result.httpStatus
+				: 502;
+		return respond(status, { ...result });
+	}
+}
+
 function aggregateBody(input: {
 	completedPageIds: readonly string[];
 	reviewPageIds: readonly string[];
@@ -137,6 +217,9 @@ Deno.serve(async (request) => {
 		rawBody = await request.json();
 	} catch {
 		return respond(400, { code: 'invalid_json' });
+	}
+	if (isGeminiDiagnosticRequest(rawBody)) {
+		return runGeminiDiagnostic(authorization, respond);
 	}
 	const parsedRequest = parseRequestBody(rawBody);
 	if (!parsedRequest) return respond(400, { code: 'invalid_ocr_request' });
