@@ -53,7 +53,10 @@ describe('requestGeminiOcrBatch', () => {
 			generationConfig: {
 				maxOutputTokens: number;
 				responseFormat: {
-					text: { mimeType: string; schema: { required: string[]; properties: { pages: { maxItems: number } } } };
+					text: {
+						mimeType: string;
+						schema: { required: string[]; properties: { pages: { maxItems: number } } };
+					};
 				};
 			};
 		};
