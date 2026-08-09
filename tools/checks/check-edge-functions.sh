@@ -11,6 +11,7 @@ command -v deno >/dev/null 2>&1 || {
 
 deno check --no-config supabase/functions/_shared/cors.ts
 deno check --no-config supabase/functions/_shared/desktop-worker-auth.ts
+deno check --no-config supabase/functions/_shared/desktop-worker-contract.ts
 deno check --no-config supabase/functions/_shared/ocr-contract.ts
 deno check --no-config supabase/functions/_shared/ocr-batch-contract.ts
 deno check --no-config supabase/functions/_shared/gemini-ocr-client.ts
