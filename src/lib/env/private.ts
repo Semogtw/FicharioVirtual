@@ -10,7 +10,7 @@ const privateEnvSchema = z.object({
 		.number()
 		.int()
 		.min(1024 * 1024)
-		.max(48 * 1024 * 1024)
+		.max(14 * 1024 * 1024)
 		.optional(),
 	OCR_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(10_000).max(140_000).optional()
 });
