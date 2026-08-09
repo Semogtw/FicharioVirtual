@@ -13,6 +13,10 @@ import { getSupabaseClient } from '$lib/services/supabase';
 import type { Database } from '$lib/types/database';
 import type { StagedDrivePdfReference } from './drive-reference';
 import {
+	acquireDrivePdfReferenceDescriptorLease,
+	type DrivePdfReferenceDescriptorLease
+} from './drive-reference-descriptor-attempt';
+import {
 	isDrivePdfReferenceStillFinalizable,
 	recoverDrivePdfReferencePublication,
 	type DrivePdfReferenceRecoveryClient
@@ -77,6 +81,11 @@ export interface DrivePdfReferenceImportDependencies {
 		options?: DrivePdfRangeInspectionOptions
 	): Promise<DrivePdfRangeInspection>;
 	recordOcrConsent(version?: number): Promise<void>;
+	acquireDescriptorLease?(input: {
+		documentId: string;
+		expectedPageCount: number;
+		client: ReferenceImportClient;
+	}): Promise<DrivePdfReferenceDescriptorLease>;
 	renderPage(
 		document: PDFDocumentProxy,
 		pageNumber: number,
@@ -168,6 +177,14 @@ function createDefaultDependencies(
 		openDocument: openDrivePdfRangeDocument,
 		inspectDocument: inspectDrivePdfDocument,
 		recordOcrConsent,
+		acquireDescriptorLease: ({ documentId, expectedPageCount }) =>
+			acquireDrivePdfReferenceDescriptorLease({
+				documentId,
+				expectedPageCount,
+				client: client as unknown as Parameters<
+					typeof acquireDrivePdfReferenceDescriptorLease
+				>[0]['client']
+			}),
 		renderPage: renderPdfDocumentPage,
 		async upload(path, blob) {
 			const { error } = await client.storage.from('documents').upload(path, blob, {
@@ -300,6 +317,7 @@ export async function importStagedDrivePdfReference({
 	const runtime = dependencies ?? createDefaultDependencies(client);
 	const uploadedPaths: string[] = [];
 	let metadataPublished = false;
+	let descriptorLease: DrivePdfReferenceDescriptorLease | null = null;
 	let rangeDocument: DrivePdfRangeDocument | null = null;
 	let document: PDFDocumentProxy | null = null;
 
@@ -340,10 +358,19 @@ export async function importStagedDrivePdfReference({
 		const renderedSizes = new Map<string, number>();
 		const ocrPages = pages.filter((page) => page.needsOcr);
 
+		if (runtime.acquireDescriptorLease) {
+			descriptorLease = await runtime.acquireDescriptorLease({
+				documentId: staged.documentId,
+				expectedPageCount: pages.length,
+				client
+			});
+		}
+
 		for (let index = 0; index < ocrPages.length; index += 1) {
 			const page = ocrPages[index];
 			if (!page) continue;
 			if (signal?.aborted) throw abortError();
+			await descriptorLease?.renewIfNeeded();
 			safelyReportProgress(onProgress, {
 				phase: 'rendering_ocr',
 				pageNumber: page.pageNumber,
@@ -376,6 +403,7 @@ export async function importStagedDrivePdfReference({
 			pages = pages.map((candidate) =>
 				candidate.id === page.id ? { ...candidate, temporaryImagePath } : candidate
 			);
+			await descriptorLease?.renewIfNeeded();
 		}
 
 		if (signal?.aborted) throw abortError();
@@ -383,14 +411,18 @@ export async function importStagedDrivePdfReference({
 		const immutablePages = Object.freeze(pages.map((page) => Object.freeze(page)));
 		let publication: PdfImportPublication;
 		try {
-			publication = parsePdfImportPublication(
-				await runtime.finalize({
-					documentId: staged.documentId,
-					pages: immutablePages,
-					promptVersion
-				}),
-				staged.documentId
-			);
+			const finalized = descriptorLease
+				? await descriptorLease.stageAndFinalize({
+						pages: immutablePages,
+						promptVersion,
+						signal
+					})
+				: await runtime.finalize({
+						documentId: staged.documentId,
+						pages: immutablePages,
+						promptVersion
+					});
+			publication = parsePdfImportPublication(finalized, staged.documentId);
 		} catch (finalizeError) {
 			const recovered = await runtime
 				.recoverPublication({ documentId: staged.documentId, pages: immutablePages })
@@ -411,7 +443,12 @@ export async function importStagedDrivePdfReference({
 			ocrFailed: ocr.failed
 		});
 	} catch (error) {
-		if (!metadataPublished && uploadedPaths.length > 0) {
+		if (!metadataPublished && descriptorLease) {
+			const abandoned = await descriptorLease.abandon().catch(() => false);
+			if (abandoned && uploadedPaths.length > 0) {
+				await runtime.remove(uploadedPaths).catch(() => undefined);
+			}
+		} else if (!metadataPublished && uploadedPaths.length > 0) {
 			const referencePending = await runtime.referencePending(staged.documentId).catch(() => false);
 			if (referencePending) await runtime.remove(uploadedPaths).catch(() => undefined);
 		}
