@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest';
 import {
 	assertOcrInvocation,
 	assertOcrPersistence,
+	createOcrInvocationDiagnostic,
 	createOcrProbePng,
 	createOcrStagingReport,
+	formatOcrInvocationFailure,
 	normalizeOcrProbeText
 } from '../../../tools/checks/ocr-staging-contract.mjs';
 
@@ -42,6 +44,7 @@ describe('OCR staging contract', () => {
 				attemptCount: 1,
 				tokens: { fichario: true, ocr: true, numericProbe: true }
 			},
+			diagnostic: { httpStatus: null, errorKind: null },
 			cleanup: { document: 'success', session: 'success' }
 		});
 
@@ -66,6 +69,7 @@ describe('OCR staging contract', () => {
 				attemptCount: 1,
 				tokens: { fichario: true, ocr: true, numericProbe: true }
 			},
+			diagnostic: { httpStatus: null, errorKind: null },
 			cleanup: { document: 'success', session: 'success' }
 		});
 		const serialized = JSON.stringify(report);
@@ -105,11 +109,30 @@ describe('OCR staging contract', () => {
 				attemptCount: null,
 				tokens: { fichario: null, ocr: null, numericProbe: null }
 			},
+			diagnostic: { httpStatus: null, errorKind: null },
 			cleanup: { document: 'not_required', session: 'not_required' }
 		});
 
 		expect(report.failureStage).toBeNull();
 		expect(JSON.stringify(report)).not.toContain('secret.example');
+	});
+
+	it('records only the HTTP status and SDK error kind for non-2xx invocations', () => {
+		const diagnostic = createOcrInvocationDiagnostic({
+			error: { name: 'FunctionsHttpError' },
+			response: { status: 500 }
+		});
+
+		expect(diagnostic).toEqual({ httpStatus: 500, errorKind: 'FunctionsHttpError' });
+		expect(formatOcrInvocationFailure(diagnostic)).toBe(
+			'process-ocr failed: HTTP 500 (FunctionsHttpError)'
+		);
+		expect(
+			createOcrInvocationDiagnostic({
+				error: { name: 'UnexpectedProviderError' },
+				response: { status: 700 }
+			})
+		).toEqual({ httpStatus: null, errorKind: null });
 	});
 
 	it('normalizes accents and punctuation before token checks', () => {

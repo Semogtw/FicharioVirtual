@@ -44,6 +44,9 @@ describe('OCR staging verification', () => {
 		expect(runner).toContain("rpc('record_ocr_consent'");
 		expect(runner).toContain("rpc('create_image_import'");
 		expect(runner).toContain("functions.invoke('process-ocr'");
+		expect(runner).toContain('invocation.response');
+		expect(runner).toContain('createOcrInvocationDiagnostic');
+		expect(runner).toContain('formatOcrInvocationFailure');
 		expect(runner).toContain("functions.invoke('delete-document'");
 		expect(runner).toContain('createOcrProbePng');
 		expect(runner).toContain("createHash('sha256')");

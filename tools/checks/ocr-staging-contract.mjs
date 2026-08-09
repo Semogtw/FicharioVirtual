@@ -115,10 +115,18 @@ export function createOcrProbePng(nonce) {
  *     attemptCount: unknown;
  *     tokens: { fichario: unknown; ocr: unknown; numericProbe: unknown };
  *   };
+ *   diagnostic?: { httpStatus?: unknown; errorKind?: unknown };
  *   cleanup: { document: CleanupStatus; session: CleanupStatus };
  * }} input
  */
-export function createOcrStagingReport({ status, failureStage, stages, outcome, cleanup }) {
+export function createOcrStagingReport({
+	status,
+	failureStage,
+	stages,
+	outcome,
+	diagnostic = {},
+	cleanup
+}) {
 	/** @param {unknown} value */
 	const terminalStatus = (value) => (value === 'ready' || value === 'needs_review' ? value : null);
 	/** @param {unknown} value */
@@ -129,6 +137,16 @@ export function createOcrStagingReport({ status, failureStage, stages, outcome, 
 	/** @param {unknown} value */
 	const cleanupStatus = (value) =>
 		value === 'success' || value === 'failure' || value === 'not_required' ? value : 'failure';
+	/** @param {unknown} value */
+	const nullableHttpStatus = (value) =>
+		Number.isInteger(value) && Number(value) >= 100 && Number(value) <= 599 ? Number(value) : null;
+	/** @param {unknown} value */
+	const errorKind = (value) =>
+		['FunctionsFetchError', 'FunctionsHttpError', 'FunctionsRelayError'].includes(
+			typeof value === 'string' ? value : ''
+		)
+			? value
+			: null;
 	/** @param {unknown} value */
 	const sanitizedFailureStage = (value) =>
 		[
@@ -170,11 +188,45 @@ export function createOcrStagingReport({ status, failureStage, stages, outcome, 
 				numericProbe: nullableBoolean(outcome.tokens.numericProbe)
 			}
 		},
+		diagnostic: {
+			httpStatus: nullableHttpStatus(diagnostic.httpStatus),
+			errorKind: errorKind(diagnostic.errorKind)
+		},
 		cleanup: {
 			document: cleanupStatus(cleanup.document),
 			session: cleanupStatus(cleanup.session)
 		}
 	};
+}
+
+/**
+ * Keep failed function invocation diagnostics bounded to the HTTP status and
+ * the SDK error class. Response bodies and provider messages may contain
+ * secrets or user data and must not enter CI logs or artifacts.
+ *
+ * @param {{ error?: { name?: unknown } | null; response?: { status?: unknown } | null }} input
+ */
+export function createOcrInvocationDiagnostic({ error, response }) {
+	const status = response?.status;
+	const httpStatus =
+		typeof status === 'number' && Number.isInteger(status) && status >= 100 && status <= 599
+			? status
+			: null;
+	const name = error?.name;
+	const errorKind =
+		typeof name === 'string' &&
+		['FunctionsFetchError', 'FunctionsHttpError', 'FunctionsRelayError'].includes(name)
+			? name
+			: null;
+	return { httpStatus, errorKind };
+}
+
+/** @param {{ httpStatus: number | null; errorKind: string | null }} diagnostic */
+export function formatOcrInvocationFailure(diagnostic) {
+	const status =
+		diagnostic.httpStatus == null ? 'unknown HTTP status' : `HTTP ${diagnostic.httpStatus}`;
+	const kind = diagnostic.errorKind ? ` (${diagnostic.errorKind})` : '';
+	return `process-ocr failed: ${status}${kind}`;
 }
 
 /** @param {unknown} text */

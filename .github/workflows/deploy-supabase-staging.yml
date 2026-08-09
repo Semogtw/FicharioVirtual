@@ -43,11 +43,14 @@ jobs:
       - name: Show migration drift before deployment
         run: supabase migration list --linked
 
-      - name: Preview pending migrations
-        run: supabase db push --linked --dry-run
+      - name: Preview all pending migrations, including out-of-order files
+        # A later remote migration can already exist when an older local file is
+        # promoted. Include every local pending file explicitly and keep dry-run
+        # failure-visible so drift is never silently skipped.
+        run: supabase db push --linked --dry-run --include-all
 
-      - name: Apply pending migrations
-        run: supabase db push --linked
+      - name: Apply all pending migrations, including out-of-order files
+        run: supabase db push --linked --include-all
 
       - name: Confirm linked migration history
         run: supabase migration list --linked

@@ -20,19 +20,20 @@ describe('Supabase staging migration deploy workflow', () => {
 
 	it('previews pending migrations before applying the linked history in order', () => {
 		const before = source.indexOf('supabase migration list --linked');
-		const dryRun = source.indexOf('supabase db push --linked --dry-run');
-		const push = source.indexOf('supabase db push --linked\n');
+		const dryRun = source.indexOf('run: supabase db push --linked --dry-run --include-all');
+		const push = source.indexOf('run: supabase db push --linked --include-all');
 		const after = source.lastIndexOf('supabase migration list --linked');
 
 		expect(before).toBeGreaterThan(-1);
 		expect(dryRun).toBeGreaterThan(before);
 		expect(push).toBeGreaterThan(dryRun);
 		expect(after).toBeGreaterThan(push);
-		expect(source).not.toContain('--include-all');
+		expect(source).toContain('--dry-run --include-all');
+		expect(source).toContain('--linked --include-all');
 	});
 
 	it('deploys the versioned Edge Functions only after the database is synchronized', () => {
-		const push = source.indexOf('supabase db push --linked\n');
+		const push = source.indexOf('run: supabase db push --linked --include-all');
 		const deployFunctions = source.indexOf(
 			'supabase functions deploy --project-ref "$STAGING_SUPABASE_PROJECT_REF"'
 		);
