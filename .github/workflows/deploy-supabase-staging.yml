@@ -2,13 +2,23 @@ name: Deploy Supabase staging
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/deploy-supabase-staging.yml
+      - supabase/config.toml
+      - supabase/functions/_shared/gemini-diagnostic-contract.ts
+      - supabase/functions/_shared/gemini-ocr-client.ts
+      - supabase/functions/process-ocr/index.ts
+      - supabase/functions/ocr-boundary-probe/**
 
 permissions:
   contents: read
 
 concurrency:
   group: supabase-staging-deploy
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   deploy:
