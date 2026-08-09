@@ -6,6 +6,7 @@ import {
 } from '../_shared/desktop-worker-auth.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const SHA256_HEX = /^[0-9a-f]{64}$/;
 const DEFAULT_LEASE_SECONDS = 120;
 const MIN_LEASE_SECONDS = 30;
 const MAX_LEASE_SECONDS = 900;
@@ -155,9 +156,30 @@ function parseSource(value: unknown, expected: WorkerRequest & { action: 'source
 	});
 }
 
+function sourceBindingMatches(
+	value: unknown,
+	expected: Readonly<{ jobId: string; pageId: string; deviceId: string; leaseId: string; sha256: string }>
+) {
+	if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+	const record = value as Record<string, unknown>;
+	return (
+		record.jobId === expected.jobId &&
+		record.pageId === expected.pageId &&
+		record.deviceId === expected.deviceId &&
+		record.leaseId === expected.leaseId &&
+		record.sourceSha256 === expected.sha256 &&
+		typeof record.sourceBoundAt === 'string' &&
+		Number.isFinite(Date.parse(record.sourceBoundAt))
+	);
+}
+
 async function sha256Hex(blob: Blob) {
 	const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer());
-	return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+	const value = [...new Uint8Array(digest)]
+		.map((byte) => byte.toString(16).padStart(2, '0'))
+		.join('');
+	if (!SHA256_HEX.test(value)) throw new Error('Unexpected SHA-256 encoding');
+	return value;
 }
 
 Deno.serve(async (request) => {
@@ -253,6 +275,28 @@ Deno.serve(async (request) => {
 		return respond(415, { code: 'desktop_ocr_source_type_invalid' });
 	}
 	const sourceSha256 = await sha256Hex(sourceBlob);
+	const { data: binding, error: bindingError } = await admin.rpc(
+		'bind_desktop_ocr_job_source_hash',
+		{
+			target_job_id: source.jobId,
+			target_device_id: device.deviceId,
+			target_lease_id: source.leaseId,
+			target_source_sha256: sourceSha256
+		}
+	);
+	if (bindingError) return respond(409, { code: 'desktop_ocr_source_changed' });
+	if (
+		!sourceBindingMatches(binding, {
+			jobId: source.jobId,
+			pageId: source.pageId,
+			deviceId: device.deviceId,
+			leaseId: source.leaseId,
+			sha256: sourceSha256
+		})
+	) {
+		return respond(503, { code: 'desktop_ocr_source_binding_failed' });
+	}
+
 	const { data: signed, error: signedError } = await admin.storage
 		.from('documents')
 		.createSignedUrl(source.storagePath, SOURCE_URL_SECONDS);
