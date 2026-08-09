@@ -8,6 +8,7 @@ const names = (await readdir(directory)).filter((name) => name.endsWith('.sql'))
 const failures = [];
 const prefixes = new Set();
 const FUNCTION_START = /create\s+or\s+replace\s+function\s+public\.([a-z_][a-z0-9_]*)\s*\(/giu;
+const TABLE_CREATE = /create\s+table(?:\s+if\s+not\s+exists)?\s+public\.([a-z_][a-z0-9_]*)\b/giu;
 const migrations = await Promise.all(
 	names.map(async (name) => ({ name, content: await readFile(join(directory, name), 'utf8') }))
 );
@@ -24,12 +25,16 @@ function functionDefinitions(content) {
 	}));
 }
 
-function hasEffectivePublicExecuteRevocation(functionName, migrationIndex) {
-	const escapedName = escapeRegex(functionName);
-	const laterSource = migrations
+function laterMigrationSource(migrationIndex) {
+	return migrations
 		.slice(migrationIndex)
 		.map((migration) => migration.content)
 		.join('\n');
+}
+
+function hasEffectivePublicExecuteRevocation(functionName, migrationIndex) {
+	const escapedName = escapeRegex(functionName);
+	const laterSource = laterMigrationSource(migrationIndex);
 	const explicitRevocation = new RegExp(
 		`revoke\\s+(?:all|execute)\\s+on\\s+function\\s+public\\.${escapedName}\\s*\\([^;]*?\\)\\s+from\\s+(?:[^;]*?\\bpublic\\b)`,
 		'iu'
@@ -43,6 +48,21 @@ function hasEffectivePublicExecuteRevocation(functionName, migrationIndex) {
 	return convertedToInvoker.test(laterSource);
 }
 
+function tableRlsState(tableName, migrationIndex) {
+	const escapedName = escapeRegex(tableName);
+	const laterSource = laterMigrationSource(migrationIndex);
+	return Object.freeze({
+		enabled: new RegExp(
+			`alter\\s+table\\s+public\\.${escapedName}\\s+enable\\s+row\\s+level\\s+security\\s*;`,
+			'iu'
+		).test(laterSource),
+		forced: new RegExp(
+			`alter\\s+table\\s+public\\.${escapedName}\\s+force\\s+row\\s+level\\s+security\\s*;`,
+			'iu'
+		).test(laterSource)
+	});
+}
+
 for (const [migrationIndex, { name, content }] of migrations.entries()) {
 	const match = name.match(/^(\d{12})_[a-z0-9_]+\.sql$/);
 	if (!match) {
@@ -53,6 +73,17 @@ for (const [migrationIndex, { name, content }] of migrations.entries()) {
 	prefixes.add(match[1]);
 	if (/\b(drop\s+(?:table|schema|type)|truncate\s+table)\b/i.test(content)) {
 		failures.push(`${name}: destructive schema operation requires explicit reviewed exception`);
+	}
+
+	for (const table of content.matchAll(TABLE_CREATE)) {
+		const tableName = table[1];
+		const rls = tableRlsState(tableName, migrationIndex);
+		if (!rls.enabled) {
+			failures.push(`${name}: public table ${tableName} never enables row level security`);
+		}
+		if (!rls.forced) {
+			failures.push(`${name}: public table ${tableName} never forces row level security`);
+		}
 	}
 
 	for (const definition of functionDefinitions(content)) {
