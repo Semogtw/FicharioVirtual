@@ -20,6 +20,7 @@ const DIAGNOSTIC_CODES = new Set([
 	'provider_response_invalid',
 	'provider_transport_failed',
 	'provider_not_configured',
+	'configuration_missing',
 	'diagnostic_forbidden',
 	'diagnostic_bad_request'
 ]);
@@ -31,11 +32,40 @@ const DIAGNOSTIC_CATEGORIES = new Set([
 	'request'
 ]);
 
+function configurationMissingReport() {
+	return {
+		schemaVersion: 1,
+		status: 'fail',
+		direct: {
+			status: 'fail',
+			category: 'configuration',
+			code: 'configuration_missing',
+			httpStatus: null
+		},
+		process: {
+			status: 'not_run',
+			category: 'configuration',
+			code: 'configuration_missing',
+			httpStatus: null,
+			errorKind: null,
+			providerStatus: null,
+			providerErrorKind: null,
+			providerErrorCode: null
+		},
+		cleanup: { document: 'not_required', session: 'not_required' }
+	};
+}
+
 /** @param {string} name */
 function requireEnv(name) {
 	const value = process.env[name]?.trim();
 	if (!value) throw new Error(`Missing required environment variable: ${name}`);
 	return value;
+}
+
+/** @param {string[]} names */
+function missingEnv(names) {
+	return names.filter((name) => !process.env[name]?.trim());
 }
 
 /** @param {string} url @param {string} publishableKey */
@@ -156,12 +186,25 @@ async function runDirectProbe(url, serviceRoleKey) {
 async function runProcessProbe(client, pageId) {
 	const invocation = await client.functions.invoke('process-ocr', { body: { pageId } });
 	if (invocation.error) {
-		return await createOcrInvocationDiagnostic({
+		const diagnostic = await createOcrInvocationDiagnostic({
 			error: invocation.error,
 			response: invocation.response
 		});
+		return {
+			status: 'fail',
+			category: diagnostic.providerErrorCode ? 'provider' : 'transport',
+			code: diagnostic.providerErrorCode ?? 'provider_transport_failed',
+			httpStatus: diagnostic.httpStatus,
+			errorKind: diagnostic.errorKind,
+			providerStatus: diagnostic.providerStatus,
+			providerErrorKind: diagnostic.providerErrorKind,
+			providerErrorCode: diagnostic.providerErrorCode
+		};
 	}
 	return {
+		status: 'pass',
+		category: 'provider',
+		code: 'provider_ok',
 		httpStatus: 200,
 		errorKind: null,
 		providerStatus: null,
@@ -184,42 +227,36 @@ async function signOut(client) {
 
 async function main() {
 	const reportPath = process.env.GEMINI_BOUNDARY_REPORT_PATH?.trim() || null;
-	const report = {
-		schemaVersion: 1,
-		status: 'fail',
-		direct: {
-			status: 'fail',
-			category: 'transport',
-			code: 'provider_transport_failed',
-			httpStatus: null
-		},
-		process: {
-			httpStatus: null,
-			errorKind: null,
-			providerStatus: null,
-			providerErrorKind: null,
-			providerErrorCode: null
-		},
-		cleanup: { document: 'not_required', session: 'not_required' }
-	};
+	let report = configurationMissingReport();
 	let client = null;
 	let probe = null;
 	let failure = null;
 	try {
-		const url = requireEnv('STAGING_SUPABASE_URL');
-		const serviceRoleKey = requireEnv('STAGING_SERVICE_ROLE_KEY');
-		const publishableKey = requireEnv('STAGING_SUPABASE_PUBLISHABLE_KEY');
-		const email = requireEnv('STAGING_AUTHORIZED_EMAIL');
-		const password = requireEnv('STAGING_AUTHORIZED_PASSWORD');
-		const bytes = Buffer.from(DIAGNOSTIC_FIXTURE_BASE64, 'base64');
-		report.direct = await runDirectProbe(url, serviceRoleKey);
-		client = createStagingClient(url, publishableKey);
-		const session = await signIn(client, email, password);
-		await recordConsent(client);
-		probe = await createProbeImport(client, session.userId, bytes);
-		report.process = await runProcessProbe(client, probe.pageId);
-		report.status =
-			report.direct.status === 'pass' && report.process.httpStatus === 200 ? 'pass' : 'fail';
+		const configuration = [
+			'STAGING_SUPABASE_URL',
+			'STAGING_SUPABASE_PUBLISHABLE_KEY',
+			'STAGING_AUTHORIZED_EMAIL',
+			'STAGING_AUTHORIZED_PASSWORD',
+			'STAGING_SERVICE_ROLE_KEY'
+		];
+		if (missingEnv(configuration).length > 0) {
+			failure = new Error('Gemini boundary configuration missing');
+		} else {
+			const url = requireEnv('STAGING_SUPABASE_URL');
+			const serviceRoleKey = requireEnv('STAGING_SERVICE_ROLE_KEY');
+			const publishableKey = requireEnv('STAGING_SUPABASE_PUBLISHABLE_KEY');
+			const email = requireEnv('STAGING_AUTHORIZED_EMAIL');
+			const password = requireEnv('STAGING_AUTHORIZED_PASSWORD');
+			const bytes = Buffer.from(DIAGNOSTIC_FIXTURE_BASE64, 'base64');
+			report.direct = await runDirectProbe(url, serviceRoleKey);
+			client = createStagingClient(url, publishableKey);
+			const session = await signIn(client, email, password);
+			await recordConsent(client);
+			probe = await createProbeImport(client, session.userId, bytes);
+			report.process = await runProcessProbe(client, probe.pageId);
+			report.status =
+				report.direct.status === 'pass' && report.process.status === 'pass' ? 'pass' : 'fail';
+		}
 	} catch (error) {
 		failure = error instanceof Error ? error : new Error('Gemini boundary probe failed');
 	}
