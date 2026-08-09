@@ -29,11 +29,13 @@ The canonical implementation checkpoint is `docs/checkpoints/2026-08-08-drive-pd
 ### Task 1: Make the descriptor-attempt migration match the RED contract
 
 **Files:**
+
 - Modify: `supabase/migrations/202608071748_drive_pdf_reference_descriptor_attempts.sql`
 - Follow-up migrations: `202608081000_drive_pdf_reference_descriptor_attempt_permissions.sql`, `202608081010_drive_pdf_reference_descriptor_finalizer_assignment.sql`
 - Test: `tests/unit/pdf/drive-reference-descriptor-attempt-sql.test.ts`
 
 **Interfaces:**
+
 - Produces RPCs `begin_drive_pdf_reference_descriptor_attempt(uuid, uuid, integer)`, `renew_drive_pdf_reference_descriptor_attempt(uuid, uuid)`, `stage_drive_pdf_reference_descriptor_batch(uuid, uuid, jsonb)`, `finalize_drive_pdf_reference_descriptor_attempt(uuid, uuid, integer)`, and `abandon_drive_pdf_reference_descriptor_attempt(uuid, uuid)`.
 - Produces attempt-scoped table `public.drive_pdf_reference_page_staging(document_id, page_number, attempt_id, descriptor, user_id, created_at)`.
 
@@ -49,11 +51,13 @@ The canonical implementation checkpoint is `docs/checkpoints/2026-08-08-drive-pd
 ### Task 2: Expose a renewable browser lease abstraction
 
 **Files:**
+
 - Modify: `src/lib/pdf/drive-reference-descriptor-attempt.ts`
 - Test: `tests/unit/pdf/drive-reference-renewable-descriptor-lease.test.ts`
 - Preserve: `tests/unit/pdf/drive-reference-descriptor-attempt.test.ts`
 
 **Interfaces:**
+
 - Produce `acquireDrivePdfReferenceDescriptorLease({ documentId, expectedPageCount, client })`.
 - Returned lease exposes `attemptId`, `renew()`, `renewIfNeeded()`, `stageAndFinalize({ pages, promptVersion, batchSize?, signal?, onBatch? })`, and `abandon(): Promise<boolean>`.
 
@@ -66,11 +70,13 @@ The canonical implementation checkpoint is `docs/checkpoints/2026-08-08-drive-pd
 ### Task 3: Activate the lease in the large-PDF orchestrator
 
 **Files:**
+
 - Modify: `src/lib/pdf/drive-reference-import.ts`
 - Test: `tests/unit/pdf/drive-reference-descriptor-lease-integration.test.ts`
 - Test: `tests/unit/pdf/drive-reference-page-staging-bytes.test.ts`
 
 **Interfaces:**
+
 - `DrivePdfReferenceImportDependencies` gains `acquireDescriptorLease(...)`.
 - The active publish path uses `lease.stageAndFinalize(...)` instead of direct `finalize_drive_pdf_reference_import`.
 
@@ -86,6 +92,7 @@ The canonical implementation checkpoint is `docs/checkpoints/2026-08-08-drive-pd
 ### Task 4: Synchronize types, docs, and validation state
 
 **Files:**
+
 - Keep provisional until schema gate: `src/lib/types/database.ts`
 - Modify: `docs/CURRENT_STATUS.md`
 - Add: `docs/checkpoints/2026-08-08-drive-pdf-renewable-descriptor-lease.md`
