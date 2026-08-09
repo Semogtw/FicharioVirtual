@@ -200,7 +200,7 @@ begin
     jsonb_build_object(
       'source', 'complete_ocr_job',
       'promptVersion', current_job.prompt_version,
-      'ocrBatchId', current_job.ocr_batch_id,
+      'ocrBatchId', current_job.batch_id,
       'finishedAt', current_job.finished_at
     ),
     coalesce(current_job.finished_at, completed_at, timezone('utc', now()))
