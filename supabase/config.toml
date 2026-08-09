@@ -60,3 +60,9 @@ verify_jwt = true
 
 [functions.drive-sync]
 verify_jwt = true
+
+[functions.desktop-ocr-pair]
+verify_jwt = true
+
+[functions.desktop-ocr-worker]
+verify_jwt = false
