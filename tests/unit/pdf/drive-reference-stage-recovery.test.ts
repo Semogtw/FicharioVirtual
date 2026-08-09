@@ -72,9 +72,7 @@ describe('Drive PDF reference staging recovery', () => {
 			code: '55000',
 			message: 'Drive PDF reference identity is unavailable'
 		});
-		await expect(
-			recoverDrivePdfReferenceStage({ client: current, expected })
-		).resolves.toBeNull();
+		await expect(recoverDrivePdfReferenceStage({ client: current, expected })).resolves.toBeNull();
 		expect(current.from).toHaveBeenCalledWith('documents');
 	});
 
