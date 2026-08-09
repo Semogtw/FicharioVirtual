@@ -7,7 +7,7 @@ create or replace function public.complete_desktop_ocr_job(
   target_model text,
   target_model_version text,
   extracted_text text,
-  corrected_text text,
+  target_corrected_text text,
   target_content_type text,
   extraction_warnings jsonb,
   needs_review boolean,
@@ -43,7 +43,7 @@ begin
     or target_model_version !~ '^[A-Za-z0-9._:/+-]+$'
     or extracted_text is null
     or char_length(extracted_text) > 1000000
-    or (corrected_text is not null and char_length(corrected_text) > 1000000)
+    or (target_corrected_text is not null and char_length(target_corrected_text) > 1000000)
     or target_content_type is null
     or char_length(target_content_type) not between 1 and 64
     or target_content_type !~ '^[A-Za-z0-9.+_-]+/[A-Za-z0-9.+_-]+$'
@@ -134,13 +134,13 @@ begin
       or persisted_result.provider <> 'local'
       or persisted_result.model <> target_model
       or persisted_result.raw_text is distinct from extracted_text
-      or persisted_result.corrected_text is distinct from corrected_text
+      or persisted_result.corrected_text is distinct from target_corrected_text
       or persisted_result.content_type <> target_content_type
       or persisted_result.warnings is distinct from extraction_warnings
       or persisted_result.metadata is distinct from expected_metadata
       or current_page.status <> terminal_status
       or current_page.ocr_raw_text is distinct from extracted_text
-      or current_page.corrected_text is distinct from corrected_text
+      or current_page.corrected_text is distinct from target_corrected_text
       or current_page.warnings is distinct from extraction_warnings
       or current_page.extraction_source <> 'ocr'::public.extraction_source
       or current_page.accepted_ocr_result_id is distinct from persisted_result.id then
@@ -165,6 +165,7 @@ begin
 
   if current_job.route <> 'desktop'::public.ocr_route
     or current_job.status <> 'processing'::public.ocr_status
+    or current_page.status <> 'processing'::public.page_status
     or current_job.desktop_lease_device_id is distinct from target_device_id
     or current_job.desktop_lease_id is distinct from target_lease_id
     or current_job.desktop_lease_expires_at is null
@@ -194,7 +195,7 @@ begin
     'local',
     target_model,
     extracted_text,
-    corrected_text,
+    target_corrected_text,
     target_content_type,
     null,
     extraction_warnings,
@@ -205,7 +206,7 @@ begin
 
   update public.pages
      set ocr_raw_text = extracted_text,
-         corrected_text = corrected_text,
+         corrected_text = target_corrected_text,
          warnings = extraction_warnings,
          extraction_source = 'ocr'::public.extraction_source,
          status = terminal_status,
