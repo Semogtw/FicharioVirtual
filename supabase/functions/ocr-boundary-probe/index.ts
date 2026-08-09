@@ -19,9 +19,12 @@ const MAX_WRAPPER_RESPONSE_BYTES = 16 * 1024;
 
 type DirectVariant =
 	| 'production'
-	| 'without_response_format'
-	| 'minimal_response_format'
-	| 'response_json_schema'
+	| 'without_max_output'
+	| 'max_output_only'
+	| 'mime_only'
+	| 'minimal_json_schema'
+	| 'legacy_schema'
+	| 'minimal_legacy_schema'
 	| 'without_generation_config'
 	| 'text_only';
 
@@ -63,6 +66,29 @@ function syntheticSuccess(page: { pageId: string; pageNumber: number }, status: 
 	);
 }
 
+function clearStructuredOutput(generationConfig: Record<string, unknown>) {
+	delete generationConfig.responseFormat;
+	delete generationConfig.responseMimeType;
+	delete generationConfig.responseJsonSchema;
+	delete generationConfig.responseSchema;
+}
+
+function toLegacyResponseSchema(value: unknown): unknown {
+	if (Array.isArray(value)) return value.map(toLegacyResponseSchema);
+	if (value === null || typeof value !== 'object') return value;
+	const converted: Record<string, unknown> = {};
+	for (const [key, child] of Object.entries(value)) {
+		// The legacy Schema surface does not need this JSON-Schema-only strictness;
+		// the application parser still rejects unexpected provider fields.
+		if (key === 'additionalProperties') continue;
+		converted[key] =
+			key === 'type' && typeof child === 'string'
+				? child.toUpperCase()
+				: toLegacyResponseSchema(child);
+	}
+	return converted;
+}
+
 function transformProviderBody(body: Record<string, unknown>, variant: DirectVariant) {
 	if (variant === 'production') return body;
 	const transformed = structuredClone(body) as Record<string, unknown>;
@@ -82,39 +108,48 @@ function transformProviderBody(body: Record<string, unknown>, variant: DirectVar
 	}
 	if (!generationConfig) return transformed;
 
-	if (variant === 'without_response_format') {
-		delete generationConfig.responseFormat;
+	const productionSchema = generationConfig.responseJsonSchema;
+
+	if (variant === 'without_max_output') {
+		delete generationConfig.maxOutputTokens;
 		return transformed;
 	}
-
-	const responseFormat =
-		generationConfig.responseFormat && typeof generationConfig.responseFormat === 'object'
-			? (generationConfig.responseFormat as Record<string, unknown>)
-			: null;
-	const textFormat =
-		responseFormat?.text && typeof responseFormat.text === 'object'
-			? (responseFormat.text as Record<string, unknown>)
-			: null;
-	const productionSchema = textFormat?.schema;
-
-	if (variant === 'response_json_schema') {
-		delete generationConfig.responseFormat;
+	if (variant === 'max_output_only') {
+		clearStructuredOutput(generationConfig);
+		return transformed;
+	}
+	if (variant === 'mime_only') {
+		clearStructuredOutput(generationConfig);
 		generationConfig.responseMimeType = 'application/json';
-		if (productionSchema !== undefined) generationConfig.responseJsonSchema = productionSchema;
 		return transformed;
 	}
-
-	if (variant === 'minimal_response_format') {
-		generationConfig.responseFormat = {
-			text: {
-				mimeType: 'application/json',
-				schema: {
-					type: 'object',
-					properties: { ok: { type: 'boolean' } },
-					required: ['ok']
-				}
-			}
+	if (variant === 'minimal_json_schema') {
+		clearStructuredOutput(generationConfig);
+		generationConfig.responseMimeType = 'application/json';
+		generationConfig.responseJsonSchema = {
+			type: 'object',
+			properties: { ok: { type: 'boolean' } },
+			required: ['ok']
 		};
+		return transformed;
+	}
+	if (variant === 'legacy_schema') {
+		clearStructuredOutput(generationConfig);
+		generationConfig.responseMimeType = 'application/json';
+		if (productionSchema !== undefined) {
+			generationConfig.responseSchema = toLegacyResponseSchema(productionSchema);
+		}
+		return transformed;
+	}
+	if (variant === 'minimal_legacy_schema') {
+		clearStructuredOutput(generationConfig);
+		generationConfig.responseMimeType = 'application/json';
+		generationConfig.responseSchema = {
+			type: 'OBJECT',
+			properties: { ok: { type: 'BOOLEAN' } },
+			required: ['ok']
+		};
+		return transformed;
 	}
 	return transformed;
 }
@@ -222,34 +257,55 @@ async function runDirectGemini(): Promise<GeminiDiagnosticResult> {
 
 	// Only a generic provider 400/422 reaches this matrix. Each fallback changes
 	// one request surface while keeping the same model, key and fixed fixture.
-	const withoutResponseFormat = await attempt('without_response_format');
-	if (withoutResponseFormat.success) {
-		const minimalResponseFormat = await attempt('minimal_response_format');
-		if (minimalResponseFormat.success) {
-			return isolatedFailure('gemini_schema_rejected', production.httpStatus);
-		}
-		if (minimalResponseFormat.code !== 'gemini_invalid_request') return minimalResponseFormat;
-
-		const responseJsonSchema = await attempt('response_json_schema');
-		if (responseJsonSchema.success) {
-			return isolatedFailure('gemini_response_format_rejected', production.httpStatus);
-		}
-		if (responseJsonSchema.code !== 'gemini_invalid_request') return responseJsonSchema;
-		return isolatedFailure('gemini_response_format_rejected', production.httpStatus);
-	}
-	if (withoutResponseFormat.code !== 'gemini_invalid_request') return withoutResponseFormat;
-
-	const withoutGenerationConfig = await attempt('without_generation_config');
-	if (withoutGenerationConfig.success) {
+	const withoutMaxOutput = await attempt('without_max_output');
+	if (withoutMaxOutput.success) {
 		return isolatedFailure('gemini_output_limit_rejected', production.httpStatus);
 	}
-	if (withoutGenerationConfig.code !== 'gemini_invalid_request') return withoutGenerationConfig;
+	if (withoutMaxOutput.code !== 'gemini_invalid_request') return withoutMaxOutput;
 
-	const textOnly = await attempt('text_only');
-	if (textOnly.success) {
-		return isolatedFailure('gemini_image_input_rejected', production.httpStatus);
+	const maxOutputOnly = await attempt('max_output_only');
+	if (!maxOutputOnly.success) {
+		if (maxOutputOnly.code !== 'gemini_invalid_request') return maxOutputOnly;
+		const withoutGenerationConfig = await attempt('without_generation_config');
+		if (withoutGenerationConfig.success) {
+			return isolatedFailure('gemini_output_limit_rejected', production.httpStatus);
+		}
+		if (withoutGenerationConfig.code !== 'gemini_invalid_request') return withoutGenerationConfig;
+		const textOnly = await attempt('text_only');
+		if (textOnly.success) {
+			return isolatedFailure('gemini_image_input_rejected', production.httpStatus);
+		}
+		return textOnly.code === 'gemini_invalid_request' ? production : textOnly;
 	}
-	return textOnly.code === 'gemini_invalid_request' ? production : textOnly;
+
+	const mimeOnly = await attempt('mime_only');
+	if (!mimeOnly.success) {
+		return mimeOnly.code === 'gemini_invalid_request'
+			? isolatedFailure('gemini_response_format_rejected', production.httpStatus)
+			: mimeOnly;
+	}
+
+	const minimalJsonSchema = await attempt('minimal_json_schema');
+	if (minimalJsonSchema.success) {
+		return isolatedFailure('gemini_schema_rejected', production.httpStatus);
+	}
+	if (minimalJsonSchema.code !== 'gemini_invalid_request') return minimalJsonSchema;
+
+	const legacySchema = await attempt('legacy_schema');
+	if (legacySchema.success) {
+		// MIME + the same logical schema is accepted on the legacy Schema surface,
+		// so the JSON-Schema field used by production is the incompatible surface.
+		return isolatedFailure('gemini_response_format_rejected', production.httpStatus);
+	}
+	if (legacySchema.code !== 'gemini_invalid_request') return legacySchema;
+
+	const minimalLegacySchema = await attempt('minimal_legacy_schema');
+	if (minimalLegacySchema.success) {
+		return isolatedFailure('gemini_schema_rejected', production.httpStatus);
+	}
+	if (minimalLegacySchema.code !== 'gemini_invalid_request') return minimalLegacySchema;
+
+	return isolatedFailure('gemini_schema_rejected', production.httpStatus);
 }
 
 async function runProcessOcr(authorization: string): Promise<GeminiDiagnosticResult> {
@@ -290,7 +346,7 @@ async function runProcessOcr(authorization: string): Promise<GeminiDiagnosticRes
 			status: 'fail',
 			category: 'wrapper',
 			code: 'wrapper_response_invalid',
-			httpStatus: response.status
+				httpStatus: response.status
 		});
 	}
 	const parsed = parseGeminiDiagnosticResult(body);
