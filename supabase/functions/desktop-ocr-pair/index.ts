@@ -1,9 +1,11 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { RequestBodyTooLargeError, readBoundedJson } from '../_shared/bounded-json.ts';
 import { corsHeaders, parseAppOrigin } from '../_shared/cors.ts';
 import { generateDesktopWorkerCredential } from '../_shared/desktop-worker-auth.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_CAPABILITIES_BYTES = 12 * 1024;
+const MAX_REQUEST_BODY_BYTES = 16 * 1024;
 
 type PairRequest = Readonly<{
 	label: string;
@@ -118,9 +120,11 @@ Deno.serve(async (request) => {
 
 	let rawBody: unknown;
 	try {
-		rawBody = await request.json();
-	} catch {
-		return respond(400, { code: 'invalid_json' });
+		rawBody = await readBoundedJson(request, MAX_REQUEST_BODY_BYTES);
+	} catch (error) {
+		return error instanceof RequestBodyTooLargeError
+			? respond(413, { code: 'pair_request_too_large' })
+			: respond(400, { code: 'invalid_json' });
 	}
 	const input = parsePairRequest(rawBody);
 	if (!input) return respond(400, { code: 'invalid_pair_request' });
