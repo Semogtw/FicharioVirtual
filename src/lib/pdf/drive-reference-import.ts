@@ -397,6 +397,7 @@ export async function importStagedDrivePdfReference({
 				throw new Error('invalid_derived_page');
 			}
 			const temporaryImagePath = `${storageRoot}/pages/${page.pageNumber}.${imageExtension(blob)}`;
+			await descriptorLease?.renew();
 			await runtime.upload(temporaryImagePath, blob);
 			renderedSizes.set(page.id, blob.size);
 			uploadedPaths.push(temporaryImagePath);
