@@ -218,6 +218,9 @@ function isolatedFailure(
 	code:
 		| 'gemini_response_format_rejected'
 		| 'gemini_schema_rejected'
+		| 'gemini_schema_complexity_rejected'
+		| 'gemini_json_schema_surface_rejected'
+		| 'gemini_structured_schema_rejected'
 		| 'gemini_image_input_rejected'
 		| 'gemini_output_limit_rejected',
 	httpStatus: number | null
@@ -287,25 +290,23 @@ async function runDirectGemini(): Promise<GeminiDiagnosticResult> {
 
 	const minimalJsonSchema = await attempt('minimal_json_schema');
 	if (minimalJsonSchema.success) {
-		return isolatedFailure('gemini_schema_rejected', production.httpStatus);
+		return isolatedFailure('gemini_schema_complexity_rejected', production.httpStatus);
 	}
 	if (minimalJsonSchema.code !== 'gemini_invalid_request') return minimalJsonSchema;
 
 	const legacySchema = await attempt('legacy_schema');
 	if (legacySchema.success) {
-		// MIME + the same logical schema is accepted on the legacy Schema surface,
-		// so the JSON-Schema field used by production is the incompatible surface.
-		return isolatedFailure('gemini_response_format_rejected', production.httpStatus);
+		return isolatedFailure('gemini_json_schema_surface_rejected', production.httpStatus);
 	}
 	if (legacySchema.code !== 'gemini_invalid_request') return legacySchema;
 
 	const minimalLegacySchema = await attempt('minimal_legacy_schema');
 	if (minimalLegacySchema.success) {
-		return isolatedFailure('gemini_schema_rejected', production.httpStatus);
+		return isolatedFailure('gemini_json_schema_surface_rejected', production.httpStatus);
 	}
 	if (minimalLegacySchema.code !== 'gemini_invalid_request') return minimalLegacySchema;
 
-	return isolatedFailure('gemini_schema_rejected', production.httpStatus);
+	return isolatedFailure('gemini_structured_schema_rejected', production.httpStatus);
 }
 
 async function runProcessOcr(authorization: string): Promise<GeminiDiagnosticResult> {
