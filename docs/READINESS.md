@@ -6,19 +6,19 @@ Esta página não publica porcentagem global. Prontidão significa evidência re
 
 ## Matriz atual
 
-| Dimensão                     | Código                                   | Evidência externa                                                                     | Estado                 |
-| ---------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------- | ---------------------- |
-| Produto privado              | Implementado                             | CI completo `b39e3eb`; HEAD `86dd393` com 940/940, E2E/Deno bloqueados e OCR pendente | Bloqueado para release |
-| OCR Gemini por lotes         | Implementado                             | Staging real pendente                                                                 | Não promovido          |
-| Quota exclusiva do provedor  | Implementada                             | `429` real pendente                                                                   | Não promovida          |
-| Google Drive-first           | Implementado                             | Conta Google real pendente                                                            | Não promovido          |
-| Picker até 50 MiB            | Implementado                             | Navegadores reais pendentes                                                           | Não promovido          |
-| Picker acima de 50 MiB       | Implementado por referência/ranges       | CI `b39e3eb` verde; PDF grande real pendente                                          | Não promovido          |
-| Recuperação crash copy→stage | Implementada com `appProperties`         | Contratos no CI; interrupção real pendente                                            | Não promovida          |
-| Lease de descritores         | Implementado e conectado ao orquestrador | Banco local no CI; duas sessões reais pendentes                                       | Não promovido          |
-| Cloudflare Pages             | Runbook e gates implementados            | Deployment real pendente                                                              | Não implantado         |
-| Worker desktop               | Fronteira backend implementada           | Worker local e hardware pendentes                                                     | Não iniciado           |
-| RX 6600                      | Não implementada                         | Benchmark pendente                                                                    | Não validada           |
+| Dimensão                     | Código                                   | Evidência externa                                                                 | Estado                 |
+| ---------------------------- | ---------------------------------------- | --------------------------------------------------------------------------------- | ---------------------- |
+| Produto privado              | Implementado                             | CI completo `f87e1edc` / run `31333367357`                                       | Bloqueado para release |
+| OCR Gemini por lotes         | Implementado e corrigido                 | `process-ocr` provider + parser HTTP 200 em `31333418948`; runtime `ACTIVE v19`   | Fronteira aprovada     |
+| Quota exclusiva do provedor  | Implementada                             | `429 gemini_daily_quota` observado na chamada direta protegida                    | Evidenciada            |
+| Google Drive-first           | Implementado                             | Conta Google real ainda pendente                                                   | Não promovido          |
+| Picker até 50 MiB            | Implementado                             | Navegadores reais pendentes                                                       | Não promovido          |
+| Picker acima de 50 MiB       | Implementado por referência/ranges       | PDF grande real pendente                                                          | Não promovido          |
+| Recuperação crash copy→stage | Implementada com `appProperties`         | Contratos no CI; interrupção real pendente                                        | Não promovida          |
+| Lease de descritores         | Implementado e conectado ao orquestrador | Banco local no CI; duas sessões reais pendentes                                   | Não promovido          |
+| Cloudflare Pages             | Runbook e gates implementados            | Deployment real pendente                                                          | Não implantado         |
+| Worker desktop               | Fronteira backend implementada           | Worker local e hardware pendentes                                                 | Não iniciado           |
+| RX 6600                      | Não implementada                         | Benchmark pendente                                                                | Não validada           |
 
 ## Evidência presente no repositório
 
@@ -35,9 +35,10 @@ Esta página não publica porcentagem global. Prontidão significa evidência re
 - somente o callback OAuth sem JWT de gateway;
 - callback protegido por origem, `state` de uso único e PKCE;
 - gates que proíbem secrets no frontend e workflows com escrita automática no repositório;
-- recibo CI completo do SHA `b39e3eb` (run `31296404993`) com lint, tipos, Vitest, build, source/offline, Deno e banco local aprovados; o E2E passou após um retry;
-- HEAD `86dd393` com check 0/0, lint, 940/940 testes, build/PWA com 131 entradas e source/offline aprovados; E2E `BLOCKED` sem Chromium, Deno ausente localmente e aviso de chunks acima de 500 kB.
-- A sonda temporária de fronteira Gemini foi removida no HEAD; o diagnóstico direto está `BLOCKED` porque o environment staging não possui `STAGING_SERVICE_ROLE_KEY` nem equivalente. Os nomes públicos confirmados são `STAGING_SUPABASE_URL`, `STAGING_SUPABASE_PUBLISHABLE_KEY`, `STAGING_AUTHORIZED_EMAIL` e `STAGING_AUTHORIZED_PASSWORD`; nenhuma chamada Gemini foi feita.
+- recibo CI completo do SHA `f87e1edc` (run `31333367357`) com frontend, source/offline, Chromium, Deno/Edge e banco local aprovados;
+- deploy do mesmo SHA `31333367356` concluído com sucesso;
+- sonda protegida `31333418948`: chamada anônima rejeitada com 401, `STAGING_SERVICE_ROLE_KEY` validado como presente sem revelar valor e `process-ocr` retornando `provider_ok` HTTP 200;
+- cleanup `31333977753` concluído: `process-ocr` `ACTIVE v19`, sonda temporária ausente e funções não relacionadas preservadas.
 
 ### Importação e OCR
 
@@ -118,33 +119,17 @@ O worker nunca deve receber service-role, chave Gemini ou refresh token do Drive
 
 ### CI do mesmo SHA
 
-Obrigatório:
-
-```text
-Prettier/ESLint
-Svelte/TypeScript
-Vitest
-Deno
-source/offline gates
-Supabase local + pgTAP
-build
-Chromium E2E
-```
-
-O recibo [`Validate current head`](https://github.com/Semogtw/FicharioVirtual/actions/runs/31296404993) do SHA `b39e3eb55caec06a4cd40aa20833634c32a463d3` terminou com sucesso em 9 de agosto de 2026. Ele registra 236 arquivos/938 testes Vitest, source/offline, Deno e 35 arquivos/434 testes de banco. O E2E teve 4 testes aprovados e 1 flake na primeira tentativa, aprovado no retry; a flakiness permanece uma ressalva.
-
-No HEAD `86dd393`, check 0/0, lint, 940/940 testes, build/PWA com 131 entradas e source/offline passaram; o build mantém o aviso de chunks acima de 500 kB. Deno está ausente localmente e E2E está `BLOCKED` sem Chromium. O deploy `31299646430` terminou com sucesso e registra `process-ocr` `ACTIVE v11`. O Verify OCR staging permanece `PENDING/UNKNOWN`, sem jobs, artifact ou conclusão terminal evidenciada; não há aprovação de OCR. A sonda Gemini temporária foi limpa e nenhuma chamada Gemini foi feita.
+O recibo [`31333367357`](https://github.com/Semogtw/FicharioVirtual/actions/runs/31333367357) do SHA `f87e1edc47268b4e0d2ea0742dac690c96d93646` terminou com **success** e executou frontend, source/offline, Chromium, Deno/Edge e Supabase local + pgTAP. Runs posteriores cancelados por pushes de cleanup/housekeeping não devem ser promovidos a PASS; o checkpoint final deve citar o novo recibo terminal depois da documentação.
 
 ### Supabase
 
-- No SHA `b39e3eb`, `Deploy Supabase staging` (`31296564374`) e `Verify Supabase staging` (`31296568886`) terminaram com sucesso, enquanto `Verify OCR staging` (`31296573162`) falhou. No HEAD `86dd393`, `Deploy Supabase staging` (`31299646430`) registra `process-ocr` `ACTIVE v11`; Verify OCR permanece `PENDING/UNKNOWN`, sem evidência terminal e sem aprovação de OCR.
-- O `Verify Supabase staging` verde mais recente é o run `31296568886` do SHA `b39e3eb` e cobriu somente Auth, RLS e Storage; ele não aprova OCR ou serviços reais.
-- aplicar todas as migrations em banco limpo;
-- executar pgTAP completo, incluindo o novo teste de ownership/takeover do lease;
-- confirmar que `authenticated` não executa os finalizadores legados revogados;
-- regenerar `src/lib/types/database.ts` pelo schema implantado;
-- comparar o tipo gerado com o espelho versionado;
-- verificar bucket, RLS e funções no projeto real.
+- deploy do fix `31333367356`: **success**;
+- sonda OCR `31333418948`: **success**, com `process-ocr` `provider_ok` HTTP 200 e tentativa direta separada em `429 gemini_daily_quota`;
+- cleanup `31333977753`: **success**; remoção explícita somente de `ocr-boundary-probe`;
+- consulta posterior: `process-ocr` `ACTIVE v19`, `ocr-boundary-probe` ausente, funções Drive/desktop preservadas;
+- `STAGING_SERVICE_ROLE_KEY` foi validado como não vazio pelo job protegido; nenhum valor foi exposto;
+- `GEMINI_API_KEY` está configurada em nível suficiente para uma chamada real bem-sucedida via `process-ocr`; nenhum valor foi exposto;
+- o fluxo normal de OCR com página/job, Storage e persistência real ainda precisa de smoke antes de release.
 
 ### Google Drive
 
@@ -160,13 +145,9 @@ No HEAD `86dd393`, check 0/0, lint, 940/940 testes, build/PWA com 131 entradas e
 
 ### Gemini
 
-- smoke real de imagem sintética;
-- lote visual multipágina;
-- PDF textual com zero chamadas;
-- omissão, duplicação e truncamento;
-- rate limit temporário e quota diária real;
-- cancelamento e retomada;
-- confirmação administrativa de billing desativado.
+A fronteira request/provider/parser foi validada em staging. O diagnóstico reproduziu HTTP 400 com `responseFormat` e com schema em `generationConfig`; após mover o contrato JSON para o prompt e manter apenas `responseMimeType: application/json`, `process-ocr` obteve HTTP 200 e `provider_ok`.
+
+Ainda faltam o fluxo normal de página/job com persistência, lote visual multipágina real, PDF textual confirmando zero chamadas, cancelamento/retomada no produto e confirmação administrativa de billing/fallback pago desativado.
 
 ### Cloudflare e dispositivos
 
@@ -180,30 +161,18 @@ No HEAD `86dd393`, check 0/0, lint, 940/940 testes, build/PWA com 131 entradas e
 ## Critérios de promoção
 
 ```text
-Validate current head no SHA `b39e3eb`: PASS com ressalva de flakiness E2E
-HEAD `86dd393`: check/lint/940-940/source-offline PASS; Deno ausente e E2E BLOCKED sem Chromium
-Deploy staging `31299646430`: success; `process-ocr` ACTIVE v11
-Verify OCR staging: PENDING/UNKNOWN, sem aprovação
-Diagnóstico Gemini direto: BLOCKED por ausência de `STAGING_SERVICE_ROLE_KEY` ou equivalente; nenhuma chamada feita
-Supabase limpo e pgTAP: PASS
-Tipos gerados pelo schema implantado: PASS
-OAuth drive.file real: PASS
-Pasta Fichário Digital: PASS
-Upload retomável: PASS
-Picker até 50 MiB: PASS
-Picker acima de 50 MiB por ranges: PASS
-Crash copy→stage reconciliado: PASS
-Lease/takeover de descritores em duas sessões: PASS
-Feed de mudanças: PASS
-Ausência, reconexão e conflitos: PASS
-Migração e rollback: PASS
-OCR Gemini multipágina real: PASS
-Quota temporária e diária: PASS
-Cloudflare produção: PASS
-Headers, fallback e PWA: PASS
-Celular e tablet: PASS ou risco registrado
-Nenhum conteúdo privado na Cloudflare: PASS
-Billing desativado, backup e rollback: PASS
+Validate current head `f87e1edc` / `31333367357`: PASS
+Deploy do fix `31333367356`: PASS
+Sonda OCR `31333418948`: PASS para fronteira provider/parser (`process-ocr` HTTP 200)
+Cleanup `31333977753`: PASS; `process-ocr` ACTIVE v19; probe ausente
+Workflow de deploy permanente: manual-only (`9ff4975`)
+Fluxo OCR normal com persistência: PENDING
+Tipos gerados pelo schema implantado: PENDING
+OAuth drive.file real: PENDING
+Picker/ranges e crash recovery reais: PENDING
+Cloudflare produção: PENDING
+Celular e tablet: PENDING ou risco registrado
+Nenhum conteúdo privado na Cloudflare: requisito obrigatório
 ```
 
 O worker desktop pode ser tratado como marco posterior se a release declarar explicitamente essa limitação. A ausência de defeitos conhecidos não substitui os recibos acima.
