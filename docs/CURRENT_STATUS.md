@@ -2,7 +2,7 @@
 
 _Atualizado: 2026-08-09_<br>
 _Branch ativa: `main`_<br>
-_Estado: Drive-first, OCR seletivo por lotes, importação de PDFs grandes por ranges, recuperação distribuída da cópia, lease renovável de publicação e a fronteira backend do worker estão integrados em código. O último CI verde é do SHA `b39e3eb` (run `31296404993`). Os runs de staging desse SHA estão `WAITING` por aprovação. Release ainda depende de staging externo, serviços reais, dispositivos reais e da investigação de uma flakiness E2E._
+_Estado: Drive-first, OCR seletivo por lotes, importação de PDFs grandes por ranges, recuperação distribuída da cópia, lease renovável de publicação e a fronteira backend do worker estão integrados em código. O HEAD atual é `a8fdd0d`; o último CI completo é do SHA `b39e3eb` (run `31296404993`) e a validação do HEAD atual está em andamento no run `31296977135`. Release ainda depende de staging externo, serviços reais, dispositivos reais e da investigação de uma flakiness E2E._
 
 ## Resumo executivo
 
@@ -138,6 +138,14 @@ No mesmo SHA passaram:
 
 Esse recibo valida somente o SHA indicado. O resultado verde não prova deploy Supabase, OAuth Google, interoperabilidade Drive/Gemini, host publicado, billing ou dispositivos físicos. O E2E deve ser tratado como verde com ressalva até a flakiness ser entendida.
 
+### Validação incremental do HEAD `a8fdd0d`
+
+- A causa do `401` observado entre os verificadores de staging foi a execução concorrente de workflows que compartilham a mesma conta protegida; `auth.signOut()` invalida globalmente a sessão usada pelo outro workflow.
+- A correção adiciona a serialização `staging-contract-verification` aos verificadores compartilhados, com `cancel-in-progress: false`, para impedir essa colisão.
+- Os testes direcionados dos contratos de staging passaram: **14/14**.
+- A suíte local completa ficou `BLOCKED` somente pelo fixture desktop não rastreado; isso não é um `PASS` da suíte completa.
+- O `Verify OCR staging` do HEAD, run `31296994849`, permanece `WAITING/approval`; não há OCR staging aprovado.
+
 ### Gates obrigatórios
 
 ```bash
@@ -155,13 +163,13 @@ pnpm test:db:local
 
 ### Limitação do ambiente local atual
 
-Foi possível validar a formatação da documentação localmente. Os gates locais completos ficam `NOT RUN`/`BLOCKED` nesta máquina porque a toolchain necessária para banco, Edge e navegador não está disponível de forma comprovada (`supabase`, Deno, Docker e Chromium). O recibo CI acima é a evidência do HEAD; não se deve convertê-lo em validação local.
+Os testes direcionados dos contratos de staging passaram 14/14. A suíte local completa do HEAD `a8fdd0d` ficou `BLOCKED` somente pelo fixture desktop não rastreado; não se deve converter esse resultado em `PASS` da suíte completa. O CI do HEAD ainda está em andamento no run `31296977135`.
 
 ## Pendências reais
 
 ### Staging e serviços externos
 
-Os workflows do mesmo SHA permanecem sem sucesso de staging: `Deploy Supabase staging` (`31296564374`), `Verify Supabase staging` (`31296568886`) e `Verify OCR staging` (`31296573162`) estão `WAITING` por aprovação. Não converter esse estado em `PASS`.
+No SHA anterior `b39e3eb`, `Deploy Supabase staging` (`31296564374`) e `Verify Supabase staging` (`31296568886`) terminaram com sucesso; `Verify OCR staging` (`31296573162`) falhou e não aprovou OCR. No HEAD `a8fdd0d`, o `Verify OCR staging` (`31296994849`) está `WAITING/approval`; não converter esse estado em `PASS`.
 
 Ainda são obrigatórios antes de release:
 
@@ -188,13 +196,14 @@ A fronteira backend está implementada em código: pareamento, credencial por di
 
 ## Pendências imediatas
 
-1. investigar a flakiness E2E e repetir o gate se a política de release exigir execução sem retry;
-2. aplicar e validar o schema/runtime do HEAD atual em Supabase staging limpo, incluindo os pgTAPs de OCR/lease;
-3. regenerar tipos pelo schema real aplicado;
-4. executar staging Google Drive + Gemini, incluindo crash/recovery e duas sessões concorrentes;
-5. validar PDFs grandes reais e dispositivos móveis/tablet;
-6. implantar e verificar Cloudflare;
-7. implementar o worker desktop em etapa separada.
+1. aguardar e concluir a validação do HEAD `a8fdd0d`, incluindo o `Verify OCR staging` pendente;
+2. investigar a flakiness E2E e repetir o gate se a política de release exigir execução sem retry;
+3. aplicar e validar o schema/runtime do HEAD atual em Supabase staging limpo, incluindo os pgTAPs de OCR/lease;
+4. regenerar tipos pelo schema real aplicado;
+5. executar staging Google Drive + Gemini, incluindo crash/recovery e duas sessões concorrentes;
+6. validar PDFs grandes reais e dispositivos móveis/tablet;
+7. implantar e verificar Cloudflare;
+8. implementar o worker desktop em etapa separada.
 
 ## Regras de continuidade
 

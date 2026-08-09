@@ -6,19 +6,19 @@ Esta página não publica porcentagem global. Prontidão significa evidência re
 
 ## Matriz atual
 
-| Dimensão                     | Código                                   | Evidência externa                                                                  | Estado                 |
-| ---------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------- |
-| Produto privado              | Implementado                             | CI `b39e3eb` verde (run `31296404993`); staging, serviços e dispositivos pendentes | Bloqueado para release |
-| OCR Gemini por lotes         | Implementado                             | Staging real pendente                                                              | Não promovido          |
-| Quota exclusiva do provedor  | Implementada                             | `429` real pendente                                                                | Não promovida          |
-| Google Drive-first           | Implementado                             | Conta Google real pendente                                                         | Não promovido          |
-| Picker até 50 MiB            | Implementado                             | Navegadores reais pendentes                                                        | Não promovido          |
-| Picker acima de 50 MiB       | Implementado por referência/ranges       | CI `b39e3eb` verde; PDF grande real pendente                                       | Não promovido          |
-| Recuperação crash copy→stage | Implementada com `appProperties`         | Contratos no CI; interrupção real pendente                                         | Não promovida          |
-| Lease de descritores         | Implementado e conectado ao orquestrador | Banco local no CI; duas sessões reais pendentes                                    | Não promovido          |
-| Cloudflare Pages             | Runbook e gates implementados            | Deployment real pendente                                                           | Não implantado         |
-| Worker desktop               | Fronteira backend implementada           | Worker local e hardware pendentes                                                  | Não iniciado           |
-| RX 6600                      | Não implementada                         | Benchmark pendente                                                                 | Não validada           |
+| Dimensão                     | Código                                   | Evidência externa                                                                     | Estado                 |
+| ---------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------- | ---------------------- |
+| Produto privado              | Implementado                             | CI completo `b39e3eb`; HEAD `a8fdd0d` em validação; serviços e dispositivos pendentes | Bloqueado para release |
+| OCR Gemini por lotes         | Implementado                             | Staging real pendente                                                                 | Não promovido          |
+| Quota exclusiva do provedor  | Implementada                             | `429` real pendente                                                                   | Não promovida          |
+| Google Drive-first           | Implementado                             | Conta Google real pendente                                                            | Não promovido          |
+| Picker até 50 MiB            | Implementado                             | Navegadores reais pendentes                                                           | Não promovido          |
+| Picker acima de 50 MiB       | Implementado por referência/ranges       | CI `b39e3eb` verde; PDF grande real pendente                                          | Não promovido          |
+| Recuperação crash copy→stage | Implementada com `appProperties`         | Contratos no CI; interrupção real pendente                                            | Não promovida          |
+| Lease de descritores         | Implementado e conectado ao orquestrador | Banco local no CI; duas sessões reais pendentes                                       | Não promovido          |
+| Cloudflare Pages             | Runbook e gates implementados            | Deployment real pendente                                                              | Não implantado         |
+| Worker desktop               | Fronteira backend implementada           | Worker local e hardware pendentes                                                     | Não iniciado           |
+| RX 6600                      | Não implementada                         | Benchmark pendente                                                                    | Não validada           |
 
 ## Evidência presente no repositório
 
@@ -35,7 +35,8 @@ Esta página não publica porcentagem global. Prontidão significa evidência re
 - somente o callback OAuth sem JWT de gateway;
 - callback protegido por origem, `state` de uso único e PKCE;
 - gates que proíbem secrets no frontend e workflows com escrita automática no repositório;
-- recibo CI do SHA `b39e3eb` (run `31296404993`) com lint, tipos, Vitest, build, source/offline, Deno e banco local aprovados; o E2E passou após um retry.
+- recibo CI completo do SHA `b39e3eb` (run `31296404993`) com lint, tipos, Vitest, build, source/offline, Deno e banco local aprovados; o E2E passou após um retry;
+- HEAD `a8fdd0d` com correção de serialização `staging-contract-verification` para os verificadores que compartilham conta e `auth.signOut()` global; testes direcionados 14/14.
 
 ### Importação e OCR
 
@@ -131,12 +132,12 @@ Chromium E2E
 
 O recibo [`Validate current head`](https://github.com/Semogtw/FicharioVirtual/actions/runs/31296404993) do SHA `b39e3eb55caec06a4cd40aa20833634c32a463d3` terminou com sucesso em 9 de agosto de 2026. Ele registra 236 arquivos/938 testes Vitest, source/offline, Deno e 35 arquivos/434 testes de banco. O E2E teve 4 testes aprovados e 1 flake na primeira tentativa, aprovado no retry; a flakiness permanece uma ressalva.
 
-O ambiente local desta sessão validou apenas a formatação documental. Supabase CLI, Deno, Docker e Chromium não estão disponíveis de forma comprovada localmente; gates correspondentes são `NOT RUN`/`BLOCKED` nesta máquina. O recibo CI não deve ser convertido em validação local.
+O HEAD atual `a8fdd0d` está em validação no run [`31296977135`](https://github.com/Semogtw/FicharioVirtual/actions/runs/31296977135), ainda sem recibo final. Os testes direcionados dos contratos de staging passaram 14/14. A suíte local completa permanece `BLOCKED` somente pelo fixture desktop não rastreado.
 
 ### Supabase
 
-- Os runs do SHA `b39e3eb` para `Deploy Supabase staging` (`31296564374`), `Verify Supabase staging` (`31296568886`) e `Verify OCR staging` (`31296573162`) estão `WAITING` por aprovação; não há sucesso de staging comprovado.
-- O último `Verify Supabase staging` verde conhecido foi no SHA `93d76ea9de3d29fb573b3b508a84deef560a0ff7` e cobriu somente Auth, RLS e Storage sintéticos.
+- No SHA `b39e3eb`, `Deploy Supabase staging` (`31296564374`) e `Verify Supabase staging` (`31296568886`) terminaram com sucesso, enquanto `Verify OCR staging` (`31296573162`) falhou. No HEAD `a8fdd0d`, `Verify OCR staging` (`31296994849`) está `WAITING/approval`; OCR não está aprovado.
+- O `Verify Supabase staging` verde mais recente é o run `31296568886` do SHA `b39e3eb` e cobriu somente Auth, RLS e Storage; ele não aprova OCR ou serviços reais.
 - aplicar todas as migrations em banco limpo;
 - executar pgTAP completo, incluindo o novo teste de ownership/takeover do lease;
 - confirmar que `authenticated` não executa os finalizadores legados revogados;
@@ -178,7 +179,7 @@ O ambiente local desta sessão validou apenas a formatação documental. Supabas
 ## Critérios de promoção
 
 ```text
-Validate current head no SHA `b39e3eb`: PASS com ressalva de flakiness E2E
+Validate current head no SHA `b39e3eb`: PASS com ressalva de flakiness E2E; `a8fdd0d`: em andamento
 Supabase limpo e pgTAP: PASS
 Tipos gerados pelo schema implantado: PASS
 OAuth drive.file real: PASS

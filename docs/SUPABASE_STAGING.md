@@ -7,13 +7,13 @@ O staging do Fichário separa duas responsabilidades:
 
 ## Estado confirmado
 
-Não há evidência de sucesso de deploy ou verificação de Supabase staging no HEAD `b39e3eb55caec06a4cd40aa20833634c32a463d3`. Os runs do SHA atual estão aguardando aprovação; este documento não afirma histórico remoto de migrations, status de Edge Functions, advisors ou configuração de secrets como concluído.
+Não há evidência de sucesso de OCR staging no HEAD `a8fdd0dda551def9af7bc7f256bc515f273542b4`. O `Verify OCR staging` `31296994849` está `WAITING/approval`; este documento não afirma OCR aprovado, histórico remoto de OCR, status live de funções ou configuração de secrets como concluídos.
 
-O último `Verify Supabase staging` verde conhecido foi o [run 31292512306](https://github.com/Semogtw/FicharioVirtual/actions/runs/31292512306), executado no SHA antigo `93d76ea9de3d29fb573b3b508a84deef560a0ff7`. Esse run validou apenas Auth, allowlist, RLS e Storage privado com dados sintéticos. Ele não valida as migrations, funções, OCR ou o runtime do HEAD atual.
+O `Verify Supabase staging` verde mais recente foi o [run 31296568886](https://github.com/Semogtw/FicharioVirtual/actions/runs/31296568886), executado no SHA anterior `b39e3eb`. Esse run validou apenas Auth, allowlist, RLS e Storage privado com dados sintéticos. Ele não valida OCR, Google Drive, Gemini ou o runtime do HEAD atual.
 
-O workflow `Deploy Supabase staging` está versionado, mas o run atual ainda aguarda aprovação e não comprova execução concluída. Deploy, pgTAP remoto, status live das funções, secrets e advisors permanecem `WAITING`, `NOT RUN` ou `BLOCKED` até um recibo concluído do SHA que será promovido.
+No SHA anterior `b39e3eb`, o `Deploy Supabase staging` `31296564374` e o `Verify Supabase staging` `31296568886` terminaram com sucesso; o `Verify OCR staging` `31296573162` falhou. No HEAD `a8fdd0d`, o `Verify OCR staging` `31296994849` está `WAITING/approval` e não constitui sucesso.
 
-No SHA atual, os workflows estão `WAITING` por aprovação e não constituem sucesso: `Deploy Supabase staging` [31296564374](https://github.com/Semogtw/FicharioVirtual/actions/runs/31296564374), `Verify Supabase staging` [31296568886](https://github.com/Semogtw/FicharioVirtual/actions/runs/31296568886) e `Verify OCR staging` [31296573162](https://github.com/Semogtw/FicharioVirtual/actions/runs/31296573162).
+O `401` observado no OCR anterior foi causado por workflows concorrentes compartilhando a mesma conta protegida: `auth.signOut()` invalida a sessão globalmente. A correção no HEAD serializa os verificadores no grupo `staging-contract-verification`, com `cancel-in-progress: false`. Essa correção ainda precisa de um run concluído; não declarar OCR aprovado.
 
 ## Preparar o projeto
 

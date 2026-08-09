@@ -26,7 +26,13 @@ Supabase local + pgTAP: PASS — 35 arquivos, 434 testes
 
 O workflow e o recibo estão verdes para esse SHA, mas o E2E não foi completamente livre de flakiness. Esse resultado não autoriza inferir interoperabilidade com Google Drive/Gemini, deploy Supabase, host publicado ou dispositivos físicos.
 
-O `Verify Supabase staging` verde mais recente foi executado no SHA antigo `93d76ea9de3d29fb573b3b508a84deef560a0ff7` e cobriu somente Auth, RLS e Storage com dados sintéticos. No SHA atual, `Deploy Supabase staging` (`31296564374`), `Verify Supabase staging` (`31296568886`) e `Verify OCR staging` (`31296573162`) estão `WAITING` por aprovação; esses gates não são `PASS`.
+## Estado do HEAD atual
+
+O HEAD `a8fdd0d` está em validação no run [`31296977135`](https://github.com/Semogtw/FicharioVirtual/actions/runs/31296977135), ainda sem recibo final. A causa do `401` entre verificadores de staging foi a concorrência de workflows que compartilham uma conta protegida: `auth.signOut()` é global e invalida a sessão do outro workflow. A correção serializa ambos em `staging-contract-verification`, com `cancel-in-progress: false`.
+
+Os testes direcionados dos contratos de staging passaram **14/14**. A suíte local completa ficou `BLOCKED` somente pelo fixture desktop não rastreado. O `Verify OCR staging` do HEAD, run [`31296994849`](https://github.com/Semogtw/FicharioVirtual/actions/runs/31296994849), está `WAITING/approval`; não há OCR aprovado.
+
+O `Verify Supabase staging` verde mais recente foi executado no SHA `b39e3eb` (`31296568886`) e cobriu Auth, RLS e Storage. No mesmo SHA, `Deploy Supabase staging` (`31296564374`) terminou com sucesso e `Verify OCR staging` (`31296573162`) falhou. No HEAD `a8fdd0d`, `Verify OCR staging` (`31296994849`) está `WAITING/approval`; esses estados não são aprovação de OCR.
 
 ## Ambiente mínimo
 
@@ -54,7 +60,7 @@ A toolchain offline fixa o ambiente de frontend e Edge. Docker e as imagens do S
 | `pnpm verify:full`          | Suíte completa mais banco local           | Antes de release ou checkpoint operacional   |
 | workflows de staging        | Supabase remoto, OCR real e host          | Antes de release privada                     |
 
-No SHA `b39e3eb`, `pnpm verify`, `pnpm test:source:offline`, `pnpm test:functions:check`, `pnpm test:e2e` e `pnpm test:db:local` possuem `PASS` no workflow acima. O gate E2E tem a flakiness registrada. Deploy/verify Supabase remoto, OCR real, deployment/headers do host, Google Drive, Gemini, billing e dispositivos físicos estão `NOT RUN`, `WAITING` ou `BLOCKED` por dependerem de aprovação, credenciais, serviços ou hardware externos.
+No SHA `b39e3eb`, `pnpm verify`, `pnpm test:source:offline`, `pnpm test:functions:check`, `pnpm test:e2e` e `pnpm test:db:local` possuem `PASS` no workflow acima. No HEAD `a8fdd0d`, os testes direcionados passam 14/14, mas a suíte local completa está `BLOCKED` pelo fixture desktop não rastreado e o CI ainda está em andamento. OCR real, deployment/headers do host, Google Drive, Gemini, billing e dispositivos físicos permanecem `NOT RUN`, `WAITING` ou `BLOCKED`.
 
 ## Testes unitários
 
