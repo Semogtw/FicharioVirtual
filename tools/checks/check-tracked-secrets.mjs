@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { readFile, stat } from 'node:fs/promises';
+import { open } from 'node:fs/promises';
 import { extname } from 'node:path';
 import { promisify } from 'node:util';
 import process from 'node:process';
@@ -57,13 +57,19 @@ const failures = [];
 
 for (const path of stdout.split('\0').filter(Boolean)) {
 	if (!isTextPath(path)) continue;
-	const information = await stat(path);
-	if (!information.isFile() || information.size > MAX_FILE_BYTES) continue;
-	const content = await readFile(path, 'utf8');
-	for (const { name, pattern } of patterns) {
-		pattern.lastIndex = 0;
-		const match = pattern.exec(content);
-		if (match) failures.push(`${path}: ${name} at byte ${match.index}`);
+	let handle;
+	try {
+		handle = await open(path, 'r');
+		const information = await handle.stat();
+		if (!information.isFile() || information.size > MAX_FILE_BYTES) continue;
+		const content = await handle.readFile('utf8');
+		for (const { name, pattern } of patterns) {
+			pattern.lastIndex = 0;
+			const match = pattern.exec(content);
+			if (match) failures.push(`${path}: ${name} at byte ${match.index}`);
+		}
+	} finally {
+		await handle?.close();
 	}
 }
 
