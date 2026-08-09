@@ -32,7 +32,7 @@
 	"dependencies": {
 		"@firecrawl/pdf-inspector-wasm": "0.1.1",
 		"@supabase/supabase-js": "^2.0.0",
-		"pdfjs-dist": "6.1.200",
+		"pdfjs-dist": "6.2.108",
 		"zod": "^4.0.0"
 	},
 	"devDependencies": {
