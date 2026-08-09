@@ -1,3 +1,5 @@
+import { RequestBodyTooLargeError, readBoundedJson } from '../_shared/bounded-json.ts';
+import { readBoundedResponseJson } from '../_shared/bounded-response.ts';
 import {
 	classifyGeminiDiagnosticFailure,
 	createGeminiDiagnosticResult,
@@ -12,6 +14,8 @@ import {
 import { requestGeminiOcrBatch } from '../_shared/gemini-ocr-client.ts';
 
 const MODEL = /^[A-Za-z0-9._-]{3,128}$/;
+const MAX_REQUEST_BODY_BYTES = 1024;
+const MAX_WRAPPER_RESPONSE_BYTES = 16 * 1024;
 
 function json(status: number, body: Record<string, unknown>) {
 	return new Response(JSON.stringify(body), {
@@ -138,7 +142,7 @@ async function runProcessOcr(authorization: string): Promise<GeminiDiagnosticRes
 	}
 	let body: unknown = null;
 	try {
-		body = await response.json();
+		body = await readBoundedResponseJson(response, MAX_WRAPPER_RESPONSE_BYTES);
 	} catch {
 		return createGeminiDiagnosticResult({
 			status: 'fail',
@@ -183,14 +187,15 @@ Deno.serve(async (request) => {
 
 	let rawBody: unknown;
 	try {
-		rawBody = await request.json();
-	} catch {
-		return json(400, {
+		rawBody = await readBoundedJson(request, MAX_REQUEST_BODY_BYTES);
+	} catch (error) {
+		const status = error instanceof RequestBodyTooLargeError ? 413 : 400;
+		return json(status, {
 			...createGeminiDiagnosticResult({
 				status: 'fail',
 				category: 'request',
 				code: 'diagnostic_bad_request',
-				httpStatus: 400
+				httpStatus: status
 			})
 		});
 	}
