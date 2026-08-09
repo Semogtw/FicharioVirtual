@@ -157,7 +157,10 @@ const defaultDependencies: DrivePdfReferenceDependencies = {
 		return data;
 	},
 	recoverStage: ({ client, expected }) =>
-		recoverDrivePdfReferenceStage({ client, expected })
+		recoverDrivePdfReferenceStage({
+			client: client as unknown as Parameters<typeof recoverDrivePdfReferenceStage>[0]['client'],
+			expected
+		})
 };
 
 export async function stageDrivePdfReference({
