@@ -1,6 +1,37 @@
 import { deflateSync } from 'node:zlib';
 
 const PNG_SIGNATURE = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10]);
+const PROVIDER_ERROR_CODES = Object.freeze([
+	'gemini_daily_quota',
+	'gemini_rate_limited',
+	'gemini_authentication_failed',
+	'gemini_model_unavailable',
+	'gemini_invalid_request',
+	'gemini_service_unavailable'
+]);
+/** @type {Readonly<Record<string, string>>} */
+const PROVIDER_ERROR_KINDS = Object.freeze({
+	gemini_daily_quota: 'quota',
+	gemini_rate_limited: 'rate_limit',
+	gemini_authentication_failed: 'authentication',
+	gemini_model_unavailable: 'model',
+	gemini_invalid_request: 'invalid_request',
+	gemini_service_unavailable: 'service_unavailable'
+});
+
+/** @param {unknown} value */
+function safeProviderErrorCode(value) {
+	if (typeof value !== 'string') return null;
+	const candidate = value.slice(0, 64);
+	return PROVIDER_ERROR_CODES.includes(candidate) ? candidate : null;
+}
+
+/** @param {unknown} value */
+function safeProviderErrorKind(value) {
+	const candidate = typeof value === 'string' ? value : '';
+	return Object.values(PROVIDER_ERROR_KINDS).includes(candidate) ? candidate : null;
+}
+
 /** @type {Readonly<Record<string, readonly number[]>>} */
 const FONT = Object.freeze({
 	' ': [0, 0, 0, 0, 0, 0, 0],
@@ -147,30 +178,6 @@ export function createOcrStagingReport({
 	const nullableHttpStatus = (value) =>
 		Number.isInteger(value) && Number(value) >= 100 && Number(value) <= 599 ? Number(value) : null;
 	/** @param {unknown} value */
-	const providerErrorKind = (value) =>
-		[
-			'quota',
-			'rate_limit',
-			'authentication',
-			'model',
-			'invalid_request',
-			'service_unavailable'
-		].includes(typeof value === 'string' ? value : '')
-			? value
-			: null;
-	/** @param {unknown} value */
-	const providerErrorCode = (value) =>
-		[
-			'gemini_daily_quota',
-			'gemini_rate_limited',
-			'gemini_authentication_failed',
-			'gemini_model_unavailable',
-			'gemini_invalid_request',
-			'gemini_service_unavailable'
-		].includes(typeof value === 'string' ? value : '')
-			? value
-			: null;
-	/** @param {unknown} value */
 	const errorKind = (value) =>
 		['FunctionsFetchError', 'FunctionsHttpError', 'FunctionsRelayError'].includes(
 			typeof value === 'string' ? value : ''
@@ -222,8 +229,8 @@ export function createOcrStagingReport({
 			httpStatus: nullableHttpStatus(diagnostic.httpStatus),
 			errorKind: errorKind(diagnostic.errorKind),
 			providerStatus: nullableHttpStatus(diagnostic.providerStatus),
-			providerErrorKind: providerErrorKind(diagnostic.providerErrorKind),
-			providerErrorCode: providerErrorCode(diagnostic.providerErrorCode)
+			providerErrorKind: safeProviderErrorKind(diagnostic.providerErrorKind),
+			providerErrorCode: safeProviderErrorCode(diagnostic.providerErrorCode)
 		},
 		cleanup: {
 			document: cleanupStatus(cleanup.document),
@@ -238,7 +245,14 @@ export function createOcrStagingReport({
  * bodies and provider messages may contain secrets or user data and must not
  * enter CI logs or artifacts.
  *
- * @param {{ error?: { name?: unknown } | null; response?: Response | { status?: unknown } | null }} input
+ * @param {{
+ *   error?: { name?: unknown } | null;
+ *   response?: {
+ *     status?: unknown;
+ *     headers?: { get: (name: string) => string | null };
+ *     clone?: () => { json: () => Promise<unknown> };
+ *   } | null;
+ * }} input
  */
 export async function createOcrInvocationDiagnostic({ error, response }) {
 	const status = response?.status;
@@ -252,6 +266,7 @@ export async function createOcrInvocationDiagnostic({ error, response }) {
 		['FunctionsFetchError', 'FunctionsHttpError', 'FunctionsRelayError'].includes(name)
 			? name
 			: null;
+	/** @type {string | null} */
 	let providerErrorCode = null;
 	if (response && typeof response.clone === 'function') {
 		try {
@@ -262,34 +277,19 @@ export async function createOcrInvocationDiagnostic({ error, response }) {
 					body && typeof body === 'object' && !Array.isArray(body)
 						? /** @type {{ code?: unknown }} */ (body).code
 						: null;
-				providerErrorCode = [
-					'gemini_daily_quota',
-					'gemini_rate_limited',
-					'gemini_authentication_failed',
-					'gemini_model_unavailable',
-					'gemini_invalid_request',
-					'gemini_service_unavailable'
-				].includes(typeof candidate === 'string' ? candidate : '')
-					? candidate
-					: null;
+				providerErrorCode = safeProviderErrorCode(candidate);
 			}
 		} catch {
 			providerErrorCode = null;
 		}
 	}
-	const kindByCode = {
-		gemini_daily_quota: 'quota',
-		gemini_rate_limited: 'rate_limit',
-		gemini_authentication_failed: 'authentication',
-		gemini_model_unavailable: 'model',
-		gemini_invalid_request: 'invalid_request',
-		gemini_service_unavailable: 'service_unavailable'
-	};
 	return {
 		httpStatus,
 		errorKind,
 		providerStatus: providerErrorCode ? httpStatus : null,
-		providerErrorKind: providerErrorCode ? kindByCode[providerErrorCode] : null,
+		providerErrorKind: providerErrorCode
+			? safeProviderErrorKind(PROVIDER_ERROR_KINDS[providerErrorCode])
+			: null,
 		providerErrorCode
 	};
 }
