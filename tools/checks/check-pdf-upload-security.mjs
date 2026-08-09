@@ -21,7 +21,9 @@ if (
 	!worker.includes("import { MAX_LOCAL_PDF_BYTES } from './limits';") ||
 	!worker.includes('request.file.size > MAX_LOCAL_PDF_BYTES')
 ) {
-	failures.push('src/lib/pdf/inspector-worker.ts: oversized local PDFs must be rejected before inspection');
+	failures.push(
+		'src/lib/pdf/inspector-worker.ts: oversized local PDFs must be rejected before inspection'
+	);
 }
 const sizeCheck = worker.indexOf('request.file.size > MAX_LOCAL_PDF_BYTES');
 const wasmInitialize = worker.indexOf('await initialize()');
@@ -33,13 +35,17 @@ if (
 	sizeCheck > wasmInitialize ||
 	sizeCheck > arrayBufferRead
 ) {
-	failures.push('src/lib/pdf/inspector-worker.ts: size validation must precede WASM initialization and file materialization');
+	failures.push(
+		'src/lib/pdf/inspector-worker.ts: size validation must precede WASM initialization and file materialization'
+	);
 }
 if (
 	!resumeStore.includes("import { MAX_LOCAL_PDF_BYTES } from './limits';") ||
 	!resumeStore.includes('file.size > MAX_LOCAL_PDF_BYTES')
 ) {
-	failures.push('src/lib/pdf/resume-store.ts: oversized PDFs must not enter resumable browser storage');
+	failures.push(
+		'src/lib/pdf/resume-store.ts: oversized PDFs must not enter resumable browser storage'
+	);
 }
 
 if (failures.length > 0) {
