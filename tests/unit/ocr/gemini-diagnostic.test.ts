@@ -37,8 +37,9 @@ describe('temporary OCR boundary diagnostic contract', () => {
 		expect(isOcrBoundaryProbeRequest({ ...OCR_BOUNDARY_PROBE_BODY, extra: true })).toBe(false);
 		const bytes = decodeGeminiDiagnosticFixture();
 		expect(Array.from(bytes.slice(0, 8))).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
+		expect(bytes.byteLength).toBe(374);
 		expect(createHash('sha256').update(bytes).digest('hex')).toBe(
-			'431ced6916a2a21a156e38701afe55bbd7f88969fbbfc56d7fe099d47f265460'
+			'f4767c1b5d574082f4ec55c3e3331af5c52ca691f29821cb93f9c6ff4fca9fc4'
 		);
 	});
 
