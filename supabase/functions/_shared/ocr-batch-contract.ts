@@ -16,6 +16,7 @@ export type OcrBatchParseOutcome = {
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MAX_BATCH_PAGES = 100;
 
 function invalidRequest(): never {
 	throw new TypeError('Invalid OCR batch request');
@@ -28,7 +29,7 @@ function hasExactKeys(record: Record<string, unknown>, expected: readonly string
 }
 
 function validateRequestedPages(requestedPages: readonly OcrBatchRequestedPage[]) {
-	if (requestedPages.length < 1 || requestedPages.length > 1_000) invalidRequest();
+	if (requestedPages.length < 1 || requestedPages.length > MAX_BATCH_PAGES) invalidRequest();
 	const ids = new Set<string>();
 	const numbers = new Set<number>();
 	for (const page of requestedPages) {
@@ -74,7 +75,11 @@ export function parseOcrBatchPayload(
 		return invalidProviderResponse(requestedPages);
 	}
 	const root = parsed as Record<string, unknown>;
-	if (!hasExactKeys(root, ['pages']) || !Array.isArray(root.pages) || root.pages.length > 1_000) {
+	if (
+		!hasExactKeys(root, ['pages']) ||
+		!Array.isArray(root.pages) ||
+		root.pages.length > MAX_BATCH_PAGES
+	) {
 		return invalidProviderResponse(requestedPages);
 	}
 
