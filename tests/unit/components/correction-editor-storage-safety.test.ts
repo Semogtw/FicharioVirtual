@@ -6,9 +6,9 @@ const source = readFileSync('src/lib/components/CorrectionEditor.svelte', 'utf8'
 describe('CorrectionEditor local draft safety', () => {
 	it('uses the safe draft boundary without making remote save depend on direct Storage access', () => {
 		expect(source).not.toContain('localStorage.');
-		expect(source).toContain('writeCorrectionDraft');
-		expect(source).toContain('readCorrectionDraft');
-		expect(source).toContain('discardCorrectionDraft');
+		expect(source).toContain('writeCorrectionDraft(userId');
+		expect(source).toContain('readCorrectionDraft(userId');
+		expect(source).toContain('discardCorrectionDraft(request.draftOwnerUserId');
 		expect(source).toContain('createLatestSerialExecutor');
 		expect(source).toContain('const saved = await savePageCorrection(page.id, request.text)');
 	});
