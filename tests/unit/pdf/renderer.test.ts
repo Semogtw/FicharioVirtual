@@ -116,7 +116,7 @@ describe('renderPdfDocumentPage', () => {
 });
 
 describe('renderPdfPage cancellation and cleanup', () => {
-	it('disables PDF scripting while loading untrusted local files', async () => {
+	it('loads untrusted local files through PDF.js display API parameters only', async () => {
 		const loading = deferred<never>();
 		const loadingTask = {
 			promise: loading.promise,
@@ -129,9 +129,10 @@ describe('renderPdfPage cancellation and cleanup', () => {
 
 		const pending = renderPdfPage(pdfFile(), 1, { signal: controller.signal });
 		await vi.waitFor(() => expect(pdfRuntime.getDocument).toHaveBeenCalledOnce());
-		expect(pdfRuntime.getDocument).toHaveBeenCalledWith(
-			expect.objectContaining({ enableScripting: false, useSystemFonts: true })
-		);
+		const source = pdfRuntime.getDocument.mock.calls[0]?.[0] as Record<string, unknown>;
+		expect(source).toMatchObject({ useSystemFonts: true });
+		expect(source).not.toHaveProperty('url');
+		expect(source).not.toHaveProperty('enableScripting');
 		controller.abort();
 		await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
 	});
