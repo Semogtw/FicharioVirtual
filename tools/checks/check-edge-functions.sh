@@ -10,6 +10,7 @@ command -v deno >/dev/null 2>&1 || {
 }
 
 deno check --no-config supabase/functions/_shared/cors.ts
+deno check --no-config supabase/functions/_shared/desktop-worker-auth.ts
 deno check --no-config supabase/functions/_shared/ocr-contract.ts
 deno check --no-config supabase/functions/_shared/ocr-batch-contract.ts
 deno check --no-config supabase/functions/_shared/gemini-ocr-client.ts
@@ -29,5 +30,7 @@ deno check --no-config supabase/functions/drive-access-token/index.ts
 deno check --no-config supabase/functions/drive-resolve-folder/index.ts
 deno check --no-config supabase/functions/drive-run-jobs/index.ts
 deno check --no-config supabase/functions/drive-sync/index.ts
+deno check --no-config supabase/functions/desktop-ocr-pair/index.ts
+deno check --no-config supabase/functions/desktop-ocr-worker/index.ts
 
 echo "Edge Function type checks completed."
