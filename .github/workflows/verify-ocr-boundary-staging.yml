@@ -1,0 +1,121 @@
+name: Verify OCR boundary staging
+
+on:
+  workflow_run:
+    workflows:
+      - Deploy Supabase staging
+    types:
+      - completed
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ocr-boundary-staging-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: staging
+    env:
+      STAGING_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SERVICE_ROLE_KEY }}
+      STAGING_SUPABASE_URL: https://exgggshcdzjaxmfcoasm.supabase.co
+
+    steps:
+      - name: Validate protected probe configuration
+        run: |
+          test -n "$STAGING_SERVICE_ROLE_KEY"
+          test -n "$STAGING_SUPABASE_URL"
+
+      - name: Confirm anonymous requests are rejected
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(
+            curl --silent --show-error \
+              --output /dev/null \
+              --write-out '%{http_code}' \
+              --request POST \
+              --header 'Content-Type: application/json' \
+              --data '{"diagnostic":"ocr-boundary-v1"}' \
+              "$STAGING_SUPABASE_URL/functions/v1/ocr-boundary-probe"
+          )"
+          test "$status" = "401"
+
+      - name: Run service-role OCR boundary probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          report="$(mktemp)"
+          chmod 600 "$report"
+          trap 'rm -f "$report"' EXIT
+          status="$(
+            curl --silent --show-error \
+              --output "$report" \
+              --write-out '%{http_code}' \
+              --request POST \
+              --header "Authorization: Bearer $STAGING_SERVICE_ROLE_KEY" \
+              --header "apikey: $STAGING_SERVICE_ROLE_KEY" \
+              --header 'Content-Type: application/json' \
+              --data '{"diagnostic":"ocr-boundary-v1"}' \
+              "$STAGING_SUPABASE_URL/functions/v1/ocr-boundary-probe"
+          )"
+          test "$status" = "200"
+          REPORT_PATH="$report" node <<'NODE'
+          const fs = require('node:fs');
+          const value = JSON.parse(fs.readFileSync(process.env.REPORT_PATH, 'utf8'));
+          const resultKeys = ['category', 'code', 'httpStatus', 'success'];
+          const categories = new Set([
+            'provider',
+            'transport',
+            'configuration',
+            'authorization',
+            'request',
+            'wrapper'
+          ]);
+          const codes = new Set([
+            'provider_ok',
+            'gemini_daily_quota',
+            'gemini_rate_limited',
+            'gemini_authentication_failed',
+            'gemini_model_unavailable',
+            'gemini_invalid_request',
+            'gemini_service_unavailable',
+            'provider_response_invalid',
+            'provider_transport_failed',
+            'provider_not_configured',
+            'diagnostic_forbidden',
+            'diagnostic_bad_request',
+            'wrapper_response_invalid',
+            'wrapper_http_failed'
+          ]);
+          const exactKeys = (candidate, expected) => {
+            if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return false;
+            const actual = Object.keys(candidate).sort();
+            const wanted = [...expected].sort();
+            return actual.length === wanted.length && actual.every((key, index) => key === wanted[index]);
+          };
+          const validResult = (candidate) => {
+            if (!exactKeys(candidate, resultKeys)) return false;
+            if (!categories.has(candidate.category) || !codes.has(candidate.code)) return false;
+            if (typeof candidate.success !== 'boolean') return false;
+            return candidate.httpStatus === null ||
+              (Number.isInteger(candidate.httpStatus) &&
+                candidate.httpStatus >= 100 &&
+                candidate.httpStatus <= 599);
+          };
+          if (!exactKeys(value, ['direct', 'process'])) throw new Error('invalid probe envelope');
+          if (!validResult(value.direct) || !validResult(value.process)) {
+            throw new Error('invalid probe result');
+          }
+          const serialized = JSON.stringify(value);
+          if (/AIza|authorization|bearer|prompt|model|header|ocr[_ -]?text|responsebody/i.test(serialized)) {
+            throw new Error('probe redaction failure');
+          }
+          console.log(serialized);
+          NODE
