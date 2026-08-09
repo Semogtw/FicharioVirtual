@@ -36,6 +36,9 @@ const DIAGNOSTIC_CODES = Object.freeze([
 	'gemini_provider_precondition_failed',
 	'gemini_response_format_rejected',
 	'gemini_schema_rejected',
+	'gemini_schema_complexity_rejected',
+	'gemini_json_schema_surface_rejected',
+	'gemini_structured_schema_rejected',
 	'gemini_image_input_rejected',
 	'gemini_output_limit_rejected',
 	'gemini_contents_rejected',
@@ -64,6 +67,9 @@ export type GeminiDiagnosticCode =
 	| 'gemini_provider_precondition_failed'
 	| 'gemini_response_format_rejected'
 	| 'gemini_schema_rejected'
+	| 'gemini_schema_complexity_rejected'
+	| 'gemini_json_schema_surface_rejected'
+	| 'gemini_structured_schema_rejected'
 	| 'gemini_image_input_rejected'
 	| 'gemini_output_limit_rejected'
 	| 'gemini_contents_rejected'
