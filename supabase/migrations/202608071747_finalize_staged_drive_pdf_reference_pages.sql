@@ -6,7 +6,7 @@ create or replace function public.finalize_staged_drive_pdf_reference_import(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public, pg_temp
+set search_path = ''
 as $$
 declare
   current_user_id uuid := auth.uid();
@@ -105,7 +105,7 @@ begin
 end;
 $$;
 
-revoke all on function public.finalize_staged_drive_pdf_reference_import(uuid, integer, integer) from public;
-revoke all on function public.finalize_staged_drive_pdf_reference_import(uuid, integer, integer) from anon;
+revoke execute on function public.finalize_staged_drive_pdf_reference_import(uuid, integer, integer) from public;
+revoke execute on function public.finalize_staged_drive_pdf_reference_import(uuid, integer, integer) from anon;
 grant execute on function public.finalize_staged_drive_pdf_reference_import(uuid, integer, integer) to authenticated;
 grant execute on function public.finalize_staged_drive_pdf_reference_import(uuid, integer, integer) to service_role;
