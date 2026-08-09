@@ -30,7 +30,9 @@ describe('Drive PDF reference page descriptor attempt migration', () => {
 	it('publishes only a complete descriptor set owned by the active attempt', () => {
 		expect(source).toContain('begin_drive_pdf_reference_descriptor_attempt(uuid, uuid, integer)');
 		expect(source).toContain('renew_drive_pdf_reference_descriptor_attempt(uuid, uuid)');
-		expect(source).toContain('finalize_drive_pdf_reference_descriptor_attempt(uuid, uuid, integer)');
+		expect(source).toContain(
+			'finalize_drive_pdf_reference_descriptor_attempt(uuid, uuid, integer)'
+		);
 		expect(source).toContain('abandon_drive_pdf_reference_descriptor_attempt(uuid, uuid)');
 		expect(source).toContain('staged_count <> expected_page_count');
 		expect(source).toContain('minimum_page <> 1');
