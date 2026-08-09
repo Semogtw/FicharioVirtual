@@ -39,11 +39,15 @@ export async function readBoundedJson(request: Request, maxBytes: number): Promi
 			if (!(value instanceof Uint8Array)) throw new InvalidJsonBodyError();
 			total += value.byteLength;
 			if (total > maxBytes) {
+				value.fill(0);
 				await reader.cancel('request body too large').catch(() => undefined);
 				throw new RequestBodyTooLargeError();
 			}
 			chunks.push(value);
 		}
+	} catch (error) {
+		for (const chunk of chunks) chunk.fill(0);
+		throw error;
 	} finally {
 		reader.releaseLock();
 	}
