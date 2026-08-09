@@ -64,7 +64,17 @@ async function boundedBlob(response: Response, maximumBytes: number) {
 			chunks.push(value);
 		}
 		if (total < 1) throw new Error('invalid download');
-		return new Blob(chunks, { type: mimeType });
+
+		const bytes = new Uint8Array(total);
+		let offset = 0;
+		for (const chunk of chunks) {
+			bytes.set(chunk, offset);
+			offset += chunk.byteLength;
+		}
+		const blob = new Blob([bytes.buffer], { type: mimeType });
+		bytes.fill(0);
+		for (const chunk of chunks) chunk.fill(0);
+		return blob;
 	} catch (error) {
 		for (const chunk of chunks) chunk.fill(0);
 		throw error;
