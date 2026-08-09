@@ -7,11 +7,26 @@ O staging do Fichário separa duas responsabilidades:
 
 ## Estado confirmado
 
-Não há evidência de deploy ou verificação de Supabase staging no HEAD `482d3af9b46eea81076e591bc188e6164b4658be`. Portanto, este documento não afirma histórico remoto de migrations, status de Edge Functions, advisors ou configuração de secrets para esse SHA.
+No HEAD `86dd3938f75e42ef4d0c5f0ee4b0c380ce94c676`, o deploy `31299646430` terminou com sucesso e registra `process-ocr` `ACTIVE v11`. O Verify OCR staging permanece `PENDING/UNKNOWN`, sem evidência de jobs, artifact ou conclusão terminal consultável; este documento não afirma OCR aprovado.
 
-O último `Verify Supabase staging` verde conhecido foi o [run 31292512306](https://github.com/Semogtw/FicharioVirtual/actions/runs/31292512306), executado no SHA antigo `93d76ea9de3d29fb573b3b508a84deef560a0ff7`. Esse run validou apenas Auth, allowlist, RLS e Storage privado com dados sintéticos. Ele não valida as migrations, funções, OCR ou o runtime do HEAD atual.
+O `Verify Supabase staging` verde mais recente foi o [run 31296568886](https://github.com/Semogtw/FicharioVirtual/actions/runs/31296568886), executado no SHA anterior `b39e3eb`. Esse run validou apenas Auth, allowlist, RLS e Storage privado com dados sintéticos. Ele não valida OCR, Google Drive, Gemini ou o runtime do HEAD atual.
 
-O workflow `Deploy Supabase staging` está versionado, mas não há neste registro um run atual que comprove sua execução. Deploy, pgTAP remoto, status live das funções, secrets e advisors ficam `NOT RUN`/`BLOCKED` até um recibo do SHA que será promovido.
+No SHA anterior `b39e3eb`, o `Deploy Supabase staging` `31296564374` e o `Verify Supabase staging` `31296568886` terminaram com sucesso; o `Verify OCR staging` `31296573162` falhou. No HEAD `86dd393`, o deploy `31299646430` terminou com sucesso e `process-ocr` está `ACTIVE v11`; o Verify OCR permanece `PENDING/UNKNOWN` e não constitui sucesso.
+
+O `401` observado no OCR anterior foi causado por workflows concorrentes compartilhando a mesma conta protegida: `auth.signOut()` invalida a sessão globalmente. A correção serializa os verificadores no grupo `staging-contract-verification`, com `cancel-in-progress: false`.
+
+O HEAD anterior continha instrumentação segura para falhas do provedor: somente códigos Gemini de allowlist, corpo inspecionado limitado a 4 KiB, sem persistir corpo/headers completos, modelo ou tokens em logs/artifacts. A sonda temporária de fronteira Gemini foi removida no HEAD `86dd393`; nenhum diagnóstico direto nem chamada Gemini foi executado.
+
+O diagnóstico Gemini direto está `BLOCKED`: o environment `staging` não possui `STAGING_SERVICE_ROLE_KEY` nem equivalente. Os nomes públicos confirmados, sem valores, são:
+
+```text
+STAGING_SUPABASE_URL
+STAGING_SUPABASE_PUBLISHABLE_KEY
+STAGING_AUTHORIZED_EMAIL
+STAGING_AUTHORIZED_PASSWORD
+```
+
+O nome ausente é `STAGING_SERVICE_ROLE_KEY`. Nenhum valor de secret foi exposto e nenhuma chamada Gemini foi feita.
 
 ## Preparar o projeto
 

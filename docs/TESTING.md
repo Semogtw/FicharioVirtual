@@ -4,19 +4,19 @@ Este documento define a cobertura do Fichário Virtual e serve como checklist de
 
 ## Último recibo completo conhecido
 
-Source commit: `482d3af9b46eea81076e591bc188e6164b4658be`<br>
-Workflow: [`Validate current head`](https://github.com/Semogtw/FicharioVirtual/actions/runs/31294232506)<br>
-Run: `31294232506`<br>
+Source commit: `b39e3eb55caec06a4cd40aa20833634c32a463d3`<br>
+Workflow: [`Validate current head`](https://github.com/Semogtw/FicharioVirtual/actions/runs/31296404993)<br>
+Run: `31296404993`<br>
 Data: 2026-08-09
 
-Esse recibo cobre exatamente o SHA `482d3af`. A branch `main` avançou depois dele com commits locais sem novo recibo completo; não atribua o resultado aos commits posteriores.
+Esse recibo cobre exatamente o SHA `b39e3eb`. Não atribua o resultado a outros SHAs.
 
 Evidência executada no GitHub Actions com o mesmo SHA:
 
 ```text
 Prettier + ESLint: PASS
 svelte-check: PASS — 0 erros, 0 warnings
-Vitest: PASS — 933 testes em 235 arquivos
+Vitest: PASS — 938 testes em 236 arquivos
 build estático/PWA: PASS
 gates offline de fonte: PASS
 Edge Functions via Deno: PASS
@@ -26,7 +26,17 @@ Supabase local + pgTAP: PASS — 35 arquivos, 434 testes
 
 O workflow e o recibo estão verdes para esse SHA, mas o E2E não foi completamente livre de flakiness. Esse resultado não autoriza inferir interoperabilidade com Google Drive/Gemini, deploy Supabase, host publicado ou dispositivos físicos.
 
-O `Verify Supabase staging` verde mais recente foi executado no SHA antigo `93d76ea9de3d29fb573b3b508a84deef560a0ff7` e cobriu somente Auth, RLS e Storage com dados sintéticos. Não existe neste documento evidência de deploy/verify de staging no SHA atual; esses gates permanecem `NOT RUN` para `482d3af`.
+## Estado do HEAD atual
+
+O HEAD `86dd393` contém a limpeza da sonda temporária de fronteira Gemini. A causa do `401` entre verificadores de staging foi a concorrência de workflows que compartilham uma conta protegida: `auth.signOut()` é global e invalida a sessão do outro workflow. A correção serializa ambos em `staging-contract-verification`, com `cancel-in-progress: false`.
+
+Gates finais do HEAD: `pnpm check` **PASS** (0 erros/0 avisos), `pnpm lint` **PASS**, Vitest **PASS** (940/940 testes em 236 arquivos), build/PWA **PASS** (131 entradas precache, com aviso de chunks acima de 500 kB) e source/offline **PASS**. Deno está ausente localmente (**NOT RUN/BLOCKED**) e E2E está **BLOCKED** sem Chromium. A suíte local completa não deve ser promovida a `PASS` por causa desses bloqueios.
+
+O deploy `31299646430` terminou com sucesso e registra `process-ocr` `ACTIVE v11`. O Verify OCR staging permanece **PENDING/UNKNOWN**, sem jobs, artifact ou conclusão terminal evidenciada; não há OCR aprovado.
+
+A instrumentação anterior de diagnóstico aceitava somente códigos Gemini de allowlist, limitava o corpo inspecionado a 4 KiB e não registrava corpo/headers completos, modelo ou tokens em logs/artifacts. A sonda temporária foi removida no HEAD. O diagnóstico Gemini direto está **BLOCKED** porque falta `STAGING_SERVICE_ROLE_KEY` ou equivalente no environment `staging`; nomes confirmados: `STAGING_SUPABASE_URL`, `STAGING_SUPABASE_PUBLISHABLE_KEY`, `STAGING_AUTHORIZED_EMAIL` e `STAGING_AUTHORIZED_PASSWORD`. Nenhuma chamada Gemini foi feita.
+
+O `Verify Supabase staging` verde mais recente foi executado no SHA `b39e3eb` (`31296568886`) e cobriu Auth, RLS e Storage. No mesmo SHA, `Deploy Supabase staging` (`31296564374`) terminou com sucesso e `Verify OCR staging` (`31296573162`) falhou. No HEAD `86dd393`, `Deploy Supabase staging` (`31299646430`) terminou com `process-ocr` `ACTIVE v11`; Verify OCR permanece `PENDING/UNKNOWN`, sem jobs/artifact/conclusão terminal evidenciada.
 
 ## Ambiente mínimo
 
@@ -54,7 +64,7 @@ A toolchain offline fixa o ambiente de frontend e Edge. Docker e as imagens do S
 | `pnpm verify:full`          | Suíte completa mais banco local           | Antes de release ou checkpoint operacional   |
 | workflows de staging        | Supabase remoto, OCR real e host          | Antes de release privada                     |
 
-No SHA `482d3af`, `pnpm verify`, `pnpm test:source:offline`, `pnpm test:functions:check`, `pnpm test:e2e` e `pnpm test:db:local` possuem `PASS` no workflow acima. O gate E2E tem a flakiness registrada. Deploy/verify Supabase remoto, OCR real, deployment/headers do host, Google Drive, Gemini, billing e dispositivos físicos estão `NOT RUN` ou `BLOCKED` por dependerem de credenciais, serviços ou hardware externos.
+No SHA `b39e3eb`, `pnpm verify`, `pnpm test:source:offline`, `pnpm test:functions:check`, `pnpm test:e2e` e `pnpm test:db:local` possuem `PASS` no workflow acima. No HEAD `86dd393`, check/lint/test/build/source passam conforme os gates acima; Deno está ausente localmente e E2E está `BLOCKED` sem Chromium. OCR permanece `PENDING/UNKNOWN` sem aprovação. Google Drive, Gemini real, deployment/headers do host, billing e dispositivos físicos permanecem `NOT RUN`, `PENDING` ou `BLOCKED`.
 
 ## Testes unitários
 

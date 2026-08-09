@@ -6,8 +6,10 @@ import { createClient } from '@supabase/supabase-js';
 import {
 	assertOcrInvocation,
 	assertOcrPersistence,
+	createOcrInvocationDiagnostic,
 	createOcrProbePng,
 	createOcrStagingReport,
+	formatOcrInvocationFailure,
 	normalizeOcrProbeText
 } from './ocr-staging-contract.mjs';
 import {
@@ -189,6 +191,13 @@ async function main() {
 	let probe = null;
 	let operationError = null;
 	let failureStage = null;
+	let diagnostic = {
+		httpStatus: null,
+		errorKind: null,
+		providerStatus: null,
+		providerErrorKind: null,
+		providerErrorCode: null
+	};
 	let currentStage = 'configuration';
 
 	try {
@@ -222,7 +231,13 @@ async function main() {
 		const invocation = await client.functions.invoke('process-ocr', {
 			body: { pageId: probe.pageId }
 		});
-		if (invocation.error) throw new Error(`process-ocr failed: ${invocation.error.message}`);
+		if (invocation.error) {
+			diagnostic = await createOcrInvocationDiagnostic({
+				error: invocation.error,
+				response: invocation.response
+			});
+			throw new Error(formatOcrInvocationFailure(diagnostic));
+		}
 		assertOcrInvocation({ data: invocation.data });
 		stages.functionCompleted = true;
 		outcome.needsReview = invocation.data.needsReview;
@@ -279,6 +294,7 @@ async function main() {
 		failureStage,
 		stages,
 		outcome,
+		diagnostic,
 		cleanup: { document: documentCleanup, session: sessionCleanup }
 	});
 	let reportError = null;

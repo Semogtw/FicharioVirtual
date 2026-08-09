@@ -1,6 +1,37 @@
 import { deflateSync } from 'node:zlib';
 
 const PNG_SIGNATURE = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10]);
+const PROVIDER_ERROR_CODES = Object.freeze([
+	'gemini_daily_quota',
+	'gemini_rate_limited',
+	'gemini_authentication_failed',
+	'gemini_model_unavailable',
+	'gemini_invalid_request',
+	'gemini_service_unavailable'
+]);
+/** @type {Readonly<Record<string, string>>} */
+const PROVIDER_ERROR_KINDS = Object.freeze({
+	gemini_daily_quota: 'quota',
+	gemini_rate_limited: 'rate_limit',
+	gemini_authentication_failed: 'authentication',
+	gemini_model_unavailable: 'model',
+	gemini_invalid_request: 'invalid_request',
+	gemini_service_unavailable: 'service_unavailable'
+});
+
+/** @param {unknown} value */
+function safeProviderErrorCode(value) {
+	if (typeof value !== 'string') return null;
+	const candidate = value.slice(0, 64);
+	return PROVIDER_ERROR_CODES.includes(candidate) ? candidate : null;
+}
+
+/** @param {unknown} value */
+function safeProviderErrorKind(value) {
+	const candidate = typeof value === 'string' ? value : '';
+	return Object.values(PROVIDER_ERROR_KINDS).includes(candidate) ? candidate : null;
+}
+
 /** @type {Readonly<Record<string, readonly number[]>>} */
 const FONT = Object.freeze({
 	' ': [0, 0, 0, 0, 0, 0, 0],
@@ -115,10 +146,24 @@ export function createOcrProbePng(nonce) {
  *     attemptCount: unknown;
  *     tokens: { fichario: unknown; ocr: unknown; numericProbe: unknown };
  *   };
+ *   diagnostic?: {
+ *     httpStatus?: unknown;
+ *     errorKind?: unknown;
+ *     providerStatus?: unknown;
+ *     providerErrorKind?: unknown;
+ *     providerErrorCode?: unknown;
+ *   };
  *   cleanup: { document: CleanupStatus; session: CleanupStatus };
  * }} input
  */
-export function createOcrStagingReport({ status, failureStage, stages, outcome, cleanup }) {
+export function createOcrStagingReport({
+	status,
+	failureStage,
+	stages,
+	outcome,
+	diagnostic = {},
+	cleanup
+}) {
 	/** @param {unknown} value */
 	const terminalStatus = (value) => (value === 'ready' || value === 'needs_review' ? value : null);
 	/** @param {unknown} value */
@@ -129,6 +174,16 @@ export function createOcrStagingReport({ status, failureStage, stages, outcome, 
 	/** @param {unknown} value */
 	const cleanupStatus = (value) =>
 		value === 'success' || value === 'failure' || value === 'not_required' ? value : 'failure';
+	/** @param {unknown} value */
+	const nullableHttpStatus = (value) =>
+		Number.isInteger(value) && Number(value) >= 100 && Number(value) <= 599 ? Number(value) : null;
+	/** @param {unknown} value */
+	const errorKind = (value) =>
+		['FunctionsFetchError', 'FunctionsHttpError', 'FunctionsRelayError'].includes(
+			typeof value === 'string' ? value : ''
+		)
+			? value
+			: null;
 	/** @param {unknown} value */
 	const sanitizedFailureStage = (value) =>
 		[
@@ -146,7 +201,7 @@ export function createOcrStagingReport({ status, failureStage, stages, outcome, 
 			: null;
 
 	return {
-		schemaVersion: 1,
+		schemaVersion: 2,
 		status: status === 'pass' || status === 'not_run' ? status : 'fail',
 		failureStage: sanitizedFailureStage(failureStage),
 		stages: {
@@ -170,11 +225,92 @@ export function createOcrStagingReport({ status, failureStage, stages, outcome, 
 				numericProbe: nullableBoolean(outcome.tokens.numericProbe)
 			}
 		},
+		diagnostic: {
+			httpStatus: nullableHttpStatus(diagnostic.httpStatus),
+			errorKind: errorKind(diagnostic.errorKind),
+			providerStatus: nullableHttpStatus(diagnostic.providerStatus),
+			providerErrorKind: safeProviderErrorKind(diagnostic.providerErrorKind),
+			providerErrorCode: safeProviderErrorCode(diagnostic.providerErrorCode)
+		},
 		cleanup: {
 			document: cleanupStatus(cleanup.document),
 			session: cleanupStatus(cleanup.session)
 		}
 	};
+}
+
+/**
+ * Keep failed function invocation diagnostics bounded to the HTTP status, SDK
+ * error class, and a small allowlist of provider classifications. Response
+ * bodies and provider messages may contain secrets or user data and must not
+ * enter CI logs or artifacts.
+ *
+ * @param {{
+ *   error?: { name?: unknown } | null;
+ *   response?: {
+ *     status?: unknown;
+ *     headers?: { get: (name: string) => string | null };
+ *     clone?: () => { json: () => Promise<unknown> };
+ *   } | null;
+ * }} input
+ */
+export async function createOcrInvocationDiagnostic({ error, response }) {
+	const status = response?.status;
+	const httpStatus =
+		typeof status === 'number' && Number.isInteger(status) && status >= 100 && status <= 599
+			? status
+			: null;
+	const name = error?.name;
+	const errorKind =
+		typeof name === 'string' &&
+		['FunctionsFetchError', 'FunctionsHttpError', 'FunctionsRelayError'].includes(name)
+			? name
+			: null;
+	/** @type {string | null} */
+	let providerErrorCode = null;
+	if (response && typeof response.clone === 'function') {
+		try {
+			const contentLength = Number(response.headers?.get('content-length') ?? '');
+			if (!Number.isFinite(contentLength) || contentLength <= 4096) {
+				const body = await response.clone().json();
+				const candidate =
+					body && typeof body === 'object' && !Array.isArray(body)
+						? /** @type {{ code?: unknown }} */ (body).code
+						: null;
+				providerErrorCode = safeProviderErrorCode(candidate);
+			}
+		} catch {
+			providerErrorCode = null;
+		}
+	}
+	return {
+		httpStatus,
+		errorKind,
+		providerStatus: providerErrorCode ? httpStatus : null,
+		providerErrorKind: providerErrorCode
+			? safeProviderErrorKind(PROVIDER_ERROR_KINDS[providerErrorCode])
+			: null,
+		providerErrorCode
+	};
+}
+
+/**
+ * @param {{
+ *   httpStatus: number | null;
+ *   errorKind: string | null;
+ *   providerStatus: number | null;
+ *   providerErrorKind: string | null;
+ *   providerErrorCode: string | null;
+ * }} diagnostic
+ */
+export function formatOcrInvocationFailure(diagnostic) {
+	const status =
+		diagnostic.httpStatus == null ? 'unknown HTTP status' : `HTTP ${diagnostic.httpStatus}`;
+	const kind = diagnostic.errorKind ? ` (${diagnostic.errorKind})` : '';
+	const provider = diagnostic.providerErrorKind
+		? `; provider=${diagnostic.providerErrorKind}${diagnostic.providerErrorCode ? `/${diagnostic.providerErrorCode}` : ''}`
+		: '';
+	return `process-ocr failed: ${status}${kind}${provider}`;
 }
 
 /** @param {unknown} text */

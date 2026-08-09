@@ -6,7 +6,7 @@ O Google Drive é o armazenamento permanente dos arquivos originais. O Supabase 
 
 ## Estado atual
 
-A base funcional do Fichário está implementada em código, mas o produto ainda **não está pronto para release**. O SHA `482d3af` possui recibo verde de CI para os gates locais; a branch avançou depois dele sem novo recibo no mesmo SHA, e staging Supabase, Google Drive/Gemini reais, host publicado e dispositivos físicos ainda não foram validados.
+A base funcional do Fichário está implementada em código, mas o produto ainda **não está pronto para release**. O SHA `b39e3eb` possui recibo verde de CI para os gates locais no run `31296404993`; os runs de staging Supabase/OCR desse SHA estão `WAITING` por aprovação, e Google Drive/Gemini reais, host publicado e dispositivos físicos ainda não foram validados.
 
 As responsabilidades da arquitetura permanecem separadas:
 
@@ -33,7 +33,7 @@ Já existem na `main`:
 
 Ainda faltam execução com OAuth/Google Drive/Gemini reais, deploy e verificação do schema/runtime Supabase no HEAD atual, migração dos originais reais, migração do host, worker local, dispositivos móveis e validação remota. O código não é tratado como prova desses ambientes.
 
-O último recibo completo está registrado em [`docs/TESTING.md`](docs/TESTING.md); ele inclui uma execução E2E que passou após uma primeira tentativa flaky. Isso mantém o SHA validado verde, mas não elimina a pendência de investigar a flakiness nem valida commits posteriores.
+O último recibo completo está registrado em [`docs/TESTING.md`](docs/TESTING.md); ele valida o SHA atual e inclui uma execução E2E que passou após uma primeira tentativa flaky. Isso mantém o CI verde, mas não elimina a pendência de investigar a flakiness nem prova staging, serviços reais ou hardware.
 
 O estado canônico fica em [`docs/CURRENT_STATUS.md`](docs/CURRENT_STATUS.md). A prontidão real fica em [`docs/READINESS.md`](docs/READINESS.md).
 
