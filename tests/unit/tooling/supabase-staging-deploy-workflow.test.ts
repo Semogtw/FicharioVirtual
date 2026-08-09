@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 const path = '.github/workflows/deploy-supabase-staging.yml';
 const source = readFileSync(path, 'utf8');
+const currentHeadSource = readFileSync('.github/workflows/validate-current-head.yml', 'utf8');
 
 describe('Supabase staging migration deploy workflow', () => {
 	it('is manual, protected and cannot push repository contents', () => {
@@ -13,9 +14,12 @@ describe('Supabase staging migration deploy workflow', () => {
 		expect(source).toContain('persist-credentials: false');
 	});
 
-	it('pins the same Supabase CLI family used by current-head validation', () => {
-		expect(source).toContain('uses: supabase/setup-cli@v2');
+	it('pins the same immutable Supabase CLI action and CLI version used by current-head validation', () => {
+		const action = source.match(/uses: supabase\/setup-cli@([0-9a-f]{40}) # v2/)?.[1];
+		expect(action).toBeTruthy();
+		expect(currentHeadSource).toContain(`uses: supabase/setup-cli@${action} # v2`);
 		expect(source).toContain('version: 2.111.0');
+		expect(currentHeadSource).toContain('version: 2.111.0');
 	});
 
 	it('previews pending migrations before applying the linked history in order', () => {
