@@ -79,7 +79,7 @@ describe('DrivePdfDataRangeTransport', () => {
 });
 
 describe('openDrivePdfRangeDocument', () => {
-	it('configures the worker and disables streaming/prefetch for the range transport', async () => {
+	it('configures the worker and disables streaming, prefetch, and PDF scripting', async () => {
 		const document = { numPages: 321 } as never;
 		const destroy = vi.fn().mockResolvedValue(undefined);
 		const configureWorker = vi.fn().mockResolvedValue(undefined);
@@ -114,7 +114,8 @@ describe('openDrivePdfRangeDocument', () => {
 			rangeChunkSize: DRIVE_PDF_RANGE_CHUNK_BYTES,
 			disableStream: true,
 			disableAutoFetch: true,
-			disableRange: false
+			disableRange: false,
+			enableScripting: false
 		});
 		expect(source).not.toHaveProperty('url');
 		expect(source).not.toHaveProperty('data');
