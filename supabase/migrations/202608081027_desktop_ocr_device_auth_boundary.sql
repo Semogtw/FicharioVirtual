@@ -192,7 +192,7 @@ begin
     page.id as page_id,
     page.document_id,
     page.page_number,
-    page.storage_path,
+    page.temporary_image_path as storage_path,
     job.desktop_lease_expires_at
     into source_record
     from public.ocr_jobs as job
@@ -209,7 +209,7 @@ begin
      and job.route = 'desktop'::public.ocr_route
      and job.status = 'processing'::public.ocr_status
      and device.status = 'active'
-     and page.storage_path is not null;
+     and page.temporary_image_path is not null;
 
   if not found then
     raise exception using errcode = '55P03', message = 'Desktop OCR source lease is not active';
