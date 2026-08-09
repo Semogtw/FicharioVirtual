@@ -2,7 +2,7 @@
 
 _Atualizado: 2026-08-09_<br>
 _Branch ativa: `main`_<br>
-_Estado: Drive-first, OCR seletivo por lotes, importação de PDFs grandes por ranges, recuperação distribuída da cópia, lease renovável de publicação e a fronteira backend do worker estão integrados em código. O último CI verde é do SHA `482d3af`; a branch avançou sem novo recibo no mesmo SHA. Release ainda depende de staging externo, serviços reais, dispositivos reais e da investigação de uma flakiness E2E._
+_Estado: Drive-first, OCR seletivo por lotes, importação de PDFs grandes por ranges, recuperação distribuída da cópia, lease renovável de publicação e a fronteira backend do worker estão integrados em código. O último CI verde é do SHA `b39e3eb` (run `31296404993`). Os runs de staging desse SHA estão `WAITING` por aprovação. Release ainda depende de staging externo, serviços reais, dispositivos reais e da investigação de uma flakiness E2E._
 
 ## Resumo executivo
 
@@ -123,20 +123,20 @@ A existência do código não substitui validação com uma conta Google real. O
 
 ### Último recibo completo de CI conhecido
 
-O workflow [`Validate current head`](https://github.com/Semogtw/FicharioVirtual/actions/runs/31294232506) no SHA `482d3af9b46eea81076e591bc188e6164b4658be` terminou com **success** em 2026-08-09.
+O workflow [`Validate current head`](https://github.com/Semogtw/FicharioVirtual/actions/runs/31296404993) no SHA `b39e3eb55caec06a4cd40aa20833634c32a463d3` terminou com **success** em 2026-08-09.
 
 No mesmo SHA passaram:
 
 - Prettier e ESLint;
 - `svelte-check` com 0 erros e 0 warnings;
-- 235 arquivos de testes unitários, totalizando 933 testes;
+- 236 arquivos de testes unitários, totalizando 938 testes;
 - build de produção;
 - gates offline/source;
 - instalação do Chromium e E2E: 4 testes passaram; 1 teste foi flaky na primeira tentativa e passou no retry;
 - type-check das Edge Functions com Deno;
 - Supabase CLI e gates locais de banco/pgTAP: 35 arquivos e 434 testes.
 
-Esse recibo valida somente o SHA indicado. A branch contém commits posteriores sem recibo equivalente. O resultado verde não prova deploy Supabase, OAuth Google, interoperabilidade Drive/Gemini, host publicado, billing ou dispositivos físicos. O E2E deve ser tratado como verde com ressalva até a flakiness ser entendida.
+Esse recibo valida somente o SHA indicado. O resultado verde não prova deploy Supabase, OAuth Google, interoperabilidade Drive/Gemini, host publicado, billing ou dispositivos físicos. O E2E deve ser tratado como verde com ressalva até a flakiness ser entendida.
 
 ### Gates obrigatórios
 
@@ -160,6 +160,8 @@ Foi possível validar a formatação da documentação localmente. Os gates loca
 ## Pendências reais
 
 ### Staging e serviços externos
+
+Os workflows do mesmo SHA permanecem sem sucesso de staging: `Deploy Supabase staging` (`31296564374`), `Verify Supabase staging` (`31296568886`) e `Verify OCR staging` (`31296573162`) estão `WAITING` por aprovação. Não converter esse estado em `PASS`.
 
 Ainda são obrigatórios antes de release:
 

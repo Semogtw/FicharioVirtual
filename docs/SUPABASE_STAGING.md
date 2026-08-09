@@ -7,11 +7,13 @@ O staging do Fichário separa duas responsabilidades:
 
 ## Estado confirmado
 
-Não há evidência de deploy ou verificação de Supabase staging no HEAD `482d3af9b46eea81076e591bc188e6164b4658be`. Portanto, este documento não afirma histórico remoto de migrations, status de Edge Functions, advisors ou configuração de secrets para esse SHA.
+Não há evidência de sucesso de deploy ou verificação de Supabase staging no HEAD `b39e3eb55caec06a4cd40aa20833634c32a463d3`. Os runs do SHA atual estão aguardando aprovação; este documento não afirma histórico remoto de migrations, status de Edge Functions, advisors ou configuração de secrets como concluído.
 
 O último `Verify Supabase staging` verde conhecido foi o [run 31292512306](https://github.com/Semogtw/FicharioVirtual/actions/runs/31292512306), executado no SHA antigo `93d76ea9de3d29fb573b3b508a84deef560a0ff7`. Esse run validou apenas Auth, allowlist, RLS e Storage privado com dados sintéticos. Ele não valida as migrations, funções, OCR ou o runtime do HEAD atual.
 
-O workflow `Deploy Supabase staging` está versionado, mas não há neste registro um run atual que comprove sua execução. Deploy, pgTAP remoto, status live das funções, secrets e advisors ficam `NOT RUN`/`BLOCKED` até um recibo do SHA que será promovido.
+O workflow `Deploy Supabase staging` está versionado, mas o run atual ainda aguarda aprovação e não comprova execução concluída. Deploy, pgTAP remoto, status live das funções, secrets e advisors permanecem `WAITING`, `NOT RUN` ou `BLOCKED` até um recibo concluído do SHA que será promovido.
+
+No SHA atual, os workflows estão `WAITING` por aprovação e não constituem sucesso: `Deploy Supabase staging` [31296564374](https://github.com/Semogtw/FicharioVirtual/actions/runs/31296564374), `Verify Supabase staging` [31296568886](https://github.com/Semogtw/FicharioVirtual/actions/runs/31296568886) e `Verify OCR staging` [31296573162](https://github.com/Semogtw/FicharioVirtual/actions/runs/31296573162).
 
 ## Preparar o projeto
 
