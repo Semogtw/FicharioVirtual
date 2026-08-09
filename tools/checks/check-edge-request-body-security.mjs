@@ -4,10 +4,9 @@ import process from 'node:process';
 
 const root = resolve(new URL('../..', import.meta.url).pathname);
 const failures = [];
-const [helper, processOcr, probe, pair, worker, deleteDocument, resolveFolder] = await Promise.all([
+const [helper, processOcr, pair, worker, deleteDocument, resolveFolder] = await Promise.all([
 	readFile(join(root, 'supabase/functions/_shared/bounded-json.ts'), 'utf8'),
 	readFile(join(root, 'supabase/functions/process-ocr/index.ts'), 'utf8'),
-	readFile(join(root, 'supabase/functions/ocr-boundary-probe/index.ts'), 'utf8'),
 	readFile(join(root, 'supabase/functions/desktop-ocr-pair/index.ts'), 'utf8'),
 	readFile(join(root, 'supabase/functions/desktop-ocr-worker/index.ts'), 'utf8'),
 	readFile(join(root, 'supabase/functions/delete-document/index.ts'), 'utf8'),
@@ -25,7 +24,6 @@ for (const required of [
 
 for (const [name, source, expectedLimit] of [
 	['process-ocr', processOcr, '16 * 1024'],
-	['ocr-boundary-probe', probe, '1024'],
 	['desktop-ocr-pair', pair, '16 * 1024'],
 	['desktop-ocr-worker', worker, '8 * 1024 * 1024'],
 	['delete-document', deleteDocument, '1024'],
