@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const migration = readFileSync(
-	'supabase/migrations/202608090001_force_rls_on_late_private_tables.sql',
+	'supabase/migrations/202608090002_force_rls_on_late_private_tables.sql',
 	'utf8'
 );
 
