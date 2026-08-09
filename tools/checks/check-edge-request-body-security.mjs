@@ -4,10 +4,12 @@ import process from 'node:process';
 
 const root = resolve(new URL('../..', import.meta.url).pathname);
 const failures = [];
-const [helper, pair, worker] = await Promise.all([
+const [helper, pair, worker, deleteDocument, resolveFolder] = await Promise.all([
 	readFile(join(root, 'supabase/functions/_shared/bounded-json.ts'), 'utf8'),
 	readFile(join(root, 'supabase/functions/desktop-ocr-pair/index.ts'), 'utf8'),
-	readFile(join(root, 'supabase/functions/desktop-ocr-worker/index.ts'), 'utf8')
+	readFile(join(root, 'supabase/functions/desktop-ocr-worker/index.ts'), 'utf8'),
+	readFile(join(root, 'supabase/functions/delete-document/index.ts'), 'utf8'),
+	readFile(join(root, 'supabase/functions/drive-resolve-folder/index.ts'), 'utf8')
 ]);
 
 for (const required of [
@@ -21,7 +23,9 @@ for (const required of [
 
 for (const [name, source, expectedLimit] of [
 	['desktop-ocr-pair', pair, '16 * 1024'],
-	['desktop-ocr-worker', worker, '8 * 1024 * 1024']
+	['desktop-ocr-worker', worker, '8 * 1024 * 1024'],
+	['delete-document', deleteDocument, '1024'],
+	['drive-resolve-folder', resolveFolder, '1024']
 ]) {
 	if (!source.includes("from '../_shared/bounded-json.ts'")) {
 		failures.push(`${name}: endpoint must use the shared bounded JSON reader`);
