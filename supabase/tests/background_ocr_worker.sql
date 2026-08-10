@@ -1,6 +1,6 @@
 begin;
 
-select plan(11);
+select plan(14);
 
 select is(
   has_function_privilege('anon', 'public.recover_background_stale_ocr_jobs()', 'EXECUTE'),
@@ -48,6 +48,22 @@ select is(
   has_function_privilege('service_role', 'public.background_ocr_as_user(uuid,text,jsonb)', 'EXECUTE'),
   true,
   'service role can use the constrained background OCR dispatcher'
+);
+
+select is(
+  has_function_privilege('anon', 'public.get_document_ocr_summary(uuid)', 'EXECUTE'),
+  false,
+  'anon cannot inspect document OCR summaries'
+);
+select is(
+  has_function_privilege('authenticated', 'public.get_document_ocr_summary(uuid)', 'EXECUTE'),
+  true,
+  'authenticated owners can inspect document OCR summaries'
+);
+select is(
+  has_function_privilege('service_role', 'public.get_document_ocr_summary(uuid)', 'EXECUTE'),
+  true,
+  'service role can inspect document OCR summaries'
 );
 
 select is(
