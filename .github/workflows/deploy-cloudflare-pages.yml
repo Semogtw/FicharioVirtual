@@ -76,7 +76,7 @@ jobs:
             artifact_root="$artifact_root/fichario-deploy"
           fi
 
-          for required in DEPLOYMENT-MANIFEST.txt SHA256SUMS source/package.json source/pnpm-lock.yaml checks/check-deployed-site.mjs checks/deployment-contract.mjs checks/validate-pages-deploy-output.mjs site/_headers site/200.html site/manifest.webmanifest site/sw.js site/registerSW.js; do
+          for required in DEPLOYMENT-MANIFEST.txt SHA256SUMS source/package.json source/pnpm-lock.yaml checks/check-deployed-site.mjs checks/check-deployment-artifact.mjs checks/deployment-contract.mjs checks/validate-pages-deploy-output.mjs site/_headers site/200.html site/manifest.webmanifest site/sw.js site/registerSW.js; do
             if [[ ! -f "$artifact_root/$required" ]]; then
               echo "deployment artifact is missing $required" >&2
               exit 1
@@ -113,6 +113,8 @@ jobs:
             cd "$artifact_root"
             sha256sum -c SHA256SUMS
           )
+
+          node "$artifact_root/checks/check-deployment-artifact.mjs" "$artifact_root"
 
           if grep -R -F -n --binary-files=without-match '127.0.0.1:54321' "$artifact_root/site"; then
             echo 'deployment artifact contains the local Supabase URL' >&2
