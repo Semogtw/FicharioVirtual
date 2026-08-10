@@ -1,515 +1,331 @@
 # Fichário Desktop OCR Worker
 
-**Status:** arquitetura aprovada; implementação pendente  
-**Última revisão:** 6 de agosto de 2026  
-**Sistema de referência:** CachyOS com RX 6600
+**Status:** runtime e plano de controle implementados em código; validação operacional de hardware/modelo ainda pendente  
+**Última revisão:** 10 de agosto de 2026  
+**Sistema de referência para validação futura:** CachyOS com RX 6600
 
-Este documento define como o computador recebe trabalhos do Fichário, executa OCR local e devolve os resultados. O worker usa apenas conexões HTTPS de saída; nenhuma porta doméstica precisa ser publicada.
+Este documento descreve o estado atual do Desktop OCR Worker. O worker usa somente conexões HTTPS de saída; nenhuma porta doméstica precisa ser publicada. Detalhes de instalação e comandos ficam em [`DESKTOP_OCR_WORKER_LOCAL_RUNTIME.md`](./DESKTOP_OCR_WORKER_LOCAL_RUNTIME.md).
 
-## 1. Finalidade
+## 1. O que já existe
 
-O worker processa páginas que não devem depender apenas do Gemini, principalmente:
+A rota desktop deixou de ser apenas uma arquitetura. O repositório contém:
 
-- manuscritos;
-- páginas com conteúdo misto;
-- fórmulas ou layout difícil;
-- resultados Gemini com muitos avisos;
-- páginas enviadas manualmente para segunda leitura;
-- lotes que o usuário deseja processar sem consumir cota do provedor.
+- dispositivos com credencial própria e autenticação por digest;
+- pareamento web por código de uso único;
+- credencial permanente gerada no próprio computador e guardada no Secret Service;
+- claim exclusivo, source, renew e complete protegidos por lease;
+- download privado por URL assinada curta com MIME, tamanho e SHA-256 verificados;
+- conclusão idempotente;
+- SQLite local para spool, retry e dead letter;
+- reenvio do spool antes de buscar novo trabalho;
+- polling/backoff e shutdown por sinal;
+- lock imutável de modelo;
+- backend `OllamaOcrEngine` limitado a loopback;
+- empacotamento de desenvolvimento e `systemd --user` sem root;
+- comandos de configuração, modelo, pareamento, status e limpeza local;
+- tela **Configurações > Computadores** para parear, listar, atualizar, renomear, revogar e remover dispositivos já revogados;
+- testes unitários, gates estáticos, Deno e pgTAP para as fronteiras implementadas.
 
-O computador pode ficar desligado. Trabalhos aguardam no Supabase e são retomados quando o worker volta a ficar online.
+`readyToRun` significa somente que config, dispositivo, credencial e modelo fixado existem localmente. Não é um selo de benchmark nem de produção.
 
-## 2. Fluxo resumido
+## 2. Fluxo atual
 
 ```text
 PWA
-└── cria trabalho desktop no Supabase
+└── cria/roteia trabalho elegível para desktop
 
 Supabase
-└── waiting_desktop
+└── mantém trabalho até um dispositivo autorizado reivindicá-lo
 
 Worker
-├── consulta a fila
-├── reivindica um item com lease
-├── baixa página temporária por URL curta
-├── confere SHA-256
-├── executa modelo local
-├── envia resultado e metadados
-└── remove a imagem temporária local
+├── autentica com credencial própria
+├── reenvia spool pendente
+├── reivindica um trabalho com lease
+├── recebe origem privada temporária
+├── verifica MIME, tamanho e SHA-256
+├── renova o lease durante inferência longa
+├── executa OCR local
+├── grava o resultado no spool antes da conclusão remota
+├── remove a imagem temporária local
+└── conclui o trabalho de forma idempotente
 
 PWA
-└── mostra o resultado para revisão
+└── recebe o resultado persistido para uso/revisão
 ```
 
-O navegador não envia bytes diretamente ao computador. O worker puxa somente trabalhos autorizados e reivindicados.
+O navegador não envia bytes diretamente ao computador. O worker puxa somente trabalhos do usuário associado à sua credencial.
 
-## 3. Estados esperados
+## 3. Pareamento preferido
 
-```text
-waiting_desktop
-processing_desktop
-retryable_desktop
-completed
-needs_review
-failed
-canceled
-```
-
-Interpretação:
-
-- `waiting_desktop`: nenhum computador compatível reivindicou o item;
-- `processing_desktop`: um dispositivo possui lease ativo;
-- `retryable_desktop`: falha temporária preservou o trabalho;
-- `completed`: resultado válido foi persistido;
-- `needs_review`: resultado existe, mas requer revisão humana;
-- `failed`: falha permanente ou política bloqueante;
-- `canceled`: cancelamento explícito do usuário.
-
-Computador offline não altera um trabalho para `failed`.
-
-## 4. Pareamento
-
-### 4.1 Primeiro uso
-
-Comando planejado:
-
-```bash
-fichario-worker pair
-```
-
-O worker:
-
-1. gera um segredo criptograficamente aleatório;
-2. cria uma solicitação de pareamento de curta duração;
-3. mostra um código curto e a URL do Fichário;
-4. aguarda aprovação.
+O fluxo novo não transfere o access token da sessão web para o computador.
 
 No site:
 
-1. abrir **Configurações > Computadores de OCR**;
-2. escolher **Parear computador**;
-3. confirmar o código;
-4. dar um nome ao dispositivo;
-5. revisar capacidades informadas;
-6. aprovar.
+1. abrir **Configurações > Computadores**;
+2. escolher **Gerar código**;
+3. copiar o comando exibido;
+4. ajustar somente o nome do computador, se desejado.
 
-A Edge Function entrega uma credencial longa apenas uma vez. O servidor guarda somente o hash dessa credencial.
-
-### 4.2 Armazenamento local
-
-A credencial deve ficar no Secret Service/keyring do usuário. Não gravar token em:
-
-- arquivo `.env`;
-- argumentos do processo;
-- histórico do shell;
-- logs;
-- repositório;
-- unidade compartilhada;
-- backup sem criptografia.
-
-### 4.3 Revogação
-
-O site permite revogar cada dispositivo. Depois da revogação:
-
-- novos claims são recusados;
-- heartbeats são recusados;
-- resultados ainda não enviados não são aceitos;
-- o worker remove a credencial do keyring ao receber a resposta de revogação;
-- trabalhos retornam à fila após expiração do lease.
-
-## 5. Operação como serviço de usuário
-
-O worker roda sem root por uma unidade systemd do usuário.
-
-Comandos planejados:
+No host do worker:
 
 ```bash
+fichario-worker-pair-code \
+  https://SEU-PROJETO.supabase.co/functions/v1/desktop-ocr-worker \
+  "Desktop principal"
+```
+
+O comando solicita o código depois de iniciar, evitando colocá-lo em `argv` ou no histórico normal do shell.
+
+### Garantias do código
+
+- 64 bits de aleatoriedade criptográfica;
+- armazenamento no banco somente por SHA-256;
+- validade de 10 minutos;
+- uso único;
+- criar um novo código invalida o anterior ainda não consumido;
+- replay é rejeitado.
+
+### Garantias da credencial permanente
+
+O próprio worker:
+
+1. gera 32 bytes aleatórios localmente;
+2. calcula o SHA-256;
+3. envia somente o digest junto ao resgate do código;
+4. recebe a identidade do dispositivo, sem receber a credencial bruta de volta;
+5. grava a credencial bruta no Secret Service;
+6. grava em `device.json` apenas metadados não secretos.
+
+O servidor nunca precisa conhecer a credencial bruta nesse fluxo.
+
+O comando legado `fichario-worker-pair` continua temporariamente disponível para compatibilidade e usa um access token efêmero do usuário. Não é o caminho recomendado para novas instalações.
+
+## 4. Revogação, limpeza local e remoção
+
+A tela web permite revogar um dispositivo. A revogação:
+
+- torna a credencial remota inutilizável;
+- impede novos claims/renew/completes autenticados por aquele dispositivo;
+- reencaminha trabalhos `processing` associados ao dispositivo conforme o contrato do backend;
+- preserva o registro revogado no histórico da tela até remoção explícita.
+
+Depois de revogar pelo site, o host pode apagar Secret Service + `device.json` sem access token web:
+
+```bash
+fichario-worker-forget --after-web-revoke
+```
+
+O nome do flag é deliberadamente explícito: esse comando **não** revoga o servidor; ele confirma que a revogação já ocorreu no site e limpa apenas o estado local.
+
+Na tela, um dispositivo revogado também pode ser **Removido da lista**. A RPC de remoção é owner-scoped e rejeita dispositivos ativos. Antes de apagar o dispositivo ela remove os registros de pairing consumidos ligados a ele, preservando as constraints do banco.
+
+O comando legado `fichario-worker-unpair` permanece disponível para o fluxo combinado revoke remoto + limpeza local e ainda solicita access token efêmero.
+
+## 5. Armazenamento local
+
+Estrutura usada pelo runtime:
+
+```text
+~/.config/fichario-worker/
+├── config.json
+├── device.json        # sem credencial secreta
+└── model.json
+
+~/.local/state/fichario-worker/
+└── worker.db          # spool/dead letter; sem imagem original
+```
+
+Diretórios privados usam permissões restritivas e a credencial permanece no Secret Service via `secret-tool`.
+
+Não colocar credencial em:
+
+- `.env`;
+- `argv`;
+- histórico do shell;
+- logs;
+- unit file;
+- repositório;
+- backup sem criptografia.
+
+## 6. Instalação de desenvolvimento
+
+O instalador atual é:
+
+```bash
+bash tools/desktop-worker/install-user-service-v2.sh
+```
+
+Ele instala módulos sob `~/.local/lib/fichario-worker`, comandos em `~/.local/bin`, instala `fichario-ocr-worker.service` no escopo do usuário e executa apenas `systemctl --user daemon-reload`.
+
+Depois de configurar, parear e fixar um modelo:
+
+```bash
+fichario-worker-status
 systemctl --user enable --now fichario-ocr-worker.service
 systemctl --user status fichario-ocr-worker.service
 journalctl --user -u fichario-ocr-worker.service
 ```
 
-A unidade deve:
+O instalador não usa `sudo`/`doas` e não inicia o serviço automaticamente.
 
-- iniciar depois da rede;
-- reiniciar após falha com intervalo conservador;
-- usar diretórios pertencentes ao usuário;
-- limitar permissões de arquivos;
-- não executar shell arbitrário recebido da rede;
-- não carregar modelos não aprovados pelo manifesto.
+## 7. Backend local atual
 
-O worker não precisa de `loginctl enable-linger` para o MVP. Ele pode operar apenas enquanto a sessão do usuário estiver ativa. Habilitar execução sem sessão exige decisão separada.
+O backend implementado é `OllamaOcrEngine`.
 
-## 6. Diretórios locais
+Ele:
 
-Localização recomendada:
+- aceita Ollama somente em `127.0.0.1` ou `::1`;
+- exige um modelo de visão já presente localmente;
+- confirma capability `vision` antes de enviar bytes privados ao Ollama;
+- fixa o digest SHA-256 do modelo;
+- recusa troca silenciosa da tag para outro conteúdo;
+- não usa endpoint cloud/remoto do Ollama.
 
-```text
-~/.config/fichario-worker/
-├── config.json
-└── device.json sem credencial secreta
+Nenhum modelo é declarado padrão ou recomendado antes de benchmark, licença e proveniência serem aprovados no hardware alvo.
 
-~/.cache/fichario-worker/
-├── models/
-└── downloads/
+## 8. Lease, origem e conclusão
 
-~/.local/state/fichario-worker/
-├── worker.db
-└── spool/
-```
+A credencial do dispositivo acessa a Edge Function `desktop-ocr-worker`, que possui autenticação própria e não recebe credenciais Gemini/Google.
 
-Permissões:
+O backend implementa:
 
-```text
-Diretórios privados: 0700
-Arquivos privados:   0600
-```
+- `claim`: escolhe um trabalho compatível e cria lease exclusivo;
+- `source`: resolve a página do lease e entrega URL assinada curta;
+- `renew`: renova o lease dentro dos limites do servidor;
+- `complete`: valida binding, resultado e ownership antes de persistir.
 
-A credencial permanece no keyring, não nesses arquivos.
+A decisão de validade do lease é do servidor, não do relógio do PC.
 
-## 7. Configuração
+Antes da inferência, o cliente valida:
 
-Contrato planejado de `config.json`:
+- HTTPS da origem;
+- MIME permitido;
+- limite de bytes;
+- SHA-256 ligado ao lease.
 
-```json
-{
-	"schemaVersion": 1,
-	"appOrigin": "https://app.example.com",
-	"backendPreference": ["vulkan", "cpu"],
-	"maxConcurrency": 1,
-	"pollIntervalSeconds": 30,
-	"idlePollIntervalSeconds": 300,
-	"modelChannel": "stable",
-	"keepCompletedSpoolHours": 24
-}
-```
+Resultado calculado é escrito no spool antes da transmissão terminal, permitindo retomada depois de falha de rede/processo.
 
-Regras:
+## 9. Spool e retomada
 
-- `appOrigin` precisa ser HTTPS e não pode conter credentials, query ou fragmento;
-- `maxConcurrency` começa em `1`;
-- polling ocioso aumenta para reduzir requisições;
-- `rocm-experimental` não entra na preferência padrão;
-- a configuração nunca contém token;
-- valores desconhecidos são rejeitados fail-closed.
+O SQLite local mantém estado transacional de resultados já calculados. O runtime:
 
-## 8. Descoberta de capacidades
+1. tenta reenviar pendências antes de reivindicar trabalho novo;
+2. preserva retryable failures;
+3. move rejeições permanentes para dead letter com código seguro;
+4. não guarda a imagem original no banco local;
+5. remove temporários privados depois que já não são necessários.
 
-No início, o worker registra:
+A conclusão remota é idempotente para permitir replay seguro do mesmo resultado.
 
-- arquitetura de CPU;
-- memória disponível aproximada;
-- sistema operacional e versão;
-- backends de inferência disponíveis;
-- identificação da GPU quando acessível;
-- versão do worker;
-- formatos de modelo suportados.
+## 10. Logs e privacidade
 
-Esses dados servem para compatibilidade e diagnóstico. Não registrar nomes de arquivos pessoais, texto OCR ou lista de aplicativos.
+Logs podem conter somente informações operacionais sanitizadas, como transição de estado, duração, versão, backend/modelo público e códigos de erro seguros.
 
-Backends:
+Não registrar:
 
-```text
-auto
-vulkan
-cpu
-rocm-experimental
-```
-
-Política:
-
-- CPU é o fallback obrigatório;
-- Vulkan pode ser preferido depois de teste funcional;
-- ROCm na RX 6600 é experimental e nunca requisito do MVP;
-- um backend que falhar repetidamente fica desativado até nova validação;
-- mudança de backend não troca silenciosamente o modelo aceito.
-
-## 9. Modelos
-
-### 9.1 Instalação
-
-Comando planejado:
-
-```bash
-fichario-worker models install <model-id>@<version>
-```
-
-Passos:
-
-1. baixar manifesto por HTTPS;
-2. validar schema e versão mínima do worker;
-3. verificar licença permitida;
-4. baixar partes individualmente;
-5. verificar tamanho e SHA-256 de cada parte;
-6. remontar em arquivo temporário;
-7. verificar SHA-256 total;
-8. testar carregamento sem processar conteúdo privado;
-9. promover atomicamente para o cache;
-10. registrar instalação no banco local.
-
-### 9.2 Atualização
-
-Atualização é explícita. O worker pode informar que há versão recomendada, mas não substitui automaticamente um modelo em uso durante um trabalho.
-
-Uma versão instalada permanece disponível para reproduzir resultados anteriores.
-
-### 9.3 Remoção
-
-Não remover modelo referenciado por um trabalho no spool ou por uma tentativa em execução. A remoção apaga somente artefatos públicos do modelo, nunca resultados do Fichário.
-
-## 10. Consulta e claim
-
-O worker consulta uma Edge Function dedicada, autenticando-se com a credencial do dispositivo.
-
-A resposta de listagem contém apenas metadados mínimos:
-
-```text
-job_id
-page_id
-priority
-content_type
-required_capabilities
-source_sha256
-estimated_pixels
-created_at
-```
-
-Não inclui texto anterior ou URL de origem antes do claim.
-
-O claim retorna:
-
-```text
-job_id
-claim_nonce
-lease_expires_at
-source_url temporária
-source_sha256
-mime_type
-model_policy
-```
-
-Somente um dispositivo pode possuir claim ativo. O backend rejeita claims concorrentes e não depende do relógio local do computador para decidir validade.
-
-## 11. Download da página
-
-A origem é uma página preparada em Supabase Storage privado, acessível por URL curta e vinculada ao trabalho.
-
-O worker:
-
-1. baixa para arquivo temporário com permissão `0600`;
-2. limita tamanho antes e durante o download;
-3. rejeita MIME não permitido;
-4. calcula SHA-256;
-5. compara com `source_sha256`;
-6. decodifica com limites de pixels;
-7. não mantém a imagem depois da conclusão.
-
-O worker não recebe refresh token nem access token persistente do Google Drive.
-
-## 12. Heartbeat e lease
-
-Durante inferência longa, o worker envia heartbeat com:
-
-```text
-job_id
-claim_nonce
-stage
-progress aproximado
-worker_version
-model_id
-model_version
-```
-
-`progress` é informativo e não pode estender indefinidamente um trabalho preso. O backend impõe duração máxima por tentativa e número finito de renovações.
-
-Se o heartbeat falhar:
-
-- o worker tenta restabelecer rede;
-- não inicia outro trabalho;
-- conclui localmente se for seguro;
-- guarda o resultado no spool;
-- tenta enviar antes da expiração;
-- se o lease expirar, pede novo claim antes de enviar.
-
-## 13. Resultado
-
-Payload mínimo:
-
-```json
-{
-	"jobId": "uuid",
-	"claimNonce": "valor-opaco",
-	"sourceSha256": "hash",
-	"engine": "desktop",
-	"backend": "vulkan",
-	"modelId": "modelo-estavel",
-	"modelVersion": "versao-imutavel",
-	"text": "transcricao",
-	"warnings": [],
-	"contentType": "handwritten",
-	"needsReview": true,
-	"processingStartedAt": "timestamp",
-	"processingFinishedAt": "timestamp"
-}
-```
-
-O backend valida:
-
-- dispositivo ativo;
-- claim e nonce;
-- lease válido ou política explícita de revalidação;
-- propriedade do trabalho;
-- hash da origem;
-- modelo permitido;
-- limites de texto e avisos;
-- timestamps coerentes;
-- ausência de campos extras.
-
-Resultado inválido não altera o texto aceito da página.
-
-## 14. Spool e retomada
-
-O spool local existe para resultados já calculados cuja transmissão falhou. Ele guarda:
-
-- payload de resultado;
-- hash da origem;
-- ID do trabalho;
-- versão do modelo;
-- estado de envio.
-
-Não guarda a imagem original depois que o resultado foi calculado.
-
-Na reinicialização:
-
-1. enviar resultados pendentes ainda válidos;
-2. confirmar aceitação idempotente;
-3. remover entradas confirmadas depois da janela configurada;
-4. somente então buscar novos trabalhos.
-
-O banco local usa transações e permissões `0600`.
-
-## 15. Logs
-
-Logs permitidos:
-
-- ID abreviado do trabalho;
-- transição de estado;
-- modelo e backend;
-- duração;
-- tamanhos em bytes;
-- códigos de erro seguros;
-- versão do worker.
-
-Logs proibidos:
-
-- texto transcrito;
-- bytes ou miniaturas;
+- texto OCR;
+- bytes/miniaturas;
 - URLs assinadas completas;
-- credenciais;
-- headers de autorização;
+- credenciais ou headers de autorização;
 - nomes de documentos;
-- caminhos do Google Drive.
+- caminhos privados do Drive;
+- payload integral do spool.
 
-## 16. Falhas
+## 11. Interface web atual
 
-| Falha                | Comportamento                                                  |
-| -------------------- | -------------------------------------------------------------- |
-| Sem rede             | mantém trabalho ou spool e repete com backoff                  |
-| Computador desligado | fila permanece aguardando                                      |
-| Modelo ausente       | instala modelo antes do claim ou informa incompatibilidade     |
-| Checksum inválido    | apaga download, bloqueia versão e não processa                 |
-| Falta de memória     | reduz backend/tamanho quando permitido ou devolve retry seguro |
-| GPU falha            | tenta CPU somente se a política do trabalho permitir           |
-| Lease expira         | solicita novo claim antes de concluir                          |
-| Origem mudou         | descarta resultado obsoleto e limpa temporário                 |
-| Credencial revogada  | para novos trabalhos e remove token local                      |
-| Resultado rejeitado  | preserva spool e registra motivo seguro                        |
-| Processo cai         | systemd reinicia; lease expira se necessário                   |
+**Configurações > Computadores** já oferece:
 
-Nenhuma falha ativa API paga automaticamente.
-
-## 17. Interface no site
-
-A página **Configurações > Computadores de OCR** mostra:
-
+- geração do código de pareamento;
+- comando copiável para o host;
+- lista de dispositivos;
 - nome do dispositivo;
-- estado online/offline/ocupado/revogado;
-- último heartbeat;
-- versão do worker;
-- CPU/GPU e backends aprovados;
-- modelo ativo;
-- fila atribuível;
-- ação de revogar;
-- ação de renomear;
-- histórico de erros sem conteúdo privado.
+- estado `Ativo`/`Revogado`;
+- último contato;
+- data de pareamento/revogação;
+- capacidades públicas limitadas: backend, modelo e concorrência quando informados;
+- renomear dispositivo ativo;
+- revogar dispositivo ativo com confirmação;
+- remover da lista somente depois da revogação, também com confirmação.
 
-A fila mostra:
+A UI não exibe credencial, digest privado ou campos arbitrários de capabilities.
 
-- aguardando computador;
-- dispositivo atual;
-- tempo de processamento;
-- motivo de roteamento;
-- resultado preliminar Gemini, quando existir;
-- ações para usar Gemini, reenviar, cancelar ou revisar.
+Ainda falta uma interface detalhada da **fila desktop** mostrando trabalhos aguardando/processando, dispositivo atual e ações operacionais do trabalho.
 
-## 18. Validação na RX 6600
+## 12. Fronteiras de segurança
 
-O benchmark precisa usar um conjunto representativo e anonimizado de páginas reais:
+O worker local não recebe nem armazena:
 
-- texto cursivo em português;
-- letra de forma;
-- páginas com marca-texto;
-- fórmulas e símbolos;
-- fotografias inclinadas;
-- iluminação irregular;
-- conteúdo misto.
+- `SUPABASE_SERVICE_ROLE_KEY`;
+- `GEMINI_API_KEY`;
+- refresh token do Google Drive;
+- access token persistente da sessão web;
+- imagem privada dentro do SQLite.
 
-Registrar para cada modelo/backend:
+`desktop-ocr-pair` usa `verify_jwt=false` no gateway somente porque o resgate do código precisa acontecer antes de o dispositivo ter identidade. Dentro da função:
 
-- taxa de erro de caracteres e palavras quando mensurável;
-- quantidade de correções manuais;
-- tempo por página;
-- pico de RAM e VRAM;
-- falhas de carregamento;
-- estabilidade em lote;
-- qualidade em acentos e pontuação;
-- licença e tamanho do modelo.
+- somente `action: redeem` segue sem bearer do usuário;
+- a RPC de resgate é `service_role`-only;
+- código, expiração e uso único são verificados no backend;
+- demais caminhos legados continuam autenticando explicitamente o usuário.
 
-A RX 6600 só aparece como `PASS` quando um backend local conclui o conjunto sem corrupção, travamentos recorrentes ou dependência não suportada. CPU continua sendo o caminho funcional mínimo.
+A tabela de pairing codes usa RLS habilitado **e forçado** e não é superfície direta do cliente.
 
-## 19. Instalação e atualização
+## 13. Validação automatizada
 
-O pacote do worker deve ser versionado e reproduzível. Antes de release:
+O repositório cobre em testes/gates:
 
-- checksums do executável/pacote;
-- assinatura ou proveniência do artifact;
-- changelog;
-- compatibilidade com schema do servidor;
-- migration de config e spool testada;
-- rollback para versão anterior;
-- atualização nunca automática durante processamento.
+- autenticação por digest;
+- ownership e revogação;
+- código de uso único e replay;
+- segredo permanente gerado localmente;
+- Secret Service adapter;
+- download limitado + hash;
+- leases e renovação;
+- conclusão idempotente;
+- spool/dead letter;
+- loop/polling/backoff/shutdown;
+- Ollama loopback e model lock;
+- empacotamento systemd;
+- gestão web de dispositivos;
+- rename e remoção pós-revogação;
+- pgTAP das RPCs;
+- probe de staging do pareamento real, versionado para rodar depois do deploy validado.
 
-O worker informa incompatibilidade quando o servidor exige versão maior. Ele não tenta interpretar contratos desconhecidos.
+O probe de staging cria código via conta autenticada, resgata sem Authorization/JWT usando somente publishable key, verifica que nenhuma credencial é retornada, rejeita replay, lista o dispositivo pelo owner, revoga e remove a fixture.
 
-## 20. Critério de prontidão
+## 14. O que ainda falta
 
-```text
-Pareamento de uso único: PASS
-Token somente no keyring: PASS
-Revogação: PASS
-Nenhuma porta pública: PASS
-Claim exclusivo: PASS
-Lease e heartbeat: PASS
-URL curta e hash da origem: PASS
-Modelo com licença e checksum: PASS
-Spool retomável: PASS
-Conclusão idempotente: PASS
-Logs sem conteúdo: PASS
-CPU funcional: PASS
-RX 6600: PASS ou limitação registrada
-Worker offline sem perda: PASS
-Resultado local preservado separadamente: PASS
-Correção manual com precedência: PASS
-```
+Pendências reais antes de declarar o Desktop OCR Worker operacionalmente pronto:
 
-Este runbook descreve o comportamento alvo. Até que os itens sejam implementados e testados, nenhuma interface ou comando aqui deve ser apresentado ao usuário como disponível.
+1. obter um checkpoint CI verde do SHA atual e promover as migrations/Edge Functions para staging;
+2. executar o novo probe de pareamento contra staging e guardar o recibo terminal;
+3. exercitar `/usr/bin/secret-tool` em uma sessão CachyOS real;
+4. escolher um modelo de visão com licença/proveniência aceitáveis;
+5. executar inferência real e benchmark CPU;
+6. validar separadamente qualquer caminho Vulkan/ROCm desejado, sem promovê-lo antes do benchmark;
+7. executar processamento desktop end-to-end contra staging com documento privado controlado;
+8. implementar UI detalhada de fila/estado desktop;
+9. registrar memória, latência, estabilidade, temperatura e qualidade no hardware alvo;
+10. decidir quando remover o pareamento legado baseado em access token após o fluxo novo estar comprovado em staging/hardware.
+
+## 15. Critério de prontidão
+
+| Item | Estado |
+| --- | --- |
+| Pareamento por código de uso único | implementado; staging real pendente |
+| Credencial longa somente local + hash remoto | implementado |
+| Secret Service | implementado; sessão real pendente |
+| Revogação web | implementado |
+| Limpeza local pós-revogação web | implementado |
+| Remoção owner-scoped de dispositivo revogado | implementado |
+| Nenhuma porta pública doméstica | implementado por arquitetura outbound-only |
+| Claim exclusivo + lease/renew | implementado/testado |
+| Origem privada curta + SHA-256 | implementado/testado |
+| Spool retomável + conclusão idempotente | implementado/testado |
+| Ollama loopback + model lock | implementado/testado |
+| CPU em hardware real | pendente |
+| RX 6600 / Vulkan / ROCm | pendente |
+| Fila desktop detalhada na PWA | pendente |
+| E2E staging com documento privado | pendente |
+
+A documentação não deve converter um item operacional pendente em `PASS` apenas porque o código correspondente existe. O release continua condicionado a CI, staging e validação no dispositivo real.
