@@ -22,13 +22,28 @@ const userId = '11111111-1111-4111-8111-111111111111';
 
 function prepared(): PreparedImage {
 	return {
+		original: new File(['source'], 'scan.png', { type: 'image/png' }),
 		image: new Blob(['image'], { type: 'image/webp' }),
 		thumbnail: new Blob(['thumb'], { type: 'image/jpeg' }),
 		width: 1200,
 		height: 900,
 		format: 'image/webp',
+		preprocessing: {
+			profile: 'ocr_clean_v1',
+			version: 1,
+			autoCropApplied: true,
+			retainedAreaPermille: 920,
+			deskewMilliDegrees: 0,
+			illuminationNormalized: true,
+			contrastEnhanced: true,
+			fallbackToStandard: false,
+			sourceWidth: 1800,
+			sourceHeight: 1400,
+			preparedWidth: 1200,
+			preparedHeight: 900
+		},
 		originalName: 'scan.png',
-		originalBytes: 100,
+		originalBytes: 6,
 		preparedBytes: 10
 	};
 }
@@ -103,7 +118,7 @@ describe('uploadPreparedImage failure safety', () => {
 		);
 	});
 
-	it('cleans both candidate paths when one parallel upload throws', async () => {
+	it('cleans source, derivative and thumbnail when one parallel upload throws', async () => {
 		const fixture = clientFixture();
 		fixture.upload.mockImplementation(async (path: string) => {
 			if (path.includes('/thumbnail.')) throw new Error('private storage detail');
@@ -115,9 +130,25 @@ describe('uploadPreparedImage failure safety', () => {
 		).rejects.toEqual(expect.objectContaining({ code: 'upload_failed' }));
 		expect(fixture.remove).toHaveBeenCalledOnce();
 		expect(fixture.remove.mock.calls[0]?.[0]).toEqual([
-			expect.stringMatching(/\/original\.webp$/),
+			expect.stringMatching(/\/prepared\.webp$/),
+			expect.stringMatching(/\/source\.png$/),
 			expect.stringMatching(/\/thumbnail\.jpg$/)
 		]);
+	});
+
+	it('uses the versioned import RPC with safe preprocessing metadata', async () => {
+		const fixture = clientFixture();
+		await uploadPreparedImage({ prepared: prepared() }, fixture.client as never);
+		expect(fixture.rpc).toHaveBeenCalledWith(
+			'create_image_import_v2',
+			expect.objectContaining({
+				preprocessing_profile: 'ocr_clean_v1',
+				preprocessing_version: 1,
+				preprocessing_auto_crop: true,
+				preprocessing_illumination: true,
+				source_sha256: 'a'.repeat(64)
+			})
+		);
 	});
 
 	it('cleans uploaded objects when metadata RPC throws', async () => {
@@ -128,6 +159,7 @@ describe('uploadPreparedImage failure safety', () => {
 			uploadPreparedImage({ prepared: prepared() }, fixture.client as never)
 		).rejects.toEqual(expect.objectContaining({ code: 'metadata_failed' }));
 		expect(fixture.remove).toHaveBeenCalledOnce();
+		expect(fixture.remove.mock.calls[0]?.[0]).toHaveLength(3);
 	});
 
 	it('does not begin storage uploads after cancellation during duplicate lookup', async () => {
