@@ -176,11 +176,10 @@ describe('runWorkerCycle', () => {
 			downloadsDir: '/tmp/test',
 			signal: undefined
 		});
-		expect(renewLease).toHaveBeenCalledWith(
-			{ client, lease: lease() },
-			expect.any(Function),
-			{ signal: undefined, now: expect.any(Function) }
-		);
+		expect(renewLease).toHaveBeenCalledWith({ client, lease: lease() }, expect.any(Function), {
+			signal: undefined,
+			now: expect.any(Function)
+		});
 		expect(engine.process).toHaveBeenCalledWith(
 			{
 				jobId: JOB_ID,
