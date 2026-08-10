@@ -6,12 +6,28 @@ const staging = readFileSync('docs/SUPABASE_STAGING.md', 'utf8');
 const driveSetup = readFileSync('docs/GOOGLE_DRIVE_SETUP.md', 'utf8');
 const desktopWorker = readFileSync('docs/DESKTOP_OCR_WORKER.md', 'utf8');
 const desktopWorkerAuth = readFileSync('supabase/functions/_shared/desktop-worker-auth.ts', 'utf8');
+const backgroundWorker = readFileSync('supabase/functions/ocr-queue-worker/index.ts', 'utf8');
 const ocrRollout = readFileSync('docs/OCR_MIGRATION_ROLLOUT.md', 'utf8');
 
 const versionedFunctions = readdirSync('supabase/functions', { withFileTypes: true })
 	.filter((entry) => entry.isDirectory() && entry.name !== '_shared')
 	.map((entry) => entry.name)
 	.sort();
+
+const expectedVersionedFunctions = [
+	'delete-document',
+	'desktop-ocr-pair',
+	'desktop-ocr-worker',
+	'drive-access-token',
+	'drive-oauth-callback',
+	'drive-oauth-start',
+	'drive-resolve-folder',
+	'drive-run-jobs',
+	'drive-sync',
+	'ocr-queue-kick',
+	'ocr-queue-worker',
+	'process-ocr'
+] as const;
 
 const requiredOcrMigrations = [
 	'202608060014_provider_only_ocr_batches.sql',
@@ -24,7 +40,7 @@ const requiredOcrMigrations = [
 
 describe('Edge Function deployment contract', () => {
 	it('keeps every versioned application Edge Function covered by config and the all-functions deploy flow', () => {
-		expect(versionedFunctions).toHaveLength(10);
+		expect(versionedFunctions).toEqual(expectedVersionedFunctions);
 		for (const functionName of versionedFunctions) {
 			expect(config).toContain(`[functions.${functionName}]`);
 		}
@@ -44,9 +60,11 @@ describe('Edge Function deployment contract', () => {
 	});
 
 	it('documents the intentional gateway JWT exceptions and their replacement authentication boundaries', () => {
+		expect(config).toContain('[functions.ocr-queue-worker]\nverify_jwt = false');
 		expect(config).toContain('[functions.drive-oauth-callback]\nverify_jwt = false');
 		expect(config).toContain('[functions.desktop-ocr-pair]\nverify_jwt = false');
 		expect(config).toContain('[functions.desktop-ocr-worker]\nverify_jwt = false');
+		expect(config).toContain('[functions.ocr-queue-kick]\nverify_jwt = true');
 		expect(config).toContain('[functions.process-ocr]\nverify_jwt = true');
 		expect(config).toContain('[functions.delete-document]\nverify_jwt = true');
 		expect(staging).toContain('Não use `--no-verify-jwt` global');
@@ -55,6 +73,9 @@ describe('Edge Function deployment contract', () => {
 		expect(driveSetup).toContain('PKCE');
 		expect(desktopWorker).toContain('`desktop-ocr-pair` usa `verify_jwt=false`');
 		expect(desktopWorkerAuth).toContain("const AUTHORIZATION_PREFIX = 'FicharioWorker '");
+		expect(backgroundWorker).toContain("Deno.env.get('OCR_BACKGROUND_WORKER_KEY')");
+		expect(backgroundWorker).toContain("request.headers.get('X-Fichario-Worker-Key')");
+		expect(backgroundWorker).toContain('secretMatches(');
 	});
 
 	it('distinguishes the local 20 MiB setting from the transitional 50 MiB migration', () => {
