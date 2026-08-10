@@ -61,19 +61,21 @@ afterEach(async () => {
 
 describe('OllamaOcrEngine', () => {
 	it('accepts only a loopback Ollama HTTP endpoint', () => {
-		expect(() =>
-			new OllamaOcrEngine({
-				model: MODEL,
-				expectedDigest: DIGEST,
-				baseUrl: 'https://ollama.com/'
-			})
+		expect(
+			() =>
+				new OllamaOcrEngine({
+					model: MODEL,
+					expectedDigest: DIGEST,
+					baseUrl: 'https://ollama.com/'
+				})
 		).toThrow('loopback');
-		expect(() =>
-			new OllamaOcrEngine({
-				model: MODEL,
-				expectedDigest: DIGEST,
-				baseUrl: 'http://192.168.1.2:11434/'
-			})
+		expect(
+			() =>
+				new OllamaOcrEngine({
+					model: MODEL,
+					expectedDigest: DIGEST,
+					baseUrl: 'http://192.168.1.2:11434/'
+				})
 		).toThrow('loopback');
 	});
 
