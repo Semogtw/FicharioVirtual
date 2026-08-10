@@ -119,7 +119,7 @@ O worker nunca deve receber service-role, chave Gemini ou refresh token do Drive
 
 ### CI do mesmo SHA
 
-O recibo [`31333367357`](https://github.com/Semogtw/FicharioVirtual/actions/runs/31333367357) do SHA `f87e1edc47268b4e0d2ea0742dac690c96d93646` terminou com **success** e executou frontend, source/offline, Chromium, Deno/Edge e Supabase local + pgTAP. Runs posteriores cancelados por pushes de cleanup/housekeeping não devem ser promovidos a PASS; o checkpoint final deve citar o novo recibo terminal depois da documentação.
+O recibo funcional [`31333367357`](https://github.com/Semogtw/FicharioVirtual/actions/runs/31333367357) do SHA `f87e1edc47268b4e0d2ea0742dac690c96d93646` terminou com **success** e executou frontend, source/offline, Chromium, Deno/Edge e Supabase local + pgTAP. Depois do cleanup e do alinhamento dos gates estáticos, o checkpoint de housekeeping `0f71737f9fb1c0bdf62b5d3eaf6b88e0b5c69a55` também recebeu recibos terminais **success**: `Validate current head` `31340782404` e `Validate documentation` `31340782422`. O primeiro recibo continua sendo a evidência funcional completa do fix OCR; o segundo checkpoint fecha a consistência do repositório após a remoção da instrumentação temporária.
 
 ### Supabase
 
@@ -161,7 +161,9 @@ Ainda faltam o fluxo normal de página/job com persistência, lote visual multip
 ## Critérios de promoção
 
 ```text
-Validate current head `f87e1edc` / `31333367357`: PASS
+Validate current head `f87e1edc` / `31333367357`: PASS funcional completo
+Housekeeping `0f71737f` / `31340782404`: PASS
+Validate documentation `0f71737f` / `31340782422`: PASS
 Deploy do fix `31333367356`: PASS
 Sonda OCR `31333418948`: PASS para fronteira provider/parser (`process-ocr` HTTP 200)
 Cleanup `31333977753`: PASS; `process-ocr` ACTIVE v19; probe ausente
