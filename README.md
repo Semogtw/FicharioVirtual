@@ -29,6 +29,7 @@ Já existem na `main`:
 - sincronizador paginado que só avança o token depois de persistir a página;
 - modelo PostgreSQL para conexão, hierarquia de pastas, fila idempotente, conflitos e reconexão;
 - histórico imutável de resultados OCR, separação dos status de página/OCR, roteamento desktop e lease de jobs;
+- telemetria sanitizada de chamadas Gemini com tokens oficiais, latência, bytes, métricas por página e agregação temporal, sem prompt/texto OCR/imagem;
 - testes unitários, contratos SQL/pgTAP locais, gates offline e type-check das Edge Functions.
 
 Ainda faltam execução com OAuth/Google Drive/Gemini reais, deploy e verificação do schema/runtime Supabase no HEAD atual, migração dos originais reais, migração do host, validação física do worker local, dispositivos móveis e validação remota. O código não é tratado como prova desses ambientes.
@@ -59,7 +60,7 @@ O estado canônico fica em [`docs/CURRENT_STATUS.md`](docs/CURRENT_STATUS.md). A
 - **Originais permanentes:** Google Drive API v3 com OAuth `drive.file`.
 - **Backend:** Supabase Auth, PostgreSQL, RLS e Edge Functions.
 - **Storage Supabase:** artefatos temporários, fallback e migração.
-- **OCR geral:** Gemini Developer API no backend.
+- **OCR geral:** Gemini Developer API no backend, com telemetria sanitizada de `usageMetadata` para orientar futuramente o roteamento por valor de qualidade/cota.
 - **OCR local:** Desktop OCR Worker implementado com backend Ollama atual; **Chandra OCR 2** é o candidato recomendado para o perfil de alta qualidade, com alvo `llama.cpp` + Vulkan na RX 6600 e validação ainda pendente.
 - **PDFs:** `@firecrawl/pdf-inspector-wasm` e PDF.js apenas quando necessário.
 - **Busca:** PostgreSQL FTS, `unaccent` e `pg_trgm`.
@@ -100,6 +101,7 @@ pnpm test:staging:ocr
 - [Worker local de OCR](docs/DESKTOP_OCR_WORKER.md)
 - [Chandra OCR 2 — decisão e integração desktop](docs/CHANDRA_OCR2_DESKTOP_INTEGRATION.md)
 - [Runtime local do worker](docs/DESKTOP_OCR_WORKER_LOCAL_RUNTIME.md)
+- [Telemetria OCR e roteamento adaptativo](docs/OCR_TELEMETRY_AND_ADAPTIVE_ROUTING.md)
 - [Configuração externa Google Drive](docs/GOOGLE_DRIVE_SETUP.md)
 - [Estratégia de testes](docs/TESTING.md)
 - [Deployment e rollback](docs/DEPLOYMENT.md)
@@ -116,5 +118,6 @@ pnpm test:staging:ocr
 - migração idempotente dos originais atuais;
 - Cloudflare Pages, origem canônica, headers e rollback;
 - roteamento Gemini/desktop, pareamento, lease, retomada e revogação do worker;
+- telemetria Gemini aplicada em staging, RLS isolada, `usageMetadata` real e overview validado sem conteúdo privado;
 - Chandra OCR 2/`llama.cpp` com licença/proveniência, benchmark Q8_0/Q6_K e validação Vulkan na RX 6600;
 - Supabase, OCR, celular/tablet, billing, backup e rollback.
