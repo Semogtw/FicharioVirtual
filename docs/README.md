@@ -14,8 +14,9 @@ Ao registrar progresso, prefira atualizar um desses arquivos em vez de adicionar
 ## Produto e arquitetura
 
 - [`PROJECT_SPEC.md`](PROJECT_SPEC.md) — especificação canônica do produto e da arquitetura.
+- [`SEARCH_OCR_MATCHING.md`](SEARCH_OCR_MATCHING.md) — busca global híbrida: FTS/fuzzy, embeddings, pgvector, ranking, consentimento e fallback textual.
 - [`UNIT_TOPIC_COVERAGE.md`](UNIT_TOPIC_COVERAGE.md) — cobertura de assuntos por unidade, editor estruturado de conteúdos e importação de ementa por foto/OCR.
-- [`SEMANTIC_COVERAGE.md`](SEMANTIC_COVERAGE.md) — embeddings, índice pgvector, score híbrido, consentimento e verificador Gemini da cobertura de conteúdos.
+- [`SEMANTIC_COVERAGE.md`](SEMANTIC_COVERAGE.md) — embeddings, índice pgvector compartilhado, score híbrido, consentimento e verificador Gemini da cobertura de conteúdos.
 - [`superpowers/specs/`](superpowers/specs/) — designs e decisões técnicas detalhadas.
 - [`superpowers/plans/`](superpowers/plans/) — planos de implementação associados aos designs.
 
