@@ -22,10 +22,13 @@ describe('shadcn-style native select primitive', () => {
 		expect(source).toContain('var(--line-strong)');
 	});
 
-	it.each(adoptedSources)('%s uses the shared primitive instead of styling a raw select', (path) => {
-		const source = readFileSync(path, 'utf8');
+	it.each(adoptedSources)(
+		'%s uses the shared primitive instead of styling a raw select',
+		(path) => {
+			const source = readFileSync(path, 'utf8');
 
-		expect(source).toContain('$lib/components/ui/native-select/NativeSelect.svelte');
-		expect(source).not.toContain('<select');
-	});
+			expect(source).toContain('$lib/components/ui/native-select/NativeSelect.svelte');
+			expect(source).not.toContain('<select');
+		}
+	);
 });
