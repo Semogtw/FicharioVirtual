@@ -74,7 +74,8 @@ function parseJob(value: unknown): DesktopOcrJob | null {
 	const leaseExpiresAt = timestamp(record.lease_expires_at, true);
 	const createdAt = timestamp(record.created_at);
 	const updatedAt = timestamp(record.updated_at);
-	const status = typeof record.status === 'string' && STATUSES.has(record.status) ? record.status : null;
+	const status =
+		typeof record.status === 'string' && STATUSES.has(record.status) ? record.status : null;
 
 	if (
 		typeof record.job_id !== 'string' ||

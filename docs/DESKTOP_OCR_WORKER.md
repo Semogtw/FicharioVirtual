@@ -310,22 +310,22 @@ Pendências reais antes de declarar o Desktop OCR Worker operacionalmente pronto
 
 ## 15. Critério de prontidão
 
-| Item | Estado |
-| --- | --- |
-| Pareamento por código de uso único | implementado; staging real pendente |
-| Credencial longa somente local + hash remoto | implementado |
-| Secret Service | implementado; sessão real pendente |
-| Revogação web | implementado |
-| Limpeza local pós-revogação web | implementado |
-| Remoção owner-scoped de dispositivo revogado | implementado |
-| Nenhuma porta pública doméstica | implementado por arquitetura outbound-only |
-| Claim exclusivo + lease/renew | implementado/testado |
-| Origem privada curta + SHA-256 | implementado/testado |
-| Spool retomável + conclusão idempotente | implementado/testado |
-| Ollama loopback + model lock | implementado/testado |
-| CPU em hardware real | pendente |
-| RX 6600 / Vulkan / ROCm | pendente |
-| Fila desktop detalhada na PWA | pendente |
-| E2E staging com documento privado | pendente |
+| Item                                         | Estado                                     |
+| -------------------------------------------- | ------------------------------------------ |
+| Pareamento por código de uso único           | implementado; staging real pendente        |
+| Credencial longa somente local + hash remoto | implementado                               |
+| Secret Service                               | implementado; sessão real pendente         |
+| Revogação web                                | implementado                               |
+| Limpeza local pós-revogação web              | implementado                               |
+| Remoção owner-scoped de dispositivo revogado | implementado                               |
+| Nenhuma porta pública doméstica              | implementado por arquitetura outbound-only |
+| Claim exclusivo + lease/renew                | implementado/testado                       |
+| Origem privada curta + SHA-256               | implementado/testado                       |
+| Spool retomável + conclusão idempotente      | implementado/testado                       |
+| Ollama loopback + model lock                 | implementado/testado                       |
+| CPU em hardware real                         | pendente                                   |
+| RX 6600 / Vulkan / ROCm                      | pendente                                   |
+| Fila desktop detalhada na PWA                | pendente                                   |
+| E2E staging com documento privado            | pendente                                   |
 
 A documentação não deve converter um item operacional pendente em `PASS` apenas porque o código correspondente existe. O release continua condicionado a CI, staging e validação no dispositivo real.

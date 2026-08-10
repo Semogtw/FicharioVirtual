@@ -38,7 +38,9 @@
 	}
 
 	function isActive(job: DesktopOcrJob) {
-		return job.status === 'waiting_desktop' || job.status === 'processing' || job.status === 'retryable';
+		return (
+			job.status === 'waiting_desktop' || job.status === 'processing' || job.status === 'retryable'
+		);
 	}
 
 	async function refreshJobs() {
@@ -105,7 +107,9 @@
 			<span>aguardando</span>
 		</div>
 		<div>
-			<strong>{jobs.filter((job) => job.status === 'processing' && !job.leaseExpired).length}</strong>
+			<strong
+				>{jobs.filter((job) => job.status === 'processing' && !job.leaseExpired).length}</strong
+			>
 			<span>processando</span>
 		</div>
 		<div>
@@ -152,8 +156,8 @@
 
 							{#if job.leaseExpired}
 								<p class="lease-warning">
-									O computador perdeu o lease. O próximo claim de um dispositivo ativo recuperará esse
-									trabalho automaticamente.
+									O computador perdeu o lease. O próximo claim de um dispositivo ativo recuperará
+									esse trabalho automaticamente.
 								</p>
 							{/if}
 

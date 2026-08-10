@@ -100,7 +100,10 @@ describe('desktop OCR queue service', () => {
 	});
 
 	it('rejects oversized result arrays before exposing partial data', async () => {
-		const rpc = vi.fn(async () => ({ data: Array.from({ length: 101 }, () => row()), error: null }));
+		const rpc = vi.fn(async () => ({
+			data: Array.from({ length: 101 }, () => row()),
+			error: null
+		}));
 		await expect(listDesktopOcrJobs({ rpc } as never)).rejects.toBeInstanceOf(DesktopOcrJobsError);
 	});
 

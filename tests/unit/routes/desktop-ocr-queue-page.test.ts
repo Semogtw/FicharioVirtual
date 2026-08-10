@@ -6,7 +6,7 @@ const settingsLayout = readFileSync('src/routes/settings/+layout.svelte', 'utf8'
 
 describe('desktop OCR queue page contract', () => {
 	it('loads the bounded queue service with stale-request protection', () => {
-		expect(page).toContain("listDesktopOcrJobs");
+		expect(page).toContain('listDesktopOcrJobs');
 		expect(page).toContain('const requests = new RequestVersion()');
 		expect(page).toContain('requests.isCurrent(version)');
 		expect(page).toContain('onDestroy');
@@ -34,8 +34,6 @@ describe('desktop OCR queue page contract', () => {
 		expect(settingsLayout).toContain('href="/settings/computers/queue/"');
 		expect(settingsLayout).toContain('Fila OCR');
 		expect(settingsLayout).toContain("page.url.pathname === '/settings/computers/'");
-		expect(settingsLayout).toContain(
-			"page.url.pathname.startsWith('/settings/computers/queue')"
-		);
+		expect(settingsLayout).toContain("page.url.pathname.startsWith('/settings/computers/queue')");
 	});
 });
