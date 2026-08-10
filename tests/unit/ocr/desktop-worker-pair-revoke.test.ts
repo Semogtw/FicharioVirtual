@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 const SOURCE_PATH = 'supabase/functions/desktop-ocr-pair/index.ts';
 
-describe('desktop OCR pairing rollback boundary', () => {
+describe('desktop OCR pairing and rollback boundary', () => {
 	it('revokes through the authenticated user client rather than service role', async () => {
 		const source = await readFile(SOURCE_PATH, 'utf8');
 		expect(source).toContain("if (input.action === 'revoke')");
@@ -11,18 +11,35 @@ describe('desktop OCR pairing rollback boundary', () => {
 		expect(source).not.toContain("admin.rpc('revoke_ocr_worker_device'");
 	});
 
-	it('handles revocation before requiring the service-role key used only for registration', async () => {
+	it('redeems a one-time code through the service-only RPC before browser authentication', async () => {
 		const source = await readFile(SOURCE_PATH, 'utf8');
-		const revokeBranch = source.indexOf("if (input.action === 'revoke')");
-		const serviceRoleLookup = source.indexOf("Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')");
-		expect(revokeBranch).toBeGreaterThanOrEqual(0);
-		expect(serviceRoleLookup).toBeGreaterThan(revokeBranch);
+		const redeemBranch = source.indexOf("if (input.action === 'redeem')");
+		const authorizationLookup = source.indexOf("request.headers.get('Authorization')");
+		expect(redeemBranch).toBeGreaterThanOrEqual(0);
+		expect(redeemBranch).toBeLessThan(authorizationLookup);
+		expect(source).toContain("admin.rpc('redeem_ocr_worker_pairing_code'");
+		expect(source).toContain("credentialDigest: string");
+		expect(source).not.toContain('credential: input.credential');
 	});
 
-	it('requires an exact revoke request shape with a UUID device id', async () => {
+	it('keeps authenticated revoke ahead of the legacy service-role registration branch', async () => {
+		const source = await readFile(SOURCE_PATH, 'utf8');
+		const revokeBranch = source.indexOf("if (input.action === 'revoke')");
+		const legacyRegistration = source.indexOf("admin.rpc('register_ocr_worker_device'");
+		expect(revokeBranch).toBeGreaterThanOrEqual(0);
+		expect(legacyRegistration).toBeGreaterThan(revokeBranch);
+	});
+
+	it('requires exact request shapes for revoke and code redemption', async () => {
 		const source = await readFile(SOURCE_PATH, 'utf8');
 		expect(source).toContain("hasExactKeys(record, ['action', 'deviceId'])");
 		expect(source).toContain("record.action === 'revoke'");
 		expect(source).toContain('UUID.test(record.deviceId)');
+		expect(source).toContain(
+			"hasExactKeys(record, ['action', 'pairingCode', 'label', 'capabilities', 'credentialDigest'])"
+		);
+		expect(source).toContain("record.action !== 'redeem'");
+		expect(source).toContain('PAIRING_CODE.test(record.pairingCode)');
+		expect(source).toContain('SHA256_HEX.test(record.credentialDigest)');
 	});
 });
