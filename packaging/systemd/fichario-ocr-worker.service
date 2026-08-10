@@ -1,0 +1,33 @@
+[Unit]
+Description=Fichário Digital local OCR worker
+Documentation=https://github.com/Semogtw/FicharioVirtual/blob/main/docs/DESKTOP_OCR_WORKER.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/env node %h/.local/lib/fichario-worker/bin.mjs
+Restart=on-failure
+RestartSec=15s
+UMask=0077
+
+# The worker needs only the user session bus (Secret Service) and outbound/loopback networking.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictRealtime=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=default.target
