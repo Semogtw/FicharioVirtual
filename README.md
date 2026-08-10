@@ -14,7 +14,7 @@ As responsabilidades da arquitetura permanecem separadas:
 - projeto Pages separado para artefatos públicos e fragmentados de modelos;
 - Gemini para OCR geral e transcrição imediata;
 - fila opcional para manuscritos e páginas difíceis;
-- worker no computador do usuário, sem porta pública, que consulta a fila, processa localmente e devolve o resultado ao Supabase. A fronteira backend do worker já está em código; o executável local e o hardware ainda não.
+- worker no computador do usuário, sem porta pública, que consulta a fila, processa localmente e devolve o resultado ao Supabase. O runtime e a fronteira backend já existem em código; a integração Chandra OCR 2/`llama.cpp` e a validação no hardware físico ainda estão pendentes.
 
 Já existem na `main`:
 
@@ -31,7 +31,7 @@ Já existem na `main`:
 - histórico imutável de resultados OCR, separação dos status de página/OCR, roteamento desktop e lease de jobs;
 - testes unitários, contratos SQL/pgTAP locais, gates offline e type-check das Edge Functions.
 
-Ainda faltam execução com OAuth/Google Drive/Gemini reais, deploy e verificação do schema/runtime Supabase no HEAD atual, migração dos originais reais, migração do host, worker local, dispositivos móveis e validação remota. O código não é tratado como prova desses ambientes.
+Ainda faltam execução com OAuth/Google Drive/Gemini reais, deploy e verificação do schema/runtime Supabase no HEAD atual, migração dos originais reais, migração do host, validação física do worker local, dispositivos móveis e validação remota. O código não é tratado como prova desses ambientes.
 
 O último recibo completo está registrado em [`docs/TESTING.md`](docs/TESTING.md); ele valida o SHA atual e inclui uma execução E2E que passou após uma primeira tentativa flaky. Isso mantém o CI verde, mas não elimina a pendência de investigar a flakiness nem prova staging, serviços reais ou hardware.
 
@@ -60,7 +60,7 @@ O estado canônico fica em [`docs/CURRENT_STATUS.md`](docs/CURRENT_STATUS.md). A
 - **Backend:** Supabase Auth, PostgreSQL, RLS e Edge Functions.
 - **Storage Supabase:** artefatos temporários, fallback e migração.
 - **OCR geral:** Gemini Developer API no backend.
-- **OCR local aprovado:** worker no computador para manuscritos, conteúdo misto e reprocessamento de qualidade; implementação pendente.
+- **OCR local:** Desktop OCR Worker implementado com backend Ollama atual; **Chandra OCR 2** é o candidato recomendado para o perfil de alta qualidade, com alvo `llama.cpp` + Vulkan na RX 6600 e validação ainda pendente.
 - **PDFs:** `@firecrawl/pdf-inspector-wasm` e PDF.js apenas quando necessário.
 - **Busca:** PostgreSQL FTS, `unaccent` e `pg_trgm`.
 
@@ -98,6 +98,8 @@ pnpm test:staging:ocr
 - [Design Cloudflare e OCR desktop](docs/superpowers/specs/2026-08-06-cloudflare-pages-and-desktop-ocr-design.md)
 - [Configuração Cloudflare](docs/CLOUDFLARE_SETUP.md)
 - [Worker local de OCR](docs/DESKTOP_OCR_WORKER.md)
+- [Chandra OCR 2 — decisão e integração desktop](docs/CHANDRA_OCR2_DESKTOP_INTEGRATION.md)
+- [Runtime local do worker](docs/DESKTOP_OCR_WORKER_LOCAL_RUNTIME.md)
 - [Configuração externa Google Drive](docs/GOOGLE_DRIVE_SETUP.md)
 - [Estratégia de testes](docs/TESTING.md)
 - [Deployment e rollback](docs/DEPLOYMENT.md)
@@ -114,4 +116,5 @@ pnpm test:staging:ocr
 - migração idempotente dos originais atuais;
 - Cloudflare Pages, origem canônica, headers e rollback;
 - roteamento Gemini/desktop, pareamento, lease, retomada e revogação do worker;
+- Chandra OCR 2/`llama.cpp` com licença/proveniência, benchmark Q8_0/Q6_K e validação Vulkan na RX 6600;
 - Supabase, OCR, celular/tablet, billing, backup e rollback.
