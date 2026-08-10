@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Database } from '$lib/types/database';
+import type { DatabaseWithNotebookBanners } from '$lib/types/database-notebook-banner-extensions';
 import { getSupabaseClient } from './supabase';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -35,8 +35,8 @@ export class NotebookBannerError extends Error {
 	}
 }
 
-function clientOrDefault(client?: SupabaseClient<Database>) {
-	return client ?? getSupabaseClient();
+function clientOrDefault(client?: SupabaseClient<DatabaseWithNotebookBanners>) {
+	return client ?? (getSupabaseClient() as unknown as SupabaseClient<DatabaseWithNotebookBanners>);
 }
 
 function validNotebookId(value: string) {
@@ -106,7 +106,7 @@ async function prepareNotebookBanner(file: File): Promise<Blob> {
 	}
 }
 
-async function currentUserId(client: SupabaseClient<Database>): Promise<string> {
+async function currentUserId(client: SupabaseClient<DatabaseWithNotebookBanners>): Promise<string> {
 	try {
 		const { data, error } = await client.auth.getSession();
 		if (error || data.session === null || !UUID.test(data.session.user.id)) {
@@ -125,7 +125,7 @@ type BannerRow = {
 };
 
 async function loadBannerRow(
-	client: SupabaseClient<Database>,
+	client: SupabaseClient<DatabaseWithNotebookBanners>,
 	notebookId: string
 ): Promise<BannerRow> {
 	const { data, error } = await client
@@ -139,7 +139,7 @@ async function loadBannerRow(
 
 export async function createNotebookBannerUrl(
 	path: string,
-	client?: SupabaseClient<Database>
+	client?: SupabaseClient<DatabaseWithNotebookBanners>
 ): Promise<string> {
 	if (path.length > 1_024 || path.includes('..') || !BANNER_PATH.test(path)) {
 		throw new TypeError('Invalid notebook banner path');
@@ -154,7 +154,7 @@ export async function createNotebookBannerUrl(
 export async function saveNotebookBanner(
 	notebookId: string,
 	input: { file?: File | null; positionX: number; positionY: number },
-	client?: SupabaseClient<Database>
+	client?: SupabaseClient<DatabaseWithNotebookBanners>
 ): Promise<NotebookBannerState> {
 	const validatedNotebookId = validNotebookId(notebookId);
 	const positionX = parseBannerPosition(input.positionX);
@@ -216,7 +216,7 @@ export async function saveNotebookBanner(
 
 export async function removeNotebookBanner(
 	notebookId: string,
-	client?: SupabaseClient<Database>
+	client?: SupabaseClient<DatabaseWithNotebookBanners>
 ): Promise<void> {
 	const validatedNotebookId = validNotebookId(notebookId);
 	const resolvedClient = clientOrDefault(client);
