@@ -1,0 +1,95 @@
+name: Verify staging artifact configuration
+
+on:
+  workflow_run:
+    workflows: [Validate current head]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-staging-artifact-configuration
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: staging
+    env:
+      PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+      PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+      PUBLIC_GOOGLE_CLIENT_ID: ${{ secrets.PUBLIC_GOOGLE_CLIENT_ID }}
+      PUBLIC_GOOGLE_PICKER_API_KEY: ${{ secrets.PUBLIC_GOOGLE_PICKER_API_KEY }}
+      PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER: ${{ secrets.PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER }}
+
+    steps:
+      - name: Validate protected public artifact configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const urlValue = (process.env.PUBLIC_SUPABASE_URL ?? '').trim();
+          const key = (process.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? '').trim();
+          if (!urlValue) throw new Error('PUBLIC_SUPABASE_URL is not configured in staging.');
+          if (!key) throw new Error('PUBLIC_SUPABASE_PUBLISHABLE_KEY is not configured in staging.');
+
+          const url = new URL(urlValue);
+          if (
+            url.protocol !== 'https:' ||
+            url.username ||
+            url.password ||
+            url.pathname !== '/' ||
+            url.search ||
+            url.hash
+          ) {
+            throw new Error('PUBLIC_SUPABASE_URL must be a credential-free HTTPS origin.');
+          }
+          if (!key.startsWith('sb_publishable_') || key.length < 20 || key.length > 512) {
+            throw new Error('PUBLIC_SUPABASE_PUBLISHABLE_KEY is invalid.');
+          }
+
+          const clientId = (process.env.PUBLIC_GOOGLE_CLIENT_ID ?? '').trim();
+          const pickerKey = (process.env.PUBLIC_GOOGLE_PICKER_API_KEY ?? '').trim();
+          const projectNumber = (process.env.PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER ?? '').trim();
+          const pickerValues = [clientId, pickerKey, projectNumber];
+          const configuredPickerValues = pickerValues.filter(Boolean).length;
+          if (configuredPickerValues !== 0 && configuredPickerValues !== pickerValues.length) {
+            throw new Error('Google Picker public settings must be configured together.');
+          }
+          if (configuredPickerValues === pickerValues.length) {
+            if (!/^\d+-[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$/.test(clientId)) {
+              throw new Error('PUBLIC_GOOGLE_CLIENT_ID is invalid.');
+            }
+            if (!/^AIza[A-Za-z0-9_-]+$/.test(pickerKey) || pickerKey.length > 256) {
+              throw new Error('PUBLIC_GOOGLE_PICKER_API_KEY is invalid.');
+            }
+            if (!/^\d{6,20}$/.test(projectNumber)) {
+              throw new Error('PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER is invalid.');
+            }
+          }
+
+          console.log(
+            configuredPickerValues === pickerValues.length
+              ? 'Protected staging public configuration is valid, including Google Picker.'
+              : 'Protected staging public configuration is valid; Google Picker public settings are not configured.'
+          );
+          NODE
+
+      - name: Publish readiness summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## Staging artifact public configuration'
+            echo
+            echo '- Environment: `staging`'
+            echo '- Supabase public configuration: validated without printing values when the preceding step passes.'
+            echo '- Google Picker: optional, but all three public settings are required together when enabled.'
+            echo '- Backend, service-role, Gemini and Cloudflare secrets are intentionally outside this workflow.'
+          } >> "$GITHUB_STEP_SUMMARY"
