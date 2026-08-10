@@ -23,6 +23,7 @@ command -v node >/dev/null 2>&1 || fail 'node is required'
 command -v systemctl >/dev/null 2>&1 || fail 'systemctl is required'
 [[ -f "$unit_source" ]] || fail 'systemd unit template is missing'
 [[ -f "$source_dir/bin.mjs" ]] || fail 'worker entrypoint is missing'
+[[ -f "$source_dir/config-bin.mjs" ]] || fail 'config setup entrypoint is missing'
 [[ -f "$source_dir/pair-bin.mjs" ]] || fail 'pairing entrypoint is missing'
 [[ -f "$source_dir/model-bin.mjs" ]] || fail 'model setup entrypoint is missing'
 
@@ -39,10 +40,15 @@ find "$install_dir" -maxdepth 1 -type f -name '*.mjs' -delete
 while IFS= read -r -d '' module; do
   install -m 0600 "$module" "$install_dir/$(basename -- "$module")"
 done < <(find "$source_dir" -maxdepth 1 -type f -name '*.mjs' -print0 | sort -z)
-chmod 0700 "$install_dir/bin.mjs" "$install_dir/pair-bin.mjs" "$install_dir/model-bin.mjs"
+chmod 0700 \
+  "$install_dir/bin.mjs" \
+  "$install_dir/config-bin.mjs" \
+  "$install_dir/pair-bin.mjs" \
+  "$install_dir/model-bin.mjs"
 
 install -d -m 0700 "$bin_dir"
 ln -sfn ../lib/fichario-worker/bin.mjs "$bin_dir/fichario-worker"
+ln -sfn ../lib/fichario-worker/config-bin.mjs "$bin_dir/fichario-worker-config"
 ln -sfn ../lib/fichario-worker/pair-bin.mjs "$bin_dir/fichario-worker-pair"
 ln -sfn ../lib/fichario-worker/model-bin.mjs "$bin_dir/fichario-worker-model"
 
@@ -52,7 +58,7 @@ systemctl --user daemon-reload
 
 printf '%s\n' \
   'Fichário OCR worker files installed for the current user.' \
-  'Commands installed in ~/.local/bin: fichario-worker, fichario-worker-pair, fichario-worker-model.' \
+  'Commands installed in ~/.local/bin: fichario-worker-config, fichario-worker-model, fichario-worker-pair, fichario-worker.' \
   'The service was NOT enabled or started.' \
-  'Configure config.json, pair the device, and pin a local vision model first.' \
+  'Create config, pin a local vision model, pair the device, then enable the service.' \
   'Then run: systemctl --user enable --now fichario-ocr-worker.service'
