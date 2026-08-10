@@ -39,12 +39,26 @@ describe('Supabase local configuration', () => {
 		const config = read('supabase/config.toml');
 
 		expect(config).toMatch(/\[functions\.drive-oauth-callback\]\s+verify_jwt\s*=\s*false/);
+		expect(config).toMatch(/\[functions\.desktop-ocr-pair\]\s+verify_jwt\s*=\s*false/);
 		const disabledJwtEntries = [
 			...config.matchAll(/\[functions\.([^\]]+)\]\s+verify_jwt\s*=\s*false/g)
 		];
 		expect(disabledJwtEntries.map((entry) => entry[1])).toEqual([
 			'drive-oauth-callback',
+			'desktop-ocr-pair',
 			'desktop-ocr-worker'
 		]);
+	});
+
+	it('keeps manual auth boundaries inside the public desktop pairing gateway', () => {
+		const source = read('supabase/functions/desktop-ocr-pair/index.ts');
+		const redeemBoundary = source.indexOf("if (input.action === 'redeem')");
+		const browserAuthorization = source.indexOf("request.headers.get('Authorization')");
+
+		expect(redeemBoundary).toBeGreaterThanOrEqual(0);
+		expect(browserAuthorization).toBeGreaterThan(redeemBoundary);
+		expect(source).toContain("admin.rpc('redeem_ocr_worker_pairing_code'");
+		expect(source).toContain('userClient.auth.getUser()');
+		expect(source).toContain("if (input.action === 'revoke')");
 	});
 });
