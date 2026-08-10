@@ -29,6 +29,7 @@ describe('Supabase staging migration deploy workflow', () => {
 		expect(source).toContain('.github/workflows/verify-ocr-staging.yml');
 		expect(source).toContain('tools/checks/check-supabase-staging.mjs');
 		expect(source).toContain('tools/checks/check-ocr-staging.mjs');
+		expect(source).toContain('tools/checks/check-desktop-ocr-pairing-staging.mjs');
 		expect(source).toContain('deploy_required: ${{ steps.changes.outputs.required }}');
 	});
 
