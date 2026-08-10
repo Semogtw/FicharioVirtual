@@ -57,7 +57,8 @@
 			addImages(images, { mode, notebookId: notebookId || null });
 			queued += images.length;
 		} else if (images.length > 0) {
-			selectionError = 'As imagens não foram adicionadas: confirme a leitura automática e selecione-as novamente.';
+			selectionError =
+				'As imagens não foram adicionadas: confirme a leitura automática e selecione-as novamente.';
 		}
 
 		if (unsupported > 0) {
@@ -144,7 +145,8 @@
 			</label>
 			<label class="choice">
 				<input type="radio" bind:group={mode} value="high-definition" />
-				<span><strong>Alta definição</strong><small>Até 3.200 px · texto muito pequeno</small></span>
+				<span><strong>Alta definição</strong><small>Até 3.200 px · texto muito pequeno</small></span
+				>
 			</label>
 		</fieldset>
 	</section>
@@ -212,10 +214,10 @@
 		<div>
 			<h2 id="background-title">Não precisa ficar nesta tela</h2>
 			<p>
-				Enquanto a fila mostrar <strong>Preparando</strong> ou <strong>Enviando</strong>, o dispositivo
-				ainda está garantindo o arquivo e, em PDFs digitalizados, preparando as páginas necessárias.
-				Depois de <strong>Leitura em segundo plano</strong>, o material já está salvo e o OCR continua no
-				servidor mesmo se você fechar o Fichário.
+				Enquanto a fila mostrar <strong>Preparando</strong> ou <strong>Enviando</strong>, o
+				dispositivo ainda está garantindo o arquivo e, em PDFs digitalizados, preparando as páginas
+				necessárias. Depois de <strong>Leitura em segundo plano</strong>, o material já está salvo e
+				o OCR continua no servidor mesmo se você fechar o Fichário.
 			</p>
 		</div>
 	</section>
