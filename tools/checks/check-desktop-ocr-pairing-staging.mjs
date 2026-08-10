@@ -77,7 +77,9 @@ async function main() {
 	try {
 		const signIn = await client.auth.signInWithPassword({ email, password });
 		if (signIn.error || !signIn.data.user || !signIn.data.session) {
-			throw new Error(`Desktop OCR staging sign-in failed: ${signIn.error?.message ?? 'no session'}`);
+			throw new Error(
+				`Desktop OCR staging sign-in failed: ${signIn.error?.message ?? 'no session'}`
+			);
 		}
 
 		const created = await client.rpc('create_ocr_worker_pairing_code');
@@ -112,7 +114,9 @@ async function main() {
 			redeemed.status !== 'active' ||
 			'credential' in redeemed
 		) {
-			throw new Error(`Pairing redemption returned an invalid HTTP ${redeemedResponse.status} receipt`);
+			throw new Error(
+				`Pairing redemption returned an invalid HTTP ${redeemedResponse.status} receipt`
+			);
 		}
 		deviceId = redeemed.deviceId;
 		console.log('PASS one-time pairing code redeemed without a browser JWT or returned credential');
@@ -140,7 +144,9 @@ async function main() {
 			revocation.data?.deviceId !== deviceId ||
 			revocation.data?.status !== 'revoked'
 		) {
-			throw new Error(`Device revocation failed: ${revocation.error?.message ?? 'invalid receipt'}`);
+			throw new Error(
+				`Device revocation failed: ${revocation.error?.message ?? 'invalid receipt'}`
+			);
 		}
 		revoked = true;
 
@@ -164,12 +170,14 @@ async function main() {
 	if (deviceId && !deleted) {
 		if (!revoked) {
 			const result = await client.rpc('revoke_ocr_worker_device', { target_device_id: deviceId });
-			if (result.error) cleanupErrors.push(new Error('Failed to revoke staging pairing probe during cleanup'));
+			if (result.error)
+				cleanupErrors.push(new Error('Failed to revoke staging pairing probe during cleanup'));
 			else revoked = true;
 		}
 		if (revoked) {
 			const result = await client.rpc('delete_ocr_worker_device', { target_device_id: deviceId });
-			if (result.error) cleanupErrors.push(new Error('Failed to delete staging pairing probe during cleanup'));
+			if (result.error)
+				cleanupErrors.push(new Error('Failed to delete staging pairing probe during cleanup'));
 		}
 	}
 
@@ -177,10 +185,14 @@ async function main() {
 	if (signOut.error) cleanupErrors.push(new Error('Failed to sign out staging pairing probe'));
 
 	if (operationError && cleanupErrors.length > 0) {
-		throw new AggregateError([operationError, ...cleanupErrors], 'Pairing staging probe and cleanup failed');
+		throw new AggregateError(
+			[operationError, ...cleanupErrors],
+			'Pairing staging probe and cleanup failed'
+		);
 	}
 	if (operationError) throw operationError;
-	if (cleanupErrors.length > 0) throw new AggregateError(cleanupErrors, 'Pairing staging cleanup failed');
+	if (cleanupErrors.length > 0)
+		throw new AggregateError(cleanupErrors, 'Pairing staging cleanup failed');
 	console.log('Desktop OCR pairing staging contract: PASS');
 }
 
