@@ -16,6 +16,7 @@ describe('nextWorkerDelay', () => {
 		expect(nextWorkerDelay('claim_deferred', 3, config)).toBe(40_000);
 		expect(nextWorkerDelay('claim_deferred', 4, config)).toBe(80_000);
 		expect(nextWorkerDelay('claim_deferred', 10, config)).toBe(80_000);
+		expect(nextWorkerDelay('dead_lettered', 1, config)).toBe(10_000);
 	});
 
 	it('rejects invalid or unexpectedly faster idle polling configuration', () => {
@@ -64,6 +65,33 @@ describe('runWorkerLoop', () => {
 			{ cycle: 4, status: 'idle', consecutiveFailures: 0, code: null }
 		]);
 		expect(result).toEqual({ cycles: 4, consecutiveFailures: 0 });
+	});
+
+	it('backs off and emits only the safe code after a preserved dead letter', async () => {
+		const runCycle = vi
+			.fn()
+			.mockResolvedValueOnce({
+				status: 'dead_lettered',
+				code: 'desktop_ocr_completion_rejected',
+				jobId: 'private-job-id',
+				delivery: { private: 'transcript' }
+			})
+			.mockResolvedValueOnce({ status: 'completed' });
+		const sleep = vi.fn(async () => undefined);
+		const onStatus = vi.fn();
+
+		const result = await runWorkerLoop({}, config, { runCycle, sleep, onStatus, maxCycles: 2 });
+
+		expect(sleep).toHaveBeenCalledWith(10_000, undefined);
+		expect(onStatus).toHaveBeenNthCalledWith(1, {
+			cycle: 1,
+			status: 'dead_lettered',
+			consecutiveFailures: 1,
+			code: 'desktop_ocr_completion_rejected'
+		});
+		expect(JSON.stringify(onStatus.mock.calls)).not.toContain('private-job-id');
+		expect(JSON.stringify(onStatus.mock.calls)).not.toContain('transcript');
+		expect(result).toEqual({ cycles: 2, consecutiveFailures: 0 });
 	});
 
 	it('uses idle polling after an empty queue without treating it as a failure', async () => {
