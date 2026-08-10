@@ -10,6 +10,8 @@ export type OcrContentClass =
 	| 'math'
 	| 'sparse';
 
+export const OCR_CONTENT_CLASSIFICATION_VERSION = 1;
+
 export function buildGeminiTelemetryRpcArgs(input: {
 	eventId: string;
 	documentId: string;
@@ -70,14 +72,17 @@ export function buildGeminiTelemetryRpcArgs(input: {
 		target_total_token_count: usage?.totalTokenCount ?? null,
 		target_service_tier: usage?.serviceTier ?? null,
 		target_provider_response_id: input.outcome?.responseId ?? null,
-		target_usage_details: usage
-			? {
-					promptTokensDetails: usage.promptTokensDetails,
-					cacheTokensDetails: usage.cacheTokensDetails,
-					candidatesTokensDetails: usage.candidatesTokensDetails,
-					toolUsePromptTokensDetails: usage.toolUsePromptTokensDetails
-				}
-			: {},
+		target_usage_details: {
+			contentClassificationVersion: OCR_CONTENT_CLASSIFICATION_VERSION,
+			...(usage
+				? {
+						promptTokensDetails: usage.promptTokensDetails,
+						cacheTokensDetails: usage.cacheTokensDetails,
+						candidatesTokensDetails: usage.candidatesTokensDetails,
+						toolUsePromptTokensDetails: usage.toolUsePromptTokensDetails
+					}
+				: {})
+		},
 		recorded_at: input.recordedAt
 	};
 }
