@@ -31,7 +31,9 @@
 			{/each}
 		</p>
 		{#if !hasMatch}
-			<small>A página foi recuperada por similaridade, mas não há um único token seguro para marcar.</small>
+			<small
+				>A página foi recuperada por similaridade, mas não há um único token seguro para marcar.</small
+			>
 		{/if}
 	</aside>
 {/if}
