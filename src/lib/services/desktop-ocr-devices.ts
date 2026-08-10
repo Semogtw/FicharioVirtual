@@ -32,6 +32,12 @@ export type DesktopOcrRevocation = Readonly<{
 	requeuedJobs: number;
 }>;
 
+export type DesktopOcrRename = Readonly<{
+	deviceId: string;
+	label: string;
+	updatedAt: string;
+}>;
+
 export class DesktopOcrDevicesError extends Error {
 	constructor(message = 'Não foi possível carregar os computadores de OCR.') {
 		super(message);
@@ -47,6 +53,10 @@ type DevicesRpcClient = {
 	rpc(
 		name: 'revoke_ocr_worker_device',
 		args: { target_device_id: string }
+	): Promise<{ data: unknown; error: unknown }>;
+	rpc(
+		name: 'rename_ocr_worker_device',
+		args: { target_device_id: string; device_label: string }
 	): Promise<{ data: unknown; error: unknown }>;
 };
 
@@ -156,6 +166,28 @@ function parseRevocation(value: unknown, expectedDeviceId: string): DesktopOcrRe
 	});
 }
 
+function parseRename(
+	value: unknown,
+	expectedDeviceId: string,
+	expectedLabel: string
+): DesktopOcrRename | null {
+	if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+	const record = value as Record<string, Json | undefined>;
+	const updatedAt = timestamp(record.updatedAt);
+	if (
+		record.deviceId !== expectedDeviceId ||
+		record.label !== expectedLabel ||
+		updatedAt === null
+	) {
+		return null;
+	}
+	return Object.freeze({
+		deviceId: expectedDeviceId,
+		label: expectedLabel,
+		updatedAt
+	});
+}
+
 function gateway(client?: SupabaseClient<Database>): DevicesRpcClient {
 	return (client ?? getSupabaseClient()) as unknown as DevicesRpcClient;
 }
@@ -197,4 +229,34 @@ export async function revokeDesktopOcrDevice(
 		throw new DesktopOcrDevicesError('A confirmação de revogação retornou um formato inválido.');
 	}
 	return revocation;
+}
+
+export async function renameDesktopOcrDevice(
+	deviceId: string,
+	label: string,
+	client?: SupabaseClient<Database>
+): Promise<DesktopOcrRename> {
+	if (!UUID.test(deviceId)) throw new TypeError('Invalid desktop OCR device id');
+	const normalizedLabel = label.trim();
+	if (normalizedLabel.length < 1 || normalizedLabel.length > 80) {
+		throw new TypeError('Invalid desktop OCR device label');
+	}
+
+	let result: { data: unknown; error: unknown };
+	try {
+		result = await gateway(client).rpc('rename_ocr_worker_device', {
+			target_device_id: deviceId,
+			device_label: normalizedLabel
+		});
+	} catch {
+		throw new DesktopOcrDevicesError('Não foi possível renomear este computador de OCR.');
+	}
+	if (result.error) {
+		throw new DesktopOcrDevicesError('Não foi possível renomear este computador de OCR.');
+	}
+	const rename = parseRename(result.data, deviceId, normalizedLabel);
+	if (!rename) {
+		throw new DesktopOcrDevicesError('A confirmação de renomeação retornou um formato inválido.');
+	}
+	return rename;
 }
