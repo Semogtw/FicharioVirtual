@@ -71,9 +71,11 @@ class MemorySpool {
 			attemptCount: number;
 		}
 	>();
+	rejected = new Map<string, { jobId: string; result: Record<string, unknown>; reasonCode: string }>();
 
 	enqueue(result: Record<string, unknown>) {
 		const jobId = String(result.jobId);
+		if (this.rejected.has(jobId)) return this.rejected.get(jobId);
 		if (!this.entries.has(jobId)) {
 			this.entries.set(jobId, { jobId, result, state: 'pending', attemptCount: 0 });
 		}
@@ -98,9 +100,35 @@ class MemorySpool {
 		return true;
 	}
 
+	markRejected(jobId: string, reasonCode: string) {
+		const entry = this.entries.get(jobId);
+		if (!entry || entry.state !== 'pending' || entry.attemptCount < 1) return false;
+		this.rejected.set(jobId, { jobId, result: entry.result, reasonCode });
+		this.entries.delete(jobId);
+		return true;
+	}
+
 	purgeAcceptedBefore() {
 		return 0;
 	}
+}
+
+function successfulProcessingOptions(removeFile = vi.fn(async () => undefined)) {
+	return {
+		downloadSource: vi.fn(async () => ({
+			jobId: JOB_ID,
+			path: '/tmp/private-source.webp',
+			bytes: 1024,
+			sha256: SOURCE_SHA,
+			mimeType: 'image/webp'
+		})),
+		renewLease: vi.fn(async (_leaseContext, operation) => ({
+			value: await operation(),
+			lease: lease(),
+			renewalFailure: null
+		})),
+		removeFile
+	};
 }
 
 describe('runWorkerCycle', () => {
@@ -122,7 +150,27 @@ describe('runWorkerCycle', () => {
 		expect(engine.process).not.toHaveBeenCalled();
 	});
 
-	it('does not claim new work while a prior computed result is still pending delivery', async () => {
+	it('does not claim new work while a prior computed result has a retryable delivery failure', async () => {
+		const spool = new MemorySpool();
+		spool.enqueue({ jobId: JOB_ID });
+		const client = {
+			claim: vi.fn(),
+			renew: vi.fn(),
+			source: vi.fn(),
+			complete: vi.fn(async () => {
+				throw new DesktopWorkerApiError(503, 'desktop_ocr_worker_failed');
+			})
+		};
+		const engine = { process: vi.fn() };
+
+		const result = await runWorkerCycle({ client, spool, engine, downloadsDir: '/tmp/test' });
+
+		expect(result.status).toBe('blocked_pending_delivery');
+		expect(client.claim).not.toHaveBeenCalled();
+		expect(spool.entries.get(JOB_ID)?.attemptCount).toBe(1);
+	});
+
+	it('dead-letters a permanently rejected prior result and defers claiming until the next cycle', async () => {
 		const spool = new MemorySpool();
 		spool.enqueue({ jobId: JOB_ID });
 		const client = {
@@ -137,8 +185,11 @@ describe('runWorkerCycle', () => {
 
 		const result = await runWorkerCycle({ client, spool, engine, downloadsDir: '/tmp/test' });
 
-		expect(result.status).toBe('blocked_pending_delivery');
+		expect(result.status).toBe('dead_lettered');
+		expect(result.code).toBe('desktop_ocr_completion_rejected');
 		expect(client.claim).not.toHaveBeenCalled();
+		expect(spool.entries.has(JOB_ID)).toBe(false);
+		expect(spool.rejected.get(JOB_ID)?.reasonCode).toBe('desktop_ocr_completion_rejected');
 	});
 
 	it('runs claim, verified source, lease-protected engine, durable spool and completion in order', async () => {
@@ -150,33 +201,22 @@ describe('runWorkerCycle', () => {
 			complete: vi.fn(async () => receipt())
 		};
 		const engine = { process: vi.fn(async () => engineOutput()) };
-		const downloadSource = vi.fn(async () => ({
-			jobId: JOB_ID,
-			path: '/tmp/private-source.webp',
-			bytes: 1024,
-			sha256: SOURCE_SHA,
-			mimeType: 'image/webp'
-		}));
 		const removeFile = vi.fn(async () => undefined);
-		const renewLease = vi.fn(async (_leaseContext, operation) => ({
-			value: await operation(),
-			lease: lease(),
-			renewalFailure: null
-		}));
+		const options = successfulProcessingOptions(removeFile);
 
 		const result = await runWorkerCycle(
 			{ client, spool, engine, downloadsDir: '/tmp/test' },
-			{ downloadSource, renewLease, removeFile }
+			options
 		);
 
 		expect(result.status).toBe('completed');
 		expect(result.renewalFailure).toBeNull();
 		expect(client.source).toHaveBeenCalledWith(JOB_ID, LEASE_ID, { signal: undefined });
-		expect(downloadSource).toHaveBeenCalledWith(source(), {
+		expect(options.downloadSource).toHaveBeenCalledWith(source(), {
 			downloadsDir: '/tmp/test',
 			signal: undefined
 		});
-		expect(renewLease).toHaveBeenCalledWith({ client, lease: lease() }, expect.any(Function), {
+		expect(options.renewLease).toHaveBeenCalledWith({ client, lease: lease() }, expect.any(Function), {
 			signal: undefined,
 			now: expect.any(Function)
 		});
@@ -205,7 +245,32 @@ describe('runWorkerCycle', () => {
 		expect(removeFile).toHaveBeenCalledWith('/tmp/private-source.webp');
 	});
 
-	it('keeps a computed result in the spool when terminal delivery fails', async () => {
+	it('dead-letters a newly computed result when its immutable completion is permanently rejected', async () => {
+		const spool = new MemorySpool();
+		const client = {
+			claim: vi.fn(async () => lease()),
+			renew: vi.fn(),
+			source: vi.fn(async () => source()),
+			complete: vi.fn(async () => {
+				throw new DesktopWorkerApiError(409, 'desktop_ocr_completion_rejected');
+			})
+		};
+		const engine = { process: vi.fn(async () => engineOutput()) };
+		const removeFile = vi.fn(async () => undefined);
+
+		const result = await runWorkerCycle(
+			{ client, spool, engine, downloadsDir: '/tmp/test' },
+			successfulProcessingOptions(removeFile)
+		);
+
+		expect(result.status).toBe('dead_lettered');
+		expect(result.code).toBe('desktop_ocr_completion_rejected');
+		expect(spool.entries.has(JOB_ID)).toBe(false);
+		expect(spool.rejected.get(JOB_ID)?.result).toMatchObject({ rawText: 'synthetic transcript' });
+		expect(removeFile).toHaveBeenCalledOnce();
+	});
+
+	it('keeps a computed result pending when terminal delivery can be retried', async () => {
 		const spool = new MemorySpool();
 		const client = {
 			claim: vi.fn(async () => lease()),
@@ -218,24 +283,16 @@ describe('runWorkerCycle', () => {
 		const engine = { process: vi.fn(async () => engineOutput()) };
 		const removeFile = vi.fn(async () => undefined);
 		const renewalFailure = { code: 'desktop_ocr_lease_not_active', httpStatus: 409 };
+		const options = successfulProcessingOptions(removeFile);
+		options.renewLease = vi.fn(async (_leaseContext, operation) => ({
+			value: await operation(),
+			lease: lease(),
+			renewalFailure
+		}));
 
 		const result = await runWorkerCycle(
 			{ client, spool, engine, downloadsDir: '/tmp/test' },
-			{
-				downloadSource: vi.fn(async () => ({
-					jobId: JOB_ID,
-					path: '/tmp/private-source.webp',
-					bytes: 1024,
-					sha256: SOURCE_SHA,
-					mimeType: 'image/webp'
-				})),
-				renewLease: vi.fn(async (_leaseContext, operation) => ({
-					value: await operation(),
-					lease: lease(),
-					renewalFailure
-				})),
-				removeFile
-			}
+			options
 		);
 
 		expect(result.status).toBe('spooled');
@@ -258,21 +315,7 @@ describe('runWorkerCycle', () => {
 
 		const result = await runWorkerCycle(
 			{ client, spool, engine, downloadsDir: '/tmp/test' },
-			{
-				downloadSource: vi.fn(async () => ({
-					jobId: JOB_ID,
-					path: '/tmp/private-source.webp',
-					bytes: 1024,
-					sha256: SOURCE_SHA,
-					mimeType: 'image/webp'
-				})),
-				renewLease: vi.fn(async (_leaseContext, operation) => ({
-					value: await operation(),
-					lease: lease(),
-					renewalFailure: null
-				})),
-				removeFile
-			}
+			successfulProcessingOptions(removeFile)
 		);
 
 		expect(result.status).toBe('processing_deferred');
