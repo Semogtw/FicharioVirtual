@@ -7,6 +7,7 @@ const SAFE_CODE = /^[a-z0-9_]{3,96}$/;
 const MAX_ACCESS_TOKEN_BYTES = 16 * 1024;
 const MAX_RESPONSE_BYTES = 32 * 1024;
 const MAX_CAPABILITIES_BYTES = 12 * 1024;
+const ROLLBACK_TIMEOUT_MS = 15_000;
 
 function requireLabel(value) {
 	if (
@@ -105,6 +106,37 @@ async function readBoundedJson(response) {
 	}
 }
 
+function safeBackendCode(body, fallback) {
+	return body &&
+		typeof body === 'object' &&
+		!Array.isArray(body) &&
+		typeof body.code === 'string' &&
+		SAFE_CODE.test(body.code)
+		? body.code
+		: fallback;
+}
+
+async function postPairApi(endpoint, sessionToken, body, fetchImpl, signal) {
+	let response;
+	try {
+		response = await fetchImpl(endpoint, {
+			method: 'POST',
+			headers: {
+				Accept: 'application/json',
+				Authorization: `Bearer ${sessionToken}`,
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify(body),
+			redirect: 'error',
+			signal
+		});
+	} catch (error) {
+		if (error?.name === 'AbortError' || error?.name === 'TimeoutError') throw error;
+		throw new DesktopPairingError('desktop_ocr_pair_network_failed');
+	}
+	return Object.freeze({ response, body: await readBoundedJson(response) });
+}
+
 function parsePairingReceipt(value, expectedLabel, expectedCapabilities) {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) {
 		throw new DesktopPairingError('desktop_ocr_pair_response_invalid', 201);
@@ -141,6 +173,36 @@ function parsePairingReceipt(value, expectedLabel, expectedCapabilities) {
 	});
 }
 
+function parseRevocationReceipt(value, expectedDeviceId) {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) {
+		throw new DesktopPairingError('desktop_ocr_revoke_response_invalid', 200);
+	}
+	const keys = Object.keys(value).sort();
+	const expectedKeys = ['deviceId', 'requeuedJobs', 'revokedAt', 'status'];
+	if (
+		keys.length !== expectedKeys.length ||
+		!keys.every((key, index) => key === expectedKeys[index])
+	) {
+		throw new DesktopPairingError('desktop_ocr_revoke_response_invalid', 200);
+	}
+	if (
+		value.deviceId !== expectedDeviceId ||
+		value.status !== 'revoked' ||
+		typeof value.revokedAt !== 'string' ||
+		!Number.isFinite(Date.parse(value.revokedAt)) ||
+		!Number.isSafeInteger(value.requeuedJobs) ||
+		value.requeuedJobs < 0
+	) {
+		throw new DesktopPairingError('desktop_ocr_revoke_response_invalid', 200);
+	}
+	return Object.freeze({
+		deviceId: expectedDeviceId,
+		status: 'revoked',
+		revokedAt: value.revokedAt,
+		requeuedJobs: value.requeuedJobs
+	});
+}
+
 export class DesktopPairingError extends Error {
 	constructor(code, httpStatus = 0) {
 		super(`Desktop worker pairing failed (${code})`);
@@ -150,9 +212,40 @@ export class DesktopPairingError extends Error {
 	}
 }
 
+export async function revokeDesktopWorkerPairing(
+	{ workerEndpoint, deviceId, accessToken },
+	{ fetchImpl = fetch, signal } = {}
+) {
+	const endpoint = pairEndpoint(workerEndpoint);
+	if (typeof deviceId !== 'string' || !UUID.test(deviceId)) {
+		throw new TypeError('Invalid desktop worker device id');
+	}
+	const sessionToken = requireAccessToken(accessToken);
+	if (typeof fetchImpl !== 'function') throw new TypeError('Invalid desktop worker pairing fetch');
+	const result = await postPairApi(
+		endpoint,
+		sessionToken,
+		{ action: 'revoke', deviceId },
+		fetchImpl,
+		signal
+	);
+	if (result.response.status !== 200) {
+		throw new DesktopPairingError(
+			safeBackendCode(result.body, 'desktop_ocr_revoke_failed'),
+			result.response.status
+		);
+	}
+	return parseRevocationReceipt(result.body, deviceId);
+}
+
 export async function pairDesktopWorker(
 	{ workerEndpoint, label, capabilities, accessToken, devicePath, credentialStore },
-	{ fetchImpl = fetch, saveMetadata = saveDeviceMetadata, signal } = {}
+	{
+		fetchImpl = fetch,
+		saveMetadata = saveDeviceMetadata,
+		revokePairing = revokeDesktopWorkerPairing,
+		signal
+	} = {}
 ) {
 	const endpoint = pairEndpoint(workerEndpoint);
 	const safeLabel = requireLabel(label);
@@ -168,44 +261,47 @@ export async function pairDesktopWorker(
 	) {
 		throw new TypeError('Invalid desktop worker credential store');
 	}
-	if (typeof fetchImpl !== 'function' || typeof saveMetadata !== 'function') {
+	if (
+		typeof fetchImpl !== 'function' ||
+		typeof saveMetadata !== 'function' ||
+		typeof revokePairing !== 'function'
+	) {
 		throw new TypeError('Invalid desktop worker pairing dependency');
 	}
 
-	let response;
-	try {
-		response = await fetchImpl(endpoint, {
-			method: 'POST',
-			headers: {
-				Accept: 'application/json',
-				Authorization: `Bearer ${sessionToken}`,
-				'Content-Type': 'application/json'
-			},
-			body: JSON.stringify({ label: safeLabel, capabilities: safeCapabilities }),
-			redirect: 'error',
-			signal
-		});
-	} catch (error) {
-		if (error?.name === 'AbortError' || error?.name === 'TimeoutError') throw error;
-		throw new DesktopPairingError('desktop_ocr_pair_network_failed');
+	const result = await postPairApi(
+		endpoint,
+		sessionToken,
+		{ label: safeLabel, capabilities: safeCapabilities },
+		fetchImpl,
+		signal
+	);
+	if (result.response.status !== 201) {
+		throw new DesktopPairingError(
+			safeBackendCode(result.body, 'desktop_ocr_pair_failed'),
+			result.response.status
+		);
 	}
+	const receipt = parsePairingReceipt(result.body, safeLabel, safeCapabilities);
 
-	const body = await readBoundedJson(response);
-	if (response.status !== 201) {
-		const code =
-			body &&
-			typeof body === 'object' &&
-			!Array.isArray(body) &&
-			typeof body.code === 'string' &&
-			SAFE_CODE.test(body.code)
-				? body.code
-				: 'desktop_ocr_pair_failed';
-		throw new DesktopPairingError(code, response.status);
-	}
-	const receipt = parsePairingReceipt(body, safeLabel, safeCapabilities);
+	const rollback = async () => {
+		await credentialStore.clear(receipt.deviceId).catch(() => undefined);
+		try {
+			await revokePairing(
+				{
+					workerEndpoint,
+					deviceId: receipt.deviceId,
+					accessToken: sessionToken
+				},
+				{ fetchImpl, signal: AbortSignal.timeout(ROLLBACK_TIMEOUT_MS) }
+			);
+		} catch {
+			throw new DesktopPairingError('desktop_ocr_pair_local_commit_rollback_failed');
+		}
+	};
 
-	await credentialStore.store(receipt.deviceId, receipt.credential, { signal });
 	try {
+		await credentialStore.store(receipt.deviceId, receipt.credential, { signal });
 		await saveMetadata(devicePath, {
 			schemaVersion: 1,
 			deviceId: receipt.deviceId,
@@ -214,7 +310,7 @@ export async function pairDesktopWorker(
 			createdAt: receipt.createdAt
 		});
 	} catch (error) {
-		await credentialStore.clear(receipt.deviceId, { signal }).catch(() => undefined);
+		await rollback();
 		throw error;
 	}
 
