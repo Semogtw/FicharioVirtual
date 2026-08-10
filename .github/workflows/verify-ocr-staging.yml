@@ -8,11 +8,6 @@ on:
         required: true
         type: boolean
         default: false
-  push:
-    branches:
-      - main
-    paths:
-      - .github/workflows/verify-ocr-staging.yml
 
 permissions:
   contents: read
@@ -45,7 +40,7 @@ jobs:
 
       - name: Require explicit OCR confirmation
         env:
-          CONFIRM_EXTERNAL_OCR: ${{ github.event_name == 'push' && 'true' || inputs.confirm_external_ocr }}
+          CONFIRM_EXTERNAL_OCR: ${{ inputs.confirm_external_ocr }}
         run: test "$CONFIRM_EXTERNAL_OCR" = "true"
 
       - name: Set up pnpm
