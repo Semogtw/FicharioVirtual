@@ -88,7 +88,7 @@ requireText(
 requireText(
 	source,
 	'Google Picker public settings must be configured together',
-	'Google Picker public settings must remain all-or-none'
+	'artifact build must keep Google Picker public settings all-or-none'
 );
 requireText(source, 'run: pnpm verify', 'artifact build must execute the full repository verify command');
 requireText(
@@ -126,8 +126,8 @@ requireText(source, 'if-no-files-found: error', 'missing deployment artifact mus
 requireText(packager, 'set -euo pipefail', 'shared packager must remain fail-fast');
 requireText(
 	packager,
-	'if [[ ! "$output_name" =~ ^[A-Za-z0-9._-]+$',
-	'packager output must remain constrained to one repository-local directory'
+	'if [[ ! "$output_name" =~ ^fichario-deploy(-[A-Za-z0-9][A-Za-z0-9._-]*)?$ ]]',
+	'packager output must remain confined to the dedicated fichario-deploy namespace'
 );
 requireText(
 	packager,
