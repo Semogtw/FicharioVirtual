@@ -9,6 +9,7 @@ const MAX_TEXT_LENGTH = 1_000_000;
 const MAX_WARNINGS = 100;
 const MAX_WARNING_MESSAGE_LENGTH = 300;
 const MAX_TIMING_MS = 86_400_000;
+const MAX_WORD_GEOMETRY = 20_000;
 
 function exactKeys(record, expected) {
 	const actual = Object.keys(record).sort();
@@ -44,24 +45,51 @@ function parseWarnings(value) {
 	return Object.freeze(warnings);
 }
 
+function parseWordGeometry(value) {
+	if (!Array.isArray(value) || value.length > MAX_WORD_GEOMETRY) return null;
+	const geometry = [];
+	for (const item of value) {
+		if (!Array.isArray(item) || item.length !== 5) return null;
+		const [text, left, top, right, bottom] = item;
+		if (
+			typeof text !== 'string' ||
+			text.length < 1 ||
+			text.length > 256 ||
+			text !== text.trim() ||
+			![left, top, right, bottom].every(
+				(coordinate) => Number.isSafeInteger(coordinate) && coordinate >= 0 && coordinate <= 10_000
+			) ||
+			right <= left ||
+			bottom <= top
+		) {
+			return null;
+		}
+		geometry.push(Object.freeze([text, left, top, right, bottom]));
+	}
+	return Object.freeze(geometry);
+}
+
 export function parseCompletionRequest(value) {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+	const baseKeys = [
+		'action',
+		'jobId',
+		'leaseId',
+		'sourceSha256',
+		'backend',
+		'modelId',
+		'modelVersion',
+		'rawText',
+		'correctedText',
+		'contentType',
+		'warnings',
+		'needsReview',
+		'timingMs'
+	];
+	const legacyShape = exactKeys(value, baseKeys);
+	const geometryShape = exactKeys(value, [...baseKeys, 'wordGeometry']);
 	if (
-		!exactKeys(value, [
-			'action',
-			'jobId',
-			'leaseId',
-			'sourceSha256',
-			'backend',
-			'modelId',
-			'modelVersion',
-			'rawText',
-			'correctedText',
-			'contentType',
-			'warnings',
-			'needsReview',
-			'timingMs'
-		]) ||
+		(!legacyShape && !geometryShape) ||
 		value.action !== 'complete' ||
 		typeof value.jobId !== 'string' ||
 		!UUID.test(value.jobId) ||
@@ -87,8 +115,9 @@ export function parseCompletionRequest(value) {
 		return null;
 	}
 	const warnings = parseWarnings(value.warnings);
-	if (warnings === null) return null;
-	return Object.freeze({ ...value, warnings });
+	const wordGeometry = geometryShape ? parseWordGeometry(value.wordGeometry) : Object.freeze([]);
+	if (warnings === null || wordGeometry === null) return null;
+	return Object.freeze({ ...value, warnings, wordGeometry });
 }
 
 export function requireCompletionRequest(value) {
