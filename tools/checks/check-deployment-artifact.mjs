@@ -10,6 +10,10 @@ const MANIFEST_FILE = 'DEPLOYMENT-MANIFEST.txt';
 const SOURCE_PACKAGE_FILE = 'source/package.json';
 const SOURCE_LOCK_FILE = 'source/pnpm-lock.yaml';
 const REQUIRED_SOURCE_FILES = Object.freeze([SOURCE_PACKAGE_FILE, SOURCE_LOCK_FILE]);
+const REQUIRED_CHECK_FILES = Object.freeze([
+	'checks/check-deployed-site.mjs',
+	'checks/deployment-contract.mjs'
+]);
 const REQUIRED_SITE_FILES = Object.freeze([
 	'200.html',
 	'_headers',
@@ -243,6 +247,7 @@ export async function verifyDeploymentArtifact(inputPath) {
 		MANIFEST_FILE,
 		CHECKSUM_FILE,
 		...REQUIRED_SOURCE_FILES,
+		...REQUIRED_CHECK_FILES,
 		...REQUIRED_SITE_FILES.map((file) => `site/${file}`)
 	]) {
 		if (!files.includes(required))
@@ -251,11 +256,14 @@ export async function verifyDeploymentArtifact(inputPath) {
 	for (const file of files) {
 		if (file.startsWith('site/') && [MANIFEST_FILE, CHECKSUM_FILE].includes(posix.basename(file))) {
 			throw contractFailure(
-				`deployment metadata must remain outside the public site root: ${file}`
-			);
+					`deployment metadata must remain outside the public site root: ${file}`
+				);
 		}
 		const allowedOutsideSite =
-			file === MANIFEST_FILE || file === CHECKSUM_FILE || REQUIRED_SOURCE_FILES.includes(file);
+			file === MANIFEST_FILE ||
+			file === CHECKSUM_FILE ||
+			REQUIRED_SOURCE_FILES.includes(file) ||
+			REQUIRED_CHECK_FILES.includes(file);
 		if (!file.startsWith('site/') && !allowedOutsideSite) {
 			throw contractFailure(`unexpected file outside the public site root: ${file}`);
 		}
