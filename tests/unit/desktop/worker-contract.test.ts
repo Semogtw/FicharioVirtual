@@ -36,13 +36,25 @@ describe('desktop worker request contract', () => {
 		});
 	});
 
-	it('accepts a bounded completion payload without mutating OCR text', () => {
+	it('accepts a bounded legacy completion payload without mutating OCR text', () => {
 		const parsed = parseDesktopWorkerRequest(completion);
-		expect(parsed).toEqual(completion);
+		expect(parsed).toEqual({ ...completion, wordGeometry: [] });
 		if (parsed?.action === 'complete') {
 			expect(parsed.rawText).toBe('Texto OCR local');
 			expect(parsed.contentType).toBe('handwritten');
 			expect(parsed.warnings).toEqual(completion.warnings);
+			expect(parsed.wordGeometry).toEqual([]);
+		}
+	});
+
+	it('accepts bounded normalized geometry on a completion payload', () => {
+		const parsed = parseDesktopWorkerRequest({
+			...completion,
+			wordGeometry: [['Texto', 1000, 2000, 3000, 2600]]
+		});
+		expect(parsed?.action).toBe('complete');
+		if (parsed?.action === 'complete') {
+			expect(parsed.wordGeometry).toEqual([['Texto', 1000, 2000, 3000, 2600]]);
 		}
 	});
 
@@ -57,12 +69,18 @@ describe('desktop worker request contract', () => {
 		expect(parseDesktopWorkerRequest({ action: 'claim', userId: jobId })).toBeNull();
 	});
 
-	it('rejects malformed source identity and unsupported backends', () => {
+	it('rejects malformed source identity, geometry and unsupported backends', () => {
 		expect(
 			parseDesktopWorkerRequest({ ...completion, sourceSha256: sourceSha256.toUpperCase() })
 		).toBeNull();
 		expect(parseDesktopWorkerRequest({ ...completion, backend: 'shell' })).toBeNull();
 		expect(parseDesktopWorkerRequest({ ...completion, leaseId: 'not-a-uuid' })).toBeNull();
+		expect(
+			parseDesktopWorkerRequest({
+				...completion,
+				wordGeometry: [['Texto', 1000, 2000, 10001, 2600]]
+			})
+		).toBeNull();
 	});
 
 	it('rejects malformed warnings instead of coercing them', () => {
