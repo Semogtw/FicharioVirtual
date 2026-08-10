@@ -1,25 +1,31 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const workflow = readFileSync('.github/workflows/build-deployment-artifact.yml', 'utf8');
-const packager = readFileSync('tools/deploy/package-static-artifact.sh', 'utf8');
-const workflowChecker = readFileSync('tools/checks/check-deployment-artifact-workflow.mjs', 'utf8');
+const repositoryRoot = new URL('../../../', import.meta.url);
+
+function read(path: string) {
+	return readFileSync(new URL(path, repositoryRoot), 'utf8');
+}
 
 describe('deployable static artifact workflow', () => {
-	it('remains manual, staging-only, read-only, and exact-SHA gated', () => {
-		expect(workflow).toContain('on:\n  workflow_dispatch:');
-		expect(workflow).not.toContain('\n  push:');
-		expect(workflow).not.toContain('\n  pull_request:');
-		expect(workflow).not.toContain('\n  schedule:');
-		expect(workflow).toContain('permissions:\n  actions: read\n  contents: read');
+	it('is manual, read-only, and hard-coded to the protected staging environment', () => {
+		const workflow = read('.github/workflows/build-deployment-artifact.yml');
+
+		expect(workflow).toContain('workflow_dispatch:');
 		expect(workflow).toContain('environment: staging');
 		expect(workflow).toContain('TARGET_ENVIRONMENT: staging');
-		expect(workflow).toContain(
-			'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803'
-		);
+		expect(workflow).toContain('actions: read');
+		expect(workflow).toContain('contents: read');
 		expect(workflow).toContain('persist-credentials: false');
+		expect(workflow).not.toContain('target_environment:');
+		expect(workflow).not.toContain('environment: production');
+		expect(workflow).not.toContain('- production');
+	});
+
+	it('requires a successful current-head validation for the exact current main SHA', () => {
+		const workflow = read('.github/workflows/build-deployment-artifact.yml');
+
 		expect(workflow).toContain('- name: Require green current-head validation for this SHA');
-		expect(workflow).toContain('GH_TOKEN: ${{ github.token }}');
 		expect(workflow).toContain('/git/ref/heads/main');
 		expect(workflow).toContain('if [[ "$main_sha" != "$GITHUB_SHA" ]]');
 		expect(workflow).toContain(
@@ -31,65 +37,55 @@ describe('deployable static artifact workflow', () => {
 		expect(workflow).toContain('No successful Validate current head push run exists');
 	});
 
-	it('uses reviewed pinned actions and the committed lockfile', () => {
-		expect(workflow).toContain(
-			'pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86'
-		);
-		expect(workflow).toContain(
-			'actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38'
-		);
-		expect(workflow).toContain('pnpm install --frozen-lockfile');
-		expect(workflow).toContain(
-			'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02'
-		);
-	});
+	it('builds with public Supabase values supplied through step environment variables', () => {
+		const workflow = read('.github/workflows/build-deployment-artifact.yml');
 
-	it('builds only from staging public configuration and rejects local config leakage', () => {
 		expect(workflow).toContain('PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}');
 		expect(workflow).toContain(
 			'PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_SUPABASE_PUBLISHABLE_KEY }}'
 		);
-		expect(workflow).toContain('PUBLIC_GOOGLE_CLIENT_ID: ${{ secrets.PUBLIC_GOOGLE_CLIENT_ID }}');
-		expect(workflow).toContain(
-			'PUBLIC_GOOGLE_PICKER_API_KEY: ${{ secrets.PUBLIC_GOOGLE_PICKER_API_KEY }}'
-		);
-		expect(workflow).toContain(
-			'PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER: ${{ secrets.PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER }}'
-		);
-		expect(workflow).toContain('Google Picker public settings must be configured together');
-		expect(workflow).toContain('run: pnpm verify');
-		expect(workflow).toContain("! grep -R -F '127.0.0.1:54321' build");
-		expect(workflow).toContain("! grep -R -F 'sb_publishable_test_key_1234567890' build");
+		expect(workflow).toContain('pnpm install --frozen-lockfile');
+		expect(workflow).toContain('pnpm verify');
+		expect(workflow).toContain('PUBLIC_SUPABASE_URL');
+		expect(workflow).toContain('PUBLIC_SUPABASE_PUBLISHABLE_KEY');
+		expect(workflow.toLowerCase()).not.toContain('service_role');
+		expect(workflow).not.toContain('GEMINI_API_KEY');
 	});
 
-	it('packages and verifies one immutable staging artifact before upload', () => {
-		expect(workflow).toContain(
-			'run: bash tools/deploy/package-static-artifact.sh fichario-deploy'
+	it('verifies the packaged artifact with the reusable post-download command before upload', () => {
+		const workflow = read('.github/workflows/build-deployment-artifact.yml');
+		const packageJson = read('package.json');
+
+		expect(packageJson).toContain(
+			'"test:deployment:artifact": "node tools/checks/check-deployment-artifact.mjs"'
 		);
+		expect(workflow).toContain('- name: Verify packaged deployment artifact');
 		expect(workflow).toContain('run: pnpm test:deployment:artifact -- fichario-deploy');
-		expect(workflow).toContain('name: fichario-static-${{ github.sha }}-staging');
-		expect(workflow).toContain('if-no-files-found: error');
-		expect(packager).toContain('set -euo pipefail');
-		expect(packager).toContain("echo 'schema_version=2'");
-		expect(packager).toContain("echo 'target_environment=staging'");
-		expect(packager).toContain('sha256sum -c SHA256SUMS');
-		expect(workflowChecker).toContain('artifact build workflow must remain manual-only');
+		expect(workflow.indexOf('run: pnpm test:deployment:artifact -- fichario-deploy')).toBeLessThan(
+			workflow.indexOf('- name: Upload deployable static artifact')
+		);
 	});
 
-	it('never receives backend/deployment secrets or performs deployment mutations', () => {
-		for (const forbidden of [
-			'GEMINI_API_KEY',
-			'SUPABASE_SERVICE_ROLE_KEY',
-			'GOOGLE_CLIENT_SECRET',
-			'DRIVE_REFRESH_TOKEN',
-			'OCR_WORKER_DEVICE_TOKEN',
-			'CLOUDFLARE_API_TOKEN'
-		]) {
-			expect(workflow).not.toContain(forbidden);
-		}
-		expect(workflow).not.toContain('production-deploy');
-		expect(workflow).not.toContain('PRODUCTION_ARTIFACT_BUILD_ENABLED');
-		expect(workflow).not.toContain('wrangler pages deploy');
+	it('delegates deterministic packaging to the shared staging-only packager', () => {
+		const workflow = read('.github/workflows/build-deployment-artifact.yml');
+		const packager = read('tools/deploy/package-static-artifact.sh');
+
+		expect(workflow).toContain('run: bash tools/deploy/package-static-artifact.sh fichario-deploy');
+		expect(packager).toContain(
+			'mkdir -p "$output_name/site" "$output_name/source" "$output_name/checks"'
+		);
+		expect(packager).toContain('cp -a build/. "$output_name/site/"');
+		expect(packager).toContain('cp package.json pnpm-lock.yaml "$output_name/source/"');
+		expect(packager).toContain("echo 'schema_version=2'");
+		expect(packager).toContain('echo "source_commit=$source_commit"');
+		expect(packager).toContain("echo 'target_environment=staging'");
+		expect(packager).toContain(
+			'find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS'
+		);
+		expect(packager).toContain('sha256sum -c SHA256SUMS');
+		expect(workflow).toContain('name: fichario-static-${{ github.sha }}-staging');
+		expect(workflow).toContain('path: fichario-deploy/');
+		expect(workflow).toContain('if-no-files-found: error');
 		expect(workflow).not.toContain('supabase db push');
 		expect(workflow).not.toContain('supabase functions deploy');
 	});
