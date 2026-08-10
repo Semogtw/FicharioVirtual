@@ -1,3 +1,5 @@
+import { parseStoredWordGeometry, type OcrWordGeometry } from './ocr-word-geometry.ts';
+
 export type DesktopWorkerWarning = Readonly<{
 	code: string;
 	message: string;
@@ -23,6 +25,7 @@ export type DesktopWorkerRequest =
 			warnings: readonly DesktopWorkerWarning[];
 			needsReview: boolean;
 			timingMs: number;
+			wordGeometry: readonly OcrWordGeometry[];
 	  }>;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -93,23 +96,26 @@ export function parseDesktopWorkerRequest(value: unknown): DesktopWorkerRequest 
 		return Object.freeze({ action: record.action, jobId: record.jobId, leaseId: record.leaseId });
 	}
 
+	const completeKeys = [
+		'action',
+		'jobId',
+		'leaseId',
+		'sourceSha256',
+		'backend',
+		'modelId',
+		'modelVersion',
+		'rawText',
+		'correctedText',
+		'contentType',
+		'warnings',
+		'needsReview',
+		'timingMs'
+	] as const;
+	const hasLegacyCompleteShape = hasExactKeys(record, completeKeys);
+	const hasGeometryCompleteShape = hasExactKeys(record, [...completeKeys, 'wordGeometry']);
 	if (
 		record.action !== 'complete' ||
-		!hasExactKeys(record, [
-			'action',
-			'jobId',
-			'leaseId',
-			'sourceSha256',
-			'backend',
-			'modelId',
-			'modelVersion',
-			'rawText',
-			'correctedText',
-			'contentType',
-			'warnings',
-			'needsReview',
-			'timingMs'
-		]) ||
+		(!hasLegacyCompleteShape && !hasGeometryCompleteShape) ||
 		typeof record.jobId !== 'string' ||
 		!UUID.test(record.jobId) ||
 		typeof record.leaseId !== 'string' ||
@@ -142,6 +148,12 @@ export function parseDesktopWorkerRequest(value: unknown): DesktopWorkerRequest 
 
 	const warnings = parseWarnings(record.warnings);
 	if (warnings === null) return null;
+	const wordGeometry = hasGeometryCompleteShape
+		? parseStoredWordGeometry(record.wordGeometry)
+		: Object.freeze([]);
+	if (hasGeometryCompleteShape && Array.isArray(record.wordGeometry) && record.wordGeometry.length > 0 && wordGeometry.length === 0) {
+		return null;
+	}
 
 	return Object.freeze({
 		action: 'complete',
@@ -156,6 +168,7 @@ export function parseDesktopWorkerRequest(value: unknown): DesktopWorkerRequest 
 		contentType: record.contentType,
 		warnings,
 		needsReview: record.needsReview,
-		timingMs: record.timingMs
+		timingMs: record.timingMs,
+		wordGeometry
 	});
 }
