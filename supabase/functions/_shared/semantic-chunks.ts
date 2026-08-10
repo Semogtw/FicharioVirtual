@@ -21,7 +21,13 @@ function backwardBoundary(source: string, start: number, idealEnd: number) {
 	const minimum = start + Math.floor(SEMANTIC_CHUNK_MAX_CHARS * 0.62);
 	for (let cursor = idealEnd; cursor >= minimum; cursor -= 1) {
 		const character = source[cursor - 1];
-		if (character === '\n' || character === '.' || character === '?' || character === '!' || character === ';') {
+		if (
+			character === '\n' ||
+			character === '.' ||
+			character === '?' ||
+			character === '!' ||
+			character === ';'
+		) {
 			return cursor;
 		}
 	}
