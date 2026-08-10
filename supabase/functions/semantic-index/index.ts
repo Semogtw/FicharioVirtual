@@ -53,7 +53,8 @@ function parseRequest(value: unknown): ParsedRequest | null {
 	const allowed = new Set(['notebookId', 'batchSize', 'maxBatches', 'concurrency']);
 	if (Object.keys(record).some((key) => !allowed.has(key))) return null;
 	const notebookId = record.notebookId ?? null;
-	if (notebookId !== null && (typeof notebookId !== 'string' || !UUID.test(notebookId))) return null;
+	if (notebookId !== null && (typeof notebookId !== 'string' || !UUID.test(notebookId)))
+		return null;
 	const batchSize = boundedInteger(record.batchSize, SEMANTIC_INDEX_BATCH_PAGES, 1, 24);
 	const maxBatches = boundedInteger(record.maxBatches, SEMANTIC_INDEX_MAX_BATCHES, 1, 32);
 	const concurrency = boundedInteger(record.concurrency, SEMANTIC_INDEX_PAGE_CONCURRENCY, 1, 4);
@@ -69,7 +70,8 @@ Deno.serve(async (request) => {
 	if (request.method !== 'POST') return respond(405, { code: 'method_not_allowed' });
 
 	const authorization = request.headers.get('Authorization');
-	if (!authorization?.startsWith('Bearer ')) return respond(401, { code: 'authentication_required' });
+	if (!authorization?.startsWith('Bearer '))
+		return respond(401, { code: 'authentication_required' });
 
 	let raw: unknown;
 	try {
@@ -85,7 +87,8 @@ Deno.serve(async (request) => {
 	const supabaseUrl = Deno.env.get('SUPABASE_URL');
 	const publishableKey = Deno.env.get('SUPABASE_ANON_KEY');
 	const apiKey = Deno.env.get('GEMINI_API_KEY');
-	if (!supabaseUrl || !publishableKey || !apiKey) return respond(503, { code: 'semantic_index_not_configured' });
+	if (!supabaseUrl || !publishableKey || !apiKey)
+		return respond(503, { code: 'semantic_index_not_configured' });
 
 	const supabase = createClient(supabaseUrl, publishableKey, {
 		global: { headers: { Authorization: authorization } },
