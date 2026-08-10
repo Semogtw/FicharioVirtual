@@ -28,7 +28,9 @@ describe('deployable static artifact workflow', () => {
 		expect(workflow).toContain('- name: Require green current-head validation for this SHA');
 		expect(workflow).toContain('/git/ref/heads/main');
 		expect(workflow).toContain('if [[ "$main_sha" != "$GITHUB_SHA" ]]');
-		expect(workflow).toContain('/actions/workflows/validate-current-head.yml/runs?head_sha=${GITHUB_SHA}');
+		expect(workflow).toContain(
+			'/actions/workflows/validate-current-head.yml/runs?head_sha=${GITHUB_SHA}'
+		);
 		expect(workflow).toContain('.head_branch == \\"main\\"');
 		expect(workflow).toContain('.event == \\"push\\"');
 		expect(workflow).toContain('.conclusion == \\"success\\"');
