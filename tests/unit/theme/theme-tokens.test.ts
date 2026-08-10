@@ -14,6 +14,10 @@ describe('theme CSS tokens', () => {
 			'--line-rgb',
 			'--accent-rgb',
 			'--archive-rgb',
+			'--success',
+			'--success-rgb',
+			'--warning',
+			'--warning-rgb',
 			'--danger-rgb',
 			'--archive-strong',
 			'--muted-strong',
@@ -21,6 +25,10 @@ describe('theme CSS tokens', () => {
 		]) {
 			expect(tokens).toContain(token);
 		}
+		expect(tokens).toContain('--success: var(--archive)');
+		expect(tokens).toContain('--success-rgb: var(--archive-rgb)');
+		expect(tokens).toContain('--warning: var(--accent)');
+		expect(tokens).toContain('--warning-rgb: var(--accent-rgb)');
 	});
 
 	it('keeps primary application surfaces free from fixed original-palette overlays', () => {
@@ -32,7 +40,9 @@ describe('theme CSS tokens', () => {
 			'src/lib/components/DocumentCard.svelte',
 			'src/lib/components/EmptyState.svelte',
 			'src/routes/+page.svelte',
-			'src/routes/settings/+page.svelte'
+			'src/routes/settings/+page.svelte',
+			'src/routes/settings/computers/+page.svelte',
+			'src/routes/settings/computers/queue/+page.svelte'
 		];
 		const offenders = primarySurfaces.filter((path) => {
 			const source = readFileSync(path, 'utf8');
