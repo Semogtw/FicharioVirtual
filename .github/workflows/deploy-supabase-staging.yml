@@ -1,17 +1,96 @@
 name: Deploy Supabase staging
 
 on:
+  workflow_run:
+    workflows: [Validate current head]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
   contents: read
+  deployments: read
 
 concurrency:
   group: supabase-staging-deploy
   cancel-in-progress: false
 
 jobs:
+  resolve:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      target_sha: ${{ steps.target.outputs.sha }}
+      deploy_required: ${{ steps.changes.outputs.required }}
+    steps:
+      - name: Resolve validated target
+        id: target
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          VALIDATED_SHA: ${{ github.event.workflow_run.head_sha }}
+          DISPATCH_SHA: ${{ github.sha }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            target_sha="$DISPATCH_SHA"
+          else
+            target_sha="$VALIDATED_SHA"
+          fi
+          test -n "$target_sha"
+          echo "sha=$target_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout validated source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ steps.target.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Detect unapplied staging runtime changes
+        id: changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "required=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          base_sha=""
+          while read -r deployment_id deployment_sha; do
+            state="$(gh api "/repos/$GITHUB_REPOSITORY/deployments/$deployment_id/statuses?per_page=1" --jq '.[0].state // ""')"
+            if [ "$state" = "success" ]; then
+              base_sha="$deployment_sha"
+              break
+            fi
+          done < <(
+            gh api "/repos/$GITHUB_REPOSITORY/deployments?environment=staging-deploy&per_page=20" \
+              --jq '.[] | "\(.id) \(.sha)"'
+          )
+
+          if [ -z "$base_sha" ] || ! git merge-base --is-ancestor "$base_sha" "$TARGET_SHA"; then
+            echo "required=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if git diff --quiet "$base_sha" "$TARGET_SHA" -- \
+            supabase \
+            .github/workflows/deploy-supabase-staging.yml \
+            .github/workflows/verify-ocr-staging.yml \
+            tools/checks/check-ocr-staging.mjs; then
+            echo "required=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "required=true" >> "$GITHUB_OUTPUT"
+          fi
+
   deploy:
+    needs: resolve
+    if: needs.resolve.outputs.deploy_required == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment: staging-deploy
@@ -21,9 +100,10 @@ jobs:
       STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
 
     steps:
-      - name: Checkout repository
+      - name: Checkout validated repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          ref: ${{ needs.resolve.outputs.target_sha }}
           persist-credentials: false
 
       - name: Set up Supabase CLI
@@ -60,3 +140,10 @@ jobs:
 
       - name: Confirm deployed Edge Functions
         run: supabase functions list --project-ref "$STAGING_SUPABASE_PROJECT_REF"
+
+  verify-ocr:
+    needs: [resolve, deploy]
+    if: needs.deploy.result == 'success'
+    uses: ./.github/workflows/verify-ocr-staging.yml
+    with:
+      target_sha: ${{ needs.resolve.outputs.target_sha }}
