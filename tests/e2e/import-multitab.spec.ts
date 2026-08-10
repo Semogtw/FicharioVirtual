@@ -26,9 +26,10 @@ const session = {
 };
 
 type RequestCounters = {
+	backgroundKicks: number;
 	consents: number;
+	directOcrRuns: number;
 	metadataCreates: number;
-	ocrRuns: number;
 	storageUploads: number;
 	unknown: string[];
 };
@@ -115,6 +116,9 @@ async function mockSupabase(context: BrowserContext, counters: RequestCounters) 
 				}
 			]);
 		}
+		if (path === '/rest/v1/rpc/get_document_ocr_summary') {
+			return json(route, [{ total: 1, completed: 0, needs_review: 0, pending: 1, failed: 0 }]);
+		}
 
 		if (path === '/functions/v1/drive-resolve-folder') {
 			return json(route, { folderId: 'RootFolder_1234567890' });
@@ -125,13 +129,17 @@ async function mockSupabase(context: BrowserContext, counters: RequestCounters) 
 				expiresAt: '2099-01-01T00:00:00.000Z'
 			});
 		}
+		if (path === '/functions/v1/ocr-queue-kick') {
+			counters.backgroundKicks += 1;
+			return json(route, { accepted: true });
+		}
 
 		if (path.startsWith('/storage/v1/object/documents/')) {
 			counters.storageUploads += 1;
 			return json(route, { Key: path.slice('/storage/v1/object/'.length) });
 		}
 		if (path === '/functions/v1/process-ocr') {
-			counters.ocrRuns += 1;
+			counters.directOcrRuns += 1;
 			return json(route, { state: 'complete', needsReview: false, warningCount: 0 });
 		}
 
@@ -244,13 +252,14 @@ async function seedStoredImport(context: BrowserContext) {
 
 test.use({ serviceWorkers: 'block' });
 
-test('two tabs resume one persisted image import without duplicate upload or OCR', async ({
+test('two tabs resume one persisted image import without duplicate upload or client OCR', async ({
 	context
 }) => {
 	const counters: RequestCounters = {
+		backgroundKicks: 0,
 		consents: 0,
+		directOcrRuns: 0,
 		metadataCreates: 0,
-		ocrRuns: 0,
 		storageUploads: 0,
 		unknown: []
 	};
@@ -265,20 +274,22 @@ test('two tabs resume one persisted image import without duplicate upload or OCR
 	const second = await context.newPage();
 	await Promise.all([first.goto('/import/'), second.goto('/import/')]);
 
-	await expect.poll(() => counters.ocrRuns, { timeout: 20_000 }).toBe(1);
+	await expect.poll(() => counters.metadataCreates, { timeout: 20_000 }).toBe(1);
+	await expect.poll(() => counters.backgroundKicks, { timeout: 20_000 }).toBeGreaterThanOrEqual(1);
+
+	await first.getByRole('button', { name: /Fila/ }).click();
+	await second.getByRole('button', { name: /Fila/ }).click();
 	await expect
 		.poll(
-			async () => {
-				return (
-					(await first.getByText('Pronto', { exact: true }).count()) +
-					(await second.getByText('Pronto', { exact: true }).count())
-				);
-			},
+			async () =>
+				(await first.getByText('Leitura em segundo plano', { exact: true }).count()) +
+				(await second.getByText('Leitura em segundo plano', { exact: true }).count()),
 			{ timeout: 15_000 }
 		)
 		.toBe(1);
 
 	expect(counters.consents).toBe(1);
+	expect(counters.directOcrRuns).toBe(0);
 	expect(counters.metadataCreates).toBe(1);
 	expect(counters.storageUploads).toBe(3);
 	expect(counters.unknown).toEqual([]);
@@ -300,7 +311,17 @@ test('two tabs resume one persisted image import without duplicate upload or OCR
 					request.onerror = () => reject(request.error ?? new Error('IndexedDB read failed'));
 				});
 				database.close();
-				return record === undefined;
+				if (record === null || typeof record !== 'object' || Array.isArray(record)) return false;
+				const stored = record as Record<string, unknown>;
+				const result = stored.result;
+				return (
+					stored.status === 'waiting' &&
+					result !== null &&
+					typeof result === 'object' &&
+					!Array.isArray(result) &&
+					typeof (result as Record<string, unknown>).documentId === 'string' &&
+					typeof (result as Record<string, unknown>).pageId === 'string'
+				);
 			}, importId);
 		})
 		.toBe(true);
