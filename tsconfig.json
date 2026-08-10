@@ -11,5 +11,6 @@
 		"sourceMap": true,
 		"strict": true,
 		"moduleResolution": "bundler"
-	}
+	},
+	"exclude": ["tools/desktop-worker/**/*", "tests/unit/desktop-worker/**/*"]
 }
