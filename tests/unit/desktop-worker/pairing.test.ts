@@ -1,8 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-	DesktopPairingError,
-	pairDesktopWorker
-} from '../../../tools/desktop-worker/pairing.mjs';
+import { DesktopPairingError, pairDesktopWorker } from '../../../tools/desktop-worker/pairing.mjs';
 
 const WORKER_ENDPOINT = 'https://example.supabase.co/functions/v1/desktop-ocr-worker';
 const PAIR_ENDPOINT = 'https://example.supabase.co/functions/v1/desktop-ocr-pair';
