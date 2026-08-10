@@ -1,419 +1,355 @@
 # Cobertura de assuntos por unidade
 
-## Objetivo
+A rota `/coverage/` compara os conteúdos de uma unidade, disciplina ou ementa com o material pesquisável do Fichário Virtual. O usuário pode montar a lista manualmente ou extrair os conteúdos de uma foto, revisar cada item em campos independentes e então receber os estados `Coberto`, `Parcial` e `Não encontrado`, sempre acompanhados das evidências disponíveis.
 
-A tela **Cobertura** permite montar a ementa/conteúdo de uma unidade e verificar quais assuntos já possuem material pesquisável no Fichário Virtual.
+A feature possui duas camadas de análise:
 
-Rota: `/coverage/`.
+1. **textual/fuzzy**, sempre disponível quando a busca normal do fichário está disponível;
+2. **semântica híbrida**, opcional e sujeita a consentimento, que combina embeddings e verificação conservadora do Gemini sem remover o fallback textual.
 
-A entrada deixou de ser apenas um bloco de texto. A unidade agora tem uma lista estruturada de assuntos editáveis que pode ser alimentada de três formas:
+Os detalhes da segunda camada estão em [`SEMANTIC_COVERAGE.md`](SEMANTIC_COVERAGE.md).
 
-1. digitando ou colando uma lista e convertendo-a em campos;
-2. adicionando campos vazios manualmente;
-3. fotografando a lista de conteúdos e usando o OCR existente para preencher os campos automaticamente.
+## Objetivo de produto
 
-A análise de cobertura continua propositalmente independente de IA generativa. Ela reutiliza a busca textual/fuzzy existente sobre o texto efetivo das páginas — texto nativo de PDF, OCR e correções manuais — e sempre devolve evidências navegáveis para o documento original.
+A tela responde a uma pergunta prática: **“o que desta ementa eu já tenho estudado/documentado no meu fichário?”**
 
-## Modelo de edição estruturada
+Ela não afirma domínio pedagógico absoluto. `Coberto` significa que foram encontradas evidências suficientemente fortes segundo os sinais disponíveis. O usuário continua podendo abrir a página original e conferir a fonte.
 
-A lista estruturada é a fonte única usada pela análise. Cada assunto possui um campo independente e pode ser:
+## Fluxo do usuário
 
-- editado sem alterar os demais;
+1. Informar opcionalmente um nome para a unidade.
+2. Escolher se a análise considera todo o fichário ou apenas um caderno.
+3. Adicionar conteúdos por uma ou ambas as formas:
+   - digitar/colar uma lista;
+   - fotografar/selecionar uma imagem da ementa e usar OCR.
+4. Revisar os conteúdos já separados em campos independentes.
+5. Editar, remover, reordenar e ajustar hierarquia.
+6. Opcionalmente ativar **relação semântica com Gemini**, com consentimento específico.
+7. Clicar em **Verificar cobertura**.
+8. Consultar percentual, estado por tópico e evidências.
+9. Abrir documento/página para inspeção do trecho original.
+
+## Editor estruturado
+
+O texto bruto nunca é a fonte canônica da análise. Antes da verificação, cada assunto vira um `EditableTopic` com:
+
+- identificador local;
+- texto editável;
+- origem `manual` ou `ocr`;
+- confiança heurística do OCR;
+- sinal de revisão;
+- nível hierárquico relativo.
+
+A análise usa os textos já revisados desses campos.
+
+### Operações disponíveis
+
+Cada campo pode ser:
+
+- editado;
 - excluído;
 - movido para cima ou para baixo;
-- promovido ou rebaixado em até quatro níveis hierárquicos;
-- identificado como entrada manual ou originada por OCR;
-- marcado para revisão quando a extração tiver baixa confiança heurística.
+- promovido ou rebaixado na hierarquia, até quatro níveis relativos.
 
-O limite atual permanece em `40` assuntos por análise para evitar rajadas de consultas. Assuntos repetidos são comparados com normalização de caixa e acentos e entram apenas uma vez no cálculo final.
+A unidade aceita no máximo `MAX_UNIT_TOPICS` conteúdos. Duplicatas são comparadas usando a mesma normalização sem acentos/caixa usada pela cobertura.
 
-### Entrada escrita
+## Entrada manual
 
-O usuário ainda pode escrever ou colar normalmente, inclusive listas como:
+O usuário pode colar uma lista com um item por linha e usar **Transformar em campos**.
 
-```text
-3.1 Temperatura
-3.2 Calor específico
-3.3 Mudanças de fase
-3.4 Primeira lei da termodinâmica
-```
+São removidos de forma conservadora marcadores comuns como:
 
-Ao selecionar **Transformar em campos**, cada item vira um campo editável. Numeração e marcadores comuns são removidos nessa conversão.
+- `1.` / `1.2` / `3.2.1`;
+- letras e romanos;
+- `-`, `*`, `•` e similares;
+- caixas de seleção.
 
-O texto colado não é a fonte final da análise: depois da conversão, os campos estruturados são a fonte de verdade.
+Também existe **Adicionar campo vazio** para cadastrar itens individualmente.
 
-## Importação por foto da ementa
+## Foto da ementa
 
-### Fluxo de usuário
+Arquivo principal: `src/lib/services/coverage-photo-import.ts`.
 
-1. O usuário confirma o consentimento de leitura automática.
-2. Seleciona uma imagem existente ou abre a câmera traseira do dispositivo.
-3. A imagem é preparada localmente com o pipeline `ocr_clean_v1` em alta definição.
-4. O arquivo é enviado temporariamente usando o mesmo pipeline de importação de imagens do Fichário.
-5. O mesmo `process-ocr` usado nos documentos normais executa a leitura.
-6. O texto efetivo da página é carregado.
-7. `src/lib/coverage/topic-import.ts` separa o OCR em itens de lista.
-8. Cada item extraído vira imediatamente um campo editável na tela.
-9. Se o arquivo temporário foi criado por este fluxo, ele é removido após a extração.
-10. Só depois da revisão do usuário os campos são enviados para a análise de cobertura.
+O fluxo reutiliza a infraestrutura real de importação/OCR do projeto em vez de criar um OCR paralelo:
 
-Não existe um segundo motor de OCR específico para Cobertura. A funcionalidade reutiliza o pipeline já mantido pelo projeto.
+1. registra consentimento de OCR;
+2. prepara a imagem em alta definição;
+3. envia a imagem como documento temporário;
+4. executa `processPageOcr`;
+5. lê o texto efetivo da página;
+6. segmenta os conteúdos;
+7. apaga o documento temporário criado por esse fluxo.
 
-### Formatos
+Se a imagem já existir no fichário, o documento existente é reutilizado e **não é apagado**.
 
-A interface aceita:
+Formatos aceitos pela UI:
 
 - JPEG;
 - PNG;
-- WebP;
-- captura direta pela câmera com `capture="environment"` quando o navegador oferece suporte.
+- WebP.
 
-Os limites de tamanho e validações continuam sendo os mesmos de `src/lib/import/image-client.ts`.
+A câmera móvel usa `capture="environment"` quando suportado.
 
-### Arquivo temporário e privacidade
+### Estágios visíveis
 
-A imagem da ementa não deve permanecer como um documento novo apenas por ter sido usada para preencher o formulário.
+- `preparing` — preparando a foto;
+- `uploading` — envio temporário;
+- `reading` — OCR;
+- `extracting` — separação dos conteúdos;
+- `cleaning_up` — remoção do temporário.
 
-Por isso `src/lib/services/coverage-photo-import.ts`:
+O fluxo aceita `AbortSignal` e pode ser cancelado.
 
-- cria um documento temporário apenas quando necessário para reutilizar o pipeline existente;
-- processa a página com OCR;
-- extrai os tópicos;
-- chama `deleteDocument` no `finally`, inclusive em falhas de cota/processamento após o upload;
-- não mascara uma extração bem-sucedida se somente a limpeza falhar; nesse caso a UI mostra um aviso de limpeza pendente.
+### Falhas tratadas
 
-Se a imagem já existe no fichário, `DuplicateImageError` é tratado de forma diferente:
+- página/texto indisponível;
+- OCR pendente;
+- cota esgotada;
+- falha definitiva do OCR;
+- imagem lida sem conteúdos utilizáveis;
+- falha isolada de limpeza do documento temporário.
 
-- a primeira página do documento existente é reaproveitada;
-- o OCR existente é processado/reutilizado;
-- o documento original **não é apagado**.
+Quando a extração foi bem-sucedida e apenas a limpeza falhou, os conteúdos são preservados e a UI avisa o usuário.
 
-Esse comportamento é importante porque uma foto já pertencente à biblioteca não pode ser tratada como temporária.
+## Segmentação do OCR
 
-### Consentimento
+Arquivo: `src/lib/coverage/topic-import.ts`.
 
-A tela repete o aviso de privacidade da importação normal e chama `recordOcrConsent()` antes do processamento. A seleção da foto fica desabilitada até o usuário confirmar o consentimento.
+O módulo é puro e determinístico. Ele:
 
-## Segmentação do OCR em assuntos
+- reconhece numeração e marcadores;
+- junta linhas quebradas que pertencem ao item anterior;
+- preserva listas sem numeração usando uma linha por candidato;
+- ignora cabeçalhos genéricos como `EMENTA` e `CONTEÚDO PROGRAMÁTICO`;
+- evita colar prováveis títulos em tópicos anteriores;
+- deduplica conteúdos normalizados;
+- infere hierarquia relativa de 0 a 3;
+- limita o resultado ao máximo aceito pela unidade.
 
-O módulo puro `src/lib/coverage/topic-import.ts` recebe o texto do OCR e devolve `OcrTopicCandidate[]`.
+### Confiança do OCR
 
-### Listas numeradas e marcadas
+`alta`, `média` e `baixa` são **sinais heurísticos de revisão**, não probabilidades estatísticas.
 
-São reconhecidos, entre outros:
+A confiança pode ser reduzida por:
 
-- `1. Assunto`;
-- `3.1 Assunto`;
-- `3.2.1 Assunto`;
-- `A. Assunto`;
-- `IV. Assunto`;
-- `- Assunto`;
-- `• Assunto`;
-- caixas de seleção como `☐ Assunto`.
+- item sem marcador explícito;
+- caracteres suspeitos de OCR;
+- página `needs_review`;
+- warnings produzidos pelo pipeline.
 
-Quando pelo menos dois marcadores explícitos são encontrados, a entrada é tratada como lista estruturada.
+Itens de confiança baixa ficam marcados como `revisar` e permanecem totalmente editáveis.
 
-Linhas sem novo marcador entre dois itens são consideradas continuação do item anterior. Isso cobre OCRs como:
+## Análise textual/fuzzy
 
-```text
-1. Primeira lei da termodinâmica e conservação
-   de energia em sistemas fechados
-2. Máquinas térmicas
-```
+Arquivo: `src/lib/services/topic-coverage.ts`.
 
-que produzem dois campos, e não três.
+Sem semântica, cada tópico reutiliza `searchPages`, que por sua vez chama `search_pages` no Supabase. O ranking atual combina full-text, substring e fuzzy/trigram, além de sinais de título/caderno conforme o contrato da busca normal.
 
-### Listas sem marcadores
+A análise:
 
-Se a foto contém apenas uma linha por conteúdo, cada linha não vazia vira um candidato independente.
+- usa até quatro workers por padrão;
+- limita resultados por tópico;
+- preserva a ordem dos assuntos;
+- propaga cancelamento;
+- mantém a classificação textual já existente.
 
-### Cabeçalhos genéricos
+### Classificação textual
 
-Cabeçalhos puramente estruturais, como `EMENTA`, `CONTEÚDO PROGRAMÁTICO` e `LISTA DE CONTEÚDOS`, são ignorados quando reconhecidos exatamente.
+No domínio `src/lib/coverage/topic-coverage.ts`:
 
-Cabeçalhos específicos da disciplina não são descartados agressivamente. Em caso de dúvida, é preferível mostrar um campo que o usuário possa excluir a apagar silenciosamente um assunto real.
+- `Coberto`: melhor rank textual >= `0.85`;
+- `Parcial`: melhor rank textual >= `0.40` e abaixo do limiar de coberto;
+- `Não encontrado`: abaixo de `0.40`.
 
-### Deduplicação
+O percentual pondera:
 
-Os candidatos são deduplicados com a mesma normalização de `normalizeTopic`:
+- coberto = 1;
+- parcial = 0,5;
+- não encontrado = 0.
 
-- ignora caixa;
-- ignora acentos;
-- normaliza pontuação e espaços.
+## Análise semântica híbrida
 
-Exemplo: `Calor específico` e `Calor especifico` contam como o mesmo assunto.
+A opção **Usar relação semântica com Gemini** começa desativada porque essa operação pode enviar trechos de páginas já armazenadas ao provedor. Ao ativá-la, a UI registra consentimento dedicado antes da chamada semântica.
 
-## Hierarquia
+Quando disponível, a análise adiciona:
 
-A numeração extraída preserva até quatro níveis (`0` a `3` internamente).
+- chunks persistidos em `page_semantic_chunks`;
+- embeddings `vector(768)`;
+- busca por similaridade cosseno;
+- fusão lexical + semântica;
+- verificação opcional de poucos candidatos pelo Gemini;
+- hash do texto efetivo para invalidar embeddings antigos;
+- indexação incremental para evitar rajadas de custo/cota.
 
-Exemplo:
+O score final é conservador. Um veredito `partial` do Gemini não pode promover o resultado para `Coberto`, e um `none` de alta confiança reduz um falso positivo lexical/semântico.
 
-```text
-3. Termodinâmica
-3.1 Temperatura
-3.2 Calorimetria
-3.2.1 Capacidade térmica
-```
+Consulte [`SEMANTIC_COVERAGE.md`](SEMANTIC_COVERAGE.md) para arquitetura, RPCs, limites, configuração e fórmula de score.
 
-resulta em níveis relativos `0`, `1`, `1`, `2`.
+### Fallback obrigatório
 
-Os níveis são normalizados pelo menor nível encontrado, portanto uma foto contendo apenas `3.1`, `3.2`, `3.3` não aparece artificialmente toda indentada.
+A semântica não é um ponto único de falha.
 
-Na interface o usuário pode ajustar a hierarquia com os controles de promover/rebaixar. A hierarquia é metadado de organização da ementa; a primeira versão da análise de cobertura continua avaliando os textos de forma plana e individual.
+Sem consentimento, chave, cota, índice atual ou disponibilidade do provedor:
 
-## Confiança e revisão
+- a Edge Function pode responder em modo `lexical`;
+- se a própria função semântica não estiver acessível, o browser volta a `searchPages`;
+- a busca textual/fuzzy continua cobrindo todo o corpus pesquisável.
 
-O OCR atual não fornece uma probabilidade calibrada por item. Portanto a UI **não apresenta o indicador como probabilidade estatística**.
+Quando o índice semântico está incompleto, a UI informa a proporção indexada e deixa claro que a busca textual continua cobrindo o restante.
 
-`topic-import.ts` gera um sinal heurístico `high | medium | low` baseado em:
-
-- presença de marcador explícito de lista;
-- caracteres estranhos ou sinais típicos de OCR corrompido;
-- tamanho inválido/suspeito;
-- estado `needs_review` retornado pelo pipeline de OCR;
-- quantidade de warnings da página.
-
-O sinal é degradado quando a página inteira precisa de revisão ou quando há warnings. Itens com `low` recebem `reviewRequired = true` e ficam visualmente destacados.
-
-O objetivo do indicador é dizer **“confira este campo”**, não afirmar uma precisão numérica falsa.
-
-## Estados da importação por foto
-
-A interface expõe os estágios:
-
-- `preparing` — preparação local da foto;
-- `uploading` — upload temporário;
-- `reading` — execução do OCR;
-- `extracting` — segmentação em assuntos;
-- `cleaning_up` — remoção do documento temporário.
-
-A operação pode ser cancelada por `AbortController`. A limpeza do documento temporário não depende do mesmo signal, para que um cancelamento não abandone o arquivo que já foi enviado.
-
-Erros específicos tratados pelo serviço incluem:
-
-- página de origem indisponível;
-- OCR pendente/retryable;
-- cota diária esgotada;
-- falha definitiva de OCR;
-- OCR concluído sem nenhum assunto utilizável.
-
-## Fluxo de análise de cobertura
-
-Depois que os campos estão revisados:
-
-1. campos vazios são ignorados;
-2. os textos passam novamente por `parseUnitTopics` para aplicar limite e deduplicação defensiva;
-3. é possível restringir a análise a um caderno ou usar todo o fichário;
-4. para cada assunto, o cliente chama a RPC `search_pages` já usada pela busca normal;
-5. as consultas rodam com concorrência máxima de 4 por padrão;
-6. os melhores resultados são classificados;
-7. até quatro evidências por assunto são exibidas;
-8. cada evidência abre diretamente o documento, página e termo de destaque.
-
-Nenhum conteúdo adicional é enviado a Gemini ou a outro serviço externo **para classificar a cobertura**. O provedor de OCR continua sendo o já configurado pelo pipeline normal de leitura.
-
-## Classificação
-
-A classificação usa o `rank` retornado pela busca fuzzy atual:
-
-- `covered` / **Coberto**: melhor `rank >= 0.85`;
-- `partial` / **Parcial**: melhor `rank >= 0.40` e abaixo do limiar de cobertura;
-- `missing` / **Não encontrado**: nenhum resultado ou melhor `rank < 0.40`.
-
-Os limiares ficam centralizados em `src/lib/coverage/topic-coverage.ts`.
-
-A força mostrada na interface é uma indicação relativa ao limiar de cobertura, limitada a 100%. Ela **não é uma probabilidade estatística** de o assunto estar coberto.
-
-### Percentual da unidade
-
-O percentual geral continua simples e explicável:
-
-- coberto = `1.0`;
-- parcial = `0.5`;
-- não encontrado = `0.0`.
-
-`percentual = soma dos pesos / quantidade de assuntos * 100`
-
-## Evidências e rastreabilidade
+## Evidências
 
 Para cada assunto são preservados, quando disponíveis:
 
 - `documentId` e título do documento;
 - `pageId` e número da página;
 - caderno;
-- trecho (`excerpt`) retornado pela busca;
-- `rank` da ocorrência.
+- trecho relevante;
+- força final usada para ordenar a evidência.
 
 A UI cria links no formato:
 
 `/documents/{documentId}/?page={pageNumber}&highlight={topic}`
 
-Assim o resultado de cobertura nunca precisa ser aceito sem inspeção.
+Mesmo quando o trecho foi encontrado semanticamente sem as mesmas palavras do tópico, o link continua levando à página-fonte para inspeção.
 
 ## Arquitetura
 
-### Domínio de cobertura
+### `src/lib/coverage/topic-coverage.ts`
 
-`src/lib/coverage/topic-coverage.ts`
+Responsável pelo contrato lexical:
 
-Responsável por:
+- parsing/normalização;
+- limites públicos;
+- classificação textual;
+- deduplicação de evidências;
+- resumo e percentual.
 
-- normalização e parsing defensivo da lista;
-- limites públicos da feature;
-- seleção/deduplicação de evidências;
-- classificação por assunto;
-- cálculo do resumo da unidade.
+### `src/lib/coverage/semantic-coverage.ts`
 
-### Segmentação de OCR
+Responsável pelo contrato híbrido:
 
-`src/lib/coverage/topic-import.ts`
+- normalização dos sinais lexical e semântico;
+- combinação dos sinais;
+- aplicação conservadora do verificador;
+- classificação híbrida;
+- metadados do modo/indexação.
 
-Responsável por:
+### `src/lib/coverage/topic-import.ts`
 
-- reconhecer marcadores/numeração;
-- separar ou juntar linhas do OCR;
-- detectar hierarquia relativa;
-- remover cabeçalhos genéricos;
-- deduplicar candidatos;
-- gerar sinal heurístico de confiança/revisão;
-- limitar o resultado ao máximo aceito pela unidade.
+Responsável pela segmentação pura do OCR em conteúdos editáveis.
 
-É um módulo puro: não conhece Svelte, Supabase nem o provedor de OCR.
+### `src/lib/services/coverage-photo-import.ts`
 
-### Serviço de foto
+Orquestra consentimento, preparação, upload, OCR, leitura, segmentação e limpeza da foto.
 
-`src/lib/services/coverage-photo-import.ts`
+### `src/lib/services/semantic-coverage.ts`
 
 Responsável por:
 
-- registrar consentimento;
-- preparar a imagem em alta definição;
-- reutilizar `uploadPreparedImage`;
-- reutilizar `processPageOcr`;
-- carregar o texto efetivo da página;
-- reaproveitar documento duplicado sem destruí-lo;
-- chamar o segmentador puro;
-- apagar o documento criado temporariamente;
-- propagar cancelamento e estágios de progresso.
+- registrar consentimento semântico;
+- invocar `semantic-coverage`;
+- validar estritamente a resposta;
+- expor candidatos e metadados tipados ao browser.
 
-A função central possui uma variante com dependências injetáveis para testes sem rede, storage ou provider real.
+### `src/lib/services/topic-coverage.ts`
 
-### Serviço de cobertura
+Orquestra o modo selecionado e garante fallback textual local quando a camada semântica falha.
 
-`src/lib/services/topic-coverage.ts`
+### `supabase/functions/semantic-coverage/index.ts`
 
-Responsável por:
+Orquestra:
 
-- reutilizar `searchPages`;
-- limitar concorrência;
-- propagar cancelamento com `AbortSignal`;
-- preservar a ordem dos assuntos;
-- montar o `UnitCoverageSummary` consumido pela interface.
+- autenticação;
+- indexação incremental;
+- embeddings de documento e consulta;
+- busca lexical e vetorial;
+- fusão dos candidatos;
+- verificação opcional;
+- fallback por cota/configuração/provedor.
 
-### Interface
+### `src/routes/coverage/+page.svelte`
 
-`src/routes/coverage/+page.svelte`
-
-Responsável por:
-
-- nome da unidade;
-- entrada escrita e conversão em campos;
-- captura/seleção de foto;
-- consentimento;
-- progresso e cancelamento da extração;
-- lista editável/reordenável/hierárquica;
-- avisos de confiança/revisão;
-- filtro por caderno;
-- estados de cobertura e evidências.
+Responsável por entrada, revisão, consentimentos, filtro, progresso e apresentação dos resultados.
 
 ## Limitações atuais
 
-### Segmentação da ementa
+### Layout da ementa
 
-A segmentação é determinística e conservadora, não um entendimento semântico completo de layout. Fotos com tabelas complexas, múltiplas colunas ou diagramação incomum podem exigir edição manual depois do OCR — exatamente por isso os campos são sempre revisáveis.
+Tabelas complexas, múltiplas colunas ou diagramação incomum podem exigir edição manual após o OCR.
 
-### Cobertura
+### Semântica
 
-A busca atual é lexical/fuzzy, não semântica. Portanto:
-
-- sinônimos distantes podem não ser reconhecidos;
-- um documento pode explicar um conceito sem usar palavras suficientemente parecidas com o nome do tópico;
-- um match textual forte comprova presença do termo, não necessariamente profundidade pedagógica completa;
-- “Coberto” significa **evidência textual forte**, não que todos os subtópicos possíveis foram ensinados.
-
-## Evolução semântica planejada
-
-O contrato atual continua preparado para uma segunda camada. A implementação deve evoluir como uma infraestrutura semântica compartilhada pelo produto, e não como um mecanismo exclusivo da tela de Cobertura:
-
-1. dividir texto efetivo em blocos/páginas;
-2. gerar embeddings no processamento/indexação;
-3. persistir os vetores e metadados de evidência em um índice reutilizável;
-4. recuperar candidatos por similaridade semântica;
-5. combinar sinal semântico + `search_pages`, preservando a busca textual/fuzzy para erros de OCR, grafias aproximadas e coincidências lexicais fortes;
-6. opcionalmente enviar apenas poucos trechos candidatos a Gemini para avaliar profundidade da **cobertura**;
-7. manter as mesmas evidências, links para página/documento e classificação explicável na UI;
-8. depois de estabilizar essa camada na Cobertura, integrar obrigatoriamente o mesmo índice à busca normal do Fichário.
-
-Gemini deve continuar opcional para a **análise de cobertura**. Ausência de cota/chave não pode inutilizar a análise lexical básica.
-
-### Reuso obrigatório na busca normal
-
-A infraestrutura criada para Cobertura também deve tornar a busca principal híbrida. O objetivo é permitir consultas por significado, inclusive quando os documentos não contêm as mesmas palavras usadas pelo usuário.
-
-Exemplo de comportamento esperado:
-
-```text
-consulta: "processo de geração de energia das plantas"
-
-resultado relevante:
-"Na fotossíntese, a energia luminosa é convertida em energia química..."
-```
-
-A integração deve seguir estes requisitos:
-
-1. **Não criar um segundo índice semântico.** Reutilizar os mesmos chunks, embeddings, modelo, hashes de origem e RPCs/serviços semânticos usados pela Cobertura, incluindo `page_semantic_chunks` e `search_pages_semantic` enquanto esses continuarem sendo os contratos canônicos.
-2. **Executar busca lexical/fuzzy e semântica em paralelo** para a consulta normal e fundir/deduplicar os candidatos em um ranking híbrido.
-3. **Gerar apenas o embedding da consulta em tempo de busca.** Embeddings de documentos devem ser persistidos e reutilizados enquanto o texto efetivo e o modelo não mudarem.
-4. **Preservar o fuzzy como sinal de primeira classe.** A busca semântica não substitui trigram/full-text: ela complementa o mecanismo que tolera erros de OCR e grafia.
-5. **Não usar o verificador generativo da Cobertura na busca comum por padrão.** A pesquisa normal deve depender de recuperação lexical + embeddings; chamadas generativas adicionais só podem ser introduzidas se houver um benefício separado, explícito e controlado de cota/latência.
-6. **Manter fallback transparente.** Sem consentimento semântico, chave, cota ou disponibilidade do provedor, a busca continua funcionando em modo lexical/fuzzy sem erro fatal.
-7. **Levar o usuário à evidência original.** Resultados semânticos devem preservar documento, página e trecho mais próximo; quando possível, abrir o documento já posicionado na página/chunk relevante.
-8. **Distinguir relevância semântica de correspondência textual na UX sem exigir um modo separado.** A busca híbrida deve ser o comportamento normal; um indicador discreto de “encontrado por significado” pode ser usado quando ajudar a explicar um resultado sem coincidência lexical forte.
-9. **Tornar a indexação independente da tela de Cobertura.** O estado final desejado é enfileirar/atualizar embeddings quando `page_effective_text` se torna disponível ou muda (OCR, texto nativo ou correção manual), mantendo o backfill incremental/lazy como mecanismo de recuperação para páginas antigas ou falhas temporárias.
-10. **Evitar rajadas na migração inicial.** Documentos existentes devem ser indexados por lotes com limites, backoff para `429` e telemetria de progresso; uma cota esgotada não deve impedir pesquisa lexical.
-11. **Reutilizar a telemetria de IA.** Registrar pelo menos modelo, operação (`document_embedding`/`query_embedding`), quantidade de chunks/entradas, falhas e `429`, sem registrar embeddings ou conteúdo sensível desnecessário.
-12. **Cobrir o ranking híbrido com testes.** Incluir casos em que fuzzy vence por erro de OCR, semântica vence por paráfrase, ambos apontam para a mesma página, índice está incompleto e provedor semântico está indisponível.
-
-Esta etapa faz parte da evolução semântica da feature e deve ser tratada como continuidade do trabalho atual antes de considerar a camada de embeddings “concluída” para o produto.
+- o índice é construído incrementalmente e pode ficar incompleto durante as primeiras análises de um fichário grande;
+- os limiares são heurísticos e precisam ser calibrados com dados reais, priorizando redução de falsos positivos;
+- o verificador avalia os trechos recuperados, não garante que uma disciplina inteira foi dominada;
+- não há job periódico obrigatório de backfill; a indexação oportunista evita custo e infraestrutura permanentes;
+- a busca principal do Fichário ainda não reutiliza automaticamente o índice semântico desta feature — esse reuso é a evolução arquitetural natural para evitar um segundo índice.
 
 ## Testes
 
-### `tests/unit/coverage/topic-coverage.test.ts`
+### Cobertura lexical
 
-Cobre parsing manual, classificação, evidências, percentual e integração com a busca injetada.
+`tests/unit/coverage/topic-coverage.test.ts`
 
-### `tests/unit/coverage/topic-import.test.ts`
+- parsing;
+- deduplicação;
+- classificação;
+- evidências;
+- percentual;
+- concorrência/cancelamento via busca injetada.
 
-Cobre:
+### Importação da ementa
+
+`tests/unit/coverage/topic-import.test.ts`
 
 - listas numeradas;
-- níveis hierárquicos;
+- hierarquia;
 - continuação de linha;
 - listas sem marcadores;
-- confiança degradada por warnings/revisão;
+- confiança/warnings;
 - deduplicação;
-- cabeçalhos genéricos;
-- texto OCR suspeito.
+- cabeçalhos;
+- OCR suspeito.
 
-### `tests/unit/coverage/photo-topic-import.test.ts`
+`tests/unit/coverage/photo-topic-import.test.ts`
 
-Cobre:
+- lifecycle do OCR;
+- documento temporário;
+- duplicata existente;
+- limpeza;
+- cota.
 
-- pipeline completo com dependências fake;
-- exclusão do documento temporário;
-- reaproveitamento seguro de documento duplicado;
-- falha de limpeza sem perda dos tópicos extraídos;
-- limpeza quando a cota interrompe o OCR.
+### Semântica
 
-Os gates normais do repositório continuam sendo `pnpm lint`, `pnpm check`, `pnpm test` e `pnpm build` (ou `pnpm verify`).
+`tests/unit/coverage/semantic-coverage.test.ts`
+
+- paráfrase sem overlap lexical;
+- proximidade média/fraca;
+- promoção `strong`;
+- supressão `none`;
+- garantia de que `partial` não vira `Coberto`;
+- metadados de índice.
+
+`tests/unit/coverage/semantic-service.test.ts`
+
+- contrato estrito Edge → browser;
+- fallback lexical do provedor;
+- rejeição de shape drift;
+- consentimento dedicado.
+
+`tests/unit/coverage/semantic-chunks.test.ts`
+
+- normalização;
+- limites;
+- sobreposição;
+- teto de chunks.
+
+`tests/unit/coverage/gemini-semantic-clients.test.ts`
+
+- contrato do Gemini Embedding 2;
+- compatibilidade com modelos anteriores;
+- vetor pgvector;
+- structured output do verificador.
+
+Os gates normais continuam sendo `pnpm verify` e, para validação completa, `pnpm verify:full`, incluindo Playwright, Edge Functions e banco local.
