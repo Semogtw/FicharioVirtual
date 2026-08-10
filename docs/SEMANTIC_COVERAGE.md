@@ -49,6 +49,8 @@ O texto efetivo de uma página é normalizado e dividido de modo determinístico
 - máximo de 16 chunks por página;
 - no máximo 48 chunks enviados para indexação em uma execução da Edge Function.
 
+Uma página só entra no lote quando **todos** os chunks dela cabem no orçamento restante da execução. Isso evita persistir uma página parcialmente indexada e, por engano, considerá-la atual pelo hash.
+
 A consulta que lista páginas a indexar devolve no máximo os primeiros 24.000 caracteres do texto para limitar memória e tráfego da função. O hash, porém, é calculado sobre o **texto efetivo completo**.
 
 ## Invalidação por hash
@@ -65,11 +67,14 @@ Se OCR, texto nativo ou correção manual mudar, os vetores antigos deixam de pa
 
 ## Banco de dados
 
-Migrações:
+Migrações da camada semântica:
 
-- `202608101410_semantic_coverage.sql`;
-- `202608101411_semantic_coverage_consent.sql`;
-- `202608101412_semantic_coverage_hardening.sql`.
+- `202608101410_semantic_coverage.sql` — tabela, RPCs e busca vetorial;
+- `202608101411_semantic_coverage_consent.sql` — consentimento dedicado;
+- `202608101412_semantic_coverage_hardening.sql` — limites e privilégios adicionais;
+- `202608101413_semantic_coverage_consent_hardening.sql` — fronteira privilegiada do consentimento;
+- `202608101414_semantic_coverage_vector_index.sql` — índice HNSW para distância cosseno;
+- `202608101444_semantic_provider_telemetry.sql` — telemetria agregável do uso do provedor sem conteúdo dos documentos.
 
 ### `page_semantic_chunks`
 
@@ -84,6 +89,8 @@ Armazena:
 - timestamps.
 
 A tabela tem RLS e apenas leitura direta para o usuário autenticado dono dos dados. A substituição de vetores é feita por RPC validado, sem conceder escrita livre à tabela.
+
+A coluna vetorial possui índice **HNSW** com `vector_cosine_ops`, usado para manter a recuperação por similaridade adequada à medida que o corpus pessoal cresce. Os parâmetros iniciais são `m = 16` e `ef_construction = 64`.
 
 ### RPCs
 
@@ -122,7 +129,8 @@ Não existe uma varredura obrigatória bloqueando a primeira análise. A Edge Fu
 
 - padrão: até 8 páginas candidatas por chamada;
 - teto configurável: 32 páginas listadas;
-- teto efetivo de trabalho do provedor: 48 chunks por execução.
+- teto efetivo de trabalho do provedor: 48 chunks por execução;
+- uma página nunca é persistida pela metade só para preencher o lote.
 
 Por isso o índice pode ficar temporariamente incompleto. A resposta traz:
 
@@ -132,6 +140,8 @@ Por isso o índice pode ficar temporariamente incompleto. A resposta traz:
 - `complete`.
 
 Enquanto o índice não estiver completo, a UI avisa que a busca lexical continua cobrindo o fichário inteiro. Novas análises avançam a indexação sem tornar o usuário refém de uma tarefa longa.
+
+Se a geração do embedding da consulta falhar depois de algum trabalho de indexação, a resposta lexical ainda preserva o formato completo dos metadados do índice e informa `indexedThisRun: 0` para aquela análise degradada.
 
 ## Recuperação híbrida
 
@@ -194,7 +204,27 @@ O prompt trata trechos como dados não confiáveis e instrui explicitamente o mo
 - `none`;
 - confiança de 0 a 1.
 
+A geração possui teto explícito de `2.048` tokens de saída. O corpo da resposta também é limitado antes do parse.
+
 Falha do verificador não invalida embeddings nem busca lexical. O resultado retorna `verification: unavailable` e continua com score híbrido.
+
+## Telemetria do provedor
+
+Arquivo: `supabase/functions/_shared/semantic-provider-telemetry.ts`.
+
+As chamadas de embeddings de documento e de consulta passam por um wrapper de telemetria. O objetivo é permitir operação consciente de cota e latência sem transformar a telemetria em uma cópia das anotações.
+
+A telemetria registra apenas metadados necessários para operação, por exemplo:
+
+- operação (`document_embedding` ou `query_embedding`);
+- superfície (`coverage`);
+- modelo;
+- quantidade de entradas;
+- dimensionalidade;
+- duração;
+- resultado/status do provedor quando aplicável.
+
+Ela **não registra** texto dos tópicos, trechos das páginas, prompts completos nem valores dos vetores de embedding. Os testes dedicados mantêm esse contrato.
 
 ## Modos e fallback
 
@@ -236,13 +266,16 @@ Controles relevantes:
 
 - JWT obrigatório na função;
 - confirmação de usuário com `auth.getUser()`;
+- consentimento específico para envio de trechos;
 - RLS na tabela de chunks;
 - RPC de escrita confirma proprietário e hash atual;
-- respostas do Gemini têm tamanho limitado;
+- escrita direta dos embeddings não é concedida ao cliente autenticado;
+- respostas do Gemini têm tamanho e saída limitados;
 - payloads e respostas são validados estritamente;
 - vetor precisa ter exatamente 768 dimensões;
 - chunks e quantidade de candidatos têm limites rígidos;
 - prompt do verificador trata o conteúdo recuperado como dado não confiável;
+- telemetria não armazena conteúdo nem vetores;
 - nenhuma chave privada é exposta ao cliente;
 - falhas externas degradam para busca local/lexical em vez de bloquear a feature.
 
@@ -266,6 +299,9 @@ A implementação adiciona testes para:
 - contrato estrito do serviço browser;
 - consentimento dedicado;
 - contrato atual do Gemini Embedding 2;
-- structured output do verificador.
+- structured output e teto de saída do verificador;
+- persistência apenas de páginas com conjunto completo de chunks;
+- metadados corretos no fallback lexical;
+- telemetria do provedor sem conteúdo sensível.
 
-Os gates de Edge Function e banco devem validar também as novas migrações, a extensão `vector` e as permissões dos RPCs antes de deploy.
+Os gates de Edge Function e banco devem validar também as novas migrações, a extensão `vector`, o índice HNSW e as permissões dos RPCs antes de deploy.
