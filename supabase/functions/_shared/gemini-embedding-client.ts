@@ -5,6 +5,7 @@ const MAX_INPUTS = 64;
 const MAX_INPUT_CHARS = 16_000;
 const MAX_PROVIDER_ERROR_BYTES = 64 * 1024;
 const MAX_PROVIDER_RESPONSE_BYTES = 4 * 1024 * 1024;
+const GEMINI_EMBEDDING_2 = 'gemini-embedding-2';
 
 export type GeminiEmbeddingTask = 'RETRIEVAL_QUERY' | 'RETRIEVAL_DOCUMENT';
 
@@ -50,7 +51,9 @@ export class GeminiEmbeddingResponseError extends Error {
 }
 
 function validateRequest(request: GeminiEmbeddingRequest) {
-	if (!request.apiKey || !MODEL.test(request.model)) throw new TypeError('Invalid Gemini embedding configuration');
+	if (!request.apiKey || !MODEL.test(request.model)) {
+		throw new TypeError('Invalid Gemini embedding configuration');
+	}
 	if (
 		!Number.isInteger(request.outputDimensionality) ||
 		request.outputDimensionality < 128 ||
@@ -108,13 +111,36 @@ async function providerJson(response: Response) {
 	}
 }
 
-export async function requestGeminiEmbeddings(
-	request: GeminiEmbeddingRequest
-): Promise<readonly (readonly number[])[]> {
-	validateRequest(request);
-	const fetchImpl = request.fetchImpl ?? fetch;
-	const modelResource = `models/${request.model}`;
-	const requests = request.inputs.map((input) => ({
+function embedding2Text(input: GeminiEmbeddingInput, taskType: GeminiEmbeddingTask) {
+	if (taskType === 'RETRIEVAL_QUERY') {
+		return `Tarefa: representar uma consulta para recuperar anotações acadêmicas semanticamente relacionadas.\nConsulta: ${input.text.trim()}`;
+	}
+	const title = input.title?.trim();
+	return [
+		'Tarefa: representar um trecho de anotação acadêmica para recuperação semântica.',
+		title ? `Documento: ${title}` : null,
+		`Trecho: ${input.text.trim()}`
+	]
+		.filter((line): line is string => line !== null)
+		.join('\n');
+}
+
+function embedRequest(
+	request: GeminiEmbeddingRequest,
+	input: GeminiEmbeddingInput,
+	modelResource: string
+) {
+	if (request.model === GEMINI_EMBEDDING_2) {
+		return {
+			model: modelResource,
+			content: { parts: [{ text: embedding2Text(input, request.taskType) }] },
+			embedContentConfig: {
+				outputDimensionality: request.outputDimensionality,
+				autoTruncate: true
+			}
+		};
+	}
+	return {
 		model: modelResource,
 		content: { parts: [{ text: input.text }] },
 		embedContentConfig: {
@@ -125,7 +151,16 @@ export async function requestGeminiEmbeddings(
 				? { title: input.title.trim() }
 				: {})
 		}
-	}));
+	};
+}
+
+export async function requestGeminiEmbeddings(
+	request: GeminiEmbeddingRequest
+): Promise<readonly (readonly number[])[]> {
+	validateRequest(request);
+	const fetchImpl = request.fetchImpl ?? fetch;
+	const modelResource = `models/${request.model}`;
+	const requests = request.inputs.map((input) => embedRequest(request, input, modelResource));
 
 	let response: Response;
 	try {
