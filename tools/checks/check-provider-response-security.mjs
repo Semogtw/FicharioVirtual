@@ -36,7 +36,10 @@ if (/\bresponse\.(?:json|text)\s*\(/.test(gemini)) {
 if (!gemini.includes('maxOutputTokens: 8192')) {
 	failures.push('Gemini single-page output token ceiling changed without security review');
 }
-if (!gemini.includes('Math.min(65_536, Math.max(8_192, request.pages.length * 2_048))')) {
+// Batch output also carries compact per-word geometry. The per-page allowance was
+// reviewed alongside that schema expansion; the 65,536-token cap and 4 MiB
+// response-body bound above remain the hard provider-response safety limits.
+if (!gemini.includes('Math.min(65_536, Math.max(8_192, request.pages.length * 4_096))')) {
 	failures.push('Gemini batch output token ceiling changed without security review');
 }
 
