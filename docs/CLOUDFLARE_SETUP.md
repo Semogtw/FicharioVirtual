@@ -1,18 +1,20 @@
 # Configuração Cloudflare do Fichário Virtual
 
-**Status:** infraestrutura Pages provisionada; primeiro deployment pendente  
+**Status:** infraestrutura Pages provisionada; primeiro Direct Upload de staging pendente  
 **Última revisão:** 10 de agosto de 2026
 
 Este runbook descreve o frontend estático na Cloudflare Pages e a distribuição pública de artefatos de modelos usados pelo worker do computador. Ele não move arquivos privados, banco, autenticação ou OCR para a Cloudflare.
 
+O caminho executável atual do app é **staging-only**. Produção permanece fail-closed enquanto não existir backend Supabase e configuração pública próprios.
+
 ## 1. Topologia
 
 ```text
-fichario-virtual.pages.dev / app.<dominio>
+fichario-virtual.pages.dev / futuro app.<dominio>
 └── Cloudflare Pages
     └── build estático da PWA
 
-fichario-models.pages.dev / models.<dominio>
+fichario-models.pages.dev / futuro models.<dominio>
 └── Cloudflare Pages com Direct Upload
     └── manifestos, partes de modelos, licenças e checksums
 
@@ -33,7 +35,7 @@ Cloudflare Pages não recebe:
 - credenciais do worker;
 - exportações privadas.
 
-## 2. Estado provisionado em 10 de agosto de 2026
+## 2. Estado provisionado
 
 Os dois projetos Pages já existem:
 
@@ -42,18 +44,18 @@ fichario-virtual
 fichario-models
 ```
 
-No projeto `fichario-virtual` já estão configurados:
+No projeto `fichario-virtual` estão configurados:
 
 ```text
-Production branch:    main
-Build command:        corepack enable && pnpm install --frozen-lockfile && pnpm build
-Build output:         build
-Root directory:       /
-Build cache:          enabled
-NODE_VERSION:         22.16.0
+Production branch administrativa: main
+Build command:                    corepack enable && pnpm install --frozen-lockfile && pnpm build
+Build output:                     build
+Root directory:                   /
+Build cache:                      enabled
+NODE_VERSION:                     22.16.0
 ```
 
-A configuração pública foi separada por ambiente:
+A configuração pública do projeto está separada:
 
 ```text
 Preview:
@@ -67,66 +69,42 @@ Production:
   PUBLIC_SUPABASE_PUBLISHABLE_KEY: ausente de propósito
 ```
 
-Ainda não existe Supabase de produção. Manter URL e chave de backend ausentes em `production` é um bloqueio fail-closed deliberado para impedir que um build futuro de produção reutilize staging silenciosamente.
+Ainda não existe Supabase de produção. Manter URL e chave de backend ausentes em `production` é um bloqueio fail-closed deliberado; não preencher esses campos com staging.
 
-A publishable key é pública por definição, mas seu valor não deve ser duplicado em documentação ou commits. Nenhum secret backend foi colocado no Pages.
+A publishable key é pública por definição, mas seu valor não deve ser duplicado em documentação ou commits. Nenhum secret backend deve ser colocado no Pages.
 
-A integração Git e o auto-deploy permanecem desligados enquanto a `main` recebe features concorrentes. O rollout usa **Direct Upload de artifact preso a um SHA**, evitando que um push novo mude o conteúdo entre build, smoke e promoção.
+A integração Git e o auto-deploy permanecem desligados durante desenvolvimento concorrente. O rollout usa **Direct Upload de artifact preso a SHA**.
 
-## 3. Separação de ambientes e credenciais
+## 3. Environments e credenciais do GitHub
 
-O build e a publicação possuem fronteiras diferentes no GitHub:
+O fluxo executável atual usa duas fronteiras:
 
 ```text
 staging
-└── configuração pública usada para construir o artifact de staging
+└── configuração pública usada para construir o artifact
 
 staging-deploy
-└── credenciais operacionais de deployment
-
-production
-└── reservado para configuração pública de build de produção
-
-production-deploy
-└── reservado para credenciais de promoção de produção
+└── credenciais operacionais de Direct Upload
 ```
 
-`staging` não deve receber token Cloudflare. O workflow de publicação usa `staging-deploy` para staging e `production-deploy` para produção.
+`staging` não deve receber token Cloudflare. `staging-deploy` não deve ser usado como origem de configuração pública do frontend.
 
-Secrets exigidos no environment de deploy:
+Secrets exigidos em `staging-deploy`:
 
 ```text
 CLOUDFLARE_API_TOKEN
 CLOUDFLARE_ACCOUNT_ID
 ```
 
-O token deve ter somente o escopo necessário para publicar no Pages da conta correta. Não reutilizar service-role do Supabase, segredo Gemini ou credenciais Google.
+O token deve possuir somente o escopo necessário para publicar no Pages da conta correta. Não reutilize service-role do Supabase, segredo Gemini ou credenciais Google.
 
-Produção possui ainda uma trava explícita:
+### Produção futura
 
-```text
-CLOUDFLARE_PRODUCTION_DEPLOY_ENABLED=true
-```
+`production` e `production-deploy` são nomes reservados para uma implementação futura, não environments consumidos pelos workflows executáveis atuais. Não crie uma trava booleana para “habilitar” um caminho incompleto. Primeiro crie backend/configuração/contrato de produção e depois introduza o pipeline correspondente com testes.
 
-Essa variável pertence a `production-deploy` e só deve ser criada/ativada depois que backend, artifact de produção e gates de promoção estiverem prontos. Sem ela, o workflow falha antes do Wrangler.
+## 4. Projeto Pages da PWA
 
-No estado atual existem `staging` e `staging-deploy`; os ambientes de produção ainda não estão provisionados, o que mantém a promoção de produção bloqueada por desenho.
-
-## 4. Referências oficiais
-
-- SvelteKit no Pages: https://developers.cloudflare.com/pages/framework-guides/deploy-a-svelte-kit-site/
-- Limites do Pages: https://developers.cloudflare.com/pages/platform/limits/
-- Direct Upload: https://developers.cloudflare.com/pages/get-started/direct-upload/
-- Custom domains: https://developers.cloudflare.com/pages/configuration/custom-domains/
-- Redirect para domínio canônico: https://developers.cloudflare.com/pages/how-to/redirect-to-custom-domain/
-- R2 pricing: https://developers.cloudflare.com/r2/pricing/
-- R2 billing: https://developers.cloudflare.com/r2/get-started/
-
-Na revisão original de 6 de agosto de 2026, o Pages aceitava até 25 MiB por asset. Este projeto usa partes de modelos de até 20 MiB para manter margem operacional. Limites externos devem ser verificados novamente antes da publicação dos modelos.
-
-## 5. Projeto Pages da PWA
-
-### 5.1 Build
+### 4.1 Build estático
 
 Configuração canônica:
 
@@ -138,11 +116,11 @@ Root directory:     /
 Node.js:            22.16.0
 ```
 
-O projeto usa `@sveltejs/adapter-static`; não instalar `@sveltejs/adapter-cloudflare` enquanto o frontend continuar inteiramente estático. O output correto permanece `build/`, não `.svelte-kit/cloudflare`.
+O projeto usa `@sveltejs/adapter-static`; não instalar `@sveltejs/adapter-cloudflare` enquanto o frontend continuar inteiramente estático. O output correto permanece `build/`.
 
-### 5.2 Variáveis públicas de build
+### 4.2 Variáveis públicas
 
-Obrigatórias por artifact:
+Obrigatórias no artifact staging:
 
 ```text
 PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
@@ -157,7 +135,7 @@ PUBLIC_GOOGLE_PICKER_API_KEY
 PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER
 ```
 
-Deixar os três ausentes é válido enquanto o Picker real ainda não foi provisionado. Configurar somente parte do trio falha no workflow de artifact.
+Deixar os três ausentes é válido enquanto o Picker real ainda não tiver sido provisionado. Configurar somente parte do trio falha no workflow de artifact.
 
 Nunca cadastrar no Pages:
 
@@ -171,18 +149,32 @@ OCR_WORKER_DEVICE_TOKEN
 
 A ausência desses secrets no Pages é requisito de release.
 
-### 5.3 Build reproduzível e artifact imutável
+## 5. Artifact staging reproduzível
 
-O workflow manual `Build deployable Fichário artifact`:
+Use o workflow manual:
 
-1. recebe `staging` ou `production`;
-2. usa o environment protegido correspondente para a configuração pública;
-3. executa `pnpm verify`;
-4. confirma que a configuração pública correta foi congelada no output;
-5. empacota somente o site e metadados verificáveis;
-6. grava `DEPLOYMENT-MANIFEST.txt` schema 2;
-7. gera `SHA256SUMS` com cobertura exata;
-8. revalida o pacote antes de publicar o artifact do Actions.
+```text
+Build deployable Fichário staging artifact
+```
+
+Ele não recebe seletor de ambiente. O job usa `environment: staging` e `TARGET_ENVIRONMENT: staging` fixos.
+
+O workflow:
+
+1. faz checkout do SHA com `persist-credentials: false`;
+2. usa Node/pnpm pinados;
+3. instala pelo lockfile congelado;
+4. valida a configuração pública de staging;
+5. valida o trio Picker como all-or-none;
+6. executa `pnpm verify`;
+7. rejeita URL/chave fake local no build;
+8. chama `tools/deploy/package-static-artifact.sh`;
+9. revalida o pacote com `test:deployment:artifact`;
+10. publica `fichario-static-<sha>-staging`.
+
+O empacotador compartilhado exige SHA completo, target staging, arquivos mínimos e verificadores, rejeita symlinks e gera checksums com cobertura exata.
+
+O timestamp do manifesto é reprodutível: usa `SOURCE_DATE_EPOCH` quando explicitamente fornecido ou o timestamp do próprio commit. O relógio do runner não entra na identidade normal do artifact.
 
 Estrutura:
 
@@ -192,7 +184,9 @@ fichario-deploy/
 ├── SHA256SUMS
 ├── checks/
 │   ├── check-deployed-site.mjs
-│   └── deployment-contract.mjs
+│   ├── check-deployment-artifact.mjs
+│   ├── deployment-contract.mjs
+│   └── validate-pages-deploy-output.mjs
 ├── source/
 │   ├── package.json
 │   └── pnpm-lock.yaml
@@ -200,20 +194,22 @@ fichario-deploy/
     └── build estático publicável
 ```
 
-Os verificadores em `checks/` pertencem ao mesmo SHA e são cobertos por `SHA256SUMS`. Assim o gate HTTP pós-deploy não depende de um checkout mais novo do repositório.
+Os verificadores pertencem ao mesmo SHA e são cobertos por `SHA256SUMS`. O gate pós-deploy não depende de checkout mais novo.
 
-Validação manual equivalente:
+Validação manual equivalente no mesmo workspace:
 
 ```bash
 corepack enable
 pnpm install --frozen-lockfile
 pnpm verify
-pnpm test:deployment:artifact -- <artifact-dir>
+TARGET_ENVIRONMENT=staging GITHUB_SHA=<sha-completo> \
+  bash tools/deploy/package-static-artifact.sh fichario-deploy
+pnpm test:deployment:artifact -- fichario-deploy
 ```
 
-Antes da promoção final, o mesmo SHA também precisa satisfazer os gates globais aplicáveis. Um artifact cujo build e contrato de deployment passam pode ser usado em preview para investigar a superfície hospedada, mas não deve ser chamado de release verde se gates obrigatórios do mesmo SHA estiverem vermelhos ou incompletos.
+O workflow `Validate current head` do próprio repositório continua sendo o gate global normal. Um run cancelado por push mais novo não é PASS nem falha funcional.
 
-### 5.4 Headers, Google APIs e fallback
+## 6. Headers, Google APIs e fallback
 
 O deploy precisa publicar:
 
@@ -234,74 +230,75 @@ connect-src https://www.googleapis.com
 
 A primeira origem carrega o loader oficial do Picker. A segunda cobre uploads retomáveis e downloads/ranges do Drive feitos diretamente pelo navegador.
 
-Não ampliar a política para curingas Google sem evidência de runtime. Se o Picker real exigir origem de frame adicional, capturar a violação em preview e liberar somente a origem mínima necessária.
+Não amplie para curingas Google sem evidência de runtime. Se o Picker real exigir origem de frame adicional, capture a violação em preview e libere somente a origem mínima necessária.
 
-O gate de build valida o `_headers` efetivamente emitido em `build/`. O gate pós-deployment confirma CSP, HSTS, `nosniff`, framing, permissions, cache de assets e `no-cache` para service worker e fallback.
+O gate de build valida o `_headers` emitido. O gate pós-deployment confirma CSP, HSTS, `nosniff`, framing, permissions, cache de assets e `no-cache` para service worker/fallback.
 
 O fallback `200.html` não pode substituir arquivos em `/assets/*`. Uma URL de asset inexistente deve falhar como asset, não retornar HTML com sucesso.
 
-## 6. Rollout por Direct Upload
+## 7. Direct Upload de staging
 
-Enquanto a `main` receber commits concorrentes, preview e produção devem partir do **mesmo artifact imutável**, sem rebuild entre as etapas.
-
-### 6.1 Workflow de publicação
-
-Use `Deploy validated artifact to Cloudflare Pages` com:
+Use o workflow manual:
 
 ```text
-target_environment: staging | production
-artifact_run_id:     run que produziu o artifact
-expected_source_commit: SHA completo de 40 caracteres
+Deploy validated staging artifact to Cloudflare Pages
 ```
 
-O workflow deliberadamente **não faz checkout** e não executa `pnpm install`, `pnpm build` ou `pnpm verify`.
+Entradas:
 
-Antes de chamar Wrangler ele:
+```text
+artifact_run_id:         run que produziu o artifact
+expected_source_commit:  SHA completo de 40 caracteres
+```
 
-- baixa somente o artifact cujo nome contém SHA + ambiente;
-- verifica manifesto, repositório, SHA e target environment;
+O workflow usa `staging-deploy` e deliberadamente:
+
+- não faz checkout;
+- não instala dependências;
+- não builda;
+- não executa `pnpm verify`;
+- não cria/substitui o projeto Pages.
+
+Antes do Wrangler ele:
+
+- baixa somente `fichario-static-<sha>-staging` do run informado;
+- valida manifesto schema 2;
+- valida repositório, SHA e `target_environment=staging`;
 - recalcula hash de `package.json` e lockfile;
 - executa `sha256sum -c SHA256SUMS`;
 - rejeita symlinks;
-- exige os arquivos públicos mínimos;
-- exige os verificadores pós-deployment pinados no artifact;
-- rejeita URL/chave fake do Supabase local.
+- exige verificadores e arquivos públicos mínimos;
+- rejeita configuração Supabase local/fake.
 
-Wrangler fica pinado em versão explícita no workflow e recebe:
+Wrangler fica pinado e recebe parâmetros equivalentes a:
 
-```text
---project-name=fichario-virtual
---branch=staging | main
---commit-hash=<SHA validado>
---commit-dirty=false
+```bash
+wrangler pages deploy <artifact>/site \
+  --project-name=fichario-virtual \
+  --branch=staging \
+  --commit-hash=<sha-validado> \
+  --commit-dirty=false
 ```
 
-### 6.2 Verificação da identidade retornada pela Cloudflare
+## 8. Verificação da identidade Cloudflare
 
-O workflow define `WRANGLER_OUTPUT_FILE_PATH` e consome o registro estruturado `pages-deploy-detailed` produzido pelo Wrangler.
+O workflow define `WRANGLER_OUTPUT_FILE_PATH` e consome o registro estruturado `pages-deploy-detailed`.
 
-Ele rejeita o deploy se a Cloudflare retornar:
+O verificador transportado no artifact rejeita respostas incompatíveis com o deployment esperado, incluindo projeto, SHA, deployment ID e URL inválidos. A configuração administrativa de production branch do projeto continua sendo conferida quando faz parte do contrato retornado.
 
-- projeto diferente de `fichario-virtual`;
-- ambiente diferente do solicitado;
-- production branch diferente de `main`;
-- `commit_hash` diferente do artifact;
-- deployment ID inválido;
-- URL que não seja uma origem HTTPS limpa.
+O gate HTTP é executado contra a **URL única retornada pelo deployment**, não contra alias presumido. Isso evita corrida entre deployments concorrentes.
 
-O gate HTTP é executado contra a **URL única retornada pelo próprio deployment**, não contra um alias presumido. Isso evita corrida entre deployments concorrentes.
+Depois do upload:
 
-Para produção, depois do gate na URL única, o mesmo verificador também testa:
-
-```text
-https://fichario-virtual.pages.dev
+```bash
+node <artifact>/checks/check-deployed-site.mjs https://<url-exata-retornada>
 ```
 
-A execução só é considerada concluída quando checksum/identidade do artifact e contrato HTTP passam.
+A execução só é concluída quando identidade/checksums do artifact e contrato HTTP passam.
 
-### 6.3 Preview manual equivalente
+### Preview manual equivalente
 
-Quando necessário fora do Actions:
+Quando for necessário reproduzir fora do workflow:
 
 ```bash
 npx wrangler pages deploy <artifact-dir>/site \
@@ -312,49 +309,36 @@ npx wrangler pages deploy <artifact-dir>/site \
 node <artifact-dir>/checks/check-deployed-site.mjs https://<url-exata-retornada>
 ```
 
-Também valide manualmente login, refresh de rotas, service worker, Picker/Drive quando configurados e ausência de dados reais de produção.
+Não use esse caminho manual para contornar environments ou registrar secrets em terminal/log.
 
-### 6.4 Promoção do mesmo artifact
+## 9. Smoke pós-deployment
 
-Somente depois de preview + gates e com a infraestrutura de produção pronta:
+Além do checker automatizado:
 
-```bash
-npx wrangler pages deploy <artifact-dir>/site \
-  --project-name=fichario-virtual \
-  --branch=main \
-  --commit-hash=<mesmo-sha>
-```
+- refresh de rota privada preserva navegação;
+- logout remove acesso;
+- sessão expirada volta ao login;
+- service worker não contém endpoint privado sensível;
+- documento autenticado não aparece em cache público;
+- preview não recebe dados de produção;
+- Drive carrega Picker e transfere dados sem violação de CSP;
+- PDF grande funciona por referência/ranges;
+- nenhum token aparece em URL/log;
+- modelo é baixado somente no computador;
+- tablet não baixa partes de modelos ao abrir a PWA.
 
-Nunca reconstruir a partir de uma `main` mais nova entre preview e produção.
+Siga também `docs/OCR_STAGING.md` e `docs/GOOGLE_DRIVE_SETUP.md`.
 
-### 6.5 Limitação do conector administrativo atual
+## 10. Domínio canônico
 
-A integração administrativa disponível consegue configurar o projeto Pages e obter o token temporário emitido pelo serviço de upload, mas não permite substituir sua própria autenticação pela credencial temporária nos endpoints `/pages/assets/*`.
+Adicione o domínio final em **Pages > Custom domains** somente depois do primeiro preview validado. Depois:
 
-Não exporte, mostre nem persista esse JWT para contornar a limitação. Use Wrangler em executor autenticado — o workflow artifact-only existe para esse fim — ou outro caminho oficialmente compatível com Direct Upload.
+- redirecione HTTP para HTTPS;
+- decida o tratamento de `*.pages.dev` sem manter duas origens canônicas de sessão;
+- preserve caminho e query;
+- use previews apenas para validação sem dados reais.
 
-### 6.6 Quando considerar auto-deploy Git
-
-Só habilitar integração Git/auto-deploy depois de uma decisão explícita de promoção. No mínimo:
-
-- build do commit precisa ser reproduzível;
-- gates obrigatórios precisam estar verdes antes da promoção;
-- não pode haver race entre preview validado e push mais novo em `main`;
-- rollback precisa identificar deployment e SHA.
-
-Até lá, Direct Upload é uma decisão de integridade, não workaround.
-
-## 7. Domínio canônico
-
-Adicionar o domínio final em **Pages > Custom domains** somente depois do primeiro preview validado. Depois:
-
-- redirecionar HTTP para HTTPS;
-- redirecionar `*.pages.dev` para a origem canônica quando aplicável;
-- preservar caminho e query;
-- evitar duas origens de produção simultâneas;
-- usar previews apenas para validação sem dados reais.
-
-Depois de ativar o domínio, atualizar no mesmo rollout:
+Atualize no mesmo rollout:
 
 ### Supabase Auth
 
@@ -373,11 +357,33 @@ supabase secrets set APP_ORIGIN=https://app.<dominio>
 
 ### Google Drive
 
-O callback OAuth continua pertencendo à Edge Function do Supabase. Atualizar origens, links de retorno e tela de consentimento sem mover refresh token para Cloudflare.
+O callback OAuth continua pertencendo à Edge Function do Supabase. Atualize origens/retornos e tela de consentimento sem mover refresh token para Cloudflare.
 
-## 8. Projeto Pages de modelos
+## 11. Produção futura
 
-### 8.1 Motivo para projeto separado
+Não existe workflow executável de produção no estado atual.
+
+Quando backend e configuração próprios existirem, o desenho futuro deve manter:
+
+```text
+mesmo SHA
+  ↓
+artifact construído com configuração de produção
+  ↓
+checksums + verificadores
+  ↓
+preview dos mesmos bytes
+  ↓
+promoção dos mesmos bytes
+  ↓
+gate HTTP da origem exata e domínio canônico
+```
+
+Não publique o artifact de staging como produção apenas para evitar build com configuração correta. Também não reintroduza código morto `production` nos workflows atuais antes de existir a infraestrutura correspondente.
+
+## 12. Projeto Pages de modelos
+
+### 12.1 Motivo para projeto separado
 
 Modelos não devem:
 
@@ -389,7 +395,7 @@ Modelos não devem:
 
 O projeto separado usa Direct Upload e recebe somente artefatos públicos já empacotados.
 
-### 8.2 Estrutura de publicação
+### 12.2 Estrutura de publicação
 
 ```text
 model-dist/
@@ -416,7 +422,7 @@ Regras:
 - `index.json` recebe cache curto;
 - caminhos versionados usam cache imutável longo.
 
-### 8.3 Publicação de modelos
+### 12.3 Publicação
 
 O projeto `fichario-models` já existe:
 
@@ -424,7 +430,7 @@ O projeto `fichario-models` já existe:
 npx wrangler pages deploy model-dist --project-name=fichario-models --branch=main
 ```
 
-Publicar somente depois de confirmar:
+Publique somente depois de confirmar:
 
 - nenhuma parte acima de 20 MiB;
 - cobertura exata dos checksums;
@@ -433,11 +439,11 @@ Publicar somente depois de confirmar:
 - `minimumWorkerVersion` compatível;
 - hash final reproduzível após remontagem.
 
-### 8.4 Rollback de modelos
+### 12.4 Rollback de modelos
 
 Modelos publicados são imutáveis. Rollback altera a versão recomendada no `index.json`; nunca substitui bytes de uma versão existente.
 
-## 9. R2 não obrigatório
+## 13. R2 não obrigatório
 
 Cloudflare R2 não é o caminho padrão do MVP. É um produto com cobrança por uso e pode cobrar excedentes.
 
@@ -450,76 +456,59 @@ R2 só pode ser habilitado depois de decisão explícita registrando:
 - confirmação de que somente modelos públicos serão armazenados;
 - atualização de `docs/FREE_TIER_OPERATIONS.md`.
 
-Sem essa decisão, não criar bucket, assinatura ou método de pagamento em nome do projeto.
+Sem essa decisão, não crie bucket, assinatura ou método de pagamento em nome do projeto.
 
-## 10. Validação pós-deployment
+## 14. Rollback
 
-O gate automatizado usa o checker contido no artifact. Para execução manual:
+### Frontend staging
 
-```bash
-node <artifact-dir>/checks/check-deployed-site.mjs https://<deployment-origin>
-```
-
-Verificações manuais adicionais:
-
-- refresh de rota privada preserva navegação;
-- logout remove acesso;
-- sessão expirada volta ao login;
-- service worker não contém endpoint privado do Supabase;
-- documento autenticado não aparece em cache público;
-- preview não recebe dados de produção;
-- Drive carrega Picker e transfere dados sem violação de CSP;
-- modelo é baixado somente no computador;
-- tablet não baixa partes de modelos ao abrir a PWA.
-
-## 11. Rollback
-
-### Frontend
-
-- selecionar deployment anterior no Pages;
-- restaurar a origem canônica para um deployment validado;
-- manter Supabase e Drive inalterados;
-- reexecutar o checker do artifact correspondente.
+- selecione deployment/artifact anterior identificado por SHA;
+- preserve Supabase e Drive;
+- confirme compatibilidade do schema;
+- use o checker do artifact correspondente;
+- reexecute smoke essencial.
 
 ### Domínio
 
-Se a origem Cloudflare falhar, o domínio pode voltar temporariamente ao host anterior se:
-
-- artifact e schema forem compatíveis;
-- `APP_ORIGIN` for atualizado de forma coordenada;
-- redirects Supabase forem revisados;
-- não existirem duas origens aceitando sessão simultaneamente.
+Se a origem Cloudflare falhar, só aponte para host anterior se artifact/schema forem compatíveis e `APP_ORIGIN` + redirects forem atualizados de forma coordenada. Não mantenha duas origens aceitando sessão simultaneamente.
 
 ### Modelos
 
-- alterar somente o índice de versão recomendada;
-- não apagar a última versão conhecida como válida;
-- não forçar reprocessamento de páginas concluídas.
+- altere somente o índice de versão recomendada;
+- não apague a última versão conhecida como válida;
+- não force reprocessamento de páginas concluídas.
 
-## 12. Critério de prontidão
+## 15. Limitação da integração administrativa
+
+A integração administrativa observada consegue configurar o projeto Pages e obter token temporário do serviço de upload, mas não fornece um caminho seguro equivalente ao Wrangler para autenticar os endpoints `/pages/assets/*`.
+
+Não exporte, mostre nem persista esse token para contornar a limitação. Use o workflow artifact-only com credencial de escopo mínimo em `staging-deploy` ou outro executor oficialmente compatível com Wrangler Direct Upload.
+
+## 16. Critério de prontidão
 
 ```text
 Projetos Cloudflare Pages criados: PASS
 Build/output do app configurados: PASS
 Preview com configuração pública staging: PASS
 Production sem backend staging reaproveitado: PASS fail-closed
-Artifact preso a SHA e reproduzível: PASS
-Artifact carrega checker HTTP pinado: PASS
+Artifact staging preso a SHA: PASS em código
+Manifest/checksums + timestamp reproduzível: PASS em código
+Artifact carrega todos os verificadores pinados: PASS em código
 Output build/ correto: PASS
 Fallback 200.html: PASS
 _headers/CSP do build: PASS
-Workflow de promoção artifact-only: PASS em código
-Credenciais Cloudflare em staging-deploy: PENDING
+Workflow staging artifact-only: PASS em código
+Credenciais Cloudflare em staging-deploy: PENDING até confirmação operacional
 Primeiro preview Direct Upload: PENDING
 Gate HTTP do preview real: PENDING
-CI global do candidato final: PENDING
-Ambientes/configuração de produção: PENDING
+CI global terminal do candidato final: PENDING
+Backend/configuração/pipeline de produção: PENDING
 Origem HTTPS canônica: PENDING
 Supabase Auth atualizado para origem final: PENDING
 APP_ORIGIN atualizado: PENDING
 Google Drive real sem regressão: PENDING
-Nenhum secret backend no Pages: PASS
-Nenhum conteúdo privado na Cloudflare: PASS por arquitetura; validar em runtime
+Nenhum secret backend no Pages: PASS em código/configuração conhecida
+Nenhum conteúdo privado na Cloudflare: requisito obrigatório; validar runtime
 Projeto de modelos separado: PASS
 Publicação/checksums dos modelos: PENDING
 Tablet não baixa modelos: PENDING
@@ -527,4 +516,4 @@ R2 desativado ou decisão explícita registrada: PASS com R2 desativado
 Rollback ensaiado: PENDING
 ```
 
-A implantação não está concluída apenas porque existe um projeto Pages ou porque `build/` foi gerado. Preview, gates externos e promoção precisam corresponder ao mesmo artifact e ao mesmo SHA.
+A implantação não está concluída apenas porque existe um projeto Pages ou porque `build/` foi gerado. Preview, gates externos e qualquer promoção futura precisam corresponder a artifacts e SHAs explicitamente verificados.
