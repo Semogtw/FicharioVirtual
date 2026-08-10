@@ -1,32 +1,22 @@
-name: Build deployable Fichário artifact
+name: Build deployable Fichário staging artifact
 
 on:
   workflow_dispatch:
-    inputs:
-      target_environment:
-        description: Protected environment that supplies the public deployment configuration
-        required: true
-        type: choice
-        default: staging
-        options:
-          - staging
-          - production
 
 permissions:
   contents: read
 
 concurrency:
-  group: build-fichario-${{ inputs.target_environment }}
+  group: build-fichario-staging
   cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    environment: ${{ inputs.target_environment }}
+    environment: staging
     env:
-      TARGET_ENVIRONMENT: ${{ inputs.target_environment }}
-      PRODUCTION_ARTIFACT_BUILD_ENABLED: ${{ vars.PRODUCTION_ARTIFACT_BUILD_ENABLED }}
+      TARGET_ENVIRONMENT: staging
 
     steps:
       - name: Checkout repository
@@ -58,10 +48,10 @@ jobs:
           PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER: ${{ secrets.PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER }}
         run: |
           set -euo pipefail
-          if [[ "$TARGET_ENVIRONMENT" == 'production' && "$PRODUCTION_ARTIFACT_BUILD_ENABLED" != 'true' ]]; then
-            echo 'production artifact creation is disabled until the production environment explicitly enables it' >&2
+          [[ "$TARGET_ENVIRONMENT" == 'staging' ]] || {
+            echo 'this workflow is intentionally staging-only until production infrastructure exists' >&2
             exit 1
-          fi
+          }
 
           node <<'NODE'
           const urlValue = process.env.PUBLIC_SUPABASE_URL ?? '';
@@ -146,7 +136,7 @@ jobs:
             echo 'schema_version=2'
             echo 'source_repository=Semogtw/FicharioVirtual'
             echo "source_commit=${GITHUB_SHA}"
-            echo "target_environment=${TARGET_ENVIRONMENT}"
+            echo 'target_environment=staging'
             echo "created_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo "node_version=$(node --version)"
             echo "pnpm_version=$(pnpm --version)"
@@ -165,7 +155,7 @@ jobs:
       - name: Upload deployable static artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: fichario-static-${{ github.sha }}-${{ inputs.target_environment }}
+          name: fichario-static-${{ github.sha }}-staging
           path: fichario-deploy/
           if-no-files-found: error
           compression-level: 6
