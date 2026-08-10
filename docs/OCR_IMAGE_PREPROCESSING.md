@@ -9,7 +9,7 @@ O Fichário prepara imagens antes do OCR para aumentar a proporção de informa�
 
 A regra principal é:
 
-> O arquivo enviado pelo usuário é a fonte de verdade. O OCR recebe um derivado reproduzível e versionado; o original nunca é sobrescrito pelo derivado.
+> O arquivo enviado pelo usuário é a fonte de verdade. O OCR recebe um derivado reproduzível e versionado; o original nunca é sobrescrito pelo derivado e continua sendo a imagem exibida ao usuário.
 
 O pré-processamento não é um filtro estético. Ele deve corrigir apenas problemas visuais com sinais suficientemente fortes e permanecer conservador quando houver dúvida.
 
@@ -118,21 +118,27 @@ Falhas reais de decode/encode continuam sendo tratadas como falhas da preparaç�
 Uma imagem passa a ter objetos distintos:
 
 ```text
-<user>/<document>/source.<ext>     # bytes enviados pelo usuário
-<user>/<document>/prepared.<ext>   # derivado usado pelo OCR/viewer atual
+<user>/<document>/source.<ext>     # bytes enviados pelo usuário; fonte exibida
+<user>/<document>/prepared.<ext>   # derivado temporário usado pelo OCR
 <user>/<document>/thumbnail.<ext>
 ```
 
-`documents.storage_path` continua apontando para o derivado preparado para manter compatibilidade com o fluxo existente.
+No contrato v2:
 
-`documents.source_storage_path` aponta para o arquivo bruto.
+- `documents.storage_path` aponta para `source.<ext>`;
+- `documents.source_storage_path` também identifica explicitamente a fonte bruta;
+- `pages.temporary_image_path` aponta para `prepared.<ext>` enquanto o OCR ainda precisa dele.
+
+Isso mantém compatibilidade com documentos antigos: `process-ocr` continua usando `documents.storage_path` quando uma página não possui derivado temporário, mas novos imports enviam ao OCR o derivado por `temporary_image_path`.
+
+Quando o OCR termina com sucesso, o mecanismo já existente limpa `temporary_image_path`; portanto o derivado pode desaparecer sem afetar o documento exibido nem sua fonte original.
 
 Também são preservados dois hashes:
 
-- `documents.sha256`: hash do derivado preparado, mantendo a semântica de deduplicação já usada pelo fluxo;
+- `documents.sha256`: hash operacional do derivado preparado, mantendo a semântica de deduplicação já usada pelo fluxo nesta versão;
 - `documents.source_sha256`: hash do arquivo bruto.
 
-A exclusão do documento remove fonte, derivado, thumbnail e derivados temporários associados.
+A exclusão do documento remove fonte, derivado temporário, thumbnail e demais derivados associados.
 
 ### 4.2 Google Drive
 
@@ -150,6 +156,8 @@ Supabase Storage temporário
 ```
 
 Depois que o OCR conclui, o mecanismo existente de limpeza pode remover o derivado temporário sem perder a fonte original.
+
+O rollback também registra cada upload temporário à medida que ele conclui. Se o thumbnail falhar depois de `ocr.webp` ter sido criado, o primeiro derivado é removido e o arquivo Drive recém-criado também é desfeito.
 
 ## 5. Proveniência persistida
 
@@ -188,6 +196,8 @@ Os RPCs anteriores permanecem disponíveis para compatibilidade durante o rollou
 A telemetria de provedor já existente é enriquecida automaticamente com a proveniência de pré-processamento da página.
 
 O enriquecimento ocorre no banco, antes do insert em `ocr_provider_page_metrics`; portanto o Gemini, um backend desktop futuro ou outro provedor podem compartilhar a mesma taxonomia sem duplicar lógica de persistência.
+
+O trigger de enriquecimento é `SECURITY INVOKER`; ele não introduz uma nova fronteira privilegiada além do writer de telemetria já existente.
 
 O RPC:
 
@@ -275,8 +285,8 @@ RLS/policies após migration: PASS
 importação Supabase imagem real: PASS
 importação Drive imagem real: PASS
 source != prepared comprovado por hash/path: PASS
+viewer usa source; OCR usa temporary prepared: PASS
 delete remove source + prepared + thumbnail: PASS
-OCR usa prepared e mantém source recuperável: PASS
 telemetria recebe preprocessing_profile/version: PASS
 A/B em corpus representativo: PENDING até amostra real
 perspectiva/dewarp: fora do escopo de v1
