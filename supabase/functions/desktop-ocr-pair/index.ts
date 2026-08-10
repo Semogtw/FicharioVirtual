@@ -8,9 +8,17 @@ const MAX_CAPABILITIES_BYTES = 12 * 1024;
 const MAX_REQUEST_BODY_BYTES = 16 * 1024;
 
 type PairRequest = Readonly<{
+	action: 'pair';
 	label: string;
 	capabilities: Readonly<Record<string, unknown>>;
 }>;
+
+type RevokeRequest = Readonly<{
+	action: 'revoke';
+	deviceId: string;
+}>;
+
+type WorkerDeviceRequest = PairRequest | RevokeRequest;
 
 function json(status: number, body: Record<string, unknown>, appOrigin: string | null) {
 	return new Response(JSON.stringify(body), {
@@ -41,9 +49,7 @@ function hasExactKeys(record: Record<string, unknown>, expected: readonly string
 	return actual.length === wanted.length && actual.every((key, index) => key === wanted[index]);
 }
 
-function parsePairRequest(value: unknown): PairRequest | null {
-	if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
-	const record = value as Record<string, unknown>;
+function parsePairRequest(record: Record<string, unknown>): PairRequest | null {
 	if (!hasExactKeys(record, ['label', 'capabilities'])) return null;
 	if (typeof record.label !== 'string' || record.label !== record.label.trim()) return null;
 	if (
@@ -69,9 +75,21 @@ function parsePairRequest(value: unknown): PairRequest | null {
 	}
 	if (new TextEncoder().encode(serialized).byteLength > MAX_CAPABILITIES_BYTES) return null;
 	return Object.freeze({
+		action: 'pair',
 		label: record.label,
 		capabilities: Object.freeze({ ...(record.capabilities as Record<string, unknown>) })
 	});
+}
+
+function parseWorkerDeviceRequest(value: unknown): WorkerDeviceRequest | null {
+	if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+	const record = value as Record<string, unknown>;
+	if (hasExactKeys(record, ['action', 'deviceId'])) {
+		return record.action === 'revoke' && typeof record.deviceId === 'string' && UUID.test(record.deviceId)
+			? Object.freeze({ action: 'revoke', deviceId: record.deviceId })
+			: null;
+	}
+	return parsePairRequest(record);
 }
 
 function parseRegisteredDevice(value: unknown): Readonly<{
@@ -105,6 +123,32 @@ function parseRegisteredDevice(value: unknown): Readonly<{
 	});
 }
 
+function parseRevokedDevice(value: unknown, expectedDeviceId: string): Readonly<{
+	deviceId: string;
+	status: 'revoked';
+	revokedAt: string;
+	requeuedJobs: number;
+}> | null {
+	if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+	const record = value as Record<string, unknown>;
+	if (
+		record.deviceId !== expectedDeviceId ||
+		record.status !== 'revoked' ||
+		typeof record.revokedAt !== 'string' ||
+		!Number.isFinite(Date.parse(record.revokedAt)) ||
+		!Number.isSafeInteger(record.requeuedJobs) ||
+		(record.requeuedJobs as number) < 0
+	) {
+		return null;
+	}
+	return Object.freeze({
+		deviceId: expectedDeviceId,
+		status: 'revoked',
+		revokedAt: record.revokedAt,
+		requeuedJobs: record.requeuedJobs as number
+	});
+}
+
 Deno.serve(async (request) => {
 	const appOrigin = parseAppOrigin(Deno.env.get('APP_ORIGIN'));
 	const respond = (status: number, body: Record<string, unknown>) => json(status, body, appOrigin);
@@ -126,13 +170,12 @@ Deno.serve(async (request) => {
 			? respond(413, { code: 'pair_request_too_large' })
 			: respond(400, { code: 'invalid_json' });
 	}
-	const input = parsePairRequest(rawBody);
+	const input = parseWorkerDeviceRequest(rawBody);
 	if (!input) return respond(400, { code: 'invalid_pair_request' });
 
 	const supabaseUrl = Deno.env.get('SUPABASE_URL');
 	const publishableKey = Deno.env.get('SUPABASE_ANON_KEY');
-	const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-	if (!supabaseUrl || !publishableKey || !serviceRoleKey) {
+	if (!supabaseUrl || !publishableKey) {
 		return respond(503, { code: 'desktop_ocr_not_configured' });
 	}
 
@@ -153,6 +196,24 @@ Deno.serve(async (request) => {
 		.eq('is_active', true)
 		.maybeSingle();
 	if (allowedError || !allowed) return respond(403, { code: 'desktop_ocr_forbidden' });
+
+	if (input.action === 'revoke') {
+		const { data, error } = await userClient.rpc('revoke_ocr_worker_device', {
+			target_device_id: input.deviceId
+		});
+		if (error) return respond(503, { code: 'desktop_ocr_revoke_failed' });
+		const revoked = parseRevokedDevice(data, input.deviceId);
+		if (!revoked) return respond(503, { code: 'desktop_ocr_revoke_failed' });
+		return respond(200, {
+			deviceId: revoked.deviceId,
+			status: revoked.status,
+			revokedAt: revoked.revokedAt,
+			requeuedJobs: revoked.requeuedJobs
+		});
+	}
+
+	const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+	if (!serviceRoleKey) return respond(503, { code: 'desktop_ocr_not_configured' });
 
 	const generated = await generateDesktopWorkerCredential();
 	const admin = createClient(supabaseUrl, serviceRoleKey, {
