@@ -1,127 +1,92 @@
-# Fichário Virtual
+<div align="center">
 
-PWA privada e pesquisável para organizar fotos, capturas de tela e PDFs de anotações manuscritas ou digitadas, preservando os arquivos originais no Google Drive e tornando seu conteúdo pesquisável por meio de extração de texto e OCR seletivo.
+# 📚 Fichário Virtual
 
-## Visão geral
+### Seus materiais organizados. Todo o conteúdo pesquisável.
 
-O Fichário Virtual foi pensado para funcionar como um fichário digital pessoal: documentos podem ser organizados em cadernos, classificados com tags, pesquisados pelo conteúdo e revisados sem transformar a interface em um chatbot.
+Transforme **fotos, capturas de tela e PDFs** em um fichário digital fácil de organizar, consultar e pesquisar — inclusive quando o texto está dentro de uma imagem ou escrito à mão.
 
-O projeto separa o arquivo original dos dados que tornam esse arquivo útil. O original permanece sob controle do usuário no Google Drive; metadados, índices de busca, resultados de OCR, sincronização e filas ficam no backend.
+**Privado · Pesquisável · Multiplataforma · Integrado ao Google Drive**
 
-### Principais capacidades
+</div>
 
-- biblioteca de imagens e PDFs;
-- cadernos, tags e organização em lote;
-- pesquisa por texto e conteúdo extraído;
-- importação de arquivos locais e integração com Google Drive;
-- extração de texto nativo de PDFs quando disponível;
-- OCR seletivo para páginas que realmente precisam dele;
-- revisão e correção manual do texto reconhecido;
-- suporte a PWA para desktop, tablet e celular;
-- exportação portátil de dados sem incluir tokens ou secrets;
-- rota opcional de OCR local para documentos mais difíceis.
+---
 
-## Como funciona
+## ✨ O que é
 
-```text
-Arquivos do usuário
-      │
-      ├── Google Drive ─────── originais permanentes
-      │
-      └── Fichário Virtual
-              │
-              ├── Frontend/PWA
-              ├── Supabase
-              │     ├── Auth + RLS
-              │     ├── PostgreSQL
-              │     ├── busca e metadados
-              │     ├── filas e sincronização
-              │     └── Edge Functions
-              │
-              └── OCR
-                    ├── texto nativo, quando existente
-                    ├── Gemini para OCR geral
-                    └── worker local opcional para casos difíceis
-```
+O **Fichário Virtual** reúne materiais que normalmente ficam espalhados entre pastas, fotos, prints e PDFs em uma biblioteca única.
 
-### Componentes
+Você pode separar tudo em cadernos, usar tags e pesquisar pelo **conteúdo dos documentos**, não apenas pelo nome do arquivo. Quando necessário, o Fichário extrai o texto automaticamente com OCR para que páginas digitalizadas e anotações também possam ser encontradas pela busca.
 
-- **Frontend/PWA:** SvelteKit 5, TypeScript, `adapter-static` e Web Workers.
-- **Arquivos originais:** Google Drive API v3 com OAuth `drive.file`.
-- **Backend:** Supabase Auth, PostgreSQL, RLS e Edge Functions.
-- **Armazenamento temporário:** Supabase Storage apenas para derivados, processamento e migrações controladas.
-- **Host estático:** Cloudflare Pages.
-- **OCR:** extração de texto nativo primeiro, Gemini no backend para OCR geral e worker local opcional para rotas especializadas.
-- **PDFs:** `@firecrawl/pdf-inspector-wasm` e PDF.js quando necessário.
-- **Busca:** PostgreSQL FTS, `unaccent` e `pg_trgm`.
+Os arquivos originais continuam no seu **Google Drive**, enquanto o Fichário cuida da organização, pesquisa e experiência de leitura.
 
-## Princípios do projeto
+## 💡 O que você pode fazer
 
-1. **O arquivo original permanente pertence ao usuário no Google Drive.**
-2. **IDs do Drive são identidade; nomes e caminhos não são.**
-3. **OCR, correções, tags e busca sobrevivem ao desaparecimento do arquivo físico.**
-4. **Texto nativo nunca é enviado ao OCR sem necessidade.**
-5. **Nenhum serviço ativa cobrança ou fallback pago automaticamente.**
-6. **Tokens e secrets nunca entram no armazenamento persistente do navegador, exportações ou cache da PWA.**
-7. **Um conflito bloqueia somente o item relacionado.**
-8. **A camada de hospedagem pública recebe somente assets públicos; documentos privados não passam por ela.**
-9. **O worker local inicia conexões de saída e não exige porta pública.**
-10. **Correção manual permanece a autoridade final do texto.**
-11. **A interface deve parecer um fichário digital profissional, não um chatbot.**
+| | |
+| --- | --- |
+| 📁 **Organizar seus materiais** | Agrupe documentos em cadernos, use tags e organize vários itens de uma vez. |
+| 🔎 **Pesquisar dentro dos arquivos** | Encontre palavras e trechos presentes em PDFs, imagens, prints e páginas digitalizadas. |
+| ✍️ **Ler conteúdo manuscrito ou escaneado** | O OCR transforma conteúdo visual em texto pesquisável e revisável. |
+| 📄 **Aproveitar o texto de PDFs** | PDFs que já possuem texto utilizam o conteúdo original sem OCR desnecessário. |
+| ☁️ **Manter os originais no Drive** | Seus documentos permanecem no Google Drive em vez de ficarem presos à aplicação. |
+| 📝 **Revisar e corrigir resultados** | O texto reconhecido pode ser conferido e corrigido quando necessário. |
+| 📱 **Usar em diferentes telas** | A interface é uma PWA pensada para computador, tablet e celular. |
+| 📦 **Exportar seus dados** | Metadados e informações do fichário podem ser exportados de forma portátil. |
 
-## Desenvolvimento local
+## 🚀 Do arquivo à busca
 
-### Requisitos
+### 1. Adicione
+Importe uma imagem ou PDF do dispositivo ou conecte seus arquivos do Google Drive.
 
-- Node.js `>=22.12`;
-- pnpm `>=10`;
-- Chromium do Playwright para testes E2E;
-- Supabase CLI, Docker, PostgreSQL `psql` e Deno para os gates locais completos.
+### 2. Organize
+Escolha o caderno, aplique tags e deixe o Fichário preparar o conteúdo para pesquisa.
 
-### Instalação
+### 3. Encontre
+Pesquise uma palavra, assunto ou trecho e encontre o material correspondente mesmo quando o texto originalmente estava dentro de uma imagem.
+
+## 🗂️ Feito para materiais reais
+
+O Fichário Virtual foi pensado para lidar com uma biblioteca que mistura diferentes tipos de conteúdo:
+
+- 📸 fotos de quadro, folhas e anotações;
+- 🖼️ capturas de tela;
+- 📑 PDFs digitais com texto selecionável;
+- 📄 PDFs escaneados;
+- ✏️ páginas manuscritas;
+- 📚 documentos longos com páginas de tipos diferentes.
+
+A aplicação tenta aproveitar primeiro o texto que já existe no arquivo e usa OCR somente onde ele realmente é necessário.
+
+## 🔐 Seus arquivos continuam seus
+
+Os documentos originais permanecem no **Google Drive**. O Fichário usa os serviços de backend para manter a organização, os índices de pesquisa e os resultados de processamento necessários para a experiência do aplicativo.
+
+A ideia é que o fichário complemente seus arquivos — não que se torne um lugar do qual seja difícil retirá-los depois.
+
+## 🛠️ Desenvolvimento
+
+O projeto é construído principalmente com **SvelteKit, TypeScript, Supabase, Google Drive e tecnologias de OCR**.
+
+Para executar localmente:
 
 ```bash
 corepack enable
 pnpm install --frozen-lockfile
-pnpm exec playwright install chromium
-```
-
-### Executar em desenvolvimento
-
-```bash
 pnpm dev
 ```
 
-### Verificações principais
+Requisitos principais: **Node.js 22.12+** e **pnpm 10+**.
 
-```bash
-pnpm verify
-pnpm verify:full
-```
+Os testes, serviços externos e configuração completa de desenvolvimento estão documentados separadamente.
 
-Outros comandos de teste e validação estão descritos em [`docs/TESTING.md`](docs/TESTING.md).
+## 📖 Documentação
 
-## Configuração
+O README é somente a apresentação do projeto. Estado de desenvolvimento, decisões técnicas, planos, testes e procedimentos operacionais ficam em [`docs/`](docs/README.md).
 
-Use [`.env.example`](.env.example) como referência para as variáveis de ambiente locais. Configurações que dependem de serviços externos possuem runbooks próprios em `docs/`.
-
-Nunca versione tokens, chaves privadas, refresh tokens ou credenciais de service role.
-
-## Documentação
-
-A documentação técnica e operacional possui um índice próprio em [`docs/README.md`](docs/README.md).
-
-Pontos de entrada principais:
-
-- [Especificação do projeto](docs/PROJECT_SPEC.md)
-- [Estado atual do desenvolvimento](docs/CURRENT_STATUS.md)
-- [Prontidão para release/deploy](docs/READINESS.md)
+- [Documentação completa](docs/README.md)
+- [Estado atual](docs/CURRENT_STATUS.md)
+- [Prontidão para release](docs/READINESS.md)
 - [Plano de implementação](docs/IMPLEMENTATION_PLAN.md)
-- [Estratégia e recibos de testes](docs/TESTING.md)
-- [Deployment e rollback](docs/DEPLOYMENT.md)
+- [Especificação do projeto](docs/PROJECT_SPEC.md)
 
-O `README` descreve o projeto e sua arquitetura de forma estável. **Progresso recente, SHAs, runs de CI, pendências de implementação e decisões ainda em validação devem ser registrados nos documentos dedicados em `docs/`, não aqui.**
-
-## Segurança e privacidade
-
-O projeto assume conteúdo pessoal e potencialmente sensível. Por isso, autenticação, RLS, URLs assinadas de curta duração, segregação de secrets e minimização de dados enviados a provedores externos fazem parte do desenho da aplicação, não de uma camada opcional adicionada depois.
+> O Fichário Virtual está em desenvolvimento ativo. Para acompanhar o que já foi validado e o que ainda está sendo preparado para release, consulte o [estado atual do projeto](docs/CURRENT_STATUS.md).
