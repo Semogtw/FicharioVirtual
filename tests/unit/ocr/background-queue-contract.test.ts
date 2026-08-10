@@ -5,6 +5,8 @@ const repositoryRoot = new URL('../../../', import.meta.url);
 const read = (path: string) => readFileSync(new URL(path, repositoryRoot), 'utf8');
 
 const migration = read('supabase/migrations/202608101200_background_ocr_worker.sql');
+const cronMigration = read('supabase/migrations/202608101205_background_ocr_cron.sql');
+const candidateGuard = read('supabase/migrations/202608101215_background_ocr_candidate_guard.sql');
 const worker = read('supabase/functions/ocr-queue-worker/index.ts');
 const kick = read('supabase/functions/ocr-queue-kick/index.ts');
 const config = read('supabase/config.toml');
@@ -41,7 +43,9 @@ describe('background OCR queue contract', () => {
 		expect(worker).toContain('return response(202, { accepted: true });');
 		expect(worker).toContain('OCR_BACKGROUND_MAX_PAGES');
 		expect(worker).toContain('OCR_BACKGROUND_TIMEOUT_MS');
-		expect(worker).toContain("'X-Fichario-Worker-Key': settings.serviceRoleKey");
+		expect(worker).toContain("Deno.env.get('OCR_BACKGROUND_WORKER_KEY')");
+		expect(worker).toContain("'X-Fichario-Worker-Key': settings.workerKey");
+		expect(worker).not.toContain("'X-Fichario-Worker-Key': settings.serviceRoleKey");
 		expect(worker).toContain("await admin.rpc('recover_background_stale_ocr_jobs')");
 		expect(worker).toContain('requestGeminiOcrBatch({');
 		expect(worker).toContain("'complete_geometry'");
@@ -52,7 +56,17 @@ describe('background OCR queue contract', () => {
 		expect(config).toContain('[functions.ocr-queue-worker]\nverify_jwt = false');
 		expect(kick).toContain('userClient.auth.getUser()');
 		expect(kick).toContain(".eq('is_active', true)");
-		expect(kick).toContain("'X-Fichario-Worker-Key': serviceRoleKey");
+		expect(kick).toContain("Deno.env.get('OCR_BACKGROUND_WORKER_KEY')");
+		expect(kick).toContain("'X-Fichario-Worker-Key': workerKey");
+		expect(kick).not.toContain('SUPABASE_SERVICE_ROLE_KEY');
+	});
+
+	it('keeps deferred wakeups cheap and quota retries time-bound', () => {
+		expect(cronMigration).toContain("'*/5 * * * *'");
+		expect(cronMigration).toContain("where name in ('project_url', 'ocr_background_worker_key')");
+		expect(candidateGuard).toContain("job.status = 'blocked_quota'::public.ocr_status");
+		expect(candidateGuard).toContain('and job.next_retry_at is not null');
+		expect(candidateGuard).toContain("grant execute on function public.list_background_gemini_ocr_candidates(integer) to service_role;");
 	});
 
 	it('defers normal browser OCR calls but preserves injected foreground clients for tests and probes', () => {
