@@ -127,9 +127,10 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf fichario-deploy
-          mkdir -p fichario-deploy/site fichario-deploy/source
+          mkdir -p fichario-deploy/site fichario-deploy/source fichario-deploy/checks
           cp -a build/. fichario-deploy/site/
           cp package.json pnpm-lock.yaml fichario-deploy/source/
+          cp tools/checks/check-deployed-site.mjs tools/checks/deployment-contract.mjs fichario-deploy/checks/
           {
             echo 'schema_version=2'
             echo 'source_repository=Semogtw/FicharioVirtual'
