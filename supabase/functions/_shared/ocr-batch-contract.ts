@@ -1,4 +1,8 @@
 import { parseOcrPayload, type OcrPayload } from './ocr-contract.ts';
+import {
+	parseCompactWordGeometry,
+	type OcrWordGeometry
+} from './ocr-word-geometry.ts';
 
 export type OcrContentClass =
 	| 'unknown'
@@ -18,6 +22,7 @@ export type OcrBatchRequestedPage = {
 export type OcrBatchPagePayload = OcrPayload &
 	OcrBatchRequestedPage & {
 		contentClass: OcrContentClass;
+		wordGeometry: readonly OcrWordGeometry[];
 	};
 
 export type OcrBatchParseOutcome = {
@@ -124,7 +129,22 @@ export function parseOcrBatchPayload(
 			'warnings',
 			'contentClass'
 		]);
-		if (!hasLegacyShape && !hasClassifiedShape) {
+		const hasGeometryShape = hasExactKeys(page, [
+			'pageId',
+			'pageNumber',
+			'text',
+			'warnings',
+			'wordGeometry'
+		]);
+		const hasClassifiedGeometryShape = hasExactKeys(page, [
+			'pageId',
+			'pageNumber',
+			'text',
+			'warnings',
+			'contentClass',
+			'wordGeometry'
+		]);
+		if (!hasLegacyShape && !hasClassifiedShape && !hasGeometryShape && !hasClassifiedGeometryShape) {
 			return invalidProviderResponse(requestedPages);
 		}
 		if (
@@ -135,8 +155,9 @@ export function parseOcrBatchPayload(
 		) {
 			return invalidProviderResponse(requestedPages);
 		}
+		const hasClass = hasClassifiedShape || hasClassifiedGeometryShape;
 		if (
-			hasClassifiedShape &&
+			hasClass &&
 			(typeof page.contentClass !== 'string' ||
 				!CONTENT_CLASSES.has(page.contentClass as OcrContentClass))
 		) {
@@ -159,14 +180,15 @@ export function parseOcrBatchPayload(
 		} catch {
 			return invalidProviderResponse(requestedPages);
 		}
+		const hasGeometry = hasGeometryShape || hasClassifiedGeometryShape;
+		const wordGeometry = hasGeometry ? parseCompactWordGeometry(page.wordGeometry) : Object.freeze([]);
 		parsedById.set(
 			page.pageId,
 			Object.freeze({
 				pageId: page.pageId,
 				pageNumber: page.pageNumber,
-				contentClass: hasClassifiedShape
-					? (page.contentClass as OcrContentClass)
-					: 'unknown',
+				contentClass: hasClass ? (page.contentClass as OcrContentClass) : 'unknown',
+				wordGeometry,
 				...payload
 			})
 		);
