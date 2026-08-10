@@ -11,9 +11,15 @@
 	</a>
 	<a
 		href="/settings/computers/"
-		aria-current={page.url.pathname.startsWith('/settings/computers') ? 'page' : undefined}
+		aria-current={page.url.pathname === '/settings/computers/' ? 'page' : undefined}
 	>
 		Computadores
+	</a>
+	<a
+		href="/settings/computers/queue/"
+		aria-current={page.url.pathname.startsWith('/settings/computers/queue') ? 'page' : undefined}
+	>
+		Fila OCR
 	</a>
 	<a
 		href="/settings/usage/"
