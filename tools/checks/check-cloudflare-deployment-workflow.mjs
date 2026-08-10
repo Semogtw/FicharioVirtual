@@ -23,7 +23,10 @@ requireText(
 	'permissions:\n  actions: read\n  contents: read',
 	'workflow permissions must remain actions:read + contents:read'
 );
-requireText('environment: staging-deploy', 'deployment must use only the existing staging-deploy environment');
+requireText(
+	'environment: staging-deploy',
+	'deployment must use only the existing staging-deploy environment'
+);
 requireText('TARGET_ENVIRONMENT: staging', 'deployment target must remain hard-coded to staging');
 requireText(
 	'CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}',
@@ -60,15 +63,24 @@ for (const validator of [
 }
 requireText('sha256sum -c SHA256SUMS', 'artifact checksums must be revalidated before deployment');
 requireText('find "$artifact_root" -type l', 'artifact symlinks must be rejected');
-requireText("[[ \"$(manifest_value target_environment)\" == 'staging' ]]", 'artifact manifest must target staging');
+requireText(
+	'[[ "$(manifest_value target_environment)" == \'staging\' ]]',
+	'artifact manifest must target staging'
+);
 requireText(
 	'node "$artifact_root/checks/check-deployment-artifact.mjs" "$artifact_root"',
 	'downloaded artifact must pass its bundled self-verifier after checksum validation'
 );
-requireText('wrangler pages deploy "$ARTIFACT_ROOT/site"', 'only the validated site directory may be deployed');
+requireText(
+	'wrangler pages deploy "$ARTIFACT_ROOT/site"',
+	'only the validated site directory may be deployed'
+);
 requireText('--project-name=fichario-virtual', 'deployment must remain scoped to fichario-virtual');
 requireText('--branch=staging', 'deployment must remain a non-production Pages preview');
-requireText('--commit-hash="$EXPECTED_SOURCE_COMMIT"', 'deployment metadata must preserve the validated SHA');
+requireText(
+	'--commit-hash="$EXPECTED_SOURCE_COMMIT"',
+	'deployment metadata must preserve the validated SHA'
+);
 requireText(
 	'node "$ARTIFACT_ROOT/checks/validate-pages-deploy-output.mjs"',
 	'Wrangler output must be validated by artifact-pinned code'

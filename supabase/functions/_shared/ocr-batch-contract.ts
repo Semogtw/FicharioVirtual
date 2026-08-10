@@ -145,7 +145,12 @@ export function parseOcrBatchPayload(
 			'contentClass',
 			'wordGeometry'
 		]);
-		if (!hasLegacyShape && !hasClassifiedShape && !hasGeometryShape && !hasClassifiedGeometryShape) {
+		if (
+			!hasLegacyShape &&
+			!hasClassifiedShape &&
+			!hasGeometryShape &&
+			!hasClassifiedGeometryShape
+		) {
 			return invalidProviderResponse(requestedPages);
 		}
 		if (

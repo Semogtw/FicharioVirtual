@@ -216,7 +216,8 @@ function parseOcrContent(value) {
 	const withGeometry = ['contentType', 'needsReview', 'rawText', 'warnings', 'wordGeometry'].sort();
 	if (
 		(keys.length !== legacy.length || !keys.every((key, index) => key === legacy[index])) &&
-		(keys.length !== withGeometry.length || !keys.every((key, index) => key === withGeometry[index]))
+		(keys.length !== withGeometry.length ||
+			!keys.every((key, index) => key === withGeometry[index]))
 	) {
 		throw new OllamaEngineError('ollama_ocr_invalid');
 	}

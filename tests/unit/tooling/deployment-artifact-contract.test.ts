@@ -117,7 +117,9 @@ describe('deployable artifact verification', () => {
 		]) {
 			const root = createFixture();
 			rmSync(join(root, 'checks', checker));
-			await expect(verifyDeploymentArtifact(root)).rejects.toThrow(new RegExp(checker.replace('.', '\\.')));
+			await expect(verifyDeploymentArtifact(root)).rejects.toThrow(
+				new RegExp(checker.replace('.', '\\.'))
+			);
 		}
 	});
 

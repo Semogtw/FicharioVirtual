@@ -54,7 +54,10 @@ function driveFile() {
 	};
 }
 
-function fixture({ failTemporaryAt = null, failMetadata = false }: {
+function fixture({
+	failTemporaryAt = null,
+	failMetadata = false
+}: {
 	failTemporaryAt?: 'ocr' | 'thumbnail' | null;
 	failMetadata?: boolean;
 } = {}) {
@@ -202,11 +205,8 @@ describe('Drive-first image upload', () => {
 			)
 		).rejects.toThrow('metadata failed');
 		expect(metadata.removedTemporary).toEqual([
-		[
-			`${userId}/${documentId}/ocr.webp`,
-			`${userId}/${documentId}/thumbnail.jpg`
-		]
-	]);
+			[`${userId}/${documentId}/ocr.webp`, `${userId}/${documentId}/thumbnail.jpg`]
+		]);
 		expect(metadata.deletedDrive).toEqual([driveFileId]);
 	});
 

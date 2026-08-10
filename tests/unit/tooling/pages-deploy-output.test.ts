@@ -40,10 +40,10 @@ describe('Cloudflare Pages structured deployment output', () => {
 
 	it('accepts production output without requiring an alias', () => {
 		expect(
-			validatePagesDeployOutput(
-				output({ environment: 'production', alias: null }),
-				{ ...expected, environment: 'production' }
-			)
+			validatePagesDeployOutput(output({ environment: 'production', alias: null }), {
+				...expected,
+				environment: 'production'
+			})
 		).toEqual({
 			url: 'https://abc123.fichario-virtual.pages.dev',
 			alias: '',

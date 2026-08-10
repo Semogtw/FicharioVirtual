@@ -12,13 +12,15 @@ describe('OCR provider telemetry migration', () => {
 		expect(source).toContain('thoughts_token_count bigint');
 		expect(source).toContain('total_token_count bigint');
 		expect(source).toContain('latency_ms integer not null');
-		expect(source).not.toMatch(/\b(prompt_text|ocr_text|response_body|image_bytes|signed_url|api_key)\b/);
+		expect(source).not.toMatch(
+			/\b(prompt_text|ocr_text|response_body|image_bytes|signed_url|api_key)\b/
+		);
 	});
 
 	it('keeps per-page metrics separate from exact batch token totals', () => {
 		expect(source).toContain('create table public.ocr_provider_page_metrics');
 		expect(source).toContain('output_characters integer not null default 0');
-		expect(source).toContain('content_class text not null default \'unknown\'');
+		expect(source).toContain("content_class text not null default 'unknown'");
 		expect(source).toContain('shadow_sample boolean not null default false');
 		expect(source).not.toContain('estimated_prompt_tokens');
 	});
@@ -26,9 +28,15 @@ describe('OCR provider telemetry migration', () => {
 	it('makes telemetry read-only to authenticated clients and owner scoped', () => {
 		expect(source).toContain('force row level security');
 		expect(source).toContain('user_id = (select auth.uid())');
-		expect(source).toContain('grant select on table public.ocr_provider_usage_events to authenticated');
-		expect(source).toContain('grant select on table public.ocr_provider_page_metrics to authenticated');
-		expect(source).not.toContain('grant insert on table public.ocr_provider_usage_events to authenticated');
+		expect(source).toContain(
+			'grant select on table public.ocr_provider_usage_events to authenticated'
+		);
+		expect(source).toContain(
+			'grant select on table public.ocr_provider_page_metrics to authenticated'
+		);
+		expect(source).not.toContain(
+			'grant insert on table public.ocr_provider_usage_events to authenticated'
+		);
 	});
 
 	it('validates ownership and page manifests inside the telemetry writer RPC', () => {

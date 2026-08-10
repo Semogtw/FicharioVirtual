@@ -79,10 +79,7 @@ function analyze(source: OffscreenCanvas) {
 	};
 }
 
-function crop(
-	source: OffscreenCanvas,
-	analysis: ReturnType<typeof analyze>
-): OffscreenCanvas {
+function crop(source: OffscreenCanvas, analysis: ReturnType<typeof analyze>): OffscreenCanvas {
 	if (!analysis.plan.autoCropApplied) return source;
 	const scaleX = source.width / analysis.width;
 	const scaleY = source.height / analysis.height;
@@ -104,8 +101,14 @@ function rotate(source: OffscreenCanvas, milliDegrees: number): OffscreenCanvas 
 	const radians = (milliDegrees / 1000) * (Math.PI / 180);
 	const cosine = Math.cos(radians);
 	const sine = Math.sin(radians);
-	const width = Math.max(1, Math.ceil(Math.abs(source.width * cosine) + Math.abs(source.height * sine)));
-	const height = Math.max(1, Math.ceil(Math.abs(source.width * sine) + Math.abs(source.height * cosine)));
+	const width = Math.max(
+		1,
+		Math.ceil(Math.abs(source.width * cosine) + Math.abs(source.height * sine))
+	);
+	const height = Math.max(
+		1,
+		Math.ceil(Math.abs(source.width * sine) + Math.abs(source.height * cosine))
+	);
 	const target = canvas(width, height);
 	white(target.context, width, height);
 	target.context.translate(width / 2, height / 2);
@@ -140,11 +143,13 @@ function backgroundGrid(data: Uint8ClampedArray, width: number, height: number) 
 			for (let y = y0; y < y1; y += stride) {
 				for (let x = x0; x < x1; x += stride) {
 					const offset = (y * width + x) * 4;
-					histogram[luma(data[offset] ?? 255, data[offset + 1] ?? 255, data[offset + 2] ?? 255)] += 1;
+					histogram[luma(data[offset] ?? 255, data[offset + 1] ?? 255, data[offset + 2] ?? 255)] +=
+						1;
 					total += 1;
 				}
 			}
-			values[gridY * columns + gridX] = total > 0 ? histogramPercentile(histogram, total, 0.88) : 255;
+			values[gridY * columns + gridX] =
+				total > 0 ? histogramPercentile(histogram, total, 0.88) : 255;
 		}
 	}
 	const ordered = [...values].sort((left, right) => left - right);
@@ -159,7 +164,10 @@ function localBackground(
 	width: number,
 	height: number
 ) {
-	const gx = Math.max(0, Math.min(grid.columns - 1, (x / Math.max(1, width - 1)) * (grid.columns - 1)));
+	const gx = Math.max(
+		0,
+		Math.min(grid.columns - 1, (x / Math.max(1, width - 1)) * (grid.columns - 1))
+	);
 	const gy = Math.max(0, Math.min(grid.rows - 1, (y / Math.max(1, height - 1)) * (grid.rows - 1)));
 	const x0 = Math.floor(gx);
 	const y0 = Math.floor(gy);
@@ -167,9 +175,11 @@ function localBackground(
 	const y1 = Math.min(grid.rows - 1, y0 + 1);
 	const tx = gx - x0;
 	const ty = gy - y0;
-	const top = (grid.values[y0 * grid.columns + x0] ?? grid.target) * (1 - tx) +
+	const top =
+		(grid.values[y0 * grid.columns + x0] ?? grid.target) * (1 - tx) +
 		(grid.values[y0 * grid.columns + x1] ?? grid.target) * tx;
-	const bottom = (grid.values[y1 * grid.columns + x0] ?? grid.target) * (1 - tx) +
+	const bottom =
+		(grid.values[y1 * grid.columns + x0] ?? grid.target) * (1 - tx) +
 		(grid.values[y1 * grid.columns + x1] ?? grid.target) * tx;
 	return top * (1 - ty) + bottom * ty;
 }
@@ -185,7 +195,9 @@ function normalize(source: OffscreenCanvas, plan: DocumentPreprocessingPlan) {
 	target.context.drawImage(source, 0, 0);
 	const image = target.context.getImageData(0, 0, source.width, source.height);
 	const data = image.data;
-	const grid = plan.illuminationNormalized ? backgroundGrid(data, source.width, source.height) : null;
+	const grid = plan.illuminationNormalized
+		? backgroundGrid(data, source.width, source.height)
+		: null;
 	const contrastRange = Math.max(1, plan.highLuma - plan.lowLuma);
 	const contrastGain = plan.contrastEnhanced ? Math.min(1.28, 232 / contrastRange) : 1;
 	const contrastOffset = plan.contrastEnhanced ? 12 - plan.lowLuma * contrastGain : 0;
@@ -195,12 +207,17 @@ function normalize(source: OffscreenCanvas, plan: DocumentPreprocessingPlan) {
 		for (let x = 0; x < source.width; x += 1) {
 			const offset = (y * source.width + x) * 4;
 			const illuminationOffset = grid
-				? Math.max(-28, Math.min(28, grid.target - localBackground(grid, x, y, source.width, source.height))) * 0.58
+				? Math.max(
+						-28,
+						Math.min(28, grid.target - localBackground(grid, x, y, source.width, source.height))
+					) * 0.58
 				: 0;
 			for (let channel = 0; channel < 3; channel += 1) {
 				const original = (data[offset + channel] ?? 255) + illuminationOffset;
 				const contrasted = original * contrastGain + contrastOffset;
-				data[offset + channel] = clampByte(original * (1 - contrastBlend) + contrasted * contrastBlend);
+				data[offset + channel] = clampByte(
+					original * (1 - contrastBlend) + contrasted * contrastBlend
+				);
 			}
 			data[offset + 3] = 255;
 		}
@@ -238,7 +255,9 @@ async function prepare(request: ImageWorkerRequest): Promise<ImageWorkerSuccess>
 		throw Object.assign(new Error('Unsupported image'), { code: 'unsupported_image' });
 	}
 	if (request.preprocessingProfile !== 'ocr_clean_v1') {
-		throw Object.assign(new Error('Unsupported preprocessing profile'), { code: 'unsupported_image' });
+		throw Object.assign(new Error('Unsupported preprocessing profile'), {
+			code: 'unsupported_image'
+		});
 	}
 
 	let bitmap: ImageBitmap;

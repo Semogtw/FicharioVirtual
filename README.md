@@ -22,26 +22,29 @@ Os arquivos originais continuam no seu **Google Drive**, enquanto o Fichário cu
 
 ## 💡 O que você pode fazer
 
-| | |
-| --- | --- |
-| 📁 **Organizar seus materiais** | Agrupe documentos em cadernos, use tags e organize vários itens de uma vez. |
-| 🔎 **Pesquisar dentro dos arquivos** | Encontre palavras e trechos presentes em PDFs, imagens, prints e páginas digitalizadas. |
-| ✍️ **Ler conteúdo manuscrito ou escaneado** | O OCR transforma conteúdo visual em texto pesquisável e revisável. |
-| 📄 **Aproveitar o texto de PDFs** | PDFs que já possuem texto utilizam o conteúdo original sem OCR desnecessário. |
-| ☁️ **Manter os originais no Drive** | Seus documentos permanecem no Google Drive em vez de ficarem presos à aplicação. |
-| 📝 **Revisar e corrigir resultados** | O texto reconhecido pode ser conferido e corrigido quando necessário. |
-| 📱 **Usar em diferentes telas** | A interface é uma PWA pensada para computador, tablet e celular. |
-| 📦 **Exportar seus dados** | Metadados e informações do fichário podem ser exportados de forma portátil. |
+|                                             |                                                                                         |
+| ------------------------------------------- | --------------------------------------------------------------------------------------- |
+| 📁 **Organizar seus materiais**             | Agrupe documentos em cadernos, use tags e organize vários itens de uma vez.             |
+| 🔎 **Pesquisar dentro dos arquivos**        | Encontre palavras e trechos presentes em PDFs, imagens, prints e páginas digitalizadas. |
+| ✍️ **Ler conteúdo manuscrito ou escaneado** | O OCR transforma conteúdo visual em texto pesquisável e revisável.                      |
+| 📄 **Aproveitar o texto de PDFs**           | PDFs que já possuem texto utilizam o conteúdo original sem OCR desnecessário.           |
+| ☁️ **Manter os originais no Drive**         | Seus documentos permanecem no Google Drive em vez de ficarem presos à aplicação.        |
+| 📝 **Revisar e corrigir resultados**        | O texto reconhecido pode ser conferido e corrigido quando necessário.                   |
+| 📱 **Usar em diferentes telas**             | A interface é uma PWA pensada para computador, tablet e celular.                        |
+| 📦 **Exportar seus dados**                  | Metadados e informações do fichário podem ser exportados de forma portátil.             |
 
 ## 🚀 Do arquivo à busca
 
 ### 1. Adicione
+
 Importe uma imagem ou PDF do dispositivo ou conecte seus arquivos do Google Drive.
 
 ### 2. Organize
+
 Escolha o caderno, aplique tags e deixe o Fichário preparar o conteúdo para pesquisa.
 
 ### 3. Encontre
+
 Pesquise uma palavra, assunto ou trecho e encontre o material correspondente mesmo quando o texto originalmente estava dentro de uma imagem.
 
 ## 🗂️ Feito para materiais reais

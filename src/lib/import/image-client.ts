@@ -229,7 +229,12 @@ export function parseImageWorkerResponse(
 	) {
 		invalidWorkerResponse();
 	}
-	const preprocessing = parsePreprocessingMetadata(value.preprocessing, width, height, maxDimension);
+	const preprocessing = parsePreprocessingMetadata(
+		value.preprocessing,
+		width,
+		height,
+		maxDimension
+	);
 	return Object.freeze({
 		type: 'success',
 		id: expectedId,

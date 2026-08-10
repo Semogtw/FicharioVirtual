@@ -258,8 +258,8 @@ export async function verifyDeploymentArtifact(inputPath) {
 	for (const file of files) {
 		if (file.startsWith('site/') && [MANIFEST_FILE, CHECKSUM_FILE].includes(posix.basename(file))) {
 			throw contractFailure(
-					`deployment metadata must remain outside the public site root: ${file}`
-				);
+				`deployment metadata must remain outside the public site root: ${file}`
+			);
 		}
 		const allowedOutsideSite =
 			file === MANIFEST_FILE ||

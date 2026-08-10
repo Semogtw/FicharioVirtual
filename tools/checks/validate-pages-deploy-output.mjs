@@ -53,7 +53,8 @@ export function validatePagesDeployOutput(source, expected) {
 	}
 	const deployment = deployments[0];
 	if (deployment.pages_project !== expected.project) fail('Pages project does not match');
-	if (deployment.environment !== expected.environment) fail('deployment environment does not match');
+	if (deployment.environment !== expected.environment)
+		fail('deployment environment does not match');
 	if (deployment.production_branch !== expected.productionBranch) {
 		fail('production branch does not match');
 	}

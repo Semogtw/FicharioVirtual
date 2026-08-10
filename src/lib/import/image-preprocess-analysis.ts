@@ -22,22 +22,7 @@ export type DocumentPreprocessingPlan = Readonly<{
 
 const MAX_SAMPLE_PIXELS = 512 * 512;
 const ANGLES_MDEG = Object.freeze([
-	-4000,
-	-3500,
-	-3000,
-	-2500,
-	-2000,
-	-1500,
-	-1000,
-	-500,
-	0,
-	500,
-	1000,
-	1500,
-	2000,
-	2500,
-	3000,
-	3500,
+	-4000, -3500, -3000, -2500, -2000, -1500, -1000, -500, 0, 500, 1000, 1500, 2000, 2500, 3000, 3500,
 	4000
 ]);
 
@@ -104,10 +89,7 @@ function findActiveBounds(plane: DocumentLumaPlane, threshold: number) {
 	return { left, top, right, bottom, foreground };
 }
 
-function conservativeCrop(
-	plane: DocumentLumaPlane,
-	bounds: ReturnType<typeof findActiveBounds>
-) {
+function conservativeCrop(plane: DocumentLumaPlane, bounds: ReturnType<typeof findActiveBounds>) {
 	if (bounds.right <= bounds.left || bounds.bottom <= bounds.top) {
 		return { left: 0, top: 0, right: plane.width, bottom: plane.height, applied: false };
 	}
@@ -221,9 +203,7 @@ export function analyzeDocumentLuma(plane: DocumentLumaPlane): DocumentPreproces
 	const illuminationNormalized =
 		backgroundLuma >= 158 && foregroundPermille >= 8 && backgroundVariation(plane) >= 18;
 	const deskewMilliDegrees =
-		foregroundPermille >= 8 && foregroundPermille <= 650
-			? deskew(plane, threshold, crop)
-			: 0;
+		foregroundPermille >= 8 && foregroundPermille <= 650 ? deskew(plane, threshold, crop) : 0;
 
 	return Object.freeze({
 		cropLeft: crop.left,

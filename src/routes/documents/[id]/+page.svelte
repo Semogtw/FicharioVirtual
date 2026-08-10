@@ -205,7 +205,7 @@
 						{/if}
 					</div>
 					<div class="original-body">
-						<DocumentMediaViewer detail={detail} page={selectedPage} query={highlightedQuery} />
+						<DocumentMediaViewer {detail} page={selectedPage} query={highlightedQuery} />
 					</div>
 				</div>
 

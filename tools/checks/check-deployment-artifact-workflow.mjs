@@ -28,8 +28,16 @@ requireText(
 	'permissions:\n  contents: read',
 	'artifact build workflow permissions must remain contents:read'
 );
-requireText(source, 'environment: staging', 'artifact build must use only the existing staging environment');
-requireText(source, 'TARGET_ENVIRONMENT: staging', 'artifact build target must remain hard-coded to staging');
+requireText(
+	source,
+	'environment: staging',
+	'artifact build must use only the existing staging environment'
+);
+requireText(
+	source,
+	'TARGET_ENVIRONMENT: staging',
+	'artifact build target must remain hard-coded to staging'
+);
 requireText(
 	source,
 	'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803',
@@ -82,7 +90,7 @@ requireText(
 );
 requireText(
 	source,
-	"[[ \"$TARGET_ENVIRONMENT\" == 'staging' ]]",
+	'[[ "$TARGET_ENVIRONMENT" == \'staging\' ]]',
 	'artifact build must fail closed if staging target is ever altered'
 );
 requireText(
@@ -90,7 +98,11 @@ requireText(
 	'Google Picker public settings must be configured together',
 	'artifact build must keep Google Picker public settings all-or-none'
 );
-requireText(source, 'run: pnpm verify', 'artifact build must execute the full repository verify command');
+requireText(
+	source,
+	'run: pnpm verify',
+	'artifact build must execute the full repository verify command'
+);
 requireText(
 	source,
 	`! grep -R -F '127.0.0.1:54321' build`,
@@ -121,7 +133,11 @@ requireText(
 	'name: fichario-static-${{ github.sha }}-staging',
 	'artifact identity must bind source SHA to staging'
 );
-requireText(source, 'if-no-files-found: error', 'missing deployment artifact must fail the workflow');
+requireText(
+	source,
+	'if-no-files-found: error',
+	'missing deployment artifact must fail the workflow'
+);
 
 requireText(packager, 'set -euo pipefail', 'shared packager must remain fail-fast');
 requireText(

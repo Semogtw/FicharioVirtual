@@ -342,10 +342,10 @@ Pendências reais antes de declarar o Desktop OCR Worker operacionalmente pronto
 | Origem privada curta + SHA-256               | implementado/testado                       |
 | Spool retomável + conclusão idempotente      | implementado/testado                       |
 | Ollama loopback + model lock v1              | implementado/testado                       |
-| Chandra OCR 2 como candidato                 | selecionado; validação pendente             |
-| Backend `llama_cpp` + model lock v2          | planejado; não implementado                 |
+| Chandra OCR 2 como candidato                 | selecionado; validação pendente            |
+| Backend `llama_cpp` + model lock v2          | planejado; não implementado                |
 | Chandra Q8_0 na RX 6600 / Vulkan             | pendente                                   |
-| Q6_K fallback de memória                     | pendente; usar somente se necessário        |
+| Q6_K fallback de memória                     | pendente; usar somente se necessário       |
 | CPU em hardware real                         | pendente                                   |
 | Fila desktop detalhada na PWA                | pendente                                   |
 | E2E staging com documento privado            | pendente                                   |
