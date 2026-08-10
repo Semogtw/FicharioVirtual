@@ -1,0 +1,168 @@
+name: Deploy validated artifact to Cloudflare Pages
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: Protected environment and Pages branch to deploy
+        required: true
+        type: choice
+        default: staging
+        options:
+          - staging
+          - production
+      artifact_run_id:
+        description: Run ID of Build deployable Fichário artifact
+        required: true
+        type: string
+      expected_source_commit:
+        description: Full 40-character source SHA expected in the artifact manifest
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: deploy-fichario-cloudflare-${{ inputs.target_environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: ${{ inputs.target_environment }}
+    env:
+      TARGET_ENVIRONMENT: ${{ inputs.target_environment }}
+      EXPECTED_SOURCE_COMMIT: ${{ inputs.expected_source_commit }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      WRANGLER_SEND_METRICS: 'false'
+      WRANGLER_VERSION: '4.120.0'
+
+    steps:
+      - name: Validate immutable deployment inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$EXPECTED_SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo 'expected_source_commit must be a full lowercase Git SHA' >&2
+            exit 1
+          fi
+          if [[ ! "${{ inputs.artifact_run_id }}" =~ ^[1-9][0-9]*$ ]]; then
+            echo 'artifact_run_id must be a positive numeric workflow run ID' >&2
+            exit 1
+          fi
+          if [[ -z "$CLOUDFLARE_API_TOKEN" || -z "$CLOUDFLARE_ACCOUNT_ID" ]]; then
+            echo 'Cloudflare deployment credentials are not provisioned in the protected environment' >&2
+            exit 1
+          fi
+
+      - name: Download the validated deployment artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: fichario-static-${{ inputs.expected_source_commit }}-${{ inputs.target_environment }}
+          path: deployment-artifact
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.artifact_run_id }}
+          digest-mismatch: error
+
+      - name: Verify artifact identity and checksums
+        id: artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact_root="$GITHUB_WORKSPACE/deployment-artifact"
+          if [[ ! -f "$artifact_root/DEPLOYMENT-MANIFEST.txt" && -f "$artifact_root/fichario-deploy/DEPLOYMENT-MANIFEST.txt" ]]; then
+            artifact_root="$artifact_root/fichario-deploy"
+          fi
+
+          for required in DEPLOYMENT-MANIFEST.txt SHA256SUMS source/package.json source/pnpm-lock.yaml site/_headers site/200.html site/manifest.webmanifest site/sw.js site/registerSW.js; do
+            if [[ ! -f "$artifact_root/$required" ]]; then
+              echo "deployment artifact is missing $required" >&2
+              exit 1
+            fi
+          done
+
+          if find "$artifact_root" -type l -print -quit | grep -q .; then
+            echo 'deployment artifact must not contain symlinks' >&2
+            exit 1
+          fi
+
+          manifest_value() {
+            local key="$1"
+            local value
+            value="$(sed -n "s/^${key}=//p" "$artifact_root/DEPLOYMENT-MANIFEST.txt")"
+            if [[ -z "$value" || "$value" == *$'\n'* ]]; then
+              echo "deployment manifest must contain exactly one non-empty ${key}" >&2
+              exit 1
+            fi
+            printf '%s' "$value"
+          }
+
+          [[ "$(manifest_value schema_version)" == '2' ]] || { echo 'unsupported deployment manifest schema' >&2; exit 1; }
+          [[ "$(manifest_value source_repository)" == 'Semogtw/FicharioVirtual' ]] || { echo 'unexpected source repository' >&2; exit 1; }
+          [[ "$(manifest_value source_commit)" == "$EXPECTED_SOURCE_COMMIT" ]] || { echo 'artifact source SHA does not match requested SHA' >&2; exit 1; }
+          [[ "$(manifest_value target_environment)" == "$TARGET_ENVIRONMENT" ]] || { echo 'artifact target environment does not match requested environment' >&2; exit 1; }
+
+          package_sha="$(sha256sum "$artifact_root/source/package.json" | cut -d' ' -f1)"
+          lock_sha="$(sha256sum "$artifact_root/source/pnpm-lock.yaml" | cut -d' ' -f1)"
+          [[ "$package_sha" == "$(manifest_value package_sha256)" ]] || { echo 'package.json checksum mismatch' >&2; exit 1; }
+          [[ "$lock_sha" == "$(manifest_value lock_sha256)" ]] || { echo 'pnpm-lock.yaml checksum mismatch' >&2; exit 1; }
+
+          (
+            cd "$artifact_root"
+            sha256sum -c SHA256SUMS
+          )
+
+          if grep -R -F -n --binary-files=without-match '127.0.0.1:54321' "$artifact_root/site"; then
+            echo 'deployment artifact contains the local Supabase URL' >&2
+            exit 1
+          fi
+          if grep -R -F -n --binary-files=without-match 'sb_publishable_test_key_1234567890' "$artifact_root/site"; then
+            echo 'deployment artifact contains the test publishable key' >&2
+            exit 1
+          fi
+
+          echo "root=$artifact_root" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy the exact artifact with pinned Wrangler
+        shell: bash
+        env:
+          ARTIFACT_ROOT: ${{ steps.artifact.outputs.root }}
+        run: |
+          set -euo pipefail
+          if [[ "$TARGET_ENVIRONMENT" == 'production' ]]; then
+            pages_branch='main'
+          else
+            pages_branch='staging'
+          fi
+
+          npm exec --yes --package="wrangler@${WRANGLER_VERSION}" -- \
+            wrangler pages deploy "$ARTIFACT_ROOT/site" \
+              --project-name=fichario-virtual \
+              --branch="$pages_branch" \
+              --commit-hash="$EXPECTED_SOURCE_COMMIT" \
+              --commit-message="Deploy validated Fichário artifact ${EXPECTED_SOURCE_COMMIT} (${TARGET_ENVIRONMENT})" \
+              --commit-dirty=false
+
+      - name: Record deterministic post-deploy target
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$TARGET_ENVIRONMENT" == 'production' ]]; then
+            origin='https://fichario-virtual.pages.dev'
+          else
+            origin='https://staging.fichario-virtual.pages.dev'
+          fi
+          {
+            echo "### Cloudflare Pages deployment"
+            echo
+            echo "- Environment: \`$TARGET_ENVIRONMENT\`"
+            echo "- Source SHA: \`$EXPECTED_SOURCE_COMMIT\`"
+            echo "- Gate target: \`$origin\`"
+            echo
+            echo 'Run the repository post-deployment contract against this origin before promotion.'
+          } >> "$GITHUB_STEP_SUMMARY"
