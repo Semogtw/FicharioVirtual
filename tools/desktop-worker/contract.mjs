@@ -17,7 +17,9 @@ function exactKeys(record, expected) {
 }
 
 function validModel(value, pattern) {
-	return typeof value === 'string' && value.length >= 1 && value.length <= 128 && pattern.test(value);
+	return (
+		typeof value === 'string' && value.length >= 1 && value.length <= 128 && pattern.test(value)
+	);
 }
 
 function parseWarnings(value) {
