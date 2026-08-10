@@ -29,7 +29,11 @@ describe('image import cross-tab yield', () => {
 	});
 
 	it('does not interfere with active local work, terminal updates, or PDF broadcasts', () => {
-		for (const remoteUpdate of [update('waiting'), update('complete'), update('reading', 'pdf-import-updated')]) {
+		for (const remoteUpdate of [
+			update('waiting'),
+			update('complete'),
+			update('reading', 'pdf-import-updated')
+		]) {
 			const items = [{ id: 'shared-import', status: 'uploading' as const, previewUrl: null }];
 			expect(yieldImageImportToRemoteTab(items, remoteUpdate)).toBe(false);
 			expect(items).toHaveLength(1);
