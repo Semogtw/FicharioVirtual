@@ -1,8 +1,8 @@
 # Estado atual do Fichário Virtual
 
-_Atualizado: 2026-08-09_<br>
+_Atualizado: 2026-08-10_<br>
 _Branch ativa: `main`_<br>
-_Estado: Drive-first e OCR seletivo por lotes seguem integrados. O defeito de request Gemini HTTP 400 foi reproduzido e corrigido em staging: o checkpoint `f87e1edc` passou o CI completo (`31333367357`), o deploy (`31333367356`) e a sonda protegida (`31333418948`), cujo caminho `process-ocr` retornou `provider_ok` HTTP 200. A instrumentação temporária foi removida, o cleanup remoto `31333977753` terminou com sucesso, `process-ocr` ficou `ACTIVE v19` e `ocr-boundary-probe` não existe mais. Release ainda depende dos gates externos de Drive, host e dispositivos._
+_Estado: Drive-first e OCR seletivo por lotes seguem integrados. O defeito de request Gemini HTTP 400 foi reproduzido e corrigido em staging: o checkpoint `f87e1edc` passou o CI completo (`31333367357`), o deploy (`31333367356`) e a sonda protegida (`31333418948`), cujo caminho `process-ocr` retornou `provider_ok` HTTP 200. A instrumentação temporária foi removida, o cleanup remoto `31333977753` terminou com sucesso, `process-ocr` ficou `ACTIVE v19` e `ocr-boundary-probe` não existe mais. O Desktop OCR Worker já possui runtime local, spool, lease renovável, keyring, backend Ollama loopback, serviço systemd e gestão web de dispositivos em código, mas ainda depende de validação real de hardware/modelo e pareamento web sem token manual. Release continua dependente dos gates externos de Drive, host e dispositivos._
 
 ## Resumo executivo
 
@@ -13,7 +13,7 @@ As autoridades permanecem separadas:
 - **Google Drive:** armazenamento permanente dos originais;
 - **Supabase:** Auth, PostgreSQL, RLS, filas, resultados, sincronização e derivados temporários;
 - **Cloudflare Pages:** frontend estático e artefatos públicos, sem documentos privados;
-- **computador confiável:** futura rota local para manuscritos e páginas difíceis.
+- **computador confiável:** rota local outbound-only para OCR difícil, implementada em código e ainda pendente de validação operacional no hardware alvo.
 
 O aplicativo não possui franquia diária própria de OCR. `blocked_quota` só representa uma resposta real de quota do provedor.
 
@@ -119,6 +119,27 @@ Já estão implementados:
 
 A existência do código não substitui validação com uma conta Google real. OAuth, Picker, ranges, uploads, mudanças, conflitos, recuperação distribuída e migração ainda precisam ser executados no ambiente final.
 
+### Desktop OCR local
+
+A rota desktop já deixou de ser apenas arquitetura e possui implementação local integrada ao plano de controle remoto:
+
+- dispositivos com credencial própria, autenticação por digest e revogação;
+- claim/source/renew/complete protegidos por lease e conclusão idempotente;
+- configuração local fail-closed e diretórios XDG privados;
+- SQLite de spool transacional, dead letter e reenvio antes de buscar trabalho novo;
+- download HTTPS de fonte com MIME, tamanho e SHA-256 vinculados ao lease;
+- renovação de lease durante inferências longas;
+- polling/backoff e shutdown por sinal;
+- credencial no Secret Service via `secret-tool`, sem `.env`, argv ou unit file;
+- lock imutável de modelo e verificação de digest;
+- backend `OllamaOcrEngine` restrito a loopback e modelo de visão já presente localmente;
+- instalador de desenvolvimento e unidade `systemd --user` sem root;
+- comandos de configuração, modelo, pareamento, status e despareamento;
+- tela **Configurações > Computadores** para listar, atualizar, revogar e renomear dispositivos ativos;
+- RPC de rename user-scoped, com validação de owner/status/label e testes unitários + pgTAP versionados.
+
+O estado local `readyToRun` não é selo de benchmark. Ainda não existe modelo padrão aprovado nem backend CPU/Vulkan/ROCm declarado validado em hardware real.
+
 ## Estado de validação
 
 ### Checkpoint OCR corrigido
@@ -174,8 +195,8 @@ O defeito HTTP 400 da fronteira Gemini está resolvido no runtime de staging. O 
 
 Ainda são obrigatórios antes de release:
 
-- aplicar todas as migrations, inclusive o lease de descritores, em um projeto Supabase limpo/staging e verificar drift;
-- executar pgTAP completo, incluindo ownership, takeover, idempotência e privilégios do lease;
+- aplicar todas as migrations, inclusive o lease de descritores e a gestão de dispositivos desktop, em um projeto Supabase limpo/staging e verificar drift;
+- executar pgTAP completo, incluindo ownership, takeover, idempotência, privilégios do lease e gestão de dispositivos;
 - regenerar `src/lib/types/database.ts` a partir do schema efetivamente implantado;
 - executar OAuth e Google Drive com conta real;
 - validar `appProperties` e a reconciliação de cópia após interrupção real do navegador;
@@ -189,11 +210,20 @@ Ainda são obrigatórios antes de release:
 
 ### Contratos gerados do banco
 
-`src/lib/types/database.ts` continua sendo um espelho provisório por decisão já documentada no próprio arquivo. As novas RPCs são usadas por uma interface estrutural local para não fingir que os tipos foram regenerados. O contrato canônico deve ser regenerado somente a partir do schema limpo realmente aplicado, dentro do gate Supabase.
+`src/lib/types/database.ts` continua sendo um espelho provisório por decisão já documentada no próprio arquivo. As RPCs desktop novas são usadas por interfaces estruturais locais para não fingir que os tipos foram regenerados. O contrato canônico deve ser regenerado somente a partir do schema limpo realmente aplicado, dentro do gate Supabase.
 
 ### Worker desktop
 
-A fronteira backend está implementada em código: pareamento, credencial por dispositivo, claim/source/renew/complete e proteção por lease possuem contratos, migrations, testes e Edge Functions. O worker local ainda não foi implementado. Permanecem pendentes spool, backend CPU, modelos verificados, serviço systemd, UI de dispositivos, retomada local e benchmark da GPU.
+A fronteira backend e o runtime local estão implementados em código, incluindo pareamento CLI, credencial por dispositivo, Secret Service, claim/source/renew/complete, lease, spool, loop contínuo, lock de modelo, backend Ollama loopback, systemd user service, status/unpair e gestão web de dispositivos. As pendências reais são operacionais e de UX:
+
+- substituir o bootstrap manual de access token do CLI por pareamento iniciado no worker e aprovado no site com código curto/uso único;
+- exercitar o Secret Service real em uma sessão CachyOS;
+- escolher e validar um modelo de visão com licença/proveniência adequadas;
+- executar inferência real e benchmark CPU no hardware alvo;
+- validar separadamente qualquer caminho Vulkan/ROCm pretendido, sem promovê-lo antes do benchmark;
+- executar end-to-end contra staging com documento privado controlado;
+- completar a UI da fila/estado de processamento desktop e o fluxo web de aprovação de pareamento;
+- registrar memória, latência, estabilidade, temperatura e qualidade antes de declarar prontidão operacional.
 
 ## Pendências imediatas
 
@@ -202,7 +232,7 @@ A fronteira backend está implementada em código: pareamento, credencial por di
 3. regenerar `src/lib/types/database.ts` pelo schema efetivamente implantado;
 4. validar PDFs grandes reais e dispositivos móveis/tablet;
 5. implantar e verificar Cloudflare Pages e headers no domínio final;
-6. implementar o worker desktop em etapa separada.
+6. concluir o pareamento web do Desktop OCR Worker e depois validar runtime/modelo/hardware em staging + CachyOS real.
 
 ## Regras de continuidade
 
