@@ -1,6 +1,6 @@
 # Runtime local do Desktop OCR Worker
 
-> Estado em 2026-08-10: a implementação local existe e está integrada ao plano de controle remoto, mas ainda não é considerada validada em hardware real. Este documento descreve o fluxo atual de desenvolvimento/instalação sem promover CPU, Vulkan, ROCm ou um modelo específico como pronto antes de benchmark real.
+> Estado em 2026-08-10: a implementação local existe e está integrada ao plano de controle remoto, inclusive com pareamento web por código de uso único. Ainda não é considerada validada em hardware real. Este documento descreve o fluxo atual de desenvolvimento/instalação sem promover CPU, Vulkan, ROCm ou um modelo específico como pronto antes de benchmark real.
 
 ## O que já existe
 
@@ -65,22 +65,33 @@ Nenhum modelo é declarado padrão ou recomendado neste documento até haver ben
 
 ## 3. Parear o dispositivo
 
-O pareamento precisa temporariamente de um access token válido da sessão web do usuário. Esse token é bootstrap efêmero e **não pertence ao runtime do worker**.
+O fluxo preferido não manipula access token do navegador no computador.
+
+1. abra **Configurações > Computadores** no Fichário Virtual;
+2. clique em **Gerar código**;
+3. copie o comando exibido pelo site e ajuste somente o rótulo do computador;
+4. execute o comando no host do worker;
+5. quando solicitado, cole o código de uso único.
+
+Formato do comando:
 
 ```bash
-fichario-worker-pair \
+fichario-worker-pair-code \
   https://SEU-PROJETO.supabase.co/functions/v1/desktop-ocr-worker \
   "Desktop principal"
 ```
 
-O comando solicita o access token em prompt oculto quando executado em TTY. Também aceita exatamente uma linha por stdin para automação controlada. Não passe o token em argv, variável de ambiente, `.env`, arquivo de configuração ou unit do systemd.
+O código não vai em `argv`: o CLI o lê em prompt ou aceita exatamente uma linha por stdin para automação controlada. O código possui 64 bits de aleatoriedade criptográfica, fica armazenado no banco apenas por SHA-256, expira em 10 minutos, é consumido uma única vez e a criação de um novo código invalida o anterior ainda não usado.
 
-Após o servidor criar o dispositivo:
+A credencial permanente do worker também não é produzida pelo navegador nem retornada pelo servidor nesse fluxo. O próprio worker gera 32 bytes aleatórios localmente, envia somente o SHA-256 ao endpoint de resgate e, após a confirmação:
 
-- a credencial do worker é gravada diretamente no Secret Service;
-- `device.json` guarda somente metadados não secretos;
-- o access token do navegador não é persistido;
-- se o keyring ou `device.json` falhar, o cliente tenta revogar imediatamente o dispositivo remoto recém-criado com um timeout independente e limpa qualquer segredo local parcial.
+- grava a credencial bruta diretamente no Secret Service;
+- grava em `device.json` somente metadados não secretos;
+- nunca recebe nem persiste access token da sessão web;
+- nunca envia a credencial permanente bruta ao servidor;
+- se a gravação local falhar depois do resgate remoto, limpa qualquer segredo local parcial e retorna `desktop_ocr_pair_local_commit_failed_revoke_required`; nesse caso o dispositivo remoto aparece na tela web e deve ser revogado por lá.
+
+O comando legado `fichario-worker-pair` permanece temporariamente disponível para compatibilidade e ainda usa um access token efêmero da sessão web. Não é mais o caminho recomendado para instalações novas.
 
 ## 4. Conferir estado local
 
@@ -109,20 +120,24 @@ systemctl --user enable --now fichario-ocr-worker.service
 
 Para acompanhar o serviço use as ferramentas normais do systemd. O próprio worker limita seus eventos a status/códigos sanitizados; IDs de job, texto OCR, caminhos e segredos não fazem parte do callback normal de status.
 
-## 6. Desparear
+## 6. Revogar ou desparear
+
+A tela **Configurações > Computadores** já permite revogar um dispositivo sem copiar token para o host. A revogação é user-scoped, invalida a credencial remota e reencaminha leases `processing` daquele dispositivo.
+
+O comando legado abaixo ainda existe para o fluxo combinado remoto + limpeza local:
 
 ```bash
 fichario-worker-unpair
 ```
 
-O comando solicita novamente um access token web efêmero. O fluxo é deliberadamente ordenado:
+Ele solicita um access token web efêmero e é deliberadamente ordenado:
 
 1. revoga o dispositivo remoto usando a identidade autenticada do usuário;
 2. o backend reencaminha leases `processing` daquele dispositivo;
 3. somente após o revoke remoto confirmado o cliente limpa a credencial no Secret Service;
 4. por último remove `device.json`.
 
-Se o revoke remoto falhar, o estado local permanece intacto. Se a limpeza local falhar depois de um revoke remoto, `device.json` é preservado para permitir repetir o revoke idempotente e concluir a limpeza.
+Uma próxima etapa de UX é oferecer limpeza local explícita após a revogação feita pelo site, eliminando a necessidade do token também nesse caminho. Até lá, revogar pelo site é suficiente para bloquear remotamente o worker; os metadados/segredo locais restantes ficam inutilizáveis pelo servidor.
 
 ## Fronteiras de segurança
 
@@ -135,11 +150,13 @@ O runtime local não deve receber ou armazenar:
 - imagem privada no SQLite;
 - segredo em argv, logs ou unit file.
 
-O endpoint de pareamento usa `service_role` somente no servidor para registrar a credencial derivada. A action de revoke roda pelo cliente autenticado do próprio usuário e pela RPC user-scoped `revoke_ocr_worker_device`.
+No pareamento preferido, `desktop-ocr-pair` fica público apenas no gateway para permitir `action: redeem`. A Edge Function aceita essa ação sem JWT somente com o código curto; a RPC de resgate é `service_role`-only, o código é verificado por hash/expiração/consumo e o digest da credencial local é o único material persistido. Os caminhos legados de pair/revoke continuam validando explicitamente o bearer token do usuário dentro da função.
+
+O endpoint `desktop-ocr-worker` usa esquema de autorização próprio por dispositivo e nunca recebe credenciais Gemini/Google.
 
 ## Estado de validação
 
-O código e os testes automatizados cobrem download verificado, spool/idempotência/dead letters, renovação de lease, polling/backoff/shutdown, Secret Service adapter, model lock, Ollama loopback, pareamento/rollback, revoke, systemd packaging e status agregado.
+O código e os testes automatizados cobrem download verificado, spool/idempotência/dead letters, renovação de lease, polling/backoff/shutdown, Secret Service adapter, model lock, Ollama loopback, pareamento legado/rollback, pareamento por código com segredo gerado localmente, revoke, systemd packaging, gestão web de dispositivos e status agregado.
 
 Ainda faltam antes de chamar o worker de operacionalmente pronto:
 
@@ -147,8 +164,9 @@ Ainda faltam antes de chamar o worker de operacionalmente pronto:
 - instalação e inferência real com modelo de visão escolhido;
 - benchmark CPU e, separadamente, qualquer caminho Vulkan/ROCm pretendido;
 - validação de memória, latência, estabilidade e temperatura no hardware alvo;
-- validação end-to-end contra staging com documento privado real/controlado;
-- UI web para pareamento, dispositivos, fila e revoke sem precisar manipular access token manualmente;
+- validação end-to-end do pareamento por código + processamento contra staging com documento privado real/controlado;
+- limpeza local pós-revogação web sem access token manual;
+- UI de fila/estado detalhado do processamento desktop;
 - decisão documentada de modelo padrão baseada em licença, proveniência, qualidade e benchmark.
 
 Até essas etapas serem concluídas, `readyToRun` significa apenas que o estado local necessário existe — não é um selo de benchmark ou produção.
