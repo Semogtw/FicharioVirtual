@@ -121,33 +121,7 @@ jobs:
           ! grep -R -F 'sb_publishable_test_key_1234567890' build
 
       - name: Package static artifact
-        run: |
-          set -euo pipefail
-          rm -rf fichario-deploy
-          mkdir -p fichario-deploy/site fichario-deploy/source fichario-deploy/checks
-          cp -a build/. fichario-deploy/site/
-          cp package.json pnpm-lock.yaml fichario-deploy/source/
-          cp \
-            tools/checks/check-deployed-site.mjs \
-            tools/checks/deployment-contract.mjs \
-            tools/checks/validate-pages-deploy-output.mjs \
-            fichario-deploy/checks/
-          {
-            echo 'schema_version=2'
-            echo 'source_repository=Semogtw/FicharioVirtual'
-            echo "source_commit=${GITHUB_SHA}"
-            echo 'target_environment=staging'
-            echo "created_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            echo "node_version=$(node --version)"
-            echo "pnpm_version=$(pnpm --version)"
-            echo "package_sha256=$(sha256sum fichario-deploy/source/package.json | cut -d' ' -f1)"
-            echo "lock_sha256=$(sha256sum fichario-deploy/source/pnpm-lock.yaml | cut -d' ' -f1)"
-          } > fichario-deploy/DEPLOYMENT-MANIFEST.txt
-          (
-            cd fichario-deploy
-            find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
-            sha256sum -c SHA256SUMS
-          )
+        run: bash tools/deploy/package-static-artifact.sh fichario-deploy
 
       - name: Verify packaged deployment artifact
         run: pnpm test:deployment:artifact -- fichario-deploy
