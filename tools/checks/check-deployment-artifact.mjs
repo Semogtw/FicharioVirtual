@@ -12,6 +12,7 @@ const SOURCE_LOCK_FILE = 'source/pnpm-lock.yaml';
 const REQUIRED_SOURCE_FILES = Object.freeze([SOURCE_PACKAGE_FILE, SOURCE_LOCK_FILE]);
 const REQUIRED_CHECK_FILES = Object.freeze([
 	'checks/check-deployed-site.mjs',
+	'checks/check-deployment-artifact.mjs',
 	'checks/deployment-contract.mjs',
 	'checks/validate-pages-deploy-output.mjs'
 ]);
@@ -80,7 +81,7 @@ async function listFiles(root) {
 
 /**
  * @param {string} source
- * @returns {{ schemaVersion: 2; sourceCommit: string; targetEnvironment: 'staging' | 'production'; packageSha256: string; lockSha256: string }}
+ * @returns {{ schemaVersion: 2; sourceCommit: string; targetEnvironment: 'staging'; packageSha256: string; lockSha256: string }}
  */
 function parseManifest(source) {
 	/** @type {Map<string, string>} */
@@ -114,9 +115,8 @@ function parseManifest(source) {
 	if (!/^[0-9a-f]{40}$/.test(sourceCommit)) {
 		throw contractFailure('deployment manifest source commit is invalid');
 	}
-	const targetEnvironment = values.get('target_environment') ?? '';
-	if (targetEnvironment !== 'staging' && targetEnvironment !== 'production') {
-		throw contractFailure('deployment manifest target environment is invalid');
+	if (values.get('target_environment') !== 'staging') {
+		throw contractFailure('deployment manifest must target staging');
 	}
 	const createdUtc = values.get('created_utc') ?? '';
 	const parsedCreatedUtc = new Date(createdUtc);
@@ -149,7 +149,7 @@ function parseManifest(source) {
 	return {
 		schemaVersion: 2,
 		sourceCommit,
-		targetEnvironment,
+		targetEnvironment: 'staging',
 		packageSha256,
 		lockSha256
 	};
@@ -234,7 +234,7 @@ function assertLockfileSnapshot(source) {
 
 /**
  * @param {string} inputPath
- * @returns {Promise<{ schemaVersion: 2; sourceCommit: string; targetEnvironment: 'staging' | 'production'; verifiedFiles: number }>}
+ * @returns {Promise<{ schemaVersion: 2; sourceCommit: string; targetEnvironment: 'staging'; verifiedFiles: number }>}
  */
 export async function verifyDeploymentArtifact(inputPath) {
 	const root = resolve(inputPath);
@@ -251,8 +251,9 @@ export async function verifyDeploymentArtifact(inputPath) {
 		...REQUIRED_CHECK_FILES,
 		...REQUIRED_SITE_FILES.map((file) => `site/${file}`)
 	]) {
-		if (!files.includes(required))
+		if (!files.includes(required)) {
 			throw contractFailure(`artifact is missing required file: ${required}`);
+		}
 	}
 	for (const file of files) {
 		if (file.startsWith('site/') && [MANIFEST_FILE, CHECKSUM_FILE].includes(posix.basename(file))) {
@@ -323,7 +324,7 @@ async function runCli() {
 	}
 	const result = await verifyDeploymentArtifact(artifactPath);
 	console.log(
-		`Deployment artifact contract: PASS (${result.verifiedFiles} files, ${result.targetEnvironment}, ${result.sourceCommit})`
+		`Deployment artifact contract: PASS (${result.verifiedFiles} files, staging, ${result.sourceCommit})`
 	);
 }
 
