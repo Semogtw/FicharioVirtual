@@ -2,6 +2,12 @@ name: Verify OCR staging
 
 on:
   workflow_call:
+    inputs:
+      target_sha:
+        description: Validated commit to verify in staging
+        required: false
+        type: string
+        default: ''
   workflow_dispatch:
 
 permissions:
@@ -24,6 +30,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          ref: ${{ inputs.target_sha != '' && inputs.target_sha || github.sha }}
           persist-credentials: false
 
       - name: Initialize sanitized OCR report
