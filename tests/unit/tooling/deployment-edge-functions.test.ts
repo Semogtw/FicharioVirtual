@@ -23,10 +23,11 @@ const requiredOcrMigrations = [
 
 describe('Edge Function deployment contract', () => {
 	it('keeps every versioned application Edge Function covered by config and the all-functions deploy flow', () => {
-		expect(versionedFunctions).toHaveLength(10);
+		expect(versionedFunctions).toHaveLength(11);
 		for (const functionName of versionedFunctions) {
 			expect(config).toContain(`[functions.${functionName}]`);
 		}
+		expect(config).toContain('[functions.semantic-coverage]\nverify_jwt = true');
 		expect(staging).toContain('supabase functions deploy --project-ref "$STAGING_SUPABASE_PROJECT_REF"');
 		expect(staging).toContain('supabase functions list --project-ref "$STAGING_SUPABASE_PROJECT_REF"');
 	});
