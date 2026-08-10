@@ -53,11 +53,11 @@ describe('Supabase staging verification workflow', () => {
 		const script = read('tools/checks/check-desktop-ocr-pairing-staging.mjs');
 		const packageJson = read('package.json');
 
-		expect(script).toContain("apikey: publishableKey");
+		expect(script).toContain('apikey: publishableKey');
 		expect(script).toContain("'Content-Type': 'application/json'");
 		expect(script).not.toContain('Authorization');
 		expect(script.toLowerCase()).not.toContain('service_role');
-		expect(script).toContain("replayResponse.status !== 409");
+		expect(script).toContain('replayResponse.status !== 409');
 		expect(script).toContain("'credential' in redeemed");
 		expect(script).toContain("client.rpc('delete_ocr_worker_device'");
 		expect(packageJson).toContain('"test:staging:desktop-ocr-pairing"');
