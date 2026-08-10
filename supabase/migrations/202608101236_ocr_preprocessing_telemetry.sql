@@ -38,7 +38,7 @@ alter table public.ocr_provider_page_metrics
 create or replace function public.fill_ocr_preprocessing_telemetry()
 returns trigger
 language plpgsql
-security definer
+security invoker
 set search_path = ''
 as $$
 begin
