@@ -31,7 +31,7 @@ export type PageRecord = {
 	ocr_raw_text: string | null;
 	corrected_text: string | null;
 	extraction_source: ExtractionSource | null;
-	ocr_word_geometry: Json;
+	ocr_word_geometry?: Json;
 	warnings: Json;
 	status: ProcessingStatus;
 	was_manually_reviewed: boolean;
@@ -79,7 +79,7 @@ export function mapPageRecord(record: PageRecord): PageDetail {
 		...sources,
 		text: effectivePageText(sources),
 		extractionSource: record.extraction_source,
-		wordGeometry: parseWordGeometry(record.ocr_word_geometry),
+		wordGeometry: parseWordGeometry(record.ocr_word_geometry ?? []),
 		warnings: safeWarnings(record.warnings),
 		status: record.status,
 		wasManuallyReviewed: record.was_manually_reviewed,
