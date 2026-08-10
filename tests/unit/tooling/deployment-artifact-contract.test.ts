@@ -15,8 +15,10 @@ function createFixture() {
 	const root = mkdtempSync(join(tmpdir(), 'fichario-deployment-artifact-'));
 	const site = join(root, 'site');
 	const source = join(root, 'source');
+	const checks = join(root, 'checks');
 	mkdirSync(site);
 	mkdirSync(source);
+	mkdirSync(checks);
 	const packageSource = '{"name":"fichario-virtual","version":"0.1.0","private":true}\n';
 	const lockSource = "lockfileVersion: '9.0'\nimporters:\n  .: {}\n";
 	const files = new Map<string, string | Buffer>([
@@ -37,6 +39,8 @@ function createFixture() {
 		],
 		['source/package.json', packageSource],
 		['source/pnpm-lock.yaml', lockSource],
+		['checks/check-deployed-site.mjs', 'import "./deployment-contract.mjs";\n'],
+		['checks/deployment-contract.mjs', 'export const deploymentContract = true;\n'],
 		['site/200.html', '<!doctype html><title>Fichário</title>'],
 		['site/_headers', '/*\n  X-Content-Type-Options: nosniff\n'],
 		['site/manifest.webmanifest', '{"name":"Fichário"}'],
@@ -92,8 +96,15 @@ describe('deployable artifact verification', () => {
 			schemaVersion: 2,
 			sourceCommit: '0123456789abcdef0123456789abcdef01234567',
 			targetEnvironment: 'staging',
-			verifiedFiles: 8
+			verifiedFiles: 10
 		});
+	});
+
+	it('requires the post-deploy verifier to travel with the immutable artifact', async () => {
+		const root = createFixture();
+		rmSync(join(root, 'checks', 'check-deployed-site.mjs'));
+
+		await expect(verifyDeploymentArtifact(root)).rejects.toThrow(/checks\/check-deployed-site/);
 	});
 
 	it('rejects an obsolete manifest schema after source snapshots became mandatory', async () => {
