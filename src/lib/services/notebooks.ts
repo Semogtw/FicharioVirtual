@@ -8,6 +8,7 @@ import {
 	type UpdateNotebookInput
 } from '$lib/domain/notebook';
 import type { Database } from '$lib/types/database';
+import type { DatabaseWithNotebookBanners } from '$lib/types/database-notebook-banner-extensions';
 import { isIsoTimestamp } from '$lib/validation/iso-timestamp';
 import { getSupabaseClient } from './supabase';
 
@@ -164,7 +165,8 @@ export async function createNotebook(
 	const resolvedClient = clientOrDefault(client);
 	const userId = await currentUserId(resolvedClient);
 	try {
-		const { data, error } = await resolvedClient
+		const bannerClient = resolvedClient as unknown as SupabaseClient<DatabaseWithNotebookBanners>;
+		const { data, error } = await bannerClient
 			.from('notebooks')
 			.insert({
 				user_id: userId,
