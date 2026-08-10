@@ -21,12 +21,12 @@ describe('Supabase staging migration deploy workflow', () => {
 
 	it('compares the validated SHA with the last successful staging deployment', () => {
 		expect(source).toContain('environment=staging-deploy&per_page=20');
-		expect(source).toContain("--jq '.[0].state // \"\"'");
+		expect(source).toContain('--jq \'.[0].state // ""\'');
 		expect(source).toContain('git merge-base --is-ancestor "$base_sha" "$TARGET_SHA"');
 		expect(source).toContain('git diff --quiet "$base_sha" "$TARGET_SHA" --');
 		expect(source).toContain('supabase');
 		expect(source).toContain('.github/workflows/verify-ocr-staging.yml');
-		expect(source).toContain("deploy_required: ${{ steps.changes.outputs.required }}");
+		expect(source).toContain('deploy_required: ${{ steps.changes.outputs.required }}');
 	});
 
 	it('pins the same immutable Supabase CLI action and CLI version used by current-head validation', () => {
