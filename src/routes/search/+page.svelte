@@ -8,14 +8,20 @@
 	import { highlightSnippet } from '$lib/search/highlight';
 	import { listNotebooks } from '$lib/services/notebooks';
 	import { RequestVersion } from '$lib/services/request-version';
-	import { searchPages, type SearchResult } from '$lib/services/search';
+	import {
+		recordSemanticSearchConsent,
+		searchPagesHybrid,
+		type SemanticSearchAnalysis,
+		type SemanticSearchResult
+	} from '$lib/services/semantic-search';
 
 	const pageSize = 30;
 	const requests = new RequestVersion();
 	const notebookRequests = new RequestVersion();
 	let query = $state('');
 	let notebookId = $state('');
-	let results = $state<readonly SearchResult[]>([]);
+	let results = $state<readonly SemanticSearchResult[]>([]);
+	let analysis = $state<SemanticSearchAnalysis | null>(null);
 	let notebooks = $state<readonly NotebookSummary[]>([]);
 	let notebookLoading = $state(true);
 	let notebookError = $state<string | null>(null);
@@ -23,6 +29,9 @@
 	let loadingMore = $state(false);
 	let error = $state<string | null>(null);
 	let hasMore = $state(false);
+	let semanticConsentChecked = $state(false);
+	let semanticConsentSaving = $state(false);
+	let semanticConsentError = $state<string | null>(null);
 	let timer: ReturnType<typeof setTimeout> | null = null;
 	let controller: AbortController | null = null;
 
@@ -40,6 +49,7 @@
 			requests.next();
 			cancelPending();
 			results = [];
+			analysis = null;
 			hasMore = false;
 			error = null;
 			loading = false;
@@ -54,15 +64,16 @@
 		else loadingMore = true;
 		error = null;
 		try {
-			const pageResults = await searchPages(normalized, {
+			const response = await searchPagesHybrid(normalized, {
 				notebookId: notebookId || null,
 				limit: pageSize,
 				offset: reset ? 0 : results.length,
 				signal: activeController.signal
 			});
 			if (!requests.isCurrent(version)) return;
-			results = reset ? pageResults : Object.freeze([...results, ...pageResults]);
-			hasMore = pageResults.length === pageSize;
+			results = reset ? response.results : Object.freeze([...results, ...response.results]);
+			analysis = response.analysis;
+			hasMore = response.hasMore;
 		} catch (caught) {
 			if (caught instanceof DOMException && caught.name === 'AbortError') return;
 			if (requests.isCurrent(version)) error = 'Não foi possível concluir esta pesquisa agora.';
@@ -78,7 +89,39 @@
 	function schedule() {
 		cancelPending();
 		const version = requests.next();
-		timer = setTimeout(() => void run(true, version), 220);
+		timer = setTimeout(() => void run(true, version), 650);
+	}
+
+	async function activateSemanticSearch() {
+		if (!semanticConsentChecked || semanticConsentSaving) return;
+		semanticConsentSaving = true;
+		semanticConsentError = null;
+		try {
+			await recordSemanticSearchConsent();
+			semanticConsentChecked = false;
+			await run(true);
+		} catch {
+			semanticConsentError = 'Não foi possível ativar a busca semântica agora.';
+		} finally {
+			semanticConsentSaving = false;
+		}
+	}
+
+	function semanticStatus() {
+		if (!analysis || analysis.reason === 'consent_required') return null;
+		if (analysis.mode === 'hybrid') {
+			const index = analysis.index;
+			if (!index) return 'Busca textual + semântica ativa.';
+			return index.complete
+				? `Busca textual + semântica ativa · ${index.indexedPages} páginas no índice.`
+				: `Busca textual + semântica ativa · ${index.indexedPages}/${index.totalPages} páginas indexadas; o restante continua coberto pela busca textual.`;
+		}
+		if (analysis.reason === 'query_too_short') return 'Consultas muito curtas usam somente a busca textual.';
+		if (analysis.reason === 'semantic_quota_or_rate_limit') return 'Busca textual ativa; a cota semântica está temporariamente indisponível.';
+		if (analysis.reason === 'semantic_provider_unavailable') return 'Busca textual ativa; o provedor semântico está temporariamente indisponível.';
+		if (analysis.reason === 'semantic_window_exhausted') return 'Resultados mais profundos continuam pela busca textual.';
+		if (analysis.reason === 'semantic_function_unavailable') return 'Busca textual ativa; a camada semântica ainda não está disponível neste ambiente.';
+		return null;
 	}
 
 	async function loadNotebookOptions(version = notebookRequests.next()) {
@@ -122,11 +165,12 @@
 
 <div class="page" aria-labelledby="page-title">
 	<header>
-		<p class="eyebrow">Busca textual</p>
+		<p class="eyebrow">Busca híbrida</p>
 		<h1 id="page-title">Pesquisar no fichário</h1>
 		<p>
-			Encontre palavras aproximadas, títulos e conteúdo corrigido sem enviar a consulta a outro
-			serviço.
+			Combine palavras, tolerância a OCR e relações de significado. Quando a busca semântica estiver
+			ativa, a consulta e pequenos trechos das suas páginas podem ser enviados ao Gemini para gerar
+			embeddings; se essa camada falhar, a pesquisa textual continua funcionando.
 		</p>
 	</header>
 
@@ -137,7 +181,7 @@
 				type="search"
 				bind:value={query}
 				maxlength="200"
-				placeholder="Ex.: fotossíntese, mitose, capítulo 4"
+				placeholder="Ex.: conservação de energia, fotossíntese, capítulo 4"
 				oninput={schedule}
 			/>
 		</label>
@@ -168,6 +212,33 @@
 		</div>
 	{/if}
 
+	{#if analysis?.reason === 'consent_required'}
+		<section class="semantic-consent" aria-labelledby="semantic-consent-title">
+			<div>
+				<strong id="semantic-consent-title">Ativar relações de significado</strong>
+				<p>
+					A pesquisa atual continua textual. Para usar embeddings, autorize o envio da consulta e de
+					pequenos trechos das páginas ao Gemini. O índice é privado por usuário e não substitui seus
+					documentos originais.
+				</p>
+				<label class="consent-check">
+					<input type="checkbox" bind:checked={semanticConsentChecked} />
+					<span>Concordo em usar meus textos para gerar embeddings de busca.</span>
+				</label>
+				{#if semanticConsentError}<p class="consent-error" role="alert">{semanticConsentError}</p>{/if}
+			</div>
+			<Button
+				label={semanticConsentSaving ? 'Ativando…' : 'Ativar busca semântica'}
+				disabled={!semanticConsentChecked || semanticConsentSaving}
+				onclick={() => void activateSemanticSearch()}
+			/>
+		</section>
+	{:else if semanticStatus()}
+		<p class:semantic-active={analysis?.mode === 'hybrid'} class="semantic-status" role="status">
+			{semanticStatus()}
+		</p>
+	{/if}
+
 	{#if error}
 		<div class="error" role="alert">
 			<p>{error}</p>
@@ -178,12 +249,12 @@
 	{:else if query.trim().length === 0}
 		<EmptyState
 			title="Digite algo para pesquisar"
-			description="A busca considera texto nativo de PDFs, transcrições e correções manuais."
+			description="A busca considera texto nativo de PDFs, transcrições, correções manuais e, quando ativada, proximidade semântica."
 		/>
 	{:else if results.length === 0}
 		<EmptyState
 			title="Nenhuma página encontrada"
-			description="Tente uma palavra menor, remova filtros ou verifique se o documento já terminou de processar."
+			description="Tente reformular a ideia, remova filtros ou verifique se o documento já terminou de processar."
 		/>
 	{:else}
 		<section class="results" aria-labelledby="results-title">
@@ -201,6 +272,11 @@
 								<strong>{result.documentTitle}</strong>
 								<span>Página {result.pageNumber}</span>
 								{#if result.notebookName}<span>{result.notebookName}</span>{/if}
+								{#if result.matchMode === 'semantic'}
+									<span class="match-badge">Por sentido</span>
+								{:else if result.matchMode === 'hybrid'}
+									<span class="match-badge">Texto + sentido</span>
+								{/if}
 							</div>
 							<p>
 								{#each highlightSnippet(result.excerpt, query) as part}
@@ -254,7 +330,7 @@
 	}
 
 	header > p:last-child {
-		max-width: 46rem;
+		max-width: 52rem;
 		margin-bottom: 0;
 		color: var(--muted);
 		line-height: 1.6;
@@ -270,7 +346,7 @@
 		background: var(--surface);
 	}
 
-	input {
+	input[type='search'] {
 		width: 100%;
 		min-height: 2.75rem;
 		padding: 0.65rem 0.75rem;
@@ -278,6 +354,60 @@
 		border-radius: var(--radius-sm);
 		background: var(--surface-strong);
 		color: var(--ink);
+	}
+
+	.semantic-consent {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1.2rem;
+		padding: 1rem;
+		border: 1px solid var(--line);
+		border-left: 0.3rem solid var(--archive);
+		border-radius: var(--radius-sm);
+		background: rgb(83 106 91 / 7%);
+	}
+
+	.semantic-consent strong {
+		font-family: var(--font-heading);
+		font-size: 1.15rem;
+	}
+
+	.semantic-consent p {
+		max-width: 52rem;
+		margin: 0.35rem 0 0;
+		color: var(--muted);
+		line-height: 1.5;
+	}
+
+	.consent-check {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.55rem;
+		margin-top: 0.8rem;
+		font-size: 0.88rem;
+	}
+
+	.consent-check input {
+		margin-top: 0.15rem;
+	}
+
+	.semantic-consent .consent-error {
+		color: var(--danger);
+	}
+
+	.semantic-status {
+		margin: 0;
+		padding: 0.65rem 0.8rem;
+		border-left: 0.22rem solid var(--accent);
+		background: rgb(166 94 67 / 7%);
+		color: var(--muted);
+		font-size: 0.83rem;
+	}
+
+	.semantic-status.semantic-active {
+		border-left-color: var(--archive);
+		background: rgb(83 106 91 / 7%);
 	}
 
 	.results-heading {
@@ -338,6 +468,15 @@
 	.result-meta span {
 		color: var(--muted);
 		font-size: 0.78rem;
+	}
+
+	.result-meta .match-badge {
+		padding: 0.15rem 0.45rem;
+		border: 1px solid rgb(83 106 91 / 25%);
+		border-radius: 999px;
+		background: rgb(83 106 91 / 8%);
+		color: var(--archive);
+		font-weight: 700;
 	}
 
 	li p {
@@ -402,6 +541,11 @@
 	@media (max-width: 760px) {
 		.search-panel {
 			grid-template-columns: 1fr;
+		}
+
+		.semantic-consent {
+			align-items: stretch;
+			flex-direction: column;
 		}
 	}
 </style>
