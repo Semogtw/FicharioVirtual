@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const edge = readFileSync('supabase/functions/semantic-search/index.ts', 'utf8');
+const indexer = readFileSync('supabase/functions/_shared/semantic-indexer.ts', 'utf8');
+const queryCache = readFileSync('supabase/functions/_shared/semantic-query-cache.ts', 'utf8');
 const migration = readFileSync(
 	'supabase/migrations/202608101501_global_semantic_search_consent.sql',
 	'utf8'
@@ -9,7 +11,9 @@ const migration = readFileSync(
 
 describe('global semantic search edge contract', () => {
 	it('retrieves with embeddings instead of only classifying lexical candidates', () => {
-		expect(edge).toContain("taskType: 'RETRIEVAL_QUERY'");
+		expect(edge).toContain('getSemanticQueryEmbedding');
+		expect(queryCache).toContain("taskType: 'RETRIEVAL_QUERY'");
+		expect(queryCache).toContain("operation: 'query_embedding'");
 		expect(edge).toContain("supabase.rpc('search_pages_semantic'");
 		expect(edge).toContain("supabase.rpc('search_pages'");
 		expect(edge).toContain('mergeCandidates(lexical, semantic)');
@@ -18,16 +22,18 @@ describe('global semantic search edge contract', () => {
 	});
 
 	it('reuses the coverage semantic index and keeps opportunistic indexing page-atomic', () => {
-		expect(edge).toContain("supabase.rpc('list_pages_needing_semantic_index'");
-		expect(edge).toContain("'replace_page_semantic_chunks'");
-		expect(edge).toContain('flattened.length + chunks.length > MAX_INDEX_CHUNKS_PER_RUN');
+		expect(edge).toContain('indexNextSemanticBatch');
+		expect(indexer).toContain("supabase.rpc('list_pages_needing_semantic_index'");
+		expect(indexer).toContain("'replace_page_semantic_chunks'");
+		expect(indexer).toContain("taskType: 'RETRIEVAL_DOCUMENT'");
+		expect(indexer).toContain("operation: 'document_embedding'");
 		expect(edge).toContain("surface: 'search'");
 	});
 
 	it('requires dedicated consent before sending query or page text to Gemini', () => {
-		const consentCheck = edge.indexOf("supabase.rpc('has_search_semantic_consent'");
-		const documentEmbedding = edge.indexOf('indexedThisRun = await indexPages');
-		const queryEmbedding = edge.indexOf("taskType: 'RETRIEVAL_QUERY'");
+		const consentCheck = edge.indexOf("'has_search_semantic_consent'");
+		const documentEmbedding = edge.indexOf('indexNextSemanticBatch({');
+		const queryEmbedding = edge.indexOf('getSemanticQueryEmbedding({');
 		expect(consentCheck).toBeGreaterThan(0);
 		expect(documentEmbedding).toBeGreaterThan(consentCheck);
 		expect(queryEmbedding).toBeGreaterThan(consentCheck);
