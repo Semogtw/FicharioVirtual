@@ -51,11 +51,7 @@ function failureStatus(cause: unknown) {
 	return 'index_error';
 }
 
-async function recordFailure(
-	supabase: SupabaseClient,
-	page: PendingPage,
-	status: string
-) {
+async function recordFailure(supabase: SupabaseClient, page: PendingPage, status: string) {
 	try {
 		await supabase.rpc('record_semantic_index_failure', {
 			target_page_id: page.page_id,
@@ -77,7 +73,7 @@ async function indexPage(input: {
 	const chunks = chunkSemanticText(input.page.source_text);
 	if (chunks.length === 0) return { indexed: false, storedChunks: 0 };
 
-	const response = await requestGeminiEmbeddingsWithTelemetry({
+	const vectors = await requestGeminiEmbeddingsWithTelemetry({
 		supabase: input.supabase,
 		apiKey: input.apiKey,
 		model: SEMANTIC_EMBEDDING_MODEL,
@@ -92,15 +88,19 @@ async function indexPage(input: {
 		...(input.signal ? { signal: input.signal } : {})
 	});
 
-	if (response.embeddings.length !== chunks.length) {
+	if (vectors.length !== chunks.length) {
 		throw new Error('semantic_embedding_count_mismatch');
 	}
 
-	const chunkPayload = chunks.map((chunk, index) => ({
-		chunk_index: chunk.index,
-		chunk_text: chunk.text,
-		embedding_text: embeddingVectorText(response.embeddings[index])
-	}));
+	const chunkPayload = chunks.map((chunk, index) => {
+		const vector = vectors[index];
+		if (!vector) throw new Error('semantic_embedding_missing');
+		return {
+			chunk_index: chunk.index,
+			chunk_text: chunk.text,
+			embedding_text: embeddingVectorText(vector)
+		};
+	});
 	const { data, error } = await input.supabase.rpc('replace_page_semantic_chunks', {
 		target_page_id: input.page.page_id,
 		target_model: SEMANTIC_EMBEDDING_MODEL,
@@ -175,10 +175,7 @@ export async function indexNextSemanticBatch(input: {
 	};
 }
 
-export async function semanticIndexStats(
-	supabase: SupabaseClient,
-	notebookId: string | null = null
-) {
+export async function semanticIndexStats(supabase: SupabaseClient, notebookId: string | null = null) {
 	const { data, error } = await supabase.rpc('semantic_index_stats', {
 		target_model: SEMANTIC_EMBEDDING_MODEL,
 		notebook_filter: notebookId
