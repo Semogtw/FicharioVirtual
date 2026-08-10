@@ -81,7 +81,9 @@ jobs:
           if git diff --quiet "$base_sha" "$TARGET_SHA" -- \
             supabase \
             .github/workflows/deploy-supabase-staging.yml \
+            .github/workflows/verify-supabase-staging.yml \
             .github/workflows/verify-ocr-staging.yml \
+            tools/checks/check-supabase-staging.mjs \
             tools/checks/check-ocr-staging.mjs; then
             echo "required=false" >> "$GITHUB_OUTPUT"
           else
@@ -141,9 +143,16 @@ jobs:
       - name: Confirm deployed Edge Functions
         run: supabase functions list --project-ref "$STAGING_SUPABASE_PROJECT_REF"
 
-  verify-ocr:
+  verify-supabase:
     needs: [resolve, deploy]
     if: needs.deploy.result == 'success'
+    uses: ./.github/workflows/verify-supabase-staging.yml
+    with:
+      target_sha: ${{ needs.resolve.outputs.target_sha }}
+
+  verify-ocr:
+    needs: [resolve, deploy, verify-supabase]
+    if: needs.deploy.result == 'success' && needs.verify-supabase.result == 'success'
     uses: ./.github/workflows/verify-ocr-staging.yml
     with:
       target_sha: ${{ needs.resolve.outputs.target_sha }}
