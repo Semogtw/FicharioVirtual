@@ -63,7 +63,12 @@ function config(): WorkerConfig | null {
 	const model = Deno.env.get('OCR_MODEL_PRIMARY');
 	const promptVersion = Number(Deno.env.get('OCR_PROMPT_VERSION') ?? '1');
 	const maxPages = envInteger('OCR_BACKGROUND_MAX_PAGES', 8, 1, 20);
-	const maxBytes = envInteger('OCR_BACKGROUND_MAX_BYTES', 8 * 1024 * 1024, 1024 * 1024, 12 * 1024 * 1024);
+	const maxBytes = envInteger(
+		'OCR_BACKGROUND_MAX_BYTES',
+		8 * 1024 * 1024,
+		1024 * 1024,
+		12 * 1024 * 1024
+	);
 	const requestTimeoutMs = envInteger('OCR_BACKGROUND_TIMEOUT_MS', 90_000, 10_000, 120_000);
 	if (
 		!supabaseUrl ||
@@ -124,14 +129,23 @@ function parseCandidate(value: unknown): Candidate | null {
 	const documentKind = row.document_kind;
 	const documentStoragePath = row.document_storage_path;
 	if (
-		typeof userId !== 'string' || !UUID.test(userId) ||
-		typeof jobId !== 'string' || !UUID.test(jobId) ||
-		typeof pageId !== 'string' || !UUID.test(pageId) ||
-		typeof documentId !== 'string' || !UUID.test(documentId) ||
-		typeof pageNumber !== 'number' || !Number.isInteger(pageNumber) || pageNumber < 1 ||
-		typeof attemptCount !== 'number' || !Number.isInteger(attemptCount) || attemptCount < 0 ||
+		typeof userId !== 'string' ||
+		!UUID.test(userId) ||
+		typeof jobId !== 'string' ||
+		!UUID.test(jobId) ||
+		typeof pageId !== 'string' ||
+		!UUID.test(pageId) ||
+		typeof documentId !== 'string' ||
+		!UUID.test(documentId) ||
+		typeof pageNumber !== 'number' ||
+		!Number.isInteger(pageNumber) ||
+		pageNumber < 1 ||
+		typeof attemptCount !== 'number' ||
+		!Number.isInteger(attemptCount) ||
+		attemptCount < 0 ||
 		(batchId !== null && (typeof batchId !== 'string' || !UUID.test(batchId))) ||
-		(temporaryImagePath !== null && (typeof temporaryImagePath !== 'string' || temporaryImagePath.length < 1)) ||
+		(temporaryImagePath !== null &&
+			(typeof temporaryImagePath !== 'string' || temporaryImagePath.length < 1)) ||
 		(documentKind !== 'image' && documentKind !== 'pdf') ||
 		(documentStoragePath !== null && typeof documentStoragePath !== 'string')
 	) {
@@ -170,14 +184,21 @@ async function runAsUser(
 	});
 	if (error) throw new Error(`Background OCR operation failed: ${operation}`);
 	const result = record(data);
-	if (!result || result.ok !== true) throw new Error(`Background OCR operation rejected: ${operation}`);
+	if (!result || result.ok !== true)
+		throw new Error(`Background OCR operation rejected: ${operation}`);
 	return result.value;
 }
 
 async function failClaim(
 	admin: ReturnType<typeof createClient>,
 	claimed: ClaimedCandidate,
-	failure: { code: string; message: string; retryable: boolean; failedAt: string; nextRetryAt: string | null }
+	failure: {
+		code: string;
+		message: string;
+		retryable: boolean;
+		failedAt: string;
+		nextRetryAt: string | null;
+	}
 ) {
 	await runAsUser(admin, claimed.candidate.userId, 'fail', {
 		pageId: claimed.candidate.pageId,
@@ -216,10 +237,12 @@ async function candidates(admin: ReturnType<typeof createClient>, limit: number)
 
 async function reconcile(admin: ReturnType<typeof createClient>, batchIds: readonly string[]) {
 	if (batchIds.length === 0) return;
-	await admin.rpc('reconcile_background_ocr_batches', {
-		target_batch_ids: [...new Set(batchIds)],
-		reconciled_at: new Date().toISOString()
-	}).catch(() => undefined);
+	await admin
+		.rpc('reconcile_background_ocr_batches', {
+			target_batch_ids: [...new Set(batchIds)],
+			reconciled_at: new Date().toISOString()
+		})
+		.catch(() => undefined);
 }
 
 async function drainOnce(settings: WorkerConfig) {
@@ -231,14 +254,15 @@ async function drainOnce(settings: WorkerConfig) {
 	if (!first) return false;
 
 	const selected = available
-		.filter((candidate) =>
-			candidate.userId === first.userId &&
-			candidate.documentId === first.documentId &&
-			candidate.batchId === first.batchId
+		.filter(
+			(candidate) =>
+				candidate.userId === first.userId &&
+				candidate.documentId === first.documentId &&
+				candidate.batchId === first.batchId
 		)
 		.slice(0, settings.maxPages);
 	const claimed: ClaimedCandidate[] = [];
-	const batchIds = selected.flatMap((candidate) => candidate.batchId ? [candidate.batchId] : []);
+	const batchIds = selected.flatMap((candidate) => (candidate.batchId ? [candidate.batchId] : []));
 
 	for (const candidate of selected) {
 		const value = await runAsUser(admin, candidate.userId, 'claim', {
@@ -261,7 +285,8 @@ async function drainOnce(settings: WorkerConfig) {
 	const providerClaims = new Map<string, ClaimedCandidate>();
 	let aggregateBytes = 0;
 	for (const entry of claimed) {
-		const sourcePath = entry.candidate.temporaryImagePath ??
+		const sourcePath =
+			entry.candidate.temporaryImagePath ??
 			(entry.candidate.documentKind === 'image' ? entry.candidate.documentStoragePath : null);
 		if (!sourcePath || sourcePath.startsWith('drive:')) {
 			await failClaim(admin, entry, {
@@ -467,7 +492,9 @@ Deno.serve(async (request) => {
 	if (request.method !== 'POST') return response(405, { code: 'method_not_allowed' });
 	const settings = config();
 	if (!settings) return response(503, { code: 'ocr_background_not_configured' });
-	if (!(await secretMatches(request.headers.get('X-Fichario-Worker-Key'), settings.serviceRoleKey))) {
+	if (
+		!(await secretMatches(request.headers.get('X-Fichario-Worker-Key'), settings.serviceRoleKey))
+	) {
 		return response(401, { code: 'worker_authentication_required' });
 	}
 
