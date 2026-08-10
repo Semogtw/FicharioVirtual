@@ -98,6 +98,7 @@ const prompt = `Você é um transcritor literal de anotações acadêmicas.
 Transcreva todo texto visível da imagem em português, preservando ordem de leitura, títulos, listas, quebras relevantes, símbolos e fórmulas em texto quando possível.
 Não resuma, não explique, não complete lacunas e não adivinhe palavras ilegíveis.
 Quando algo não puder ser lido com segurança, mantenha o trecho mais conservador possível e adicione um aviso curto.
+Quando o contrato pedir wordGeometry, localize cada palavra visível usando a mesma grafia retornada na transcrição. Cada caixa usa coordenadas inteiras normalizadas de 0 a 10000, origem no canto superior esquerdo, no formato compacto esquerda,topo,direita,base|palavra. Não invente caixas para texto não visível e não inclua comentários na geometria.
 Retorne exclusivamente JSON válido e cumpra exatamente o contrato JSON descrito na instrução da requisição.`;
 
 const warningSchema = {
@@ -139,6 +140,16 @@ const responseSchema = {
 	required: ['text', 'warnings']
 } as const;
 
+const wordGeometrySchema = {
+	type: 'array',
+	maxItems: 20_000,
+	items: {
+		type: 'string',
+		description:
+			'Uma palavra visível no formato esquerda,topo,direita,base|palavra; coordenadas inteiras entre 0 e 10000, origem superior esquerda.'
+	}
+} as const;
+
 const batchResponseSchema = {
 	type: 'object',
 	additionalProperties: false,
@@ -171,9 +182,10 @@ const batchResponseSchema = {
 						description:
 							'Classificação visual conservadora para telemetria. Use unknown quando não houver uma classe dominante segura.'
 					},
+					wordGeometry: wordGeometrySchema,
 					warnings: warningSchema
 				},
-				required: ['pageId', 'pageNumber', 'text', 'contentClass', 'warnings']
+				required: ['pageId', 'pageNumber', 'text', 'contentClass', 'wordGeometry', 'warnings']
 			}
 		}
 	},
@@ -343,7 +355,7 @@ export async function requestGeminiOcrBatch(
 	validateBatchPages(request.pages);
 	const parts: Array<Record<string, unknown>> = [
 		{
-			text: `${prompt}\nCada imagem é precedida por seu pageId e número original. Não omita, duplique, reordene a identidade nem combine páginas. Classifique visualmente cada página em contentClass usando somente a enumeração fornecida; a classe é telemetria e nunca deve alterar, resumir ou normalizar a transcrição. Retorne um item para cada imagem.\n${outputContract(batchResponseSchema)}\nVersão do prompt: ${request.promptVersion}.`
+			text: `${prompt}\nCada imagem é precedida por seu pageId e número original. Não omita, duplique, reordene a identidade nem combine páginas. Classifique visualmente cada página em contentClass usando somente a enumeração fornecida; a classe é telemetria e nunca deve alterar, resumir ou normalizar a transcrição. Em wordGeometry, inclua uma entrada compacta para cada palavra que puder ser localizada visualmente com segurança. Retorne um item para cada imagem.\n${outputContract(batchResponseSchema)}\nVersão do prompt: ${request.promptVersion}.`
 		}
 	];
 	for (const page of request.pages) {
@@ -361,7 +373,7 @@ export async function requestGeminiOcrBatch(
 	const payload = await execute(request, {
 		contents: [{ role: 'user', parts }],
 		generationConfig: {
-			maxOutputTokens: Math.min(65_536, Math.max(8_192, request.pages.length * 2_048)),
+			maxOutputTokens: Math.min(65_536, Math.max(8_192, request.pages.length * 4_096)),
 			responseMimeType: 'application/json'
 		}
 	});
