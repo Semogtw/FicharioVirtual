@@ -6,19 +6,19 @@ Esta página não publica porcentagem global. Prontidão significa evidência re
 
 ## Matriz atual
 
-| Dimensão                     | Código                                   | Evidência externa                                                                                         | Estado                         |
-| ---------------------------- | ---------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| Produto privado              | Implementado                             | CI completo `f87e1edc` / run `31333367357`                                                               | Bloqueado para release         |
-| OCR Gemini por lotes         | Implementado e corrigido                 | `process-ocr` provider + parser HTTP 200 em `31333418948`; runtime `ACTIVE v19`                          | Fronteira aprovada             |
-| Quota exclusiva do provedor  | Implementada                             | `429 gemini_daily_quota` observado na chamada direta protegida                                           | Evidenciada                    |
-| Google Drive-first           | Implementado                             | Conta Google real ainda pendente                                                                          | Não promovido                  |
-| Picker até 50 MiB            | Implementado                             | Navegadores reais pendentes                                                                               | Não promovido                  |
-| Picker acima de 50 MiB       | Implementado por referência/ranges       | PDF grande real pendente                                                                                  | Não promovido                  |
-| Recuperação crash copy→stage | Implementada com `appProperties`         | Contratos no CI; interrupção real pendente                                                                | Não promovida                  |
-| Lease de descritores         | Implementado e conectado ao orquestrador | Banco local no CI; duas sessões reais pendentes                                                           | Não promovido                  |
-| Cloudflare Pages             | Infra + pipeline de promoção implementados | projeto provisionado; artifact/gates prontos; primeiro Direct Upload real ainda pendente                | Preparado para primeiro deploy |
-| Worker desktop               | Fronteira backend implementada           | Worker local e hardware pendentes                                                                         | Não iniciado                   |
-| RX 6600                      | Não implementada                         | Benchmark pendente                                                                                        | Não validada                   |
+| Dimensão | Código | Evidência externa | Estado |
+| --- | --- | --- | --- |
+| Produto privado | Implementado | CI completo `f87e1edc` / run `31333367357` | Bloqueado para release |
+| OCR Gemini por lotes | Implementado e corrigido | `process-ocr` provider + parser HTTP 200 em `31333418948`; runtime `ACTIVE v19` | Fronteira aprovada |
+| Quota exclusiva do provedor | Implementada | `429 gemini_daily_quota` observado na chamada direta protegida | Evidenciada |
+| Google Drive-first | Implementado | Conta Google real ainda pendente | Não promovido |
+| Picker até 50 MiB | Implementado | Navegadores reais pendentes | Não promovido |
+| Picker acima de 50 MiB | Implementado por referência/ranges | PDF grande real pendente | Não promovido |
+| Recuperação crash copy→stage | Implementada com `appProperties` | Contratos no CI; interrupção real pendente | Não promovida |
+| Lease de descritores | Implementado e conectado ao orquestrador | Banco local no CI; duas sessões reais pendentes | Não promovido |
+| Cloudflare Pages | Infra + pipeline staging implementados | Projeto provisionado; artifact/gates prontos; primeiro Direct Upload real ainda pendente | Preparado para primeiro deploy de staging |
+| Worker desktop | Runtime local e plano de controle implementados | Hardware/modelo e pareamento web reais pendentes | Implementado, não validado em hardware |
+| RX 6600 | Caminho de benchmark planejado | Benchmark Vulkan/ROCm/CPU pendente | Não validada |
 
 ## Evidência presente no repositório
 
@@ -66,28 +66,50 @@ Esta página não publica porcentagem global. Prontidão significa evidência re
 - feed paginado de mudanças, reconexão, fila idempotente e conflitos;
 - migrations, pgTAP, contratos TypeScript e gates Deno/segurança.
 
+### Desktop OCR local
+
+O worker já não é apenas uma fronteira backend. O repositório contém:
+
+- dispositivos com credencial própria, revogação e autenticação por digest;
+- claim/source/renew/complete protegidos por lease e conclusão idempotente;
+- configuração local fail-closed e diretórios XDG privados;
+- SQLite de spool transacional, dead letter e reenvio antes de buscar trabalho novo;
+- download HTTPS de fonte com MIME, tamanho e SHA-256 vinculados ao lease;
+- renovação de lease durante inferências longas;
+- polling/backoff e shutdown por sinal;
+- credencial no Secret Service via `secret-tool`;
+- lock imutável de modelo e verificação de digest;
+- backend `OllamaOcrEngine` restrito a loopback;
+- instalador de desenvolvimento e unidade `systemd --user` sem root;
+- comandos de configuração, modelo, pareamento, status e despareamento;
+- tela **Configurações > Computadores** para listar, atualizar, revogar e renomear dispositivos.
+
+Isso ainda não equivale a benchmark aprovado. Modelo padrão, backend e desempenho precisam ser validados no hardware alvo, e o pareamento web precisa de smoke real sem depender de token manual.
+
 ### Cloudflare e artifact de deployment
 
 - projetos Pages `fichario-virtual` e `fichario-models` já existem;
-- `fichario-virtual` usa production branch `main`, build estático para `build/`, cache de build e Node 22;
+- `fichario-virtual` usa production branch `main`, build estático para `build/`, cache de build e Node 22 na configuração do projeto;
 - auto-deploy Git continua desligado durante desenvolvimento concorrente;
 - preview do Pages possui URL + publishable key do Supabase staging;
 - production do Pages não possui URL/chave de backend: isso é fail-closed deliberado porque ainda não existe Supabase de produção;
-- nenhum segredo backend foi cadastrado no Pages;
+- nenhum segredo backend deve ser cadastrado no Pages;
 - `_headers` libera somente as origens adicionais atualmente exigidas pelo loader do Google Picker e pelo tráfego browser do Drive;
 - contrato de deployment exige essas origens;
 - o build valida o `_headers` realmente emitido;
 - fallback SPA, manifesto e service worker são verificados;
-- artifact schema 2 inclui manifesto, `SHA256SUMS`, snapshot mínimo de package/lock e o checker HTTP do mesmo SHA;
+- artifact schema 2 inclui manifesto, `SHA256SUMS`, snapshot mínimo de package/lock e todos os verificadores usados no deploy;
 - `check-deployment-artifact.mjs` exige cobertura exata de checksum, rejeita extras inesperados, symlinks e traversal;
-- o workflow `Deploy validated artifact to Cloudflare Pages` é manual, artifact-only e não faz checkout/rebuild;
-- staging publica usando credenciais de `staging-deploy`; produção é reservada para `production-deploy`;
-- produção ainda exige `CLOUDFLARE_PRODUCTION_DEPLOY_ENABLED=true` no environment protegido, além de um artifact `production` válido;
+- o empacotador compartilhado `tools/deploy/package-static-artifact.sh` é staging-only e usa timestamp reproduzível derivado de `SOURCE_DATE_EPOCH` ou do próprio commit, evitando que o relógio do runner altere o manifesto;
+- um gate offline dedicado impede regressão para timestamp dependente do relógio;
+- o workflow `Build deployable Fichário staging artifact` é manual, usa somente o environment `staging` e produz `fichario-static-<sha>-staging`;
+- o workflow `Deploy validated staging artifact to Cloudflare Pages` é manual, artifact-only, usa `staging-deploy` e não faz checkout/rebuild;
+- o deploy baixa somente o artifact do run e SHA informados, revalida manifesto e checksums e publica na branch Pages `staging`;
 - Wrangler fica pinado e recebe o SHA validado como `--commit-hash`;
-- o workflow consome `pages-deploy-detailed`, confere projeto, ambiente, production branch, SHA, deployment ID e URL;
-- o gate HTTP roda contra a URL única devolvida pelo deployment, usando o checker carregado dentro do artifact e coberto por SHA-256;
-- produção também testa o alias `fichario-virtual.pages.dev`;
-- um gate offline específico impede regressões que reintroduzam checkout/rebuild, SHA frouxo ou publicação sem checksum;
+- o workflow consome `pages-deploy-detailed`, confere projeto, ambiente, production branch configurada, SHA, deployment ID e URL;
+- o gate HTTP roda contra a URL única devolvida pelo deployment, usando checker carregado dentro do artifact e coberto por SHA-256;
+- gates offline impedem reintroduzir checkout/rebuild, SHA frouxo, publicação sem checksum ou referências prematuras a infraestrutura de produção inexistente;
+- **não existe workflow de artifact/deploy de produção habilitado no estado atual**; produção só deve voltar ao pipeline depois de backend, environments, credenciais e contrato próprios existirem;
 - projeto separado de modelos permanece documentado e R2 continua desativado por padrão.
 
 ## Checkpoints de deploy já produzidos
@@ -112,24 +134,19 @@ O pipeline de deploy foi endurecido em commits posteriores. Nos recibos observad
 - `146591a` / run `31385276495`: frontend + source gates passaram antes de execução posterior ser cancelada por commits novos;
 - `1af2ed0` / run `31385577030`: frontend + source + Edge passaram; banco ainda executava quando commits novos interromperam o recibo;
 - `26e768d` / run `31386249873`: frontend + source + Edge passaram e Supabase CLI foi instalado; banco estava executando quando a `main` avançou;
-- `4a5c1f4` / run `31386594216`: frontend + source + Edge passaram novamente, confirmando inclusive o gate de isolamento `staging-deploy` / `production-deploy`; os passos restantes ainda precisavam de recibo terminal no momento desta atualização.
+- `4a5c1f4` / run `31386594216`: frontend + source + Edge passaram novamente; os passos restantes ainda precisavam de recibo terminal no momento da observação;
+- a sequência posterior removeu suporte prematuro a produção, tornou o artifact staging self-verifying, extraiu um empacotador único e adicionou guard de timestamp reproduzível.
 
-Não usar esses recibos parciais como substituto de um CI completo do SHA que for promovido. Eles servem para mostrar que o caminho de deployment novo está passando pelos gates que de fato chegaram a executar.
+Não usar recibos parciais ou cancelados como substituto de um CI completo do SHA que for promovido. Eles mostram somente os gates que efetivamente chegaram a terminar.
 
 ## Pendências funcionais em código
 
-### Worker desktop
+As grandes fronteiras do site, Drive-first, OCR e worker desktop já possuem implementação. As pendências principais que ainda justificam código são encontradas conforme os gates e smokes reais revelarem diferenças entre contrato e ambiente. Em particular:
 
-Ainda faltam:
-
-- worker local e integração de produção com as tabelas/Edge Functions de dispositivos;
-- credencial no keyring local;
-- serviço systemd do usuário;
-- backend CPU funcional;
-- cache e verificação de modelos;
-- spool local e retomada;
-- UI de dispositivos e fila;
-- benchmark Vulkan e RX 6600.
+- completar qualquer integração de pareamento web do worker que ainda exija token manual no fluxo real;
+- definir, após benchmark, um perfil/modelo local suportado em vez de assumir antecipadamente CPU, Vulkan ou ROCm;
+- manter o pipeline de produção ausente enquanto não houver backend e configuração de produção reais;
+- corrigir regressões descobertas pelos gates do SHA candidato, sem tratar cancelamentos por commits novos como PASS ou falha funcional.
 
 O worker nunca deve receber service-role, chave Gemini ou refresh token do Drive.
 
@@ -149,7 +166,7 @@ Para a promoção do site, o SHA candidato final precisa obter recibo terminal e
 - `process-ocr` permanece registrado como `ACTIVE v19` no checkpoint consultado;
 - o fluxo normal de OCR com página/job, Storage e persistência real ainda precisa de smoke antes de release;
 - antes do host real, `APP_ORIGIN` precisa apontar para a origem correta do rollout;
-- ainda não existe backend Supabase de produção, portanto artifact e promoção `production` devem continuar bloqueados.
+- ainda não existe backend Supabase de produção; produção deve continuar ausente do pipeline executável.
 
 ### Google Drive
 
@@ -169,21 +186,28 @@ Para a promoção do site, o SHA candidato final precisa obter recibo terminal e
 
 A fronteira request/provider/parser foi validada em staging. Ainda faltam o fluxo normal de página/job com persistência, lote visual multipágina real, PDF textual confirmando zero chamadas, cancelamento/retomada no produto e confirmação administrativa de billing/fallback pago desativado.
 
+### Worker desktop
+
+- parear um computador real pelo fluxo web;
+- confirmar armazenamento/rotação da credencial no keyring real;
+- interromper processo/rede durante claim e complete e comprovar retomada pelo spool;
+- validar modelo e backend em hardware real;
+- medir CPU e, quando aplicável, Vulkan/ROCm na RX 6600;
+- documentar o perfil suportado com base em benchmark, não em hipótese.
+
 ### Cloudflare
 
 Ainda faltam:
 
-- provisionar em `staging-deploy` um `CLOUDFLARE_API_TOKEN` de escopo mínimo e `CLOUDFLARE_ACCOUNT_ID`;
+- confirmar/provisionar em `staging-deploy` um `CLOUDFLARE_API_TOKEN` de escopo mínimo e `CLOUDFLARE_ACCOUNT_ID` sem revelar valores;
 - gerar um artifact staging do SHA candidato final;
-- executar o primeiro workflow `Deploy validated artifact to Cloudflare Pages`;
+- executar o primeiro workflow `Deploy validated staging artifact to Cloudflare Pages`;
 - obter PASS automático do checker contra a URL única retornada pelo Wrangler;
 - executar smoke real de autenticação/PWA/Drive;
 - atualizar `APP_ORIGIN` quando a origem escolhida estiver estável;
 - criar domínio canônico e redirects somente depois do preview;
 - ensaiar rollback;
-- criar ambientes/backend/configuração de produção antes de habilitar `production-deploy`.
-
-O conector administrativo Cloudflare consegue configurar o projeto e emitir o JWT temporário do serviço de upload, mas a camada de integração não permite usar esse JWT como autenticação dos endpoints `/pages/assets/*`. Uma sonda com token novo e os headers esperados pelo Wrangler continua retornando `403` / código Cloudflare `8000013` (`Authorization failed`). Não exportar ou persistir o JWT para tentar contornar essa fronteira.
+- criar backend, environments, credenciais e contratos de produção antes de reintroduzir um caminho de deploy de produção.
 
 ## Critérios de promoção
 
@@ -195,10 +219,11 @@ Cleanup `31333977753`: PASS
 Cloudflare Pages: projetos e build base provisionados
 Preview Pages: Supabase staging configurado
 Production Pages: backend ausente por fail-closed
-Artifact schema 2 + checksums + checker pinado: PASS em código
-Workflow artifact-only + identidade Wrangler + gate HTTP exato: PASS em código
-Gate offline do workflow de promoção: PASS nos recibos que chegaram ao source gate
-Credenciais Cloudflare em staging-deploy: PENDING
+Artifact schema 2 + checksums + verificadores pinados: PASS em código
+Empacotador staging compartilhado + timestamp reproduzível: PASS em código
+Workflow staging artifact-only + identidade Wrangler + gate HTTP exato: PASS em código
+Gate offline dos workflows e da reprodutibilidade: PASS em código; recibo terminal do SHA candidato ainda necessário
+Credenciais Cloudflare em staging-deploy: PENDING até confirmação operacional
 Primeiro Direct Upload: PENDING
 Gate HTTP real: PENDING
 CI global terminal do SHA candidato final: PENDING
@@ -206,9 +231,10 @@ Fluxo OCR normal com persistência: PENDING
 Tipos gerados pelo schema implantado: PENDING
 OAuth drive.file real: PENDING
 Picker/ranges e crash recovery reais: PENDING
+Pareamento/worker/hardware reais: PENDING
 Backend e ambientes de produção: PENDING
 Celular e tablet: PENDING ou risco registrado
 Nenhum conteúdo privado na Cloudflare: requisito obrigatório
 ```
 
-O worker desktop pode ser tratado como marco posterior se a release declarar explicitamente essa limitação. A ausência de defeitos conhecidos não substitui os recibos acima.
+O worker desktop pode ser tratado como marco operacional posterior se a release declarar explicitamente a limitação. A ausência de defeitos conhecidos não substitui os recibos acima.
