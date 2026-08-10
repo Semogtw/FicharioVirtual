@@ -7,6 +7,7 @@ on:
       - .github/workflows/build-deployment-artifact.yml
       - .github/workflows/deploy-cloudflare-pages.yml
       - .github/workflows/validate-deployment-pipeline.yml
+      - .github/workflows/verify-staging-artifact-config.yml
       - package.json
       - pnpm-lock.yaml
       - svelte.config.js
@@ -24,6 +25,7 @@ on:
       - tests/unit/tooling/deployment-artifact-workflow.test.ts
       - tests/unit/tooling/deployment-contract.test.ts
       - tests/unit/tooling/pages-deploy-output.test.ts
+      - tests/unit/tooling/staging-artifact-config-workflow.test.ts
   workflow_dispatch:
 
 permissions:
@@ -69,6 +71,7 @@ jobs:
             .github/workflows/build-deployment-artifact.yml \
             .github/workflows/deploy-cloudflare-pages.yml \
             .github/workflows/validate-deployment-pipeline.yml \
+            .github/workflows/verify-staging-artifact-config.yml \
             tools/checks/check-artifact-reproducibility.mjs \
             tools/checks/check-built-pwa.mjs \
             tools/checks/check-cloudflare-deployment-workflow.mjs \
@@ -80,7 +83,8 @@ jobs:
             tests/unit/tooling/deployment-artifact-contract.test.ts \
             tests/unit/tooling/deployment-artifact-workflow.test.ts \
             tests/unit/tooling/deployment-contract.test.ts \
-            tests/unit/tooling/pages-deploy-output.test.ts
+            tests/unit/tooling/pages-deploy-output.test.ts \
+            tests/unit/tooling/staging-artifact-config-workflow.test.ts
 
       - name: Check deployment shell syntax
         run: bash -n tools/deploy/package-static-artifact.sh
@@ -98,7 +102,8 @@ jobs:
             tests/unit/tooling/deployment-artifact-contract.test.ts \
             tests/unit/tooling/deployment-artifact-workflow.test.ts \
             tests/unit/tooling/deployment-contract.test.ts \
-            tests/unit/tooling/pages-deploy-output.test.ts
+            tests/unit/tooling/pages-deploy-output.test.ts \
+            tests/unit/tooling/staging-artifact-config-workflow.test.ts
 
       - name: Build static site with non-deployable CI public config
         run: pnpm build
