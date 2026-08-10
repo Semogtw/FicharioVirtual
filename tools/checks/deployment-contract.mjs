@@ -84,7 +84,11 @@ export function assertSecurityHeaders(headers) {
 	requireCspDirective(csp, 'form-action', ["'self'"]);
 	requireCspDirective(csp, 'object-src', ["'none'"]);
 	requireCspDirective(csp, 'frame-ancestors', ["'none'"]);
-	const scripts = requireCspDirective(csp, 'script-src', ["'self'", "'wasm-unsafe-eval'"]);
+	const scripts = requireCspDirective(csp, 'script-src', [
+		"'self'",
+		"'wasm-unsafe-eval'",
+		'https://apis.google.com'
+	]);
 	for (const forbidden of ["'unsafe-inline'", "'unsafe-eval'"]) {
 		if (scripts.has(forbidden))
 			fail(`Content-Security-Policy script-src must not include ${forbidden}`);
