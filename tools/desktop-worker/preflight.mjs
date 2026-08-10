@@ -2,9 +2,7 @@ import { runWorkerDoctor } from './doctor.mjs';
 
 const SAFE_CODE = /^[a-z0-9_]{3,96}$/;
 
-export async function checkWorkerPreflight(
-	{ doctor = runWorkerDoctor, signal } = {}
-) {
+export async function checkWorkerPreflight({ doctor = runWorkerDoctor, signal } = {}) {
 	if (typeof doctor !== 'function') throw new TypeError('Invalid desktop worker preflight doctor');
 	const result = await doctor({}, { signal });
 	if (result.ready === true) {
