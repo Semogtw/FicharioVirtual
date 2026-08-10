@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -78,6 +78,7 @@ describe('initializeWorkerConfig', () => {
 
 	it('preserves a pre-existing non-config file instead of truncating it', async () => {
 		const paths = await pathsFixture();
+		await mkdir(paths.configDir, { recursive: true, mode: 0o700 });
 		await writeFile(paths.configPath, 'do-not-overwrite', { mode: 0o600 });
 
 		await expect(
