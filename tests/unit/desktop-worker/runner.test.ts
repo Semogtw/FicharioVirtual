@@ -71,7 +71,10 @@ class MemorySpool {
 			attemptCount: number;
 		}
 	>();
-	rejected = new Map<string, { jobId: string; result: Record<string, unknown>; reasonCode: string }>();
+	rejected = new Map<
+		string,
+		{ jobId: string; result: Record<string, unknown>; reasonCode: string }
+	>();
 
 	enqueue(result: Record<string, unknown>) {
 		const jobId = String(result.jobId);
@@ -216,10 +219,14 @@ describe('runWorkerCycle', () => {
 			downloadsDir: '/tmp/test',
 			signal: undefined
 		});
-		expect(options.renewLease).toHaveBeenCalledWith({ client, lease: lease() }, expect.any(Function), {
-			signal: undefined,
-			now: expect.any(Function)
-		});
+		expect(options.renewLease).toHaveBeenCalledWith(
+			{ client, lease: lease() },
+			expect.any(Function),
+			{
+				signal: undefined,
+				now: expect.any(Function)
+			}
+		);
 		expect(engine.process).toHaveBeenCalledWith(
 			{
 				jobId: JOB_ID,
