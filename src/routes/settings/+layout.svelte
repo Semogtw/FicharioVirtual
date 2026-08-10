@@ -10,6 +10,12 @@
 		Geral
 	</a>
 	<a
+		href="/settings/computers/"
+		aria-current={page.url.pathname.startsWith('/settings/computers') ? 'page' : undefined}
+	>
+		Computadores
+	</a>
+	<a
 		href="/settings/usage/"
 		aria-current={page.url.pathname.startsWith('/settings/usage') ? 'page' : undefined}
 	>
@@ -45,5 +51,17 @@
 	a[aria-current='page'] {
 		background: var(--archive);
 		color: white;
+	}
+
+	@media (max-width: 520px) {
+		.settings-tabs {
+			width: 100%;
+			overflow-x: auto;
+		}
+
+		a {
+			flex: 1 0 auto;
+			justify-content: center;
+		}
 	}
 </style>
