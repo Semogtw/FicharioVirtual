@@ -22,6 +22,7 @@ describe('Supabase local configuration', () => {
 
 		for (const functionName of [
 			'process-ocr',
+			'ocr-queue-kick',
 			'delete-document',
 			'drive-oauth-start',
 			'drive-access-token',
@@ -38,16 +39,26 @@ describe('Supabase local configuration', () => {
 	it('allows only explicit non-JWT service endpoints through the gateway', () => {
 		const config = read('supabase/config.toml');
 
+		expect(config).toMatch(/\[functions\.ocr-queue-worker\]\s+verify_jwt\s*=\s*false/);
 		expect(config).toMatch(/\[functions\.drive-oauth-callback\]\s+verify_jwt\s*=\s*false/);
 		expect(config).toMatch(/\[functions\.desktop-ocr-pair\]\s+verify_jwt\s*=\s*false/);
 		const disabledJwtEntries = [
 			...config.matchAll(/\[functions\.([^\]]+)\]\s+verify_jwt\s*=\s*false/g)
 		];
 		expect(disabledJwtEntries.map((entry) => entry[1])).toEqual([
+			'ocr-queue-worker',
 			'drive-oauth-callback',
 			'desktop-ocr-pair',
 			'desktop-ocr-worker'
 		]);
+	});
+
+	it('keeps dedicated authentication inside the public background OCR worker gateway', () => {
+		const source = read('supabase/functions/ocr-queue-worker/index.ts');
+
+		expect(source).toContain("Deno.env.get('OCR_BACKGROUND_WORKER_KEY')");
+		expect(source).toContain("request.headers.get('X-Fichario-Worker-Key')");
+		expect(source).toContain('secretMatches(');
 	});
 
 	it('keeps manual auth boundaries inside the public desktop pairing gateway', () => {
