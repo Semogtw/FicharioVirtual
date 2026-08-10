@@ -73,7 +73,10 @@ requirePattern(
 	/manifest_value target_environment/u,
 	'artifact manifest target environment must be verified'
 );
-requirePattern(/sha256sum -c SHA256SUMS/u, 'artifact checksums must be revalidated before deployment');
+requirePattern(
+	/sha256sum -c SHA256SUMS/u,
+	'artifact checksums must be revalidated before deployment'
+);
 requirePattern(/find "\$artifact_root" -type l/u, 'artifact symlinks must be rejected');
 requirePattern(
 	/wrangler pages deploy "\$ARTIFACT_ROOT\/site"/u,
