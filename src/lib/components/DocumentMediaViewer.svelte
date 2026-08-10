@@ -78,7 +78,12 @@
 			.select('source_size_bytes')
 			.eq('document_id', documentId)
 			.maybeSingle();
-		if (error || !data || !Number.isSafeInteger(data.source_size_bytes) || data.source_size_bytes < 1) {
+		if (
+			error ||
+			!data ||
+			!Number.isSafeInteger(data.source_size_bytes) ||
+			data.source_size_bytes < 1
+		) {
 			return null;
 		}
 		return data.source_size_bytes;
@@ -185,7 +190,9 @@
 		<div class="status" role="status">
 			<p>{renderError ?? 'O original não pôde ser exibido aqui.'}</p>
 			{#if detail.originalReference.provider === 'google_drive'}
-				<a href={detail.originalReference.url} target="_blank" rel="noreferrer">Abrir no Google Drive</a>
+				<a href={detail.originalReference.url} target="_blank" rel="noreferrer"
+					>Abrir no Google Drive</a
+				>
 			{:else}
 				<a href={detail.originalReference.url} target="_blank" rel="noreferrer">Abrir original</a>
 			{/if}
