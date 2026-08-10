@@ -58,7 +58,12 @@ function timestamp(value: unknown, nullable = false): string | null {
 
 function capabilities(value: unknown): DesktopOcrDeviceCapabilities {
 	if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-		return Object.freeze({ protocolVersion: null, backend: null, model: null, maxConcurrency: null });
+		return Object.freeze({
+			protocolVersion: null,
+			backend: null,
+			model: null,
+			maxConcurrency: null
+		});
 	}
 	const record = value as Record<string, unknown>;
 	return Object.freeze({
@@ -166,7 +171,8 @@ export async function listDesktopOcrDevices(
 	}
 	if (result.error) throw new DesktopOcrDevicesError();
 	const devices = parseDevices(result.data);
-	if (!devices) throw new DesktopOcrDevicesError('A lista de computadores retornou um formato inválido.');
+	if (!devices)
+		throw new DesktopOcrDevicesError('A lista de computadores retornou um formato inválido.');
 	return devices;
 }
 
