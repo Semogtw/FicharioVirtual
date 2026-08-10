@@ -11,6 +11,7 @@ on:
       - pnpm-lock.yaml
       - svelte.config.js
       - static/**
+      - tools/checks/check-artifact-reproducibility.mjs
       - tools/checks/check-built-pwa.mjs
       - tools/checks/check-cloudflare-deployment-workflow.mjs
       - tools/checks/check-deployed-site.mjs
@@ -67,6 +68,7 @@ jobs:
             .github/workflows/build-deployment-artifact.yml \
             .github/workflows/deploy-cloudflare-pages.yml \
             .github/workflows/validate-deployment-pipeline.yml \
+            tools/checks/check-artifact-reproducibility.mjs \
             tools/checks/check-built-pwa.mjs \
             tools/checks/check-cloudflare-deployment-workflow.mjs \
             tools/checks/check-deployed-site.mjs \
@@ -86,6 +88,7 @@ jobs:
           node tools/checks/check-workflow-security.mjs
           node tools/checks/check-cloudflare-deployment-workflow.mjs
           node tools/checks/check-deployment-artifact-workflow.mjs
+          node tools/checks/check-artifact-reproducibility.mjs
 
       - name: Run deployment contract unit tests
         run: |
@@ -106,20 +109,29 @@ jobs:
           grep -R -F -- "$PUBLIC_SUPABASE_URL" build >/dev/null
           grep -R -F -- "$PUBLIC_SUPABASE_PUBLISHABLE_KEY" build >/dev/null
 
-      - name: Package a throwaway staging artifact
-        run: bash tools/deploy/package-static-artifact.sh ci-deploy-artifact
+      - name: Package staging artifact twice
+        run: |
+          set -euo pipefail
+          bash tools/deploy/package-static-artifact.sh fichario-deploy-ci-a
+          bash tools/deploy/package-static-artifact.sh fichario-deploy-ci-b
+
+      - name: Prove repeated packaging has identical identity
+        run: |
+          set -euo pipefail
+          cmp fichario-deploy-ci-a/DEPLOYMENT-MANIFEST.txt fichario-deploy-ci-b/DEPLOYMENT-MANIFEST.txt
+          cmp fichario-deploy-ci-a/SHA256SUMS fichario-deploy-ci-b/SHA256SUMS
 
       - name: Verify throwaway artifact from repository checker
-        run: node tools/checks/check-deployment-artifact.mjs ci-deploy-artifact
+        run: node tools/checks/check-deployment-artifact.mjs fichario-deploy-ci-a
 
       - name: Verify throwaway artifact from its bundled checker
-        run: node ci-deploy-artifact/checks/check-deployment-artifact.mjs ci-deploy-artifact
+        run: node fichario-deploy-ci-a/checks/check-deployment-artifact.mjs fichario-deploy-ci-a
 
       - name: Confirm throwaway artifact cannot masquerade as production
         run: |
           set -euo pipefail
-          grep -Fx 'target_environment=staging' ci-deploy-artifact/DEPLOYMENT-MANIFEST.txt >/dev/null
-          ! grep -R -F -- 'target_environment=production' ci-deploy-artifact
+          grep -Fx 'target_environment=staging' fichario-deploy-ci-a/DEPLOYMENT-MANIFEST.txt >/dev/null
+          ! grep -R -F -- 'target_environment=production' fichario-deploy-ci-a
 
       - name: Publish deployment validation summary
         if: always()
@@ -129,6 +141,7 @@ jobs:
             echo
             echo "- Source SHA: \`${GITHUB_SHA}\`"
             echo '- Target contract: `staging` only'
-            echo '- Artifact: throwaway CI package; never uploaded or deployable as a release artifact'
+            echo '- Reproducibility: two independent package operations compared byte-for-byte at manifest/checksum identity level'
+            echo '- Artifacts: throwaway CI packages; never uploaded or deployable as release artifacts'
             echo '- Secrets used: none'
           } >> "$GITHUB_STEP_SUMMARY"
