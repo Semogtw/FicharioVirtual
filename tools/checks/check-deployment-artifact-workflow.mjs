@@ -23,18 +23,8 @@ requireText(
 	'permissions:\n  contents: read',
 	'artifact build workflow permissions must remain contents:read'
 );
-requireText(
-	'environment: ${{ inputs.target_environment }}',
-	'artifact build must use the selected protected configuration environment'
-);
-requireText(
-	'PRODUCTION_ARTIFACT_BUILD_ENABLED: ${{ vars.PRODUCTION_ARTIFACT_BUILD_ENABLED }}',
-	'production artifact creation must require an explicit environment flag'
-);
-requireText(
-	`if [[ "$TARGET_ENVIRONMENT" == 'production' && "$PRODUCTION_ARTIFACT_BUILD_ENABLED" != 'true' ]]; then`,
-	'production artifact creation must fail closed until explicitly enabled'
-);
+requireText('environment: staging', 'artifact build must use only the existing staging environment');
+requireText('TARGET_ENVIRONMENT: staging', 'artifact build target must remain hard-coded to staging');
 requireText(
 	'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803',
 	'checkout action must remain pinned to the reviewed commit'
@@ -51,17 +41,14 @@ requireText(
 	'actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38',
 	'Node setup action must remain pinned to the reviewed commit'
 );
-requireText(
-	'pnpm install --frozen-lockfile',
-	'artifact build must install only from the committed lockfile'
-);
+requireText('pnpm install --frozen-lockfile', 'artifact build must install only from the committed lockfile');
 requireText(
 	'PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}',
-	'artifact build must obtain the public Supabase URL from the protected environment'
+	'artifact build must obtain the public Supabase URL from staging'
 );
 requireText(
 	'PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_SUPABASE_PUBLISHABLE_KEY }}',
-	'artifact build must obtain the publishable Supabase key from the protected environment'
+	'artifact build must obtain the publishable Supabase key from staging'
 );
 requireText(
 	'PUBLIC_GOOGLE_CLIENT_ID: ${{ secrets.PUBLIC_GOOGLE_CLIENT_ID }}',
@@ -74,6 +61,10 @@ requireText(
 requireText(
 	'PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER: ${{ secrets.PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER }}',
 	'artifact build must keep Google Picker project number environment-scoped'
+);
+requireText(
+	"[[ \"$TARGET_ENVIRONMENT\" == 'staging' ]]",
+	'artifact build must fail closed if staging target is ever altered'
 );
 requireText(
 	'Google Picker public settings must be configured together',
@@ -100,6 +91,7 @@ for (const validator of [
 	requireText(validator, `artifact must carry deployment validator ${validator}`);
 }
 requireText("echo 'schema_version=2'", 'artifact manifest schema must remain explicit');
+requireText("echo 'target_environment=staging'", 'artifact manifest must remain staging-only');
 requireText(
 	'find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS',
 	'artifact must checksum every packaged file deterministically'
@@ -114,8 +106,8 @@ requireText(
 	'artifact upload action must remain pinned to the reviewed commit'
 );
 requireText(
-	'name: fichario-static-${{ github.sha }}-${{ inputs.target_environment }}',
-	'artifact identity must bind source SHA and target environment'
+	'name: fichario-static-${{ github.sha }}-staging',
+	'artifact identity must bind source SHA to staging'
 );
 requireText('if-no-files-found: error', 'missing deployment artifact must fail the workflow');
 
@@ -130,6 +122,17 @@ for (const forbiddenSecret of [
 	forbidText(
 		forbiddenSecret,
 		`artifact build workflow must not receive backend/deployment secret ${forbiddenSecret}`
+	);
+}
+for (const forbiddenProductionText of [
+	'production-deploy',
+	'PRODUCTION_ARTIFACT_BUILD_ENABLED',
+	'options:\n          - staging\n          - production',
+	'environment: production'
+]) {
+	forbidText(
+		forbiddenProductionText,
+		`staging artifact workflow must not reference unprovisioned production state: ${forbiddenProductionText}`
 	);
 }
 
