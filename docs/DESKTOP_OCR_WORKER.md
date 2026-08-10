@@ -1,10 +1,10 @@
 # Fichário Desktop OCR Worker
 
-**Status:** runtime e plano de controle implementados em código; validação operacional de hardware/modelo ainda pendente  
+**Status:** runtime e plano de controle implementados em código; Chandra OCR 2 selecionado como candidato local, mas integração e validação em hardware ainda pendentes  
 **Última revisão:** 10 de agosto de 2026  
 **Sistema de referência para validação futura:** CachyOS com RX 6600
 
-Este documento descreve o estado atual do Desktop OCR Worker. O worker usa somente conexões HTTPS de saída; nenhuma porta doméstica precisa ser publicada. Detalhes de instalação e comandos ficam em [`DESKTOP_OCR_WORKER_LOCAL_RUNTIME.md`](./DESKTOP_OCR_WORKER_LOCAL_RUNTIME.md).
+Este documento descreve o estado atual do Desktop OCR Worker. O worker usa somente conexões HTTPS de saída; nenhuma porta doméstica precisa ser publicada. Detalhes de instalação e comandos ficam em [`DESKTOP_OCR_WORKER_LOCAL_RUNTIME.md`](./DESKTOP_OCR_WORKER_LOCAL_RUNTIME.md). A decisão de modelo, runtime Vulkan e plano de integração ficam em [`CHANDRA_OCR2_DESKTOP_INTEGRATION.md`](./CHANDRA_OCR2_DESKTOP_INTEGRATION.md).
 
 ## 1. O que já existe
 
@@ -168,9 +168,9 @@ journalctl --user -u fichario-ocr-worker.service
 
 O instalador não usa `sudo`/`doas` e não inicia o serviço automaticamente.
 
-## 7. Backend local atual
+## 7. Backend local atual e candidato escolhido
 
-O backend implementado é `OllamaOcrEngine`.
+O backend **implementado hoje** é `OllamaOcrEngine`.
 
 Ele:
 
@@ -181,7 +181,22 @@ Ele:
 - recusa troca silenciosa da tag para outro conteúdo;
 - não usa endpoint cloud/remoto do Ollama.
 
-Nenhum modelo é declarado padrão ou recomendado antes de benchmark, licença e proveniência serem aprovados no hardware alvo.
+A pesquisa de modelo foi concluída o suficiente para selecionar **Chandra OCR 2** como candidato recomendado para o caso de uso do Fichário: livros digitalizados, scans degradados, português, tabelas/layout e escrita à mão contemporânea em papel ou tablet.
+
+Isso **não** transforma o backend atual em Chandra nem marca o hardware como validado. O alvo de implementação é:
+
+```text
+Chandra OCR 2
+└── GGUF de proveniência verificada
+    └── llama.cpp + Vulkan
+        ├── Q8_0 primeiro
+        ├── Q6_K somente se Q8_0 não for estável em 8 GiB
+        └── concorrência 1
+```
+
+O checkpoint oficial permanece a referência de qualidade. Quantizações GGUF de terceiros precisam de hash, provenance e regressão contra o checkpoint antes de promoção. A licença dos pesos também precisa ser revisada antes de qualquer redistribuição pelo Fichário.
+
+O plano completo, incluindo model lock v2, backend `llama_cpp`, prompt profile, benchmark e gates de promoção, está em [`CHANDRA_OCR2_DESKTOP_INTEGRATION.md`](./CHANDRA_OCR2_DESKTOP_INTEGRATION.md).
 
 ## 8. Lease, origem e conclusão
 
@@ -293,6 +308,8 @@ O repositório cobre em testes/gates:
 
 O probe de staging cria código via conta autenticada, resgata sem Authorization/JWT usando somente publishable key, verifica que nenhuma credencial é retornada, rejeita replay, lista o dispositivo pelo owner, revoga e remove a fixture.
 
+Os testes de Chandra/`llama_cpp` ainda não existem; a especificação deles está no documento de integração do modelo.
+
 ## 14. O que ainda falta
 
 Pendências reais antes de declarar o Desktop OCR Worker operacionalmente pronto:
@@ -300,13 +317,15 @@ Pendências reais antes de declarar o Desktop OCR Worker operacionalmente pronto
 1. obter um checkpoint CI verde do SHA atual e promover as migrations/Edge Functions para staging;
 2. executar o novo probe de pareamento contra staging e guardar o recibo terminal;
 3. exercitar `/usr/bin/secret-tool` em uma sessão CachyOS real;
-4. escolher um modelo de visão com licença/proveniência aceitáveis;
-5. executar inferência real e benchmark CPU;
-6. validar separadamente qualquer caminho Vulkan/ROCm desejado, sem promovê-lo antes do benchmark;
-7. executar processamento desktop end-to-end contra staging com documento privado controlado;
-8. implementar UI detalhada de fila/estado desktop;
-9. registrar memória, latência, estabilidade, temperatura e qualidade no hardware alvo;
-10. decidir quando remover o pareamento legado baseado em access token após o fluxo novo estar comprovado em staging/hardware.
+4. revisar licença/proveniência do Chandra OCR 2 e dos artefatos GGUF candidatos;
+5. adicionar backend `llama_cpp`, model lock v2 e `LlamaCppChandraEngine` sem alterar fila/lease/spool;
+6. validar `llama.cpp` + Vulkan na RX 6600 e confirmar que a inferência não caiu silenciosamente para CPU;
+7. executar benchmark de Chandra Q8_0; testar Q6_K somente se Q8_0 falhar por memória/estabilidade;
+8. comparar manuscrito, livros/scans, layout e omissões contra checkpoint oficial e Gemini no corpus privado;
+9. executar processamento desktop end-to-end contra staging com documento privado controlado;
+10. implementar UI detalhada de fila/estado desktop;
+11. registrar memória, latência, estabilidade, temperatura e qualidade no hardware alvo;
+12. decidir quando remover o pareamento legado baseado em access token após o fluxo novo estar comprovado em staging/hardware.
 
 ## 15. Critério de prontidão
 
@@ -322,9 +341,12 @@ Pendências reais antes de declarar o Desktop OCR Worker operacionalmente pronto
 | Claim exclusivo + lease/renew                | implementado/testado                       |
 | Origem privada curta + SHA-256               | implementado/testado                       |
 | Spool retomável + conclusão idempotente      | implementado/testado                       |
-| Ollama loopback + model lock                 | implementado/testado                       |
+| Ollama loopback + model lock v1              | implementado/testado                       |
+| Chandra OCR 2 como candidato                 | selecionado; validação pendente             |
+| Backend `llama_cpp` + model lock v2          | planejado; não implementado                 |
+| Chandra Q8_0 na RX 6600 / Vulkan             | pendente                                   |
+| Q6_K fallback de memória                     | pendente; usar somente se necessário        |
 | CPU em hardware real                         | pendente                                   |
-| RX 6600 / Vulkan / ROCm                      | pendente                                   |
 | Fila desktop detalhada na PWA                | pendente                                   |
 | E2E staging com documento privado            | pendente                                   |
 
