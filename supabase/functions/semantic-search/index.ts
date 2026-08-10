@@ -9,10 +9,7 @@ import {
 } from '../_shared/semantic-config.ts';
 import { indexNextSemanticBatch, semanticIndexStats } from '../_shared/semantic-indexer.ts';
 import { getSemanticQueryEmbedding } from '../_shared/semantic-query-cache.ts';
-import {
-	compareHybridRanked,
-	hybridReciprocalRankScore
-} from '../_shared/semantic-ranking.ts';
+import { compareHybridRanked, hybridReciprocalRankScore } from '../_shared/semantic-ranking.ts';
 import { recordSemanticRetrievalEvent } from '../_shared/semantic-retrieval-telemetry.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -87,10 +84,12 @@ function parseRequest(value: unknown): ParsedRequest | null {
 	const query = record.query.trim();
 	if (query.length < 1 || query.length > MAX_QUERY_CHARS) return null;
 	const notebookId = record.notebookId ?? null;
-	if (notebookId !== null && (typeof notebookId !== 'string' || !UUID.test(notebookId))) return null;
+	if (notebookId !== null && (typeof notebookId !== 'string' || !UUID.test(notebookId)))
+		return null;
 	const limit = record.limit ?? 30;
 	const offset = record.offset ?? 0;
-	if (!Number.isInteger(limit) || Number(limit) < 1 || Number(limit) > MAX_RESULT_LIMIT) return null;
+	if (!Number.isInteger(limit) || Number(limit) < 1 || Number(limit) > MAX_RESULT_LIMIT)
+		return null;
 	if (!Number.isInteger(offset) || Number(offset) < 0 || Number(offset) > MAX_OFFSET) return null;
 	return {
 		query,
@@ -110,15 +109,22 @@ function validLexicalRow(value: unknown): value is LexicalRow {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
 	const row = value as Record<string, unknown>;
 	return (
-		typeof row.page_id === 'string' && UUID.test(row.page_id) &&
-		typeof row.document_id === 'string' && UUID.test(row.document_id) &&
-		typeof row.document_title === 'string' && row.document_title.trim().length > 0 &&
-		(row.notebook_id === null || (typeof row.notebook_id === 'string' && UUID.test(row.notebook_id))) &&
+		typeof row.page_id === 'string' &&
+		UUID.test(row.page_id) &&
+		typeof row.document_id === 'string' &&
+		UUID.test(row.document_id) &&
+		typeof row.document_title === 'string' &&
+		row.document_title.trim().length > 0 &&
+		(row.notebook_id === null ||
+			(typeof row.notebook_id === 'string' && UUID.test(row.notebook_id))) &&
 		(row.notebook_name === null || typeof row.notebook_name === 'string') &&
 		(row.notebook_id === null) === (row.notebook_name === null) &&
-		Number.isInteger(row.page_number) && Number(row.page_number) >= 1 &&
+		Number.isInteger(row.page_number) &&
+		Number(row.page_number) >= 1 &&
 		typeof row.excerpt === 'string' &&
-		typeof row.rank === 'number' && Number.isFinite(row.rank) && row.rank >= 0
+		typeof row.rank === 'number' &&
+		Number.isFinite(row.rank) &&
+		row.rank >= 0
 	);
 }
 
@@ -129,7 +135,8 @@ function validSemanticRow(value: unknown): value is SemanticRow {
 		validLexicalRow({ ...row, rank: 0 }) &&
 		typeof row.semantic_similarity === 'number' &&
 		Number.isFinite(row.semantic_similarity) &&
-		row.semantic_similarity >= 0 && row.semantic_similarity <= 1
+		row.semantic_similarity >= 0 &&
+		row.semantic_similarity <= 1
 	);
 }
 
@@ -203,7 +210,8 @@ function mergeCandidates(lexical: readonly LexicalRow[], semantic: readonly Sema
 			current.semanticPosition = index + 1;
 			current.semanticSimilarity = row.semantic_similarity;
 			current.matchMode = 'hybrid';
-			if (row.semantic_similarity >= 0.62 && row.excerpt.trim()) current.excerpt = row.excerpt.slice(0, 2000);
+			if (row.semantic_similarity >= 0.62 && row.excerpt.trim())
+				current.excerpt = row.excerpt.slice(0, 2000);
 			current.score = hybridReciprocalRankScore({
 				lexicalRank: current.lexicalPosition,
 				semanticRank: current.semanticPosition,
@@ -235,20 +243,22 @@ function mergeCandidates(lexical: readonly LexicalRow[], semantic: readonly Sema
 		merged.set(row.page_id, candidate);
 	});
 
-	return [...merged.values()].sort((left, right) => compareHybridRanked(
-		{
-			lexicalRank: left.lexicalPosition,
-			semanticRank: left.semanticPosition,
-			semanticSimilarity: left.semanticSimilarity,
-			stableKey: left.stableKey
-		},
-		{
-			lexicalRank: right.lexicalPosition,
-			semanticRank: right.semanticPosition,
-			semanticSimilarity: right.semanticSimilarity,
-			stableKey: right.stableKey
-		}
-	));
+	return [...merged.values()].sort((left, right) =>
+		compareHybridRanked(
+			{
+				lexicalRank: left.lexicalPosition,
+				semanticRank: left.semanticPosition,
+				semanticSimilarity: left.semanticSimilarity,
+				stableKey: left.stableKey
+			},
+			{
+				lexicalRank: right.lexicalPosition,
+				semanticRank: right.semanticPosition,
+				semanticSimilarity: right.semanticSimilarity,
+				stableKey: right.stableKey
+			}
+		)
+	);
 }
 
 async function fallbackResponse(input: {
@@ -259,7 +269,12 @@ async function fallbackResponse(input: {
 	embeddingModel?: string | null;
 	index?: Awaited<ReturnType<typeof semanticIndexStats>> | null;
 }) {
-	const rows = await lexicalRows(input.supabase, input.parsed, input.parsed.limit, input.parsed.offset);
+	const rows = await lexicalRows(
+		input.supabase,
+		input.parsed,
+		input.parsed.limit,
+		input.parsed.offset
+	);
 	await recordSemanticRetrievalEvent(input.supabase, {
 		surface: 'global_search',
 		mode: 'fallback',
@@ -312,7 +327,8 @@ Deno.serve(async (request) => {
 	if (request.method !== 'POST') return respond(405, { code: 'method_not_allowed' });
 
 	const authorization = request.headers.get('Authorization');
-	if (!authorization?.startsWith('Bearer ')) return respond(401, { code: 'authentication_required' });
+	if (!authorization?.startsWith('Bearer '))
+		return respond(401, { code: 'authentication_required' });
 
 	let raw: unknown;
 	try {
@@ -347,9 +363,12 @@ Deno.serve(async (request) => {
 
 	try {
 		const apiKey = Deno.env.get('GEMINI_API_KEY');
-		const { data: consent, error: consentError } = await supabase.rpc('has_search_semantic_consent', {
-			consent_version: SEMANTIC_CONSENT_VERSION
-		});
+		const { data: consent, error: consentError } = await supabase.rpc(
+			'has_search_semantic_consent',
+			{
+				consent_version: SEMANTIC_CONSENT_VERSION
+			}
+		);
 		const semanticAllowed =
 			parsed.query.length >= MIN_SEMANTIC_QUERY_CHARS &&
 			!consentError &&
@@ -361,7 +380,8 @@ Deno.serve(async (request) => {
 			let reason = 'semantic_not_configured';
 			if (parsed.query.length < MIN_SEMANTIC_QUERY_CHARS) reason = 'query_too_short';
 			else if (!consentError && consent !== true) reason = 'consent_required';
-			else if (parsed.offset + parsed.limit > MAX_HYBRID_WINDOW) reason = 'semantic_window_exhausted';
+			else if (parsed.offset + parsed.limit > MAX_HYBRID_WINDOW)
+				reason = 'semantic_window_exhausted';
 			return respond(200, await fallbackResponse({ supabase, parsed, reason, startedAt }));
 		}
 
@@ -393,16 +413,20 @@ Deno.serve(async (request) => {
 		} catch (error) {
 			if (error instanceof DOMException && error.name === 'AbortError') throw error;
 			const index = await semanticIndexStats(supabase, parsed.notebookId).catch(() => null);
-			return respond(200, await fallbackResponse({
-				supabase,
-				parsed,
-				reason: error instanceof GeminiEmbeddingHttpError && error.status === 429
-					? 'semantic_quota_or_rate_limit'
-					: 'semantic_provider_unavailable',
-				startedAt,
-				embeddingModel: SEMANTIC_EMBEDDING_MODEL,
-				index
-			}));
+			return respond(
+				200,
+				await fallbackResponse({
+					supabase,
+					parsed,
+					reason:
+						error instanceof GeminiEmbeddingHttpError && error.status === 429
+							? 'semantic_quota_or_rate_limit'
+							: 'semantic_provider_unavailable',
+					startedAt,
+					embeddingModel: SEMANTIC_EMBEDDING_MODEL,
+					index
+				})
+			);
 		}
 
 		const candidateLimit = Math.min(
@@ -420,14 +444,17 @@ Deno.serve(async (request) => {
 		]);
 		if (semanticResponse.error) {
 			const index = await semanticIndexStats(supabase, parsed.notebookId).catch(() => null);
-			return respond(200, await fallbackResponse({
-				supabase,
-				parsed,
-				reason: 'semantic_rpc_unavailable',
-				startedAt,
-				embeddingModel: SEMANTIC_EMBEDDING_MODEL,
-				index
-			}));
+			return respond(
+				200,
+				await fallbackResponse({
+					supabase,
+					parsed,
+					reason: 'semantic_rpc_unavailable',
+					startedAt,
+					embeddingModel: SEMANTIC_EMBEDDING_MODEL,
+					index
+				})
+			);
 		}
 
 		const semantic = Array.isArray(semanticResponse.data)
