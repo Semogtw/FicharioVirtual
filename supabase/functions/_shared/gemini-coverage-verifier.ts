@@ -67,7 +67,11 @@ function candidateText(payload: unknown): string | null {
 		const parts = (content as { parts?: unknown }).parts;
 		if (!Array.isArray(parts)) continue;
 		for (const part of parts) {
-			if (part && typeof part === 'object' && typeof (part as { text?: unknown }).text === 'string') {
+			if (
+				part &&
+				typeof part === 'object' &&
+				typeof (part as { text?: unknown }).text === 'string'
+			) {
 				return (part as { text: string }).text;
 			}
 		}
@@ -110,21 +114,27 @@ function parseVerdicts(
 	}
 	const verdicts = (value as { verdicts?: unknown }).verdicts;
 	if (!Array.isArray(verdicts) || verdicts.length !== candidates.length) {
-		throw new GeminiCoverageVerificationError('Gemini coverage verifier returned incomplete results');
+		throw new GeminiCoverageVerificationError(
+			'Gemini coverage verifier returned incomplete results'
+		);
 	}
 	const expected = new Set(candidates.map((item) => `${item.topicIndex}:${item.candidateIndex}`));
 	const seen = new Set<string>();
 	const parsed: CoverageVerificationVerdict[] = [];
 	for (const raw of verdicts) {
 		if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-			throw new GeminiCoverageVerificationError('Gemini coverage verifier returned invalid results');
+			throw new GeminiCoverageVerificationError(
+				'Gemini coverage verifier returned invalid results'
+			);
 		}
 		const record = raw as Record<string, unknown>;
 		const key = `${record.topicIndex}:${record.candidateIndex}`;
 		if (
 			!Number.isInteger(record.topicIndex) ||
 			!Number.isInteger(record.candidateIndex) ||
-			(record.coverage !== 'strong' && record.coverage !== 'partial' && record.coverage !== 'none') ||
+			(record.coverage !== 'strong' &&
+				record.coverage !== 'partial' &&
+				record.coverage !== 'none') ||
 			typeof record.confidence !== 'number' ||
 			!Number.isFinite(record.confidence) ||
 			record.confidence < 0 ||
@@ -132,7 +142,9 @@ function parseVerdicts(
 			!expected.has(key) ||
 			seen.has(key)
 		) {
-			throw new GeminiCoverageVerificationError('Gemini coverage verifier returned invalid results');
+			throw new GeminiCoverageVerificationError(
+				'Gemini coverage verifier returned invalid results'
+			);
 		}
 		seen.add(key);
 		parsed.push(
@@ -154,7 +166,8 @@ export async function requestGeminiCoverageVerification(input: {
 	signal?: AbortSignal;
 	fetchImpl?: typeof fetch;
 }): Promise<readonly CoverageVerificationVerdict[]> {
-	if (!input.apiKey || !MODEL.test(input.model)) throw new TypeError('Invalid coverage verifier configuration');
+	if (!input.apiKey || !MODEL.test(input.model))
+		throw new TypeError('Invalid coverage verifier configuration');
 	validateCandidates(input.candidates);
 
 	const prompt = [
@@ -184,6 +197,7 @@ export async function requestGeminiCoverageVerification(input: {
 					contents: [{ role: 'user', parts: [{ text: prompt }] }],
 					generationConfig: {
 						temperature: 0,
+						maxOutputTokens: 2_048,
 						responseMimeType: 'application/json',
 						responseSchema
 					}
@@ -215,7 +229,8 @@ export async function requestGeminiCoverageVerification(input: {
 		throw new GeminiCoverageVerificationError('Gemini coverage verifier returned invalid JSON');
 	}
 	const text = candidateText(payload);
-	if (text === null) throw new GeminiCoverageVerificationError('Gemini coverage verifier returned no candidate');
+	if (text === null)
+		throw new GeminiCoverageVerificationError('Gemini coverage verifier returned no candidate');
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(text) as unknown;
