@@ -50,7 +50,7 @@ begin
     if word_text is null
       or char_length(word_text) not between 1 and 256
       or word_text <> btrim(word_text)
-      or word_text ~ '[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]'
+      or word_text ~ '[[:cntrl:]]'
       or left_text !~ '^[0-9]{1,5}$'
       or top_text !~ '^[0-9]{1,5}$'
       or right_text !~ '^[0-9]{1,5}$'
@@ -225,7 +225,9 @@ begin
 end;
 $$;
 
-revoke execute on function public.is_valid_ocr_word_geometry(jsonb) from public, anon, authenticated;
+revoke execute on function public.is_valid_ocr_word_geometry(jsonb) from public, anon;
+grant execute on function public.is_valid_ocr_word_geometry(jsonb) to authenticated, service_role;
+
 revoke execute on function public.complete_ocr_job_with_geometry(uuid, text, jsonb, public.page_status, timestamptz, jsonb)
   from public, anon;
 grant execute on function public.complete_ocr_job_with_geometry(uuid, text, jsonb, public.page_status, timestamptz, jsonb)
