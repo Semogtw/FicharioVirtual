@@ -44,7 +44,7 @@ export function buildGeminiTelemetryRpcArgs(input: {
 			outputCharacters: result?.text.length ?? 0,
 			warningCount: result?.warnings.length ?? 0,
 			needsReview: result?.needsReview ?? false,
-			contentClass: contentClasses.get(page.pageId) ?? 'unknown',
+			contentClass: result?.contentClass ?? contentClasses.get(page.pageId) ?? 'unknown',
 			routeReason,
 			shadowSample: shadowSamples.has(page.pageId)
 		};
