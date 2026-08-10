@@ -65,6 +65,29 @@ describe('parseOcrBatchPayload', () => {
 		]);
 	});
 
+	it('drops a geometrically valid provider box when its word is absent from the OCR transcription', () => {
+		const parsed = parseOcrBatchPayload(
+			JSON.stringify({
+				pages: [
+					{
+						...result(first, 'A fotossintcse ocorre.'),
+						contentClass: 'scan_degraded',
+						wordGeometry: [
+							'1200,2400,3500,2900|fotossintcse',
+							'4000,2400,5200,2900|inventada'
+						]
+					}
+				]
+			}),
+			[first]
+		);
+
+		expect(parsed.valid).toBe(true);
+		expect(parsed.pages[0]?.wordGeometry).toEqual([
+			['fotossintcse', 1200, 2400, 3500, 2900]
+		]);
+	});
+
 	it('keeps valid unique pages while reporting omissions for subset retry', () => {
 		const parsed = parseOcrBatchPayload(JSON.stringify({ pages: [result(first)] }), [
 			first,
