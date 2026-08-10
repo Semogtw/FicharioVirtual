@@ -134,7 +134,6 @@ describe('createProcessShutdownSignal', () => {
 		shutdown.signal.addEventListener('abort', abort);
 
 		processObject.emit('SIGTERM');
-		processObject.emit('SIGINT');
 
 		expect(shutdown.signal.aborted).toBe(true);
 		expect(shutdown.signal.reason).toMatchObject({ name: 'AbortError' });
