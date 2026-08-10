@@ -9,6 +9,8 @@ export class OcrBackgroundKickError extends Error {
 	}
 }
 
+let defaultKick: Promise<boolean> | null = null;
+
 function acceptedResponse(value: unknown) {
 	return (
 		value !== null &&
@@ -18,7 +20,7 @@ function acceptedResponse(value: unknown) {
 	);
 }
 
-export async function kickOcrQueue(client: SupabaseClient<Database> = getSupabaseClient()) {
+async function performKick(client: SupabaseClient<Database>) {
 	try {
 		const { data, error } = await client.functions.invoke('ocr-queue-kick', { body: {} });
 		if (error || !acceptedResponse(data)) throw new OcrBackgroundKickError();
@@ -27,6 +29,16 @@ export async function kickOcrQueue(client: SupabaseClient<Database> = getSupabas
 		if (error instanceof OcrBackgroundKickError) throw error;
 		throw new OcrBackgroundKickError();
 	}
+}
+
+export function kickOcrQueue(client?: SupabaseClient<Database>): Promise<boolean> {
+	if (client) return performKick(client);
+	if (defaultKick) return defaultKick;
+	const pending = performKick(getSupabaseClient()).finally(() => {
+		if (defaultKick === pending) defaultKick = null;
+	});
+	defaultKick = pending;
+	return pending;
 }
 
 export function kickOcrQueueBestEffort(client?: SupabaseClient<Database>) {
