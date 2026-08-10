@@ -19,6 +19,7 @@ import {
 } from './supabase-staging-contract.mjs';
 
 const STORAGE_BUCKET = 'documents';
+const OCR_RETRY_DELAYS_MS = Object.freeze([0, 5_000, 20_000, 60_000]);
 
 /** @param {string} name */
 function requireEnv(name) {
@@ -58,6 +59,38 @@ async function recordConsent(client) {
 	if (result.error || result.data !== true) {
 		throw new Error(`OCR consent failed: ${result.error?.message ?? 'unexpected response'}`);
 	}
+}
+
+/** @param {unknown} data */
+function isRetryLater(data) {
+	if (data === null || typeof data !== 'object' || Array.isArray(data)) return false;
+	const record = /** @type {Record<string, unknown>} */ (data);
+	return Object.keys(record).length === 1 && record.state === 'retry_later';
+}
+
+/** @param {number} milliseconds */
+function wait(milliseconds) {
+	return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+/**
+ * Mirrors the browser OCR queue's finite retry rounds. A retry_later response is
+ * never considered success: the probe must still reach a terminal successful
+ * response within the same bounded 0/5s/20s/60s recovery window used by the app.
+ * @param {ReturnType<typeof createStagingClient>} client
+ * @param {string} pageId
+ */
+async function invokeProbeOcr(client, pageId) {
+	let invocation = null;
+	for (const [round, delayMs] of OCR_RETRY_DELAYS_MS.entries()) {
+		if (delayMs > 0) await wait(delayMs);
+		invocation = await client.functions.invoke('process-ocr', { body: { pageId } });
+		if (invocation.error || !isRetryLater(invocation.data)) return invocation;
+		if (round < OCR_RETRY_DELAYS_MS.length - 1) {
+			console.log(`INFO process-ocr requested bounded retry round ${round + 1}`);
+		}
+	}
+	return invocation;
 }
 
 /**
@@ -228,17 +261,15 @@ async function main() {
 		console.log('PASS synthetic OCR document was created with public credentials');
 
 		currentStage = 'invocation';
-		const invocation = await client.functions.invoke('process-ocr', {
-			body: { pageId: probe.pageId }
-		});
-		if (invocation.error) {
+		const invocation = await invokeProbeOcr(client, probe.pageId);
+		if (invocation?.error) {
 			diagnostic = await createOcrInvocationDiagnostic({
 				error: invocation.error,
 				response: invocation.response
 			});
 			throw new Error(formatOcrInvocationFailure(diagnostic));
 		}
-		assertOcrInvocation({ data: invocation.data });
+		assertOcrInvocation({ data: invocation?.data });
 		stages.functionCompleted = true;
 		outcome.needsReview = invocation.data.needsReview;
 		outcome.warningCount = invocation.data.warningCount;
