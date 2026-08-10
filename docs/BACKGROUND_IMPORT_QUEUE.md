@@ -43,6 +43,14 @@ A fila passa a mostrar `Leitura em segundo plano`. A partir desse ponto:
 - rate limits e retries futuros são reavaliados pelo despertador periódico do backend;
 - ao reabrir o app, a fila consulta um resumo user-scoped para refletir conclusão, revisão necessária ou falha.
 
+## Múltiplas abas
+
+A exclusão por browser lock continua impedindo que duas abas executem a mesma etapa crítica ao mesmo tempo. Com OCR server-side, `waiting` deixou de ser terminal; por isso a coordenação também usa as mensagens entre abas.
+
+Quando uma aba observa que outra já publicou um estado pós-lock (`Preparando`, `Enviando`, `Leitura iniciada` ou `Leitura em segundo plano`), ela cede somente sua cópia do item em memória e deixa de competir pelo retry. O registro compartilhado no IndexedDB não é apagado: ele permanece como checkpoint enquanto o OCR estiver pendente no servidor. O estado `Na fila` não é usado como prova de posse, porque duas abas podem restaurar o mesmo item antes da eleição do lock.
+
+O E2E multitab trava que uma restauração concorrente produz uma única criação de metadados, não duplica os uploads, não chama `process-ocr` diretamente no navegador e preserva o checkpoint em `waiting` até a conclusão no backend.
+
 ## Worker Gemini
 
 `ocr-queue-worker` é uma Edge Function server-to-server. Cada execução:
