@@ -61,8 +61,11 @@ verify_jwt = true
 [functions.drive-sync]
 verify_jwt = true
 
+# Pair-code redemption is intentionally public at the gateway. The function itself
+# accepts unauthenticated requests only for the short-lived one-time redeem action;
+# legacy pair/revoke paths validate the browser bearer token explicitly.
 [functions.desktop-ocr-pair]
-verify_jwt = true
+verify_jwt = false
 
 [functions.desktop-ocr-worker]
 verify_jwt = false
