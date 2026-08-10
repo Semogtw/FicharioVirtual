@@ -140,7 +140,7 @@ export class SecretServiceCredentialStore {
 				'device-id',
 				id
 			],
-			{ input: `${secret}\n`, command: this.#command, signal }
+			{ input: secret, command: this.#command, signal }
 		);
 		return true;
 	}
