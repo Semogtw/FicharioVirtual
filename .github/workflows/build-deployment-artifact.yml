@@ -124,25 +124,17 @@ jobs:
           ! grep -R -F 'sb_publishable_test_key_1234567890' build
 
       - name: Package static artifact
-        env:
-          PUBLIC_GOOGLE_CLIENT_ID: ${{ secrets.PUBLIC_GOOGLE_CLIENT_ID }}
         run: |
           set -euo pipefail
           rm -rf fichario-deploy
           mkdir -p fichario-deploy/site fichario-deploy/source
           cp -a build/. fichario-deploy/site/
           cp package.json pnpm-lock.yaml fichario-deploy/source/
-          if [[ -n "$PUBLIC_GOOGLE_CLIENT_ID" ]]; then
-            picker_configured=true
-          else
-            picker_configured=false
-          fi
           {
             echo 'schema_version=2'
             echo 'source_repository=Semogtw/FicharioVirtual'
             echo "source_commit=${GITHUB_SHA}"
             echo "target_environment=${TARGET_ENVIRONMENT}"
-            echo "google_picker_configured=${picker_configured}"
             echo "created_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo "node_version=$(node --version)"
             echo "pnpm_version=$(pnpm --version)"
