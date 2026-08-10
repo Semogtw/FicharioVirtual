@@ -187,7 +187,8 @@ export class DesktopWorkerClient {
 		if (typeof credential !== 'string' || !CREDENTIAL.test(credential)) {
 			throw new TypeError('Invalid desktop worker credential');
 		}
-		if (typeof fetchImpl !== 'function') throw new TypeError('Invalid desktop worker fetch implementation');
+		if (typeof fetchImpl !== 'function')
+			throw new TypeError('Invalid desktop worker fetch implementation');
 		if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 120_000) {
 			throw new TypeError('Invalid desktop worker request timeout');
 		}
