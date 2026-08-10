@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { page as appPage } from '$app/state';
 	import { onDestroy, onMount, untrack } from 'svelte';
+	import SearchMatch from '$lib/components/SearchMatch.svelte';
 	import type { PageDetail } from '$lib/domain/page';
 	import {
 		discardCorrectionDraft,
@@ -22,6 +24,7 @@
 	let error = $state<string | null>(null);
 	let timer: ReturnType<typeof setTimeout> | null = null;
 	let editVersion = 0;
+	let highlightedQuery = $derived(appPage.url.searchParams.get('highlight')?.slice(0, 200) ?? '');
 
 	type SaveRequest = {
 		version: number;
@@ -145,6 +148,15 @@
 				<li>{warning.message}</li>
 			{/each}
 		</ul>
+	{/if}
+
+	{#if highlightedQuery}
+		<SearchMatch
+			text={text}
+			query={highlightedQuery}
+			label="Trecho encontrado nesta página"
+			maximumLength={320}
+		/>
 	{/if}
 
 	<label>
