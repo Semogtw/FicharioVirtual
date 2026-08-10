@@ -1,6 +1,6 @@
 # Pré-processamento de imagens para OCR
 
-**Status:** `ocr_clean_v1` implementado para importação de imagens/fotos; validação visual e rollout de staging ainda são gates de promoção  
+**Status:** `ocr_clean_v1` implementado para importação de imagens/fotos; schema e limpeza validados em `fichario-staging`; validação visual/E2E e A/B real ainda pendentes  
 **Última revisão:** 10 de agosto de 2026
 
 ## 1. Objetivo
@@ -272,24 +272,44 @@ O fluxo de PDF já preserva o PDF original e renderiza apenas páginas que preci
 
 Não ativar isso até o perfil de imagens estar validado e o contrato de proveniência por página de PDF estar implementado, para não perder a capacidade de comparar resultados.
 
-## 9. Gates de rollout
+## 9. Estado de validação
 
-Antes de promover `ocr_clean_v1` para produção:
+### PASS estrutural
 
 ```text
-frontend/type-check: PASS
-unit tests de análise/contrato/upload: PASS
-database migrations em banco limpo: PASS
-migration aplicada em fichario-staging: PASS
-RLS/policies após migration: PASS
-importação Supabase imagem real: PASS
-importação Drive imagem real: PASS
-source != prepared comprovado por hash/path: PASS
-viewer usa source; OCR usa temporary prepared: PASS
-delete remove source + prepared + thumbnail: PASS
-telemetria recebe preprocessing_profile/version: PASS
-A/B em corpus representativo: PENDING até amostra real
-perspectiva/dewarp: fora do escopo de v1
+análise pura + testes sintéticos: PASS
+contrato do Worker/cliente + metadados bounded: PASS
+upload Supabase: source + prepared + thumbnail + rollback testados: PASS
+upload Drive: source bruto + derivados temporários + rollback parcial testados: PASS
+viewer/source e OCR/temporary separados no contrato SQL: PASS
+frontend/type-check do HEAD contendo a implementação: PASS
+source gates: PASS
+Edge Function type-check: PASS
+database gates em banco local limpo: PASS
+migrations aplicadas em fichario-staging: PASS
+RLS + FORCE RLS da telemetria preservados em staging: PASS
+trigger de enriquecimento SECURITY INVOKER em staging: PASS
+delete-document v11 ACTIVE em staging com source_storage_path: PASS
 ```
 
-Enquanto A/B real ainda estiver pendente, os thresholds devem continuar conservadores e o fallback deve permanecer ativo.
+As migrations de staging foram aplicadas em ordem e o catálogo confirmou 2 campos de fonte em `documents`, 14 campos de preprocessing em `pages`, 10 campos de preprocessing em `ocr_provider_page_metrics`, um trigger de enriquecimento e os três RPCs novos.
+
+O workflow `Validate current head` também comprovou os gates funcionais de frontend/source/Edge/banco. A execução global ainda pode aparecer como falha quando a faixa Chromium/browser é `skipped`, porque o passo final rejeita qualquer gate diferente de `success`; isso não deve ser convertido em um falso PASS de browser.
+
+### PENDING E2E/qualidade
+
+```text
+execução real do image-worker em Chromium pelo CI: PENDING
+importação Supabase de foto real pelo navegador: PENDING
+importação Drive de foto real pelo navegador: PENDING
+source != prepared comprovado em amostra real por hash/path: PENDING
+viewer exibindo source real em browser: PENDING
+OCR Gemini consumindo prepared real e mantendo source: PENDING
+exclusão E2E de documento real: PENDING
+telemetria com preprocessing_profile/version vinda de OCR real: PENDING
+A/B original/controle vs ocr_clean_v1 em corpus representativo: PENDING
+```
+
+Portanto `ocr_clean_v1` está implementado e pronto para validação com arquivos reais, mas ainda não deve ser descrito como comprovadamente superior ao original. A promoção para produção depende principalmente da validação visual/E2E e do A/B de qualidade.
+
+Perspectiva/dewarp e preprocessing de páginas renderizadas de PDFs continuam fora do escopo de v1.
