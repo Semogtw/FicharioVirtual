@@ -11,7 +11,7 @@ import {
 function secureHeaders(overrides: Record<string, string> = {}) {
 	return new Headers({
 		'content-security-policy':
-			"default-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'wasm-unsafe-eval'",
+			"default-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'wasm-unsafe-eval' https://apis.google.com",
 		'strict-transport-security': 'max-age=31536000; includeSubDomains',
 		'referrer-policy': 'no-referrer',
 		'x-content-type-options': 'nosniff',
@@ -50,7 +50,7 @@ describe('deployment contract', () => {
 			assertSecurityHeaders(
 				secureHeaders({
 					'content-security-policy':
-						"default-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline'"
+						"default-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'wasm-unsafe-eval' https://apis.google.com 'unsafe-inline'"
 				})
 			)
 		).toThrow(/unsafe-inline/);
