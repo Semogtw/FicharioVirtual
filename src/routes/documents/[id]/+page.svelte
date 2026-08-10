@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import CorrectionEditor from '$lib/components/CorrectionEditor.svelte';
+	import SearchMatch from '$lib/components/SearchMatch.svelte';
 	import type { PageDetail } from '$lib/domain/page';
 	import { deleteDocument } from '$lib/services/documents';
 	import { loadDocumentDetail, type DocumentDetail } from '$lib/services/document-detail';
@@ -169,7 +170,8 @@
 
 		{#if highlightedQuery}
 			<p class="search-context">
-				Aberto a partir da busca por <strong>“{highlightedQuery}”</strong>.
+				Aberto a partir da busca por <strong>“{highlightedQuery}”</strong>. A correspondência é
+				marcada sobre a mídia e na transcrição.
 			</p>
 		{/if}
 		{#if error}<p class="inline-error" role="alert">{error}</p>{/if}
@@ -200,27 +202,41 @@
 							>
 						{/if}
 					</div>
-					{#if detail.originalReference.provider === 'missing'}
-						<p class="original-status" role="status">O original não está disponível.</p>
-					{:else if detail.originalReference.provider === 'google_drive'}
-						<div class="original-status drive-reference" role="status">
-							<p>O original está preservado no Google Drive.</p>
-							<a href={detail.originalReference.url} target="_blank" rel="noreferrer"
-								>Abrir no Google Drive</a
-							>
-						</div>
-					{:else}
-						<div class="viewer">
-							{#if detail.kind === 'image'}
-								<img src={detail.originalReference.url} alt={`Original de ${detail.title}`} />
-							{:else}
-								<iframe
-									src={`${detail.originalReference.url}#page=${selectedPage.pageNumber}&zoom=page-width`}
-									title={`Página ${selectedPage.pageNumber} do PDF ${detail.title}`}
-								></iframe>
-							{/if}
-						</div>
-					{/if}
+					<div class="original-body">
+						{#if detail.originalReference.provider === 'missing'}
+							<p class="original-status" role="status">O original não está disponível.</p>
+						{:else if detail.originalReference.provider === 'google_drive'}
+							<div class="original-status drive-reference" role="status">
+								<p>O original está preservado no Google Drive.</p>
+								<a href={detail.originalReference.url} target="_blank" rel="noreferrer"
+									>Abrir no Google Drive</a
+								>
+							</div>
+						{:else}
+							<div class="viewer">
+								{#if detail.kind === 'image'}
+									<img src={detail.originalReference.url} alt={`Original de ${detail.title}`} />
+								{:else}
+									<iframe
+										src={`${detail.originalReference.url}#page=${selectedPage.pageNumber}&zoom=page-width`}
+										title={`Página ${selectedPage.pageNumber} do PDF ${detail.title}`}
+									></iframe>
+								{/if}
+							</div>
+						{/if}
+
+						{#if highlightedQuery}
+							<div class="media-search-marker">
+								<SearchMatch
+									text={selectedPage.text}
+									query={highlightedQuery}
+									label="Encontrado nesta mídia"
+									maximumLength={220}
+									compact
+								/>
+							</div>
+						{/if}
+					</div>
 				</div>
 
 				{#key selectedPage.id}
@@ -373,6 +389,11 @@
 		font-size: 0.76rem;
 	}
 
+	.original-body {
+		position: relative;
+		min-height: 28rem;
+	}
+
 	.viewer {
 		min-height: 28rem;
 		display: grid;
@@ -381,6 +402,17 @@
 		border: 1px solid var(--line);
 		border-radius: var(--radius-sm);
 		background: #d8d6d0;
+	}
+
+	.media-search-marker {
+		position: absolute;
+		right: 0.75rem;
+		bottom: 0.75rem;
+		left: 0.75rem;
+		z-index: 3;
+		max-height: 42%;
+		overflow: auto;
+		pointer-events: auto;
 	}
 
 	.original-status {
@@ -492,6 +524,13 @@
 
 		.header-actions {
 			justify-content: flex-start;
+		}
+
+		.media-search-marker {
+			right: 0.45rem;
+			bottom: 0.45rem;
+			left: 0.45rem;
+			max-height: 50%;
 		}
 	}
 </style>
