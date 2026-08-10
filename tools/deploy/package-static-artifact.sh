@@ -5,8 +5,8 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$repo_root"
 
 output_name="${1:-fichario-deploy}"
-if [[ ! "$output_name" =~ ^[A-Za-z0-9._-]+$ || "$output_name" == '.' || "$output_name" == '..' ]]; then
-  echo 'artifact output must be a simple repository-local directory name' >&2
+if [[ ! "$output_name" =~ ^fichario-deploy(-[A-Za-z0-9][A-Za-z0-9._-]*)?$ ]]; then
+  echo 'artifact output must be fichario-deploy or a fichario-deploy-* repository-local directory' >&2
   exit 1
 fi
 
