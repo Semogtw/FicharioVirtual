@@ -3,14 +3,14 @@
 	import Button from '$lib/components/Button.svelte';
 	import NativeSelect from '$lib/components/ui/native-select/NativeSelect.svelte';
 	import type { NotebookSummary } from '$lib/domain/notebook';
+	import type { AnalyzedUnitCoverageSummary } from '$lib/coverage/semantic-coverage';
 	import type { OcrTopicCandidate, TopicImportConfidence } from '$lib/coverage/topic-import';
 	import {
 		MAX_TOPIC_LENGTH,
 		MAX_UNIT_TOPICS,
 		normalizeTopic,
 		parseUnitTopics,
-		type TopicCoverageStatus,
-		type UnitCoverageSummary
+		type TopicCoverageStatus
 	} from '$lib/coverage/topic-coverage';
 	import { highlightSnippet } from '$lib/search/highlight';
 	import {
@@ -19,6 +19,7 @@
 	} from '$lib/services/coverage-photo-import';
 	import { listNotebooks } from '$lib/services/notebooks';
 	import { RequestVersion } from '$lib/services/request-version';
+	import { recordSemanticCoverageConsent } from '$lib/services/semantic-coverage';
 	import { analyzeUnitCoverage } from '$lib/services/topic-coverage';
 
 	type EditableTopic = {
@@ -55,7 +56,7 @@
 	let notebooks = $state<readonly NotebookSummary[]>([]);
 	let notebookLoading = $state(true);
 	let notebookError = $state<string | null>(null);
-	let summary = $state<UnitCoverageSummary | null>(null);
+	let summary = $state<AnalyzedUnitCoverageSummary | null>(null);
 	let loading = $state(false);
 	let error = $state<string | null>(null);
 	let controller: AbortController | null = null;
@@ -65,6 +66,9 @@
 	let photoError = $state<string | null>(null);
 	let photoNotice = $state<string | null>(null);
 	let photoController: AbortController | null = null;
+	let semanticEnabled = $state(false);
+	let semanticConsentRecorded = $state(false);
+	let semanticNotice = $state<string | null>(null);
 
 	let topicValidation = $derived.by(() => {
 		try {
@@ -107,6 +111,38 @@
 		loading = false;
 		error = null;
 		summary = null;
+	}
+
+	function toggleSemantic() {
+		semanticNotice = null;
+		invalidateCoverage();
+	}
+
+	function semanticResultNotice(result: AnalyzedUnitCoverageSummary) {
+		const analysis = result.analysis;
+		if (!analysis) return null;
+		if (analysis.mode === 'lexical') {
+			return 'A camada semântica não ficou disponível nesta análise. O resultado textual/fuzzy foi preservado normalmente.';
+		}
+		const notes = ['Análise híbrida ativa: busca textual/fuzzy + relação semântica.'];
+		if (analysis.index) {
+			if (analysis.index.complete) {
+				notes.push(`Índice semântico atualizado para ${analysis.index.totalPages} página(s).`);
+			} else {
+				notes.push(
+					`Índice semântico em construção: ${analysis.index.indexedPages}/${analysis.index.totalPages} página(s) atuais. A busca textual continua cobrindo o fichário inteiro.`
+				);
+			}
+			if (analysis.index.indexedThisRun > 0) {
+				notes.push(`${analysis.index.indexedThisRun} página(s) foram indexadas nesta análise.`);
+			}
+		}
+		if (analysis.verification === 'used') {
+			notes.push('Os melhores trechos também foram verificados semanticamente pelo Gemini.');
+		} else if (analysis.verification === 'unavailable') {
+			notes.push('O verificador Gemini não respondeu; o score híbrido permaneceu disponível.');
+		}
+		return notes.join(' ');
 	}
 
 	function appendEditableTopics(incoming: readonly EditableTopic[]) {
@@ -311,12 +347,30 @@
 		controller = activeController;
 		loading = true;
 		error = null;
+		semanticNotice = null;
 		try {
+			let semanticRequested = semanticEnabled;
+			if (semanticRequested && !semanticConsentRecorded) {
+				try {
+					await recordSemanticCoverageConsent();
+					if (!coverageRequests.isCurrent(version)) return;
+					semanticConsentRecorded = true;
+				} catch {
+					semanticRequested = false;
+					semanticNotice =
+						'Não foi possível registrar o consentimento para enviar trechos ao Gemini. A análise textual/fuzzy será usada desta vez.';
+				}
+			}
+
 			const result = await analyzeUnitCoverage(topicValidation.topics, {
 				notebookId: notebookId || null,
-				signal: activeController.signal
+				signal: activeController.signal,
+				semantic: semanticRequested
 			});
-			if (coverageRequests.isCurrent(version)) summary = result;
+			if (coverageRequests.isCurrent(version)) {
+				summary = result;
+				semanticNotice = semanticResultNotice(result) ?? semanticNotice;
+			}
 		} catch (caught) {
 			if (caught instanceof DOMException && caught.name === 'AbortError') return;
 			if (coverageRequests.isCurrent(version)) {
@@ -549,13 +603,34 @@
 			</div>
 		{/if}
 
+		<label class="consent">
+			<input
+				type="checkbox"
+				bind:checked={semanticEnabled}
+				disabled={loading}
+				onchange={toggleSemantic}
+			/>
+			<span>
+				<strong>Usar relação semântica com Gemini.</strong>
+				<small>
+					Quando ativado, trechos das suas páginas podem ser enviados ao Gemini para gerar embeddings e
+					verificar os melhores candidatos. A busca textual/fuzzy continua sendo o fallback e cobre o
+					fichário mesmo sem cota. No nível gratuito do provedor, os dados podem ser usados para melhorar
+					produtos.
+				</small>
+			</span>
+		</label>
+		{#if semanticNotice}<p class="photo-notice" role="status">{semanticNotice}</p>{/if}
+
 		<div class="actions">
 			<Button
 				label={loading ? 'Analisando…' : 'Verificar cobertura'}
 				disabled={loading || topicValidation.topics.length === 0 || Boolean(topicValidation.error)}
 				onclick={() => void analyze()}
 			/>
-			<p>Até quatro pesquisas são executadas em paralelo para evitar rajadas desnecessárias.</p>
+			<p>
+				A busca é limitada e concorrente; com semântica ativa, o índice é atualizado em pequenos lotes.
+			</p>
 		</div>
 	</section>
 
@@ -567,7 +642,11 @@
 	{/if}
 
 	{#if loading}
-		<p class="loading" role="status">Comparando os assuntos com as páginas pesquisáveis…</p>
+		<p class="loading" role="status">
+			{semanticEnabled
+				? 'Comparando os assuntos por texto e significado…'
+				: 'Comparando os assuntos com as páginas pesquisáveis…'}
+		</p>
 	{:else if summary}
 		<section class="coverage" aria-labelledby="coverage-title">
 			<div class="coverage-summary">
@@ -630,9 +709,14 @@
 			</ol>
 
 			<p class="method-note">
-				A classificação usa a força da busca textual/fuzzy atual. “Parcial” indica que há indícios,
-				mas não evidência forte o bastante para afirmar cobertura completa. Busca semântica pode ser
-				adicionada depois como refinamento, sem mudar este contrato de interface.
+				{#if summary.analysis?.mode === 'hybrid'}
+					A classificação combina busca textual/fuzzy, similaridade por embeddings e, quando disponível,
+					verificação conservadora do Gemini sobre poucos trechos candidatos. O percentual continua
+					derivado dos mesmos estados Coberto, Parcial e Não encontrado.
+				{:else}
+					A classificação usa a força da busca textual/fuzzy. “Parcial” indica que há indícios, mas não
+					evidência forte o bastante para afirmar cobertura completa.
+				{/if}
 			</p>
 		</section>
 	{/if}
