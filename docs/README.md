@@ -14,6 +14,7 @@ Ao registrar progresso, prefira atualizar um desses arquivos em vez de adicionar
 ## Produto e arquitetura
 
 - [`PROJECT_SPEC.md`](PROJECT_SPEC.md) — especificação canônica do produto e da arquitetura.
+- [`BACKGROUND_IMPORT_QUEUE.md`](BACKGROUND_IMPORT_QUEUE.md) — fila global de importações e OCR server-driven após a ingestão.
 - [`superpowers/specs/`](superpowers/specs/) — designs e decisões técnicas detalhadas.
 - [`superpowers/plans/`](superpowers/plans/) — planos de implementação associados aos designs.
 
