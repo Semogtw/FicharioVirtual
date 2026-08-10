@@ -15,7 +15,9 @@ if (process.argv.length !== 2) {
 		if (error?.name === 'AbortError') {
 			process.exitCode = 130;
 		} else {
-			process.stderr.write(`${JSON.stringify({ status: 'failed', code: 'worker_doctor_failed' })}\n`);
+			process.stderr.write(
+				`${JSON.stringify({ status: 'failed', code: 'worker_doctor_failed' })}\n`
+			);
 			process.exitCode = 1;
 		}
 	}
