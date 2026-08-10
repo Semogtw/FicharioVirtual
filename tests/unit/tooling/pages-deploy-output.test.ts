@@ -38,17 +38,10 @@ describe('Cloudflare Pages structured deployment output', () => {
 		});
 	});
 
-	it('accepts production output without requiring an alias', () => {
-		expect(
-			validatePagesDeployOutput(output({ environment: 'production', alias: null }), {
-				...expected,
-				environment: 'production'
-			})
-		).toEqual({
-			url: 'https://abc123.fichario-virtual.pages.dev',
-			alias: '',
-			deploymentId: '12345678-abcd-4abc-8abc-1234567890ab'
-		});
+	it('rejects production output while the executable pipeline is staging-only', () => {
+		expect(() =>
+			validatePagesDeployOutput(output({ environment: 'production', alias: null }), expected)
+		).toThrow(/environment/);
 	});
 
 	it('rejects the wrong project, environment, branch or source SHA', () => {
