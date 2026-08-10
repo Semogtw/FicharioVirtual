@@ -72,51 +72,7 @@ jobs:
           PUBLIC_GOOGLE_CLIENT_ID: ${{ secrets.PUBLIC_GOOGLE_CLIENT_ID }}
           PUBLIC_GOOGLE_PICKER_API_KEY: ${{ secrets.PUBLIC_GOOGLE_PICKER_API_KEY }}
           PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER: ${{ secrets.PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER }}
-        run: |
-          set -euo pipefail
-          [[ "$TARGET_ENVIRONMENT" == 'staging' ]] || {
-            echo 'this workflow is intentionally staging-only until production infrastructure exists' >&2
-            exit 1
-          }
-
-          node <<'NODE'
-          const urlValue = process.env.PUBLIC_SUPABASE_URL ?? '';
-          const key = process.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? '';
-          const url = new URL(urlValue);
-          if (
-            url.protocol !== 'https:' ||
-            url.username ||
-            url.password ||
-            url.pathname !== '/' ||
-            url.search ||
-            url.hash
-          ) {
-            throw new Error('PUBLIC_SUPABASE_URL must be a credential-free HTTPS origin');
-          }
-          if (!key.startsWith('sb_publishable_') || key.length < 20 || key.length > 512) {
-            throw new Error('PUBLIC_SUPABASE_PUBLISHABLE_KEY is invalid');
-          }
-
-          const clientId = (process.env.PUBLIC_GOOGLE_CLIENT_ID ?? '').trim();
-          const pickerKey = (process.env.PUBLIC_GOOGLE_PICKER_API_KEY ?? '').trim();
-          const projectNumber = (process.env.PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER ?? '').trim();
-          const pickerValues = [clientId, pickerKey, projectNumber];
-          const configuredPickerValues = pickerValues.filter(Boolean).length;
-          if (configuredPickerValues !== 0 && configuredPickerValues !== pickerValues.length) {
-            throw new Error('Google Picker public settings must be configured together');
-          }
-          if (configuredPickerValues === pickerValues.length) {
-            if (!/^\d+-[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$/.test(clientId)) {
-              throw new Error('PUBLIC_GOOGLE_CLIENT_ID is invalid');
-            }
-            if (!/^AIza[A-Za-z0-9_-]+$/.test(pickerKey) || pickerKey.length > 256) {
-              throw new Error('PUBLIC_GOOGLE_PICKER_API_KEY is invalid');
-            }
-            if (!/^\d{6,20}$/.test(projectNumber)) {
-              throw new Error('PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER is invalid');
-            }
-          }
-          NODE
+        run: node tools/checks/check-staging-public-config.mjs
 
       - name: Verify and build static site
         env:
@@ -138,11 +94,9 @@ jobs:
           set -euo pipefail
           grep -R -F -- "$PUBLIC_SUPABASE_URL" build >/dev/null
           grep -R -F -- "$PUBLIC_SUPABASE_PUBLISHABLE_KEY" build >/dev/null
-          if [[ -n "$PUBLIC_GOOGLE_CLIENT_ID" ]]; then
-            grep -R -F -- "$PUBLIC_GOOGLE_CLIENT_ID" build >/dev/null
-            grep -R -F -- "$PUBLIC_GOOGLE_PICKER_API_KEY" build >/dev/null
-            grep -R -F -- "$PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER" build >/dev/null
-          fi
+          grep -R -F -- "$PUBLIC_GOOGLE_CLIENT_ID" build >/dev/null
+          grep -R -F -- "$PUBLIC_GOOGLE_PICKER_API_KEY" build >/dev/null
+          grep -R -F -- "$PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER" build >/dev/null
           ! grep -R -F '127.0.0.1:54321' build
           ! grep -R -F 'sb_publishable_test_key_1234567890' build
 
