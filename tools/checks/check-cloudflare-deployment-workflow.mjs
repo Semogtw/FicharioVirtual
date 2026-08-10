@@ -21,16 +21,24 @@ requirePattern(
 	'workflow permissions must remain actions:read + contents:read'
 );
 requirePattern(
-	/^\s+environment:\s*\$\{\{ inputs\.target_environment \}\}\s*$/mu,
-	'deployment job must use the selected protected environment'
+	/^\s+environment:\s*\$\{\{ inputs\.target_environment == 'production' && 'production-deploy' \|\| 'staging-deploy' \}\}\s*$/mu,
+	'deployment job must isolate staging-deploy from production-deploy'
 );
 requirePattern(
 	/^\s+CLOUDFLARE_API_TOKEN:\s*\$\{\{ secrets\.CLOUDFLARE_API_TOKEN \}\}\s*$/mu,
-	'Cloudflare API token must come only from the protected environment'
+	'Cloudflare API token must come only from the protected deploy environment'
 );
 requirePattern(
 	/^\s+CLOUDFLARE_ACCOUNT_ID:\s*\$\{\{ secrets\.CLOUDFLARE_ACCOUNT_ID \}\}\s*$/mu,
-	'Cloudflare account ID must come only from the protected environment'
+	'Cloudflare account ID must come only from the protected deploy environment'
+);
+requirePattern(
+	/^\s+CLOUDFLARE_PRODUCTION_DEPLOY_ENABLED:\s*\$\{\{ vars\.CLOUDFLARE_PRODUCTION_DEPLOY_ENABLED \}\}\s*$/mu,
+	'production promotion must use an explicit protected-environment enable flag'
+);
+requirePattern(
+	/CLOUDFLARE_PRODUCTION_DEPLOY_ENABLED\" != 'true'/u,
+	'production promotion must fail closed until explicitly enabled'
 );
 requirePattern(
 	/^\s+WRANGLER_VERSION:\s*'\d+\.\d+\.\d+'\s*$/mu,
