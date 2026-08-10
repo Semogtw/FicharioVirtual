@@ -72,12 +72,76 @@ describe('desktop worker result spool', () => {
 		expect(spool.get(JOB_ID)?.state).toBe('accepted');
 	});
 
+	it('moves a permanently rejected result transactionally into a preserved dead letter', async () => {
+		const { spool } = await createSpool();
+		spool.enqueue(result(), new Date('2026-08-09T00:00:01.000Z'));
+		spool.markAttempt(JOB_ID, new Date('2026-08-09T00:00:02.000Z'));
+
+		expect(
+			spool.markRejected(
+				JOB_ID,
+				'desktop_ocr_completion_rejected',
+				new Date('2026-08-09T00:00:03.000Z')
+			)
+		).toBe(true);
+
+		expect(spool.get(JOB_ID)).toBeNull();
+		expect(spool.listPending()).toEqual([]);
+		expect(spool.getRejected(JOB_ID)).toEqual({
+			jobId: JOB_ID,
+			sourceSha256: SOURCE_SHA,
+			modelId: 'test-model',
+			modelVersion: '1.0.0',
+			attemptCount: 1,
+			createdAt: '2026-08-09T00:00:01.000Z',
+			rejectedAt: '2026-08-09T00:00:03.000Z',
+			reasonCode: 'desktop_ocr_completion_rejected',
+			result: result()
+		});
+		expect(spool.listRejected()).toHaveLength(1);
+	});
+
+	it('keeps dead-lettered payloads idempotent and rejects collisions instead of recreating pending work', async () => {
+		const { spool } = await createSpool();
+		spool.enqueue(result());
+		spool.markAttempt(JOB_ID);
+		spool.markRejected(JOB_ID, 'desktop_ocr_completion_rejected');
+
+		const replay = spool.enqueue(result());
+		expect(replay?.reasonCode).toBe('desktop_ocr_completion_rejected');
+		expect(spool.listPending()).toEqual([]);
+		expect(() => spool.enqueue(result({ rawText: 'different transcript' }))).toThrow(
+			'idempotency conflict'
+		);
+	});
+
+	it('requires at least one delivery attempt and a safe reason before dead-lettering', async () => {
+		const { spool } = await createSpool();
+		spool.enqueue(result());
+		expect(spool.markRejected(JOB_ID, 'desktop_ocr_completion_rejected')).toBe(false);
+		expect(() => spool.markRejected(JOB_ID, 'BAD reason / secret')).toThrow('rejection reason');
+		expect(spool.get(JOB_ID)?.state).toBe('pending');
+	});
+
 	it('purges only accepted results older than the retention cutoff', async () => {
 		const { spool } = await createSpool();
 		spool.enqueue(result());
 		spool.markAccepted(JOB_ID, new Date('2026-08-09T00:00:03.000Z'));
 		expect(spool.purgeAcceptedBefore(new Date('2026-08-09T00:00:04.000Z'))).toBe(1);
 		expect(spool.get(JOB_ID)).toBeNull();
+	});
+
+	it('does not purge preserved dead letters with accepted-result retention', async () => {
+		const { spool } = await createSpool();
+		spool.enqueue(result(), new Date('2026-08-08T00:00:00.000Z'));
+		spool.markAttempt(JOB_ID);
+		spool.markRejected(
+			JOB_ID,
+			'desktop_ocr_completion_rejected',
+			new Date('2026-08-08T00:00:01.000Z')
+		);
+		expect(spool.purgeAcceptedBefore(new Date('2026-08-10T00:00:00.000Z'))).toBe(0);
+		expect(spool.getRejected(JOB_ID)?.result).toEqual(result());
 	});
 
 	it('rejects payloads that diverge from the Edge Function contract', async () => {
