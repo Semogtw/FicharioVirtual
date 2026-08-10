@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
 	DesktopOcrDevicesError,
 	listDesktopOcrDevices,
+	renameDesktopOcrDevice,
 	revokeDesktopOcrDevice
 } from '../../../src/lib/services/desktop-ocr-devices';
 
@@ -100,12 +101,56 @@ describe('desktop OCR device service', () => {
 		});
 	});
 
-	it('rejects invalid ids before reaching Supabase', async () => {
+	it('renames an active device with a normalized bounded label', async () => {
+		const rpc = vi.fn(async () => ({
+			data: {
+				deviceId: DEVICE_ID,
+				label: 'PC do escritório',
+				updatedAt: '2026-08-10T04:30:00.000Z'
+			},
+			error: null
+		}));
+
+		await expect(
+			renameDesktopOcrDevice(DEVICE_ID, '  PC do escritório  ', { rpc } as never)
+		).resolves.toEqual({
+			deviceId: DEVICE_ID,
+			label: 'PC do escritório',
+			updatedAt: '2026-08-10T04:30:00.000Z'
+		});
+		expect(rpc).toHaveBeenCalledWith('rename_ocr_worker_device', {
+			target_device_id: DEVICE_ID,
+			device_label: 'PC do escritório'
+		});
+	});
+
+	it('rejects invalid ids and labels before reaching Supabase', async () => {
 		const rpc = vi.fn();
 		await expect(revokeDesktopOcrDevice('../device', { rpc } as never)).rejects.toThrow(
 			'device id'
 		);
+		await expect(renameDesktopOcrDevice(DEVICE_ID, '   ', { rpc } as never)).rejects.toThrow(
+			'device label'
+		);
+		await expect(renameDesktopOcrDevice(DEVICE_ID, 'x'.repeat(81), { rpc } as never)).rejects.toThrow(
+			'device label'
+		);
 		expect(rpc).not.toHaveBeenCalled();
+	});
+
+	it('fails closed when the rename receipt does not match the requested mutation', async () => {
+		const rpc = vi.fn(async () => ({
+			data: {
+				deviceId: DEVICE_ID,
+				label: 'Outro nome',
+				updatedAt: '2026-08-10T04:30:00.000Z'
+			},
+			error: null
+		}));
+
+		await expect(
+			renameDesktopOcrDevice(DEVICE_ID, 'Nome esperado', { rpc } as never)
+		).rejects.toBeInstanceOf(DesktopOcrDevicesError);
 	});
 
 	it('maps transport and backend failures to safe user-facing errors', async () => {
@@ -122,5 +167,13 @@ describe('desktop OCR device service', () => {
 		);
 		expect(error).toBeInstanceOf(DesktopOcrDevicesError);
 		expect(String(error)).not.toContain('details');
+
+		const renameError = await renameDesktopOcrDevice(
+			DEVICE_ID,
+			'Nome novo',
+			{ rpc: failingRpc } as never
+		).catch((caught) => caught);
+		expect(renameError).toBeInstanceOf(DesktopOcrDevicesError);
+		expect(String(renameError)).not.toContain('details');
 	});
 });
