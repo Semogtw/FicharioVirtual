@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import process from 'node:process';
+import { assertSecurityHeaders } from './deployment-contract.mjs';
 
 const root = resolve(new URL('../..', import.meta.url).pathname);
 const build = join(root, 'build');
@@ -19,11 +20,35 @@ async function requiredFile(name) {
 	}
 }
 
-const [manifestSource, serviceWorker, registerScript, fallback] = await Promise.all([
+function parseRootStaticHeaders(source) {
+	const lines = source.split(/\r?\n/);
+	const rootIndex = lines.findIndex((line) => line.trim() === '/*');
+	if (rootIndex < 0) throw new Error('_headers is missing the /* root rule');
+
+	const headers = new Headers();
+	const names = new Set();
+	for (const line of lines.slice(rootIndex + 1)) {
+		if (line.trim() === '') break;
+		if (!/^\s+/.test(line)) break;
+		const separator = line.indexOf(':');
+		if (separator <= 0) throw new Error('_headers contains an invalid root header line');
+		const name = line.slice(0, separator).trim().toLowerCase();
+		const value = line.slice(separator + 1).trim();
+		if (!name || !value) throw new Error('_headers contains an empty root header');
+		if (names.has(name)) throw new Error(`_headers repeats root header ${name}`);
+		names.add(name);
+		headers.set(name, value);
+	}
+	if (names.size === 0) throw new Error('_headers root rule has no headers');
+	return headers;
+}
+
+const [manifestSource, serviceWorker, registerScript, fallback, staticHeaders] = await Promise.all([
 	requiredFile('manifest.webmanifest'),
 	requiredFile('sw.js'),
 	requiredFile('registerSW.js'),
-	requiredFile('200.html')
+	requiredFile('200.html'),
+	requiredFile('_headers')
 ]);
 
 if (manifestSource) {
@@ -69,6 +94,16 @@ if (serviceWorker) {
 	}
 	if (!serviceWorker.includes('200.html')) {
 		fail('sw.js must precache the static adapter fallback shell');
+	}
+}
+
+if (staticHeaders) {
+	try {
+		assertSecurityHeaders(parseRootStaticHeaders(staticHeaders));
+	} catch (error) {
+		fail(
+			`_headers root security contract is invalid: ${error instanceof Error ? error.message : String(error)}`
+		);
 	}
 }
 
