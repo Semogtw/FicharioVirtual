@@ -25,6 +25,14 @@ export type DesktopOcrJobStatus =
 	| 'failed'
 	| 'waiting_desktop';
 
+export type DesktopOcrJobRouteChange = Readonly<{
+	jobId: string;
+	pageId: string;
+	route: 'gemini';
+	status: 'pending';
+	recoveredExpiredLease: boolean;
+}>;
+
 export type DesktopOcrJob = Readonly<{
 	id: string;
 	pageId: string;
@@ -54,6 +62,10 @@ type QueueRpcClient = {
 	rpc(
 		name: 'list_desktop_ocr_jobs',
 		args?: Record<string, never>
+	): Promise<{ data: unknown; error: unknown }>;
+	rpc(
+		name: 'set_ocr_job_route',
+		args: { target_page_id: string; target_route: 'gemini' }
 	): Promise<{ data: unknown; error: unknown }>;
 };
 
@@ -149,6 +161,28 @@ function parseJobs(value: unknown): readonly DesktopOcrJob[] | null {
 	return Object.freeze(jobs);
 }
 
+function parseRouteChange(value: unknown, expectedPageId: string): DesktopOcrJobRouteChange | null {
+	if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+	const record = value as Record<string, unknown>;
+	if (
+		typeof record.jobId !== 'string' ||
+		!UUID.test(record.jobId) ||
+		record.pageId !== expectedPageId ||
+		record.route !== 'gemini' ||
+		record.status !== 'pending' ||
+		typeof record.recoveredExpiredLease !== 'boolean'
+	) {
+		return null;
+	}
+	return Object.freeze({
+		jobId: record.jobId,
+		pageId: expectedPageId,
+		route: 'gemini',
+		status: 'pending',
+		recoveredExpiredLease: record.recoveredExpiredLease
+	});
+}
+
 function gateway(client?: SupabaseClient<Database>): QueueRpcClient {
 	return (client ?? getSupabaseClient()) as unknown as QueueRpcClient;
 }
@@ -166,4 +200,28 @@ export async function listDesktopOcrJobs(
 	const jobs = parseJobs(result.data);
 	if (!jobs) throw new DesktopOcrJobsError('A fila de OCR local retornou um formato inválido.');
 	return jobs;
+}
+
+export async function returnDesktopOcrJobToGemini(
+	pageId: string,
+	client?: SupabaseClient<Database>
+): Promise<DesktopOcrJobRouteChange> {
+	if (!UUID.test(pageId)) throw new TypeError('Invalid desktop OCR page id');
+	let result: { data: unknown; error: unknown };
+	try {
+		result = await gateway(client).rpc('set_ocr_job_route', {
+			target_page_id: pageId,
+			target_route: 'gemini'
+		});
+	} catch {
+		throw new DesktopOcrJobsError('Não foi possível devolver este trabalho ao Gemini.');
+	}
+	if (result.error) {
+		throw new DesktopOcrJobsError('Não foi possível devolver este trabalho ao Gemini.');
+	}
+	const change = parseRouteChange(result.data, pageId);
+	if (!change) {
+		throw new DesktopOcrJobsError('A confirmação de troca de rota retornou um formato inválido.');
+	}
+	return change;
 }
