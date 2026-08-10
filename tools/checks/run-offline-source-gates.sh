@@ -8,6 +8,7 @@ node tools/checks/check-tracked-secrets.mjs
 node tools/checks/check-workflow-security.mjs
 node tools/checks/check-cloudflare-deployment-workflow.mjs
 node tools/checks/check-deployment-artifact-workflow.mjs
+node tools/checks/check-artifact-reproducibility.mjs
 node tools/checks/check-dependency-security.mjs
 node tools/checks/check-pdfjs-security.mjs
 node tools/checks/check-pdf-upload-security.mjs
