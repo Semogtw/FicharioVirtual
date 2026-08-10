@@ -66,10 +66,8 @@ jobs:
           if ! git diff --quiet; then
             git config user.name github-actions[bot]
             git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-            git add \
-              src/lib/components/MobileNavigation.svelte \
-              src/lib/components/NavigationIcon.svelte \
-              src/routes/coverage/+page.svelte
+            git add src/lib/components/MobileNavigation.svelte src/lib/components/NavigationIcon.svelte
+            git add -f src/routes/coverage/+page.svelte
             git commit -m 'style(coverage): format and lint coverage UI'
             git push origin HEAD:feature/unit-topic-coverage
           fi
