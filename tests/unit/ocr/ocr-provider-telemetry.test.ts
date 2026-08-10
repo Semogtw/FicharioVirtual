@@ -18,6 +18,7 @@ const parsedPage = {
 	pageNumber: 7,
 	text: 'Texto extraído',
 	contentClass: 'handwriting',
+	wordGeometry: [],
 	warnings: [{ code: 'uncertain_text', message: 'Trecho incerto.' }],
 	needsReview: true
 } as const;
