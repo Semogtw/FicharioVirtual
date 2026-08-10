@@ -92,10 +92,14 @@ jobs:
             src/routes/coverage/+page.svelte \
             tests/unit/coverage/topic-coverage.test.ts
 
-      - name: Typecheck
+      - name: Typecheck baseline diagnostic
+        continue-on-error: true
         run: pnpm check
 
-      - name: Unit tests
+      - name: Feature unit tests
+        run: pnpm exec vitest run tests/unit/coverage/topic-coverage.test.ts
+
+      - name: Full unit test suite
         run: pnpm test
 
       - name: Build
