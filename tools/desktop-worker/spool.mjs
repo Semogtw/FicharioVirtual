@@ -249,7 +249,11 @@ export class ResultSpool {
 			this.#database.exec('COMMIT');
 			return true;
 		} catch (error) {
-			if (this.#database.isTransaction) this.#database.exec('ROLLBACK');
+			try {
+				this.#database.exec('ROLLBACK');
+			} catch {
+				// Preserve the original failure if SQLite already closed the transaction.
+			}
 			throw error;
 		}
 	}
