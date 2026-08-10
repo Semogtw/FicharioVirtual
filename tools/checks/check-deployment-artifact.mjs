@@ -12,7 +12,8 @@ const SOURCE_LOCK_FILE = 'source/pnpm-lock.yaml';
 const REQUIRED_SOURCE_FILES = Object.freeze([SOURCE_PACKAGE_FILE, SOURCE_LOCK_FILE]);
 const REQUIRED_CHECK_FILES = Object.freeze([
 	'checks/check-deployed-site.mjs',
-	'checks/deployment-contract.mjs'
+	'checks/deployment-contract.mjs',
+	'checks/validate-pages-deploy-output.mjs'
 ]);
 const REQUIRED_SITE_FILES = Object.freeze([
 	'200.html',
