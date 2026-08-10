@@ -46,7 +46,8 @@ create table public.ocr_provider_usage_events (
     on delete cascade,
   foreign key (ocr_batch_id, user_id)
     references public.ocr_batches(id, user_id)
-    on delete set null
+    on delete restrict,
+  check ((status = 'success' and safe_error_code is null) or status = 'error')
 );
 
 create table public.ocr_provider_page_metrics (
@@ -177,6 +178,7 @@ begin
     or (target_provider_model_version is not null and char_length(target_provider_model_version) not between 1 and 200)
     or target_prompt_version not between 1 and 10000
     or terminal_status not in ('success', 'error')
+    or (terminal_status = 'success' and target_safe_error_code is not null)
     or (target_safe_error_code is not null and target_safe_error_code !~ '^[a-z0-9_]{1,64}$')
     or target_latency_ms not between 0 and 3600000
     or target_page_metrics is null
@@ -263,12 +265,12 @@ begin
      and p.document_id = target_document_id;
   if matched_pages <> metric_count then return false; end if;
 
-  if target_prompt_token_count is not null and target_prompt_token_count < 0
-    or target_cached_content_token_count is not null and target_cached_content_token_count < 0
-    or target_candidates_token_count is not null and target_candidates_token_count < 0
-    or target_tool_use_prompt_token_count is not null and target_tool_use_prompt_token_count < 0
-    or target_thoughts_token_count is not null and target_thoughts_token_count < 0
-    or target_total_token_count is not null and target_total_token_count < 0
+  if (target_prompt_token_count is not null and target_prompt_token_count < 0)
+    or (target_cached_content_token_count is not null and target_cached_content_token_count < 0)
+    or (target_candidates_token_count is not null and target_candidates_token_count < 0)
+    or (target_tool_use_prompt_token_count is not null and target_tool_use_prompt_token_count < 0)
+    or (target_thoughts_token_count is not null and target_thoughts_token_count < 0)
+    or (target_total_token_count is not null and target_total_token_count < 0)
   then
     return false;
   end if;
@@ -365,7 +367,7 @@ begin
     return null;
   end if;
 
-  start_date := timezone('utc', now()) - make_interval(days => window_days - 1);
+  start_date := now() - make_interval(days => window_days - 1);
 
   with events as (
     select * from public.ocr_provider_usage_events e
