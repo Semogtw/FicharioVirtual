@@ -104,7 +104,7 @@ async function mockSupabase(context: BrowserContext, counters: RequestCounters) 
 			counters.consents += 1;
 			return json(route, true);
 		}
-		if (path === '/rest/v1/rpc/create_drive_image_import') {
+		if (path === '/rest/v1/rpc/create_drive_image_import_v2') {
 			counters.metadataCreates += 1;
 			const body = request.postDataJSON() as Record<string, string>;
 			return json(route, [
@@ -280,7 +280,7 @@ test('two tabs resume one persisted image import without duplicate upload or OCR
 
 	expect(counters.consents).toBe(1);
 	expect(counters.metadataCreates).toBe(1);
-	expect(counters.storageUploads).toBe(2);
+	expect(counters.storageUploads).toBe(3);
 	expect(counters.unknown).toEqual([]);
 
 	await expect
