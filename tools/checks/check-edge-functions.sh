@@ -15,6 +15,9 @@ deno check --no-config supabase/functions/_shared/desktop-worker-contract.ts
 deno check --no-config supabase/functions/_shared/ocr-contract.ts
 deno check --no-config supabase/functions/_shared/ocr-batch-contract.ts
 deno check --no-config supabase/functions/_shared/gemini-ocr-client.ts
+deno check --no-config supabase/functions/_shared/gemini-embedding-client.ts
+deno check --no-config supabase/functions/_shared/gemini-coverage-verifier.ts
+deno check --no-config supabase/functions/_shared/semantic-chunks.ts
 deno check --no-config supabase/functions/_shared/ocr-failure.ts
 deno check --no-config supabase/functions/_shared/google-oauth.ts
 deno check --no-config supabase/functions/_shared/google-oauth-http.ts
@@ -24,6 +27,7 @@ deno check --no-config supabase/functions/_shared/google-drive-mutations.ts
 deno check --no-config supabase/functions/_shared/drive-folder-chain.ts
 deno check --no-config supabase/functions/_shared/drive-job-runner.ts
 deno check --no-config supabase/functions/process-ocr/index.ts
+deno check --no-config supabase/functions/semantic-coverage/index.ts
 deno check --no-config supabase/functions/delete-document/index.ts
 deno check --no-config supabase/functions/drive-oauth-start/index.ts
 deno check --no-config supabase/functions/drive-oauth-callback/index.ts
