@@ -44,7 +44,7 @@ verify_jwt = true
 verify_jwt = true
 
 # Server-to-server only. The function performs its own constant-time check of a
-# high-entropy service-role secret and never accepts browser credentials.
+# dedicated high-entropy worker secret and never accepts browser credentials.
 [functions.ocr-queue-worker]
 verify_jwt = false
 
