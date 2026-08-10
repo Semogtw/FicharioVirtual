@@ -6,7 +6,8 @@ import { runWithLeaseRenewal } from './lease.mjs';
 import { DesktopSourceError, downloadDesktopSource } from './source.mjs';
 
 function safeCode(error, fallback) {
-	if (error instanceof DesktopWorkerApiError || error instanceof DesktopSourceError) return error.code;
+	if (error instanceof DesktopWorkerApiError || error instanceof DesktopSourceError)
+		return error.code;
 	if (error?.name === 'TimeoutError') return 'worker_request_timeout';
 	if (error?.name === 'AbortError') return 'worker_request_aborted';
 	return fallback;
