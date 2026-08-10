@@ -219,9 +219,9 @@ describe('desktop OCR device service', () => {
 			},
 			error: null
 		}));
-		await expect(deleteDesktopOcrDevice(DEVICE_ID, { rpc: deleteRpc } as never)).rejects.toBeInstanceOf(
-			DesktopOcrDevicesError
-		);
+		await expect(
+			deleteDesktopOcrDevice(DEVICE_ID, { rpc: deleteRpc } as never)
+		).rejects.toBeInstanceOf(DesktopOcrDevicesError);
 	});
 
 	it('maps transport and backend failures to safe user-facing errors', async () => {
