@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(8);
+select plan(9);
 
 insert into auth.users (id, email)
 values
@@ -70,6 +70,17 @@ select throws_ok(
   '23514',
   null,
   'banner paths cannot escape the owning user namespace'
+);
+
+select throws_ok(
+  $$
+    update public.notebooks
+       set banner_path = '11111111-1111-4111-8111-111111111111/notebook-banners/33333333-3333-4333-8333-333333333333/../other.webp'
+     where id = '33333333-3333-4333-8333-333333333333'
+  $$,
+  '23514',
+  null,
+  'banner paths reject traversal segments'
 );
 
 select throws_ok(
