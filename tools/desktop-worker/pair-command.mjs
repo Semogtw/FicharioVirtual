@@ -76,9 +76,7 @@ function readHiddenTtyToken(input, output) {
 				if (character < ' ' || character === '\u007f') continue;
 				value += character;
 				if (Buffer.byteLength(value, 'utf8') > MAX_ACCESS_TOKEN_BYTES) {
-					finish(() =>
-						reject(new TypeError('Desktop worker browser access token is too large'))
-					);
+					finish(() => reject(new TypeError('Desktop worker browser access token is too large')));
 					return;
 				}
 			}
@@ -146,7 +144,11 @@ export async function runPairCli(
 		pairLocal = pairFromLocalState
 	} = {}
 ) {
-	if (!Array.isArray(argv) || argv.length !== 2 || argv.some((value) => typeof value !== 'string')) {
+	if (
+		!Array.isArray(argv) ||
+		argv.length !== 2 ||
+		argv.some((value) => typeof value !== 'string')
+	) {
 		stderr.write('Usage: fichario-worker-pair <worker-endpoint> <device-label>\n');
 		return 2;
 	}
