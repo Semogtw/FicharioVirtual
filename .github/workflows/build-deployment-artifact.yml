@@ -26,6 +26,7 @@ jobs:
     environment: ${{ inputs.target_environment }}
     env:
       TARGET_ENVIRONMENT: ${{ inputs.target_environment }}
+      PRODUCTION_ARTIFACT_BUILD_ENABLED: ${{ vars.PRODUCTION_ARTIFACT_BUILD_ENABLED }}
 
     steps:
       - name: Checkout repository
@@ -56,6 +57,12 @@ jobs:
           PUBLIC_GOOGLE_PICKER_API_KEY: ${{ secrets.PUBLIC_GOOGLE_PICKER_API_KEY }}
           PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER: ${{ secrets.PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER }}
         run: |
+          set -euo pipefail
+          if [[ "$TARGET_ENVIRONMENT" == 'production' && "$PRODUCTION_ARTIFACT_BUILD_ENABLED" != 'true' ]]; then
+            echo 'production artifact creation is disabled until the production environment explicitly enables it' >&2
+            exit 1
+          fi
+
           node <<'NODE'
           const urlValue = process.env.PUBLIC_SUPABASE_URL ?? '';
           const key = process.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? '';
