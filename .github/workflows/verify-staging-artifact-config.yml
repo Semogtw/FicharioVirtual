@@ -57,28 +57,22 @@ jobs:
           const clientId = (process.env.PUBLIC_GOOGLE_CLIENT_ID ?? '').trim();
           const pickerKey = (process.env.PUBLIC_GOOGLE_PICKER_API_KEY ?? '').trim();
           const projectNumber = (process.env.PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER ?? '').trim();
-          const pickerValues = [clientId, pickerKey, projectNumber];
-          const configuredPickerValues = pickerValues.filter(Boolean).length;
-          if (configuredPickerValues !== 0 && configuredPickerValues !== pickerValues.length) {
-            throw new Error('Google Picker public settings must be configured together.');
+          if (!clientId) throw new Error('PUBLIC_GOOGLE_CLIENT_ID is not configured in staging.');
+          if (!pickerKey) throw new Error('PUBLIC_GOOGLE_PICKER_API_KEY is not configured in staging.');
+          if (!projectNumber) {
+            throw new Error('PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER is not configured in staging.');
           }
-          if (configuredPickerValues === pickerValues.length) {
-            if (!/^\d+-[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$/.test(clientId)) {
-              throw new Error('PUBLIC_GOOGLE_CLIENT_ID is invalid.');
-            }
-            if (!/^AIza[A-Za-z0-9_-]+$/.test(pickerKey) || pickerKey.length > 256) {
-              throw new Error('PUBLIC_GOOGLE_PICKER_API_KEY is invalid.');
-            }
-            if (!/^\d{6,20}$/.test(projectNumber)) {
-              throw new Error('PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER is invalid.');
-            }
+          if (!/^\d+-[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$/.test(clientId)) {
+            throw new Error('PUBLIC_GOOGLE_CLIENT_ID is invalid.');
+          }
+          if (!/^AIza[A-Za-z0-9_-]+$/.test(pickerKey) || pickerKey.length > 256) {
+            throw new Error('PUBLIC_GOOGLE_PICKER_API_KEY is invalid.');
+          }
+          if (!/^\d{6,20}$/.test(projectNumber)) {
+            throw new Error('PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER is invalid.');
           }
 
-          console.log(
-            configuredPickerValues === pickerValues.length
-              ? 'Protected staging public configuration is valid, including Google Picker.'
-              : 'Protected staging public configuration is valid; Google Picker public settings are not configured.'
-          );
+          console.log('Protected staging public configuration is valid, including Google Drive Picker.');
           NODE
 
       - name: Publish readiness summary
@@ -89,7 +83,7 @@ jobs:
             echo '## Staging artifact public configuration'
             echo
             echo '- Environment: `staging`'
-            echo '- Supabase public configuration: validated without printing values when the preceding step passes.'
-            echo '- Google Picker: optional, but all three public settings are required together when enabled.'
+            echo '- Supabase public configuration: required and validated without printing values when the preceding step passes.'
+            echo '- Google Drive Picker: required for a release artifact because Drive is a core product capability.'
             echo '- Backend, service-role, Gemini and Cloudflare secrets are intentionally outside this workflow.'
           } >> "$GITHUB_STEP_SUMMARY"
