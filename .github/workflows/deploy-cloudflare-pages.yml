@@ -85,7 +85,7 @@ jobs:
             artifact_root="$artifact_root/fichario-deploy"
           fi
 
-          for required in DEPLOYMENT-MANIFEST.txt SHA256SUMS source/package.json source/pnpm-lock.yaml checks/check-deployed-site.mjs checks/deployment-contract.mjs site/_headers site/200.html site/manifest.webmanifest site/sw.js site/registerSW.js; do
+          for required in DEPLOYMENT-MANIFEST.txt SHA256SUMS source/package.json source/pnpm-lock.yaml checks/check-deployed-site.mjs checks/deployment-contract.mjs checks/validate-pages-deploy-output.mjs site/_headers site/200.html site/manifest.webmanifest site/sw.js site/registerSW.js; do
             if [[ ! -f "$artifact_root/$required" ]]; then
               echo "deployment artifact is missing $required" >&2
               exit 1
@@ -156,36 +156,7 @@ jobs:
               --commit-message="Deploy validated Fichário artifact ${EXPECTED_SOURCE_COMMIT} (${TARGET_ENVIRONMENT})" \
               --commit-dirty=false
 
-          node <<'NODE'
-          const { appendFileSync, readFileSync } = require('node:fs');
-          const path = process.env.WRANGLER_OUTPUT_FILE_PATH;
-          const entries = readFileSync(path, 'utf8')
-            .split(/\r?\n/)
-            .filter(Boolean)
-            .map((line) => JSON.parse(line));
-          const deployment = [...entries].reverse().find((entry) => entry.type === 'pages-deploy-detailed');
-          if (!deployment) throw new Error('Wrangler did not emit pages-deploy-detailed output');
-          if (deployment.pages_project !== 'fichario-virtual') throw new Error('Wrangler deployed an unexpected Pages project');
-          const expectedEnvironment = process.env.TARGET_ENVIRONMENT === 'production' ? 'production' : 'preview';
-          if (deployment.environment !== expectedEnvironment) throw new Error('Wrangler deployment environment does not match the requested environment');
-          if (deployment.production_branch !== 'main') throw new Error('Cloudflare production branch is not main');
-          if (deployment.deployment_trigger?.metadata?.commit_hash !== process.env.EXPECTED_SOURCE_COMMIT) {
-            throw new Error('Cloudflare deployment metadata does not preserve the validated source SHA');
-          }
-          if (typeof deployment.deployment_id !== 'string' || deployment.deployment_id.length < 8) {
-            throw new Error('Wrangler deployment ID is unavailable');
-          }
-          const url = new URL(deployment.url);
-          if (url.protocol !== 'https:' || url.pathname !== '/' || url.search || url.hash) {
-            throw new Error('Wrangler returned an invalid deployment URL');
-          }
-          const alias = deployment.alias ? new URL(deployment.alias) : null;
-          if (alias && alias.protocol !== 'https:') throw new Error('Wrangler returned an invalid deployment alias');
-          appendFileSync(
-            process.env.GITHUB_OUTPUT,
-            `url=${url.origin}\ndeployment_id=${deployment.deployment_id}\nalias=${alias?.origin ?? ''}\n`
-          );
-          NODE
+          node "$ARTIFACT_ROOT/checks/validate-pages-deploy-output.mjs"
 
       - name: Verify the exact deployed URL with the artifact-pinned contract
         shell: bash
