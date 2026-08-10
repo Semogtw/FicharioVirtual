@@ -277,4 +277,24 @@ export class ResultSpool {
 			throw error;
 		}
 	}
+
+	purgeRejectedBefore(cutoff) {
+		const timestamp = cutoff.toISOString();
+		this.#database.exec('BEGIN IMMEDIATE');
+		try {
+			const result = this.#database
+				.prepare(
+					`
+					DELETE FROM result_dead_letter
+					WHERE rejected_at < ?
+					`
+				)
+				.run(timestamp);
+			this.#database.exec('COMMIT');
+			return Number(result.changes);
+		} catch (error) {
+			this.#database.exec('ROLLBACK');
+			throw error;
+		}
+	}
 }
