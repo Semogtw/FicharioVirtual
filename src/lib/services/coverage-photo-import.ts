@@ -1,25 +1,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
-import {
-	extractTopicCandidatesFromOcr,
-	type OcrTopicExtraction
-} from '$lib/coverage/topic-import';
+import { extractTopicCandidatesFromOcr, type OcrTopicExtraction } from '$lib/coverage/topic-import';
 import { effectivePageText } from '$lib/domain/page';
 import { prepareImage } from '$lib/import/image-client';
 import type { PreparedImage } from '$lib/import/image-types';
-import {
-	DuplicateImageError,
-	uploadPreparedImage,
-	type UploadedPage
-} from '$lib/import/upload';
+import { DuplicateImageError, uploadPreparedImage, type UploadedPage } from '$lib/import/upload';
 import type { Database, ProcessingStatus } from '$lib/types/database';
 import { deleteDocument } from './documents';
 import { recordOcrConsent } from './ocr-consent';
-import {
-	OcrProcessingError,
-	processPageOcr,
-	type OcrRunResult
-} from './ocr';
+import { OcrProcessingError, processPageOcr, type OcrRunResult } from './ocr';
 import { getSupabaseClient } from './supabase';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -46,11 +35,7 @@ const pageSourceSchema = z
 	.strict();
 
 export type CoveragePhotoImportStage =
-	| 'preparing'
-	| 'uploading'
-	| 'reading'
-	| 'extracting'
-	| 'cleaning_up';
+	'preparing' | 'uploading' | 'reading' | 'extracting' | 'cleaning_up';
 
 export type CoveragePhotoSourcePage = Readonly<{
 	id: string;
@@ -68,17 +53,15 @@ export type CoveragePhotoImportResult = OcrTopicExtraction &
 
 export class CoveragePhotoImportError extends Error {
 	readonly code:
-		| 'page_unavailable'
-		| 'ocr_pending'
-		| 'quota_exhausted'
-		| 'ocr_failed'
-		| 'no_topics';
+		'page_unavailable' | 'ocr_pending' | 'quota_exhausted' | 'ocr_failed' | 'no_topics';
 
 	constructor(code: CoveragePhotoImportError['code'], message?: string) {
 		const messages = {
 			page_unavailable: 'A leitura terminou, mas o texto extraído não pôde ser carregado.',
-			ocr_pending: 'A leitura automática ficou pendente. Tente novamente quando o serviço estiver disponível.',
-			quota_exhausted: 'A cota diária de leitura automática foi atingida. Tente novamente mais tarde.',
+			ocr_pending:
+				'A leitura automática ficou pendente. Tente novamente quando o serviço estiver disponível.',
+			quota_exhausted:
+				'A cota diária de leitura automática foi atingida. Tente novamente mais tarde.',
 			ocr_failed: 'Não foi possível ler esta foto agora.',
 			no_topics: 'A foto foi lida, mas nenhum assunto utilizável foi identificado.'
 		} as const;
@@ -183,9 +166,7 @@ function defaultDependencies(): CoveragePhotoImportDependencies {
 }
 
 function processResultNeedsReview(result: OcrRunResult) {
-	return (
-		(result.state === 'complete' || result.state === 'already_complete') && result.needsReview
-	);
+	return (result.state === 'complete' || result.state === 'already_complete') && result.needsReview;
 }
 
 function ensureProcessCompleted(result: OcrRunResult) {
@@ -258,8 +239,7 @@ export async function extractTopicsFromPhotoWithDependencies(
 
 		options.onStage?.('extracting');
 		extraction = extractTopicCandidatesFromOcr(sourcePage.text, {
-			pageNeedsReview:
-				processResultNeedsReview(runResult) || sourcePage.status === 'needs_review',
+			pageNeedsReview: processResultNeedsReview(runResult) || sourcePage.status === 'needs_review',
 			warningCount: sourcePage.warningCount
 		});
 		if (extraction.topics.length === 0) throw new CoveragePhotoImportError('no_topics');
