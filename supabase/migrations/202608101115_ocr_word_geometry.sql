@@ -90,7 +90,7 @@ create or replace function public.complete_ocr_job_with_geometry(
   extraction_warnings jsonb,
   terminal_status public.page_status,
   completed_at timestamptz,
-  word_geometry jsonb
+  geometry_payload jsonb
 )
 returns void
 language plpgsql
@@ -104,7 +104,7 @@ begin
   if current_user_id is null or not public.is_authorized_user() then
     raise exception using errcode = '42501', message = 'Authentication required';
   end if;
-  if word_geometry is null or not public.is_valid_ocr_word_geometry(word_geometry) then
+  if geometry_payload is null or not public.is_valid_ocr_word_geometry(geometry_payload) then
     raise exception using errcode = '22023', message = 'Invalid OCR word geometry';
   end if;
 
@@ -127,23 +127,23 @@ begin
     raise exception using errcode = '55000', message = 'OCR result is unavailable after completion';
   end if;
 
-  update public.ocr_results
-     set word_geometry = word_geometry
-   where id = accepted_result_id
-     and page_id = target_page_id
-     and user_id = current_user_id
-     and (word_geometry = '[]'::jsonb or word_geometry is not distinct from complete_ocr_job_with_geometry.word_geometry);
+  update public.ocr_results as result
+     set word_geometry = geometry_payload
+   where result.id = accepted_result_id
+     and result.page_id = target_page_id
+     and result.user_id = current_user_id
+     and (result.word_geometry = '[]'::jsonb or result.word_geometry is not distinct from geometry_payload);
 
   if not found then
     raise exception using errcode = '22023', message = 'OCR word geometry conflicts with the persisted result';
   end if;
 
-  update public.pages
-     set ocr_word_geometry = word_geometry
-   where id = target_page_id
-     and user_id = current_user_id
-     and accepted_ocr_result_id = accepted_result_id
-     and (ocr_word_geometry = '[]'::jsonb or ocr_word_geometry is not distinct from complete_ocr_job_with_geometry.word_geometry);
+  update public.pages as page
+     set ocr_word_geometry = geometry_payload
+   where page.id = target_page_id
+     and page.user_id = current_user_id
+     and page.accepted_ocr_result_id = accepted_result_id
+     and (page.ocr_word_geometry = '[]'::jsonb or page.ocr_word_geometry is not distinct from geometry_payload);
 
   if not found then
     raise exception using errcode = '22023', message = 'OCR word geometry conflicts with the page summary';
@@ -165,7 +165,7 @@ create or replace function public.complete_desktop_ocr_job_with_geometry(
   extraction_warnings jsonb,
   needs_review boolean,
   timing_ms integer,
-  word_geometry jsonb
+  geometry_payload jsonb
 )
 returns jsonb
 language plpgsql
@@ -177,7 +177,7 @@ declare
   completed_page_id uuid;
   completed_result_id uuid;
 begin
-  if word_geometry is null or not public.is_valid_ocr_word_geometry(word_geometry) then
+  if geometry_payload is null or not public.is_valid_ocr_word_geometry(geometry_payload) then
     raise exception using errcode = '22023', message = 'Invalid OCR word geometry';
   end if;
 
@@ -200,22 +200,22 @@ begin
   completed_page_id := (completion ->> 'pageId')::uuid;
   completed_result_id := (completion ->> 'resultId')::uuid;
 
-  update public.ocr_results
-     set word_geometry = word_geometry
-   where id = completed_result_id
-     and page_id = completed_page_id
-     and ocr_job_id = target_job_id
-     and (word_geometry = '[]'::jsonb or word_geometry is not distinct from complete_desktop_ocr_job_with_geometry.word_geometry);
+  update public.ocr_results as result
+     set word_geometry = geometry_payload
+   where result.id = completed_result_id
+     and result.page_id = completed_page_id
+     and result.ocr_job_id = target_job_id
+     and (result.word_geometry = '[]'::jsonb or result.word_geometry is not distinct from geometry_payload);
 
   if not found then
     raise exception using errcode = '22023', message = 'Desktop OCR word geometry conflicts with the persisted result';
   end if;
 
-  update public.pages
-     set ocr_word_geometry = word_geometry
-   where id = completed_page_id
-     and accepted_ocr_result_id = completed_result_id
-     and (ocr_word_geometry = '[]'::jsonb or ocr_word_geometry is not distinct from complete_desktop_ocr_job_with_geometry.word_geometry);
+  update public.pages as page
+     set ocr_word_geometry = geometry_payload
+   where page.id = completed_page_id
+     and page.accepted_ocr_result_id = completed_result_id
+     and (page.ocr_word_geometry = '[]'::jsonb or page.ocr_word_geometry is not distinct from geometry_payload);
 
   if not found then
     raise exception using errcode = '22023', message = 'Desktop OCR word geometry conflicts with the page summary';
