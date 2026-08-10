@@ -8,7 +8,7 @@ function read(path: string) {
 }
 
 describe('import notebook query selection', () => {
-	it.each(['src/routes/import/+page.svelte', 'src/routes/import/pdf/+page.svelte'])(
+	it.each(['src/lib/components/UnifiedImportPage.svelte', 'src/routes/import/pdf/+page.svelte'])(
 		'reacts to the notebook query and keeps the URL aligned in %s',
 		(path) => {
 			const source = read(path);
