@@ -93,6 +93,12 @@ export function assertSecurityHeaders(headers) {
 		if (scripts.has(forbidden))
 			fail(`Content-Security-Policy script-src must not include ${forbidden}`);
 	}
+	requireCspDirective(csp, 'connect-src', [
+		"'self'",
+		'https://*.supabase.co',
+		'wss://*.supabase.co',
+		'https://www.googleapis.com'
+	]);
 
 	const hsts = requireHeader(headers, 'strict-transport-security');
 	const maxAge = hsts.match(/(?:^|;)\s*max-age=(\d+)\s*(?:;|$)/i)?.[1];
