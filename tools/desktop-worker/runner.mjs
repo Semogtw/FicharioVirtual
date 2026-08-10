@@ -40,7 +40,8 @@ function completionFromEngine(lease, source, output) {
 		contentType: output.contentType,
 		warnings: output.warnings,
 		needsReview: output.needsReview,
-		timingMs: output.timingMs
+		timingMs: output.timingMs,
+		wordGeometry: output.wordGeometry ?? []
 	});
 }
 
