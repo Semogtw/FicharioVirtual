@@ -32,8 +32,6 @@
 
 	const notebookRequests = new RequestVersion();
 	const coverageRequests = new RequestVersion();
-	const topicPlaceholder =
-		'3.1 Temperatura\n3.2 Calor específico\n3.3 Mudanças de fase\n3.4 Primeira lei da termodinâmica';
 	const bulkPlaceholder =
 		'3.1 Temperatura\n3.2 Calor específico\n3.3 Mudanças de fase\n3.4 Primeira lei da termodinâmica';
 	const confidenceLabel: Record<TopicImportConfidence, string> = {
