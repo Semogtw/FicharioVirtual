@@ -146,11 +146,11 @@ export async function uploadPreparedImageToDriveWithGateway(
 			throw new ImageUploadError('upload_failed');
 		}
 		if (input.signal?.aborted) throw abortError();
-		await Promise.all([
-			gateway.uploadTemporary(ocrPath, input.prepared.image),
-			gateway.uploadTemporary(thumbnailPath, input.prepared.thumbnail)
-		]);
-		temporaryPaths.push(ocrPath, thumbnailPath);
+		await gateway.uploadTemporary(ocrPath, input.prepared.image);
+		temporaryPaths.push(ocrPath);
+		if (input.signal?.aborted) throw abortError();
+		await gateway.uploadTemporary(thumbnailPath, input.prepared.thumbnail);
+		temporaryPaths.push(thumbnailPath);
 		if (input.signal?.aborted) throw abortError();
 		const imported = await gateway.createImport({
 			documentId,
