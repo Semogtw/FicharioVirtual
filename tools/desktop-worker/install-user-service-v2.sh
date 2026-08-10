@@ -22,7 +22,7 @@ warn() {
 command -v node >/dev/null 2>&1 || fail 'node is required'
 command -v systemctl >/dev/null 2>&1 || fail 'systemctl is required'
 [[ -f "$unit_source" ]] || fail 'systemd unit template is missing'
-for entrypoint in bin.mjs config-bin.mjs pair-bin.mjs pair-code-bin.mjs unpair-bin.mjs model-bin.mjs status-bin.mjs; do
+for entrypoint in bin.mjs config-bin.mjs pair-bin.mjs pair-code-bin.mjs unpair-bin.mjs forget-bin.mjs model-bin.mjs status-bin.mjs; do
   [[ -f "$source_dir/$entrypoint" ]] || fail "worker entrypoint is missing: $entrypoint"
 done
 
@@ -45,6 +45,7 @@ chmod 0700 \
   "$install_dir/pair-bin.mjs" \
   "$install_dir/pair-code-bin.mjs" \
   "$install_dir/unpair-bin.mjs" \
+  "$install_dir/forget-bin.mjs" \
   "$install_dir/model-bin.mjs" \
   "$install_dir/status-bin.mjs"
 
@@ -54,6 +55,7 @@ ln -sfn ../lib/fichario-worker/config-bin.mjs "$bin_dir/fichario-worker-config"
 ln -sfn ../lib/fichario-worker/pair-bin.mjs "$bin_dir/fichario-worker-pair"
 ln -sfn ../lib/fichario-worker/pair-code-bin.mjs "$bin_dir/fichario-worker-pair-code"
 ln -sfn ../lib/fichario-worker/unpair-bin.mjs "$bin_dir/fichario-worker-unpair"
+ln -sfn ../lib/fichario-worker/forget-bin.mjs "$bin_dir/fichario-worker-forget"
 ln -sfn ../lib/fichario-worker/model-bin.mjs "$bin_dir/fichario-worker-model"
 ln -sfn ../lib/fichario-worker/status-bin.mjs "$bin_dir/fichario-worker-status"
 
@@ -63,8 +65,9 @@ systemctl --user daemon-reload
 
 printf '%s\n' \
   'Fichário OCR worker files installed for the current user.' \
-  'Commands installed in ~/.local/bin: fichario-worker-config, fichario-worker-model, fichario-worker-pair-code, fichario-worker-pair, fichario-worker-unpair, fichario-worker-status, fichario-worker.' \
+  'Commands installed in ~/.local/bin: fichario-worker-config, fichario-worker-model, fichario-worker-pair-code, fichario-worker-pair, fichario-worker-unpair, fichario-worker-forget, fichario-worker-status, fichario-worker.' \
   'The service was NOT enabled or started.' \
   'Create config, pin a local vision model, pair the device, verify status, then enable the service.' \
   'Use fichario-worker-pair-code for the preferred browser-approved one-time-code flow; fichario-worker-pair remains available only for legacy compatibility.' \
+  'After revoking a device in the web app, use fichario-worker-forget --after-web-revoke to remove only its local credential and metadata.' \
   'Then run: systemctl --user enable --now fichario-ocr-worker.service'
