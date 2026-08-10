@@ -30,11 +30,11 @@ begin
     count(*)::integer as total,
     count(*) filter (
       where page.status = 'ready'::public.page_status
-        and job.status = 'ready'::public.ocr_status
+        and job.status <> 'failed'::public.ocr_status
     )::integer as completed,
     count(*) filter (
       where page.status = 'needs_review'::public.page_status
-        and job.status in ('ready'::public.ocr_status, 'needs_review'::public.ocr_status)
+        and job.status <> 'failed'::public.ocr_status
     )::integer as needs_review,
     count(*) filter (
       where page.status not in (
