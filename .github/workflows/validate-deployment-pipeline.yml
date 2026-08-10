@@ -27,6 +27,7 @@ on:
       - tests/unit/tooling/deployment-contract.test.ts
       - tests/unit/tooling/pages-deploy-output.test.ts
       - tests/unit/tooling/staging-artifact-config-workflow.test.ts
+      - tests/unit/tooling/staging-public-config.test.ts
   workflow_dispatch:
 
 permissions:
@@ -89,7 +90,8 @@ jobs:
             tests/unit/tooling/deployment-artifact-workflow.test.ts \
             tests/unit/tooling/deployment-contract.test.ts \
             tests/unit/tooling/pages-deploy-output.test.ts \
-            tests/unit/tooling/staging-artifact-config-workflow.test.ts
+            tests/unit/tooling/staging-artifact-config-workflow.test.ts \
+            tests/unit/tooling/staging-public-config.test.ts
 
       - name: Check deployment shell syntax
         run: bash -n tools/deploy/package-static-artifact.sh
@@ -111,7 +113,8 @@ jobs:
             tests/unit/tooling/deployment-artifact-workflow.test.ts \
             tests/unit/tooling/deployment-contract.test.ts \
             tests/unit/tooling/pages-deploy-output.test.ts \
-            tests/unit/tooling/staging-artifact-config-workflow.test.ts
+            tests/unit/tooling/staging-artifact-config-workflow.test.ts \
+            tests/unit/tooling/staging-public-config.test.ts
 
       - name: Build static site with non-deployable CI public config
         run: pnpm build
