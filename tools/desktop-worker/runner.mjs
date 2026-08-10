@@ -1,8 +1,9 @@
 import { rm } from 'node:fs/promises';
+import { DesktopWorkerApiError } from './client.mjs';
 import { requireCompletionRequest } from './contract.mjs';
 import { flushResultSpool } from './delivery.mjs';
+import { runWithLeaseRenewal } from './lease.mjs';
 import { DesktopSourceError, downloadDesktopSource } from './source.mjs';
-import { DesktopWorkerApiError } from './client.mjs';
 
 function safeCode(error, fallback) {
 	if (error instanceof DesktopWorkerApiError || error instanceof DesktopSourceError) return error.code;
@@ -44,12 +45,19 @@ export async function runWorkerCycle(
 	{
 		signal,
 		now = () => new Date(),
+		leaseNow = () => Date.now(),
 		keepCompletedSpoolHours = 24,
 		downloadSource = downloadDesktopSource,
+		renewLease = runWithLeaseRenewal,
 		removeFile = (path) => rm(path, { force: true })
 	} = {}
 ) {
-	if (!client || typeof client.claim !== 'function' || typeof client.source !== 'function') {
+	if (
+		!client ||
+		typeof client.claim !== 'function' ||
+		typeof client.source !== 'function' ||
+		typeof client.renew !== 'function'
+	) {
 		throw new TypeError('Invalid desktop worker API client');
 	}
 	if (!spool || typeof spool.purgeAcceptedBefore !== 'function') {
@@ -59,7 +67,9 @@ export async function runWorkerCycle(
 	if (typeof downloadsDir !== 'string' || downloadsDir.length === 0) {
 		throw new TypeError('Invalid desktop worker downloads directory');
 	}
-	if (typeof now !== 'function') throw new TypeError('Invalid desktop worker clock');
+	if (typeof now !== 'function' || typeof leaseNow !== 'function') {
+		throw new TypeError('Invalid desktop worker clock');
+	}
 	if (
 		!Number.isSafeInteger(keepCompletedSpoolHours) ||
 		keepCompletedSpoolHours < 0 ||
@@ -67,7 +77,11 @@ export async function runWorkerCycle(
 	) {
 		throw new TypeError('Invalid desktop worker spool retention');
 	}
-	if (typeof downloadSource !== 'function' || typeof removeFile !== 'function') {
+	if (
+		typeof downloadSource !== 'function' ||
+		typeof renewLease !== 'function' ||
+		typeof removeFile !== 'function'
+	) {
 		throw new TypeError('Invalid desktop worker source lifecycle');
 	}
 
@@ -127,19 +141,26 @@ export async function runWorkerCycle(
 	}
 
 	let completion;
+	let renewalFailure = null;
 	try {
-		const output = await engine.process(
-			Object.freeze({
-				jobId: lease.jobId,
-				pageId: source.pageId,
-				path: downloaded.path,
-				mimeType: downloaded.mimeType,
-				bytes: downloaded.bytes,
-				sha256: downloaded.sha256
-			}),
-			{ signal }
+		const processing = await renewLease(
+			{ client, lease },
+			() =>
+				engine.process(
+					Object.freeze({
+						jobId: lease.jobId,
+						pageId: source.pageId,
+						path: downloaded.path,
+						mimeType: downloaded.mimeType,
+						bytes: downloaded.bytes,
+						sha256: downloaded.sha256
+					}),
+					{ signal }
+				),
+			{ signal, now: leaseNow }
 		);
-		completion = completionFromEngine(lease, source, output);
+		renewalFailure = processing.renewalFailure;
+		completion = completionFromEngine(lease, source, processing.value);
 		spool.enqueue(completion, now());
 	} catch (error) {
 		if (error?.name === 'AbortError') throw error;
@@ -147,6 +168,7 @@ export async function runWorkerCycle(
 			status: 'processing_deferred',
 			jobId: lease.jobId,
 			code: safeCode(error, 'worker_processing_failed'),
+			renewalFailure,
 			replay,
 			purgedAccepted
 		});
@@ -159,6 +181,7 @@ export async function runWorkerCycle(
 		return Object.freeze({
 			status: 'spooled',
 			jobId: lease.jobId,
+			renewalFailure,
 			delivery,
 			replay,
 			purgedAccepted
@@ -167,6 +190,7 @@ export async function runWorkerCycle(
 	return Object.freeze({
 		status: 'completed',
 		jobId: lease.jobId,
+		renewalFailure,
 		delivery,
 		replay,
 		purgedAccepted
