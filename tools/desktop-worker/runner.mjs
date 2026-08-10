@@ -5,11 +5,14 @@ import { flushResultSpool } from './delivery.mjs';
 import { runWithLeaseRenewal } from './lease.mjs';
 import { DesktopSourceError, downloadDesktopSource } from './source.mjs';
 
+const SAFE_CODE = /^[a-z0-9_]{3,96}$/;
+
 function safeCode(error, fallback) {
 	if (error instanceof DesktopWorkerApiError || error instanceof DesktopSourceError)
 		return error.code;
 	if (error?.name === 'TimeoutError') return 'worker_request_timeout';
 	if (error?.name === 'AbortError') return 'worker_request_aborted';
+	if (typeof error?.code === 'string' && SAFE_CODE.test(error.code)) return error.code;
 	return fallback;
 }
 
