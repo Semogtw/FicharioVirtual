@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+	createDesktopOcrPairingCode,
 	DesktopOcrDevicesError,
 	listDesktopOcrDevices,
 	renameDesktopOcrDevice,
@@ -7,6 +8,7 @@ import {
 } from '../../../src/lib/services/desktop-ocr-devices';
 
 const DEVICE_ID = '11111111-1111-4111-8111-111111111111';
+const PAIRING_ID = '22222222-2222-4222-8222-222222222222';
 
 function device(overrides: Record<string, unknown> = {}) {
 	return {
@@ -54,6 +56,39 @@ describe('desktop OCR device service', () => {
 		]);
 		expect(JSON.stringify(devices)).not.toContain('modelDigest');
 		expect(JSON.stringify(devices)).not.toContain('privateUnexpectedField');
+	});
+
+	it('creates a bounded one-time pairing code without exposing any worker credential', async () => {
+		const rpc = vi.fn(async () => ({
+			data: {
+				pairingId: PAIRING_ID,
+				code: 'ABCD-1234-EF56-7890',
+				expiresAt: '2026-08-10T05:00:00.000Z'
+			},
+			error: null
+		}));
+
+		await expect(createDesktopOcrPairingCode({ rpc } as never)).resolves.toEqual({
+			pairingId: PAIRING_ID,
+			code: 'ABCD-1234-EF56-7890',
+			expiresAt: '2026-08-10T05:00:00.000Z'
+		});
+		expect(rpc).toHaveBeenCalledWith('create_ocr_worker_pairing_code');
+		expect(JSON.stringify(rpc.mock.calls)).not.toContain('credential');
+	});
+
+	it('fails closed on malformed pairing-code receipts', async () => {
+		const rpc = vi.fn(async () => ({
+			data: {
+				pairingId: PAIRING_ID,
+				code: 'not-a-code',
+				expiresAt: '2026-08-10T05:00:00.000Z'
+			},
+			error: null
+		}));
+		await expect(createDesktopOcrPairingCode({ rpc } as never)).rejects.toBeInstanceOf(
+			DesktopOcrDevicesError
+		);
 	});
 
 	it('accepts a revoked device only when a valid revoked timestamp is present', async () => {
@@ -132,9 +167,9 @@ describe('desktop OCR device service', () => {
 		await expect(renameDesktopOcrDevice(DEVICE_ID, '   ', { rpc } as never)).rejects.toThrow(
 			'device label'
 		);
-		await expect(renameDesktopOcrDevice(DEVICE_ID, 'x'.repeat(81), { rpc } as never)).rejects.toThrow(
-			'device label'
-		);
+		await expect(
+			renameDesktopOcrDevice(DEVICE_ID, 'x'.repeat(81), { rpc } as never)
+		).rejects.toThrow('device label');
 		expect(rpc).not.toHaveBeenCalled();
 	});
 
@@ -158,6 +193,9 @@ describe('desktop OCR device service', () => {
 			throw new Error('private backend details');
 		});
 		await expect(listDesktopOcrDevices({ rpc: throwingRpc } as never)).rejects.toMatchObject({
+			name: 'DesktopOcrDevicesError'
+		});
+		await expect(createDesktopOcrPairingCode({ rpc: throwingRpc } as never)).rejects.toMatchObject({
 			name: 'DesktopOcrDevicesError'
 		});
 
