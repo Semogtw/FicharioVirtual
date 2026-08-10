@@ -7,6 +7,7 @@ import {
 	type CoveragePhotoImportDependencies,
 	type CoveragePhotoSourcePage
 } from '../../../src/lib/services/coverage-photo-import';
+import type { OcrRunResult } from '../../../src/lib/services/ocr';
 
 const DOCUMENT_ID = '11111111-1111-4111-8111-111111111111';
 const PAGE_ID = '22222222-2222-4222-8222-222222222222';
@@ -68,7 +69,13 @@ function dependencies(
 			storagePath: 'temporary',
 			thumbnailPath: 'temporary-thumbnail'
 		})),
-		process: vi.fn(async () => ({ state: 'complete', needsReview: false, warningCount: 0 })),
+		process: vi.fn(
+			async (): Promise<OcrRunResult> => ({
+				state: 'complete',
+				needsReview: false,
+				warningCount: 0
+			})
+		),
 		loadPage: vi.fn(async () => sourcePage()),
 		loadFirstPage: vi.fn(async () => sourcePage()),
 		deleteTemporaryDocument: vi.fn(async () => undefined),
@@ -99,7 +106,9 @@ describe('coverage photo topic import', () => {
 			upload: vi.fn(async () => {
 				throw new DuplicateImageError(DOCUMENT_ID);
 			}),
-			process: vi.fn(async () => ({ state: 'already_complete', needsReview: false }))
+			process: vi.fn(
+				async (): Promise<OcrRunResult> => ({ state: 'already_complete', needsReview: false })
+			)
 		});
 
 		const result = await extractTopicsFromPhotoWithDependencies(file, deps);
@@ -125,7 +134,7 @@ describe('coverage photo topic import', () => {
 	it('cleans up temporary data when provider quota prevents extraction', async () => {
 		const file = new File(['photo'], 'ementa.jpg', { type: 'image/jpeg' });
 		const deps = dependencies(file, {
-			process: vi.fn(async () => ({ state: 'quota_exhausted' }))
+			process: vi.fn(async (): Promise<OcrRunResult> => ({ state: 'quota_exhausted' }))
 		});
 
 		await expect(extractTopicsFromPhotoWithDependencies(file, deps)).rejects.toMatchObject({
