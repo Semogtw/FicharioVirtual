@@ -56,3 +56,11 @@ jobs:
           STAGING_UNAUTHORIZED_EMAIL: ${{ secrets.STAGING_UNAUTHORIZED_EMAIL }}
           STAGING_UNAUTHORIZED_PASSWORD: ${{ secrets.STAGING_UNAUTHORIZED_PASSWORD }}
         run: pnpm test:staging:supabase
+
+      - name: Verify desktop OCR one-time pairing
+        env:
+          STAGING_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+          STAGING_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
+          STAGING_AUTHORIZED_EMAIL: ${{ secrets.STAGING_AUTHORIZED_EMAIL }}
+          STAGING_AUTHORIZED_PASSWORD: ${{ secrets.STAGING_AUTHORIZED_PASSWORD }}
+        run: pnpm test:staging:desktop-ocr-pairing
