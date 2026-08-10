@@ -24,7 +24,12 @@ async function sha256(value: string) {
 }
 
 function validCachedVector(value: unknown): value is string {
-	return typeof value === 'string' && value.startsWith('[') && value.endsWith(']') && value.length <= 24_000;
+	return (
+		typeof value === 'string' &&
+		value.startsWith('[') &&
+		value.endsWith(']') &&
+		value.length <= 24_000
+	);
 }
 
 export async function getSemanticQueryEmbeddings(input: {
