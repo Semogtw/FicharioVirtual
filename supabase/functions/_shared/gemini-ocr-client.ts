@@ -156,9 +156,24 @@ const batchResponseSchema = {
 						type: 'string',
 						description: 'Transcrição literal completa desta página.'
 					},
+					contentClass: {
+						type: 'string',
+						enum: [
+							'unknown',
+							'book_clean',
+							'scan_degraded',
+							'handwriting',
+							'mixed',
+							'table_layout',
+							'math',
+							'sparse'
+						],
+						description:
+							'Classificação visual conservadora para telemetria. Use unknown quando não houver uma classe dominante segura.'
+					},
 					warnings: warningSchema
 				},
-				required: ['pageId', 'pageNumber', 'text', 'warnings']
+				required: ['pageId', 'pageNumber', 'text', 'contentClass', 'warnings']
 			}
 		}
 	},
@@ -328,7 +343,7 @@ export async function requestGeminiOcrBatch(
 	validateBatchPages(request.pages);
 	const parts: Array<Record<string, unknown>> = [
 		{
-			text: `${prompt}\nCada imagem é precedida por seu pageId e número original. Não omita, duplique, reordene a identidade nem combine páginas. Retorne um item para cada imagem.\n${outputContract(batchResponseSchema)}\nVersão do prompt: ${request.promptVersion}.`
+			text: `${prompt}\nCada imagem é precedida por seu pageId e número original. Não omita, duplique, reordene a identidade nem combine páginas. Classifique visualmente cada página em contentClass usando somente a enumeração fornecida; a classe é telemetria e nunca deve alterar, resumir ou normalizar a transcrição. Retorne um item para cada imagem.\n${outputContract(batchResponseSchema)}\nVersão do prompt: ${request.promptVersion}.`
 		}
 	];
 	for (const page of request.pages) {
