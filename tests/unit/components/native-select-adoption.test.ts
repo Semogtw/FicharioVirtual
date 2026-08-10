@@ -2,10 +2,10 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const componentPath = 'src/lib/components/ui/native-select/NativeSelect.svelte';
-const adoptedRoutes = [
+const adoptedSources = [
 	'src/routes/library/+page.svelte',
 	'src/routes/search/+page.svelte',
-	'src/routes/import/+page.svelte',
+	'src/lib/components/UnifiedImportPage.svelte',
 	'src/routes/import/pdf/+page.svelte',
 	'src/routes/library/organize/+page.svelte',
 	'src/routes/import/drive/+page.svelte'
@@ -22,7 +22,7 @@ describe('shadcn-style native select primitive', () => {
 		expect(source).toContain('var(--line-strong)');
 	});
 
-	it.each(adoptedRoutes)('%s uses the shared primitive instead of styling a raw select', (path) => {
+	it.each(adoptedSources)('%s uses the shared primitive instead of styling a raw select', (path) => {
 		const source = readFileSync(path, 'utf8');
 
 		expect(source).toContain('$lib/components/ui/native-select/NativeSelect.svelte');
