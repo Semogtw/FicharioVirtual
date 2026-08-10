@@ -1,5 +1,6 @@
 import { invalidateAll } from '$app/navigation';
 import type { ClientInit } from '@sveltejs/kit';
+import { startImageImportCrossTabYield } from '$lib/import/image-import-cross-tab-yield';
 import { createOcrQueueLifecycle } from '$lib/import/job-runner-lifecycle';
 import { purgeLegacyCorrectionDrafts } from '$lib/review/draft-index';
 import { kickOcrQueueBestEffort } from '$lib/services/ocr-background';
@@ -15,6 +16,7 @@ import {
 
 export const init: ClientInit = () => {
 	initializeTheme();
+	startImageImportCrossTabYield();
 	try {
 		purgeLegacyCorrectionDrafts();
 	} catch {
