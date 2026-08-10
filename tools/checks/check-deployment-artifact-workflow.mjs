@@ -25,8 +25,8 @@ forbidText(source, '\n  pull_request:', 'artifact build workflow must not run on
 forbidText(source, '\n  schedule:', 'artifact build workflow must not run on a schedule');
 requireText(
 	source,
-	'permissions:\n  contents: read',
-	'artifact build workflow permissions must remain contents:read'
+	'permissions:\n  actions: read\n  contents: read',
+	'artifact build workflow permissions must remain actions:read and contents:read only'
 );
 requireText(
 	source,
@@ -47,6 +47,41 @@ requireText(
 	source,
 	'persist-credentials: false',
 	'artifact checkout must not persist repository credentials'
+);
+requireText(
+	source,
+	'- name: Require green current-head validation for this SHA',
+	'artifact build must require a green current-head validation before packaging'
+);
+requireText(
+	source,
+	'GH_TOKEN: ${{ github.token }}',
+	'artifact validation lookup must use only the scoped GitHub workflow token'
+);
+requireText(
+	source,
+	'/git/ref/heads/main',
+	'artifact build must bind the requested SHA to the current main ref'
+);
+requireText(
+	source,
+	'if [[ "$main_sha" != "$GITHUB_SHA" ]]',
+	'artifact build must reject stale or non-main workflow dispatches'
+);
+requireText(
+	source,
+	'/actions/workflows/validate-current-head.yml/runs?head_sha=${GITHUB_SHA}&status=completed',
+	'artifact build must query completed current-head validation runs for the exact SHA'
+);
+requireText(
+	source,
+	'.event == \\"push\\" and .conclusion == \\"success\\"',
+	'artifact build must accept only successful push validation evidence'
+);
+requireText(
+	source,
+	'No successful Validate current head push run exists',
+	'artifact build must fail closed when exact-SHA validation evidence is missing'
 );
 requireText(
 	source,
