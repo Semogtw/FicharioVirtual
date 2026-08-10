@@ -67,7 +67,7 @@ export async function getSemanticQueryEmbeddings(input: {
 
 	const misses = unique.filter((entry) => !resolved.has(entry.queryHash));
 	if (misses.length > 0) {
-		const result = await requestGeminiEmbeddingsWithTelemetry({
+		const vectors = await requestGeminiEmbeddingsWithTelemetry({
 			supabase: input.supabase,
 			apiKey: input.apiKey,
 			model: SEMANTIC_EMBEDDING_MODEL,
@@ -79,12 +79,14 @@ export async function getSemanticQueryEmbeddings(input: {
 			...(input.signal ? { signal: input.signal } : {})
 		});
 
-		if (result.embeddings.length !== misses.length) {
+		if (vectors.length !== misses.length) {
 			throw new Error('Semantic query embedding count mismatch');
 		}
 
 		const writes = misses.map(async (entry, missIndex) => {
-			const vectorText = embeddingVectorText(result.embeddings[missIndex]);
+			const vector = vectors[missIndex];
+			if (!vector) throw new Error('Semantic query embedding missing');
+			const vectorText = embeddingVectorText(vector);
 			resolved.set(
 				entry.queryHash,
 				Object.freeze({ vectorText, cacheHit: false, queryHash: entry.queryHash })
