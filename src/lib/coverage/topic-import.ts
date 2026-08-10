@@ -146,7 +146,8 @@ function confidenceFor(
 ): TopicImportConfidence {
 	let confidence: TopicImportConfidence = line.explicitMarker ? 'high' : 'medium';
 	if (line.suspicious) confidence = downgrade(confidence);
-	if (options.pageNeedsReview || options.warningCount > 0) confidence = downgrade(confidence);
+	if (options.pageNeedsReview) confidence = downgrade(confidence);
+	if (options.warningCount > 0) confidence = downgrade(confidence);
 	return confidence;
 }
 
@@ -196,13 +197,13 @@ export function extractTopicCandidatesFromOcr(
 
 	for (const line of parsed) {
 		if (structuredList && !line.explicitMarker) {
+			if (probableHeading(line.text)) {
+				skippedLines += 1;
+				continue;
+			}
 			const previous = grouped.at(-1);
 			if (previous?.explicitMarker) {
 				mergeContinuation(previous, line);
-				continue;
-			}
-			if (probableHeading(line.text)) {
-				skippedLines += 1;
 				continue;
 			}
 		}
