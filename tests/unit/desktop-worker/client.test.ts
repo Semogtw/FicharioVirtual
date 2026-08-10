@@ -43,6 +43,7 @@ function completionRequest() {
 		correctedText: null,
 		contentType: 'printed',
 		warnings: [],
+		wordGeometry: [],
 		needsReview: false,
 		timingMs: 1000
 	};

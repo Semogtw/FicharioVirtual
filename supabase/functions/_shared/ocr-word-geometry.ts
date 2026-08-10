@@ -11,12 +11,28 @@ const MAX_WORD_LENGTH = 256;
 const COMPACT_GEOMETRY = /^(\d{1,5}),(\d{1,5}),(\d{1,5}),(\d{1,5})\|(.+)$/u;
 const TOKEN = /[\p{L}\p{N}]+/gu;
 
+function hasForbiddenControlCharacter(text: string) {
+	for (let index = 0; index < text.length; index += 1) {
+		const code = text.charCodeAt(index);
+		if (
+			code <= 0x08 ||
+			code === 0x0b ||
+			code === 0x0c ||
+			(code >= 0x0e && code <= 0x1f) ||
+			code === 0x7f
+		) {
+			return true;
+		}
+	}
+	return false;
+}
+
 function validBox(text: string, left: number, top: number, right: number, bottom: number) {
 	return (
 		text.length >= 1 &&
 		text.length <= MAX_WORD_LENGTH &&
 		text === text.trim() &&
-		!/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(text) &&
+		!hasForbiddenControlCharacter(text) &&
 		Number.isInteger(left) &&
 		Number.isInteger(top) &&
 		Number.isInteger(right) &&

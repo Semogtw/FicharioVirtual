@@ -35,6 +35,20 @@
 	let effectiveGeometry = $derived(
 		page.wordGeometry.length > 0 ? page.wordGeometry : nativeGeometry
 	);
+	let mediaRevision = $derived.by(() => {
+		const reference = detail.originalReference;
+		return JSON.stringify([
+			detail.id,
+			detail.kind,
+			detail.originalFilename,
+			reference.provider,
+			reference.url,
+			reference.driveFileId,
+			page.id,
+			page.pageNumber,
+			shouldExtractNativeGeometry()
+		]);
+	});
 
 	function releaseObjectUrl() {
 		if (ownedObjectUrl) URL.revokeObjectURL(ownedObjectUrl);
@@ -118,7 +132,11 @@
 		return Object.freeze({ blob: rendered, geometry });
 	}
 
-	async function refreshMedia(expectedGeneration: number) {
+	function refreshIsStale(expectedGeneration: number, expectedRevision: string) {
+		return expectedGeneration !== generation || expectedRevision !== mediaRevision;
+	}
+
+	async function refreshMedia(expectedGeneration: number, expectedRevision: string) {
 		loading = true;
 		renderError = null;
 		renderedUrl = null;
@@ -137,7 +155,7 @@
 					fileId: detail.originalReference.driveFileId,
 					maximumBytes: 64 * 1024 * 1024
 				});
-				if (expectedGeneration !== generation) return;
+				if (refreshIsStale(expectedGeneration, expectedRevision)) return;
 				publishBlob(blob);
 				return;
 			}
@@ -146,26 +164,21 @@
 				detail.originalReference.provider === 'supabase'
 					? await renderSupabasePdf(detail.originalReference.url, page.pageNumber)
 					: await renderDrivePdf(detail.originalReference.driveFileId, page.pageNumber);
-			if (expectedGeneration !== generation) return;
+			if (refreshIsStale(expectedGeneration, expectedRevision)) return;
 			nativeGeometry = rendered.geometry;
 			publishBlob(rendered.blob);
 		} catch {
-			if (expectedGeneration !== generation) return;
+			if (refreshIsStale(expectedGeneration, expectedRevision)) return;
 			renderError = 'Não foi possível renderizar esta página para marcação espacial.';
 		} finally {
-			if (expectedGeneration === generation) loading = false;
+			if (!refreshIsStale(expectedGeneration, expectedRevision)) loading = false;
 		}
 	}
 
 	$effect(() => {
-		detail.id;
-		detail.originalReference.provider;
-		detail.originalReference.url;
-		page.id;
-		page.pageNumber;
-		query;
+		const expectedRevision = mediaRevision;
 		generation += 1;
-		void refreshMedia(generation);
+		void refreshMedia(generation, expectedRevision);
 	});
 
 	onDestroy(() => {

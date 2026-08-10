@@ -20,6 +20,7 @@ function result(overrides: Record<string, unknown> = {}) {
 		rawText: 'synthetic transcript',
 		correctedText: null,
 		warnings: [],
+		wordGeometry: [],
 		contentType: 'printed',
 		needsReview: false,
 		timingMs: 1000,

@@ -2,10 +2,27 @@ import { appendFileSync, readFileSync } from 'node:fs';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
+/**
+ * @typedef {Readonly<{
+ *   project: 'fichario-virtual';
+ *   environment: 'preview';
+ *   productionBranch: 'main';
+ *   commitHash: string;
+ * }>} ExpectedDeploymentIdentity
+ */
+
+/**
+ * @param {string} message
+ * @returns {never}
+ */
 function fail(message) {
 	throw new Error(`Cloudflare Pages deployment output failed validation: ${message}`);
 }
 
+/**
+ * @param {unknown} value
+ * @param {string} label
+ */
 function cleanHttpsOrigin(value, label) {
 	if (typeof value !== 'string' || value.trim() === '') fail(`${label} is missing`);
 	let url;
@@ -27,15 +44,17 @@ function cleanHttpsOrigin(value, label) {
 	return url.origin;
 }
 
+/**
+ * @param {string} source
+ * @param {ExpectedDeploymentIdentity} expected
+ */
 export function validatePagesDeployOutput(source, expected) {
 	if (typeof source !== 'string' || source.trim() === '') fail('Wrangler output is empty');
 	if (!expected || typeof expected !== 'object') fail('expected deployment identity is missing');
 	if (expected.project !== 'fichario-virtual') fail('expected project must be fichario-virtual');
-	if (!['preview', 'production'].includes(expected.environment)) {
-		fail('expected environment must be preview or production');
-	}
+	if (expected.environment !== 'preview') fail('expected environment must be preview');
 	if (expected.productionBranch !== 'main') fail('expected production branch must be main');
-	if (!/^[0-9a-f]{40}$/.test(expected.commitHash ?? '')) fail('expected source SHA is invalid');
+	if (!/^[0-9a-f]{40}$/.test(expected.commitHash)) fail('expected source SHA is invalid');
 
 	const entries = [];
 	for (const [index, line] of source.split(/\r?\n/).entries()) {
@@ -53,8 +72,9 @@ export function validatePagesDeployOutput(source, expected) {
 	}
 	const deployment = deployments[0];
 	if (deployment.pages_project !== expected.project) fail('Pages project does not match');
-	if (deployment.environment !== expected.environment)
+	if (deployment.environment !== expected.environment) {
 		fail('deployment environment does not match');
+	}
 	if (deployment.production_branch !== expected.productionBranch) {
 		fail('production branch does not match');
 	}
@@ -96,11 +116,12 @@ function runCli() {
 	const commitHash = process.env.EXPECTED_SOURCE_COMMIT;
 	const githubOutput = process.env.GITHUB_OUTPUT;
 	if (!outputPath) fail('WRANGLER_OUTPUT_FILE_PATH is missing');
+	if (targetEnvironment !== 'staging') fail('TARGET_ENVIRONMENT must be staging');
+	if (!commitHash) fail('EXPECTED_SOURCE_COMMIT is missing');
 	if (!githubOutput) fail('GITHUB_OUTPUT is missing');
-	const environment = targetEnvironment === 'production' ? 'production' : 'preview';
 	const result = validatePagesDeployOutput(readFileSync(outputPath, 'utf8'), {
 		project: 'fichario-virtual',
-		environment,
+		environment: 'preview',
 		productionBranch: 'main',
 		commitHash
 	});

@@ -48,7 +48,8 @@ describe('process-ocr provider delegation', () => {
 
 	it('persists valid pages independently and requests a split only for affected identities', () => {
 		expect(source).toContain('for (const result of outcome.pages)');
-		expect(source).toMatch(rpc('complete_ocr_job'));
+		expect(source).toMatch(rpc('complete_ocr_job_with_geometry'));
+		expect(source).toContain('geometry_payload: result.wordGeometry');
 		expect(source).toContain('outcome.missingPageIds');
 		expect(source).toContain('outcome.duplicatePageIds');
 		expect(source).toContain("code: 'ocr_batch_response_incomplete'");
