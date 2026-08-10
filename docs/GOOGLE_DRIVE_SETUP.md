@@ -1,6 +1,6 @@
 # Configuração externa do Google Drive
 
-_Atualizado: 6 de agosto de 2026_
+_Atualizado: 10 de agosto de 2026_
 
 Este runbook cobre somente o trabalho externo necessário para ativar a integração cujo design está em `docs/superpowers/specs/2026-08-06-google-drive-primary-storage-design.md`. Nenhum segredo deve ser colocado no frontend, no GitHub, em artifacts, issues ou logs.
 
@@ -13,6 +13,7 @@ Ao final deve existir:
 - tela de consentimento OAuth configurada para a conta autorizada;
 - um cliente OAuth do tipo aplicação Web;
 - uma URI HTTPS de callback apontando para a Edge Function implantada;
+- fluxo Authorization Code protegido por PKCE S256;
 - escopo exato `https://www.googleapis.com/auth/drive.file`;
 - `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET` somente nos secrets do Supabase;
 - refresh token armazenado somente no backend protegido;
@@ -25,10 +26,12 @@ Ao final deve existir:
 - Não solicite `https://www.googleapis.com/auth/drive` nem outro escopo amplo no MVP.
 - Não coloque client secret ou refresh token em variável pública, tabela exposta, localStorage ou service worker.
 - Não use OAuth implícito para manter sincronização em segundo plano.
-- Use fluxo de código de autorização para aplicação Web, com `state` único, curto e de uso único.
+- Use fluxo de código de autorização para aplicação Web, com `state` único, curto e de uso único e PKCE S256.
+- Gere o `code_verifier` no backend; persista-o somente no state privado de curta duração e nunca o envie ao navegador.
+- Envie ao Google somente `code_challenge` e `code_challenge_method=S256`; a callback deve recuperar o verifier do state privado e enviá-lo apenas na troca do código.
 - Solicite acesso offline somente pelo backend para obter refresh token.
 - A URI de redirecionamento cadastrada deve coincidir exatamente com a callback implantada.
-- Não registre código de autorização, token, secret ou URL contendo credenciais.
+- Não registre código de autorização, verifier PKCE, token, secret ou URL contendo credenciais.
 - Não habilite cobrança automaticamente.
 
 ## 1. Criar ou selecionar o projeto Google Cloud
@@ -71,6 +74,8 @@ https://<project-ref>.supabase.co/functions/v1/drive-oauth-callback
 
 Não use wildcard. Produção e staging devem ter URIs explícitas e credenciais separadas quando possível.
 
+O PKCE não adiciona uma credencial estática no Google Cloud. O Fichário gera um verifier aleatório por tentativa, armazena esse valor apenas no backend privado e deriva dele um challenge S256 descartável.
+
 ## 4. Configurar secrets no Supabase
 
 Na CLI ligada ao projeto correto:
@@ -86,20 +91,23 @@ supabase secrets set \
 
 Também preserve o `APP_ORIGIN` HTTPS já usado pelas demais funções.
 
-Esses valores não entram em `.env` público. O client ID poderá ser exposto somente quando uma integração de Picker no navegador realmente exigir, nunca como substituto do fluxo backend.
+Esses valores não entram em `.env` público. O client ID poderá ser exposto somente quando uma integração de Picker no navegador realmente exigir, nunca como substituto do fluxo backend. O `code_verifier` não é secret de ambiente: ele é efêmero, único por tentativa e fica vinculado ao state privado até a callback consumi-lo.
 
-## 5. Implantar as funções
+## 5. Implantar migration e funções
 
-Depois que as funções existirem e passarem nos gates Deno:
+A migration PKCE deve entrar antes das novas versões das Edge Functions. Isso mantém rollout escalonado fail-closed: RPCs legados só consomem states sem verifier e RPCs PKCE só consomem states com verifier.
+
+Depois que as migrations e funções passarem nos gates locais/CI:
 
 ```bash
+supabase db push
 supabase functions deploy drive-oauth-start
 supabase functions deploy drive-oauth-callback
 supabase functions deploy drive-access-token
 ```
 
-- `drive-oauth-start` deve exigir JWT válido do usuário do Fichário.
-- `drive-oauth-callback` pode precisar ser implantada sem verificação JWT da plataforma porque recebe o redirecionamento do Google, mas deve validar internamente `state`, expiração, uso único, usuário e origem antes de trocar o código.
+- `drive-oauth-start` deve exigir JWT válido do usuário do Fichário, gerar state, nonce e verifier no backend, persistir somente o hash do state mais nonce/verifier privados e devolver apenas a URL de autorização com challenge S256.
+- `drive-oauth-callback` pode precisar ser implantada sem verificação JWT da plataforma porque recebe o redirecionamento do Google, mas deve validar internamente `state`, expiração, uso único, usuário e verifier antes de trocar o código. O verifier deve sair do backend somente como `code_verifier` para o endpoint de token do Google.
 - `drive-access-token` deve exigir JWT válido e devolver somente token de acesso efêmero, nunca refresh token.
 
 ## 6. Executar a conexão inicial
@@ -112,7 +120,9 @@ supabase functions deploy drive-access-token
 6. confirme que `drive_connections` ficou `connected`;
 7. confirme que `root_folder_id` foi persistido;
 8. confirme a existência de uma única pasta `Fichário Digital` criada/reconectada pelo app;
-9. confirme que nenhum token apareceu no navegador persistente, logs ou banco público.
+9. confirme que nenhum token ou verifier PKCE apareceu no navegador persistente, logs ou banco público.
+
+Para validar especificamente PKCE, confira em um ambiente de teste que a URL de autorização contém `code_challenge` e `code_challenge_method=S256`, mas não contém `code_verifier`. A troca do código deve falhar se o verifier correto não estiver disponível no state privado.
 
 ## 7. Validar o feed de mudanças
 
@@ -166,6 +176,8 @@ Teste revogar o acesso no Google:
 ```text
 Drive API habilitada: PASS
 OAuth Web e redirect exato: PASS
+PKCE S256: PASS
+Verifier PKCE somente no backend privado: PASS
 Escopo drive.file somente: PASS
 State de uso único: PASS
 Refresh token somente no backend: PASS

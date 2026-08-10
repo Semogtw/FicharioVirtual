@@ -9,6 +9,8 @@ import {
 
 export type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
+const PKCE_VERIFIER = /^[A-Za-z0-9._~-]{43,128}$/;
+
 function base64Url(bytes: Uint8Array): string {
 	let binary = '';
 	for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -29,12 +31,27 @@ function validateSecret(value: string, label: string): string {
 	return value;
 }
 
+export function isOAuthPkceVerifier(value: unknown): value is string {
+	return typeof value === 'string' && PKCE_VERIFIER.test(value);
+}
+
+async function sha256Base64Url(value: string): Promise<string> {
+	const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+	return base64Url(new Uint8Array(digest));
+}
+
+export async function createOAuthPkceChallenge(codeVerifier: string): Promise<string> {
+	if (!isOAuthPkceVerifier(codeVerifier)) throw new TypeError('Invalid OAuth PKCE verifier');
+	return sha256Base64Url(codeVerifier);
+}
+
 function validateOAuthConfiguration(clientId: string, redirectUri: string): void {
 	buildGoogleAuthorizationUrl({
 		clientId,
 		redirectUri,
 		state: 's'.repeat(43),
-		nonce: 'n'.repeat(43)
+		nonce: 'n'.repeat(43),
+		codeChallenge: 'c'.repeat(43)
 	});
 }
 
@@ -58,9 +75,7 @@ export function generateOAuthOpaqueValue(bytes?: Uint8Array): string {
 }
 
 export async function hashOAuthState(state: string): Promise<string> {
-	const validState = validateOAuthOpaqueValue(state);
-	const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(validState));
-	return base64Url(new Uint8Array(digest));
+	return sha256Base64Url(validateOAuthOpaqueValue(state));
 }
 
 export async function requestInitialGoogleTokens({
@@ -68,19 +83,23 @@ export async function requestInitialGoogleTokens({
 	clientSecret,
 	redirectUri,
 	code,
+	codeVerifier,
 	fetchImpl = fetch
 }: {
 	clientId: string;
 	clientSecret: string;
 	redirectUri: string;
 	code: string;
+	codeVerifier: string;
 	fetchImpl?: FetchLike;
 }): Promise<GoogleTokenResponse> {
 	validateOAuthConfiguration(clientId, redirectUri);
+	if (!isOAuthPkceVerifier(codeVerifier)) throw new TypeError('Invalid OAuth PKCE verifier');
 	const body = new URLSearchParams({
 		client_id: clientId,
 		client_secret: validateSecret(clientSecret, 'Google client secret'),
 		code: validateSecret(code, 'Google authorization code'),
+		code_verifier: codeVerifier,
 		grant_type: 'authorization_code',
 		redirect_uri: redirectUri
 	});

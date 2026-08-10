@@ -17,26 +17,36 @@ function configSection(config: string, name: string) {
 }
 
 describe('Drive OAuth Edge Function boundaries', () => {
-	it('stores only a hash of state before returning the Google authorization URL', () => {
+	it('stores only a hash of state plus a backend PKCE verifier before returning the authorization URL', () => {
 		const source = readFileSync(startPath, 'utf8');
 
 		expect(source).toContain('generateOAuthOpaqueValue');
 		expect(source).toContain('hashOAuthState');
-		expect(source).toMatch(rpc('store_drive_oauth_state'));
+		expect(source).toContain('createOAuthPkceChallenge');
+		expect(source).toMatch(rpc('store_drive_oauth_state_pkce'));
+		expect(source).not.toMatch(rpc('store_drive_oauth_state'));
+		expect(source).toContain('target_code_verifier: codeVerifier');
 		expect(source).toContain('buildGoogleAuthorizationUrl');
+		expect(source).toContain('codeChallenge');
+		expect(source).toContain('return respond(200, { authorizationUrl })');
+		expect(source).not.toContain('return respond(200, { authorizationUrl, codeVerifier');
 		expect(source).not.toContain('refresh_token');
 		expect(source).not.toContain('access_token');
 	});
 
-	it('consumes state, stores credentials, and bootstraps Drive before completing OAuth', () => {
+	it('consumes the PKCE-bound state before token exchange and keeps verifier backend-only', () => {
 		const source = readFileSync(callbackPath, 'utf8');
-		const consumeIndex = source.search(rpc('consume_drive_oauth_state'));
+		const consumeIndex = source.search(rpc('consume_drive_oauth_state_pkce'));
 		const exchangeIndex = source.indexOf('await requestInitialGoogleTokens', consumeIndex);
 		const bootstrapIndex = source.indexOf('await bootstrapDriveRoot', exchangeIndex);
 		const completeIndex = source.indexOf("'complete_drive_connection'", bootstrapIndex);
 
 		expect(consumeIndex).toBeGreaterThan(0);
+		expect(source).not.toMatch(rpc('consume_drive_oauth_state'));
+		expect(source).toContain('Object.keys(record).length !== 3');
+		expect(source).toContain('isOAuthPkceVerifier(record.code_verifier)');
 		expect(exchangeIndex).toBeGreaterThan(consumeIndex);
+		expect(source).toContain('codeVerifier: verifiedState.codeVerifier');
 		expect(source).toMatch(rpc('store_drive_credential'));
 		expect(source).toContain('verifyGoogleIdToken');
 		expect(bootstrapIndex).toBeGreaterThan(exchangeIndex);
@@ -57,7 +67,7 @@ describe('Drive OAuth Edge Function boundaries', () => {
 		expect(source).not.toContain('refreshToken:');
 	});
 
-	it('disables platform JWT verification only for the Google redirect callback', () => {
+	it('keeps the callback gateway exception explicit while authenticated entrypoints still require JWT', () => {
 		const config = readFileSync(configPath, 'utf8');
 		const callback = configSection(config, 'drive-oauth-callback');
 		const start = configSection(config, 'drive-oauth-start');

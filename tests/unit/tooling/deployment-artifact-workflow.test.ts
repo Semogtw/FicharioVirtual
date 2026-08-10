@@ -55,7 +55,9 @@ describe('deployable static artifact workflow', () => {
 		const packager = read('tools/deploy/package-static-artifact.sh');
 
 		expect(workflow).toContain('run: bash tools/deploy/package-static-artifact.sh fichario-deploy');
-		expect(packager).toContain('mkdir -p "$output_name/site" "$output_name/source" "$output_name/checks"');
+		expect(packager).toContain(
+			'mkdir -p "$output_name/site" "$output_name/source" "$output_name/checks"'
+		);
 		expect(packager).toContain('cp -a build/. "$output_name/site/"');
 		expect(packager).toContain('cp package.json pnpm-lock.yaml "$output_name/source/"');
 		expect(packager).toContain("echo 'schema_version=2'");

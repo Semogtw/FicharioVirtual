@@ -11,10 +11,17 @@ const clientId = '123456789012-example.apps.googleusercontent.com';
 const redirectUri = 'https://example.supabase.co/functions/v1/drive-oauth-callback';
 const state = 'state_abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG';
 const nonce = 'nonce_abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG';
+const codeChallenge = 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM';
 
 describe('Google Drive OAuth contracts', () => {
-	it('builds an authorization URL with only identity and drive.file scopes', () => {
-		const value = buildGoogleAuthorizationUrl({ clientId, redirectUri, state, nonce });
+	it('builds an authorization URL with only identity, drive.file, and S256 PKCE parameters', () => {
+		const value = buildGoogleAuthorizationUrl({
+			clientId,
+			redirectUri,
+			state,
+			nonce,
+			codeChallenge
+		});
 		const url = new URL(value);
 
 		expect(url.origin).toBe('https://accounts.google.com');
@@ -26,6 +33,8 @@ describe('Google Drive OAuth contracts', () => {
 		expect(url.searchParams.get('prompt')).toBe('consent');
 		expect(url.searchParams.get('state')).toBe(state);
 		expect(url.searchParams.get('nonce')).toBe(nonce);
+		expect(url.searchParams.get('code_challenge')).toBe(codeChallenge);
+		expect(url.searchParams.get('code_challenge_method')).toBe('S256');
 		expect(url.searchParams.get('scope')?.split(' ')).toEqual([
 			'openid',
 			'email',
@@ -35,6 +44,8 @@ describe('Google Drive OAuth contracts', () => {
 			[
 				'access_type',
 				'client_id',
+				'code_challenge',
+				'code_challenge_method',
 				'include_granted_scopes',
 				'nonce',
 				'prompt',
@@ -46,13 +57,14 @@ describe('Google Drive OAuth contracts', () => {
 		);
 	});
 
-	it('rejects malformed client, redirect, state, nonce, and scope expansion', () => {
+	it('rejects malformed client, redirect, state, nonce, challenge, and scope expansion', () => {
 		expect(() =>
 			buildGoogleAuthorizationUrl({
 				clientId: 'not-a-client',
 				redirectUri,
 				state,
-				nonce
+				nonce,
+				codeChallenge
 			})
 		).toThrow('Invalid Google OAuth configuration');
 		expect(() =>
@@ -60,9 +72,13 @@ describe('Google Drive OAuth contracts', () => {
 				clientId,
 				redirectUri: 'http://example.supabase.co/functions/v1/drive-oauth-callback',
 				state,
-				nonce
+				nonce,
+				codeChallenge
 			})
 		).toThrow('Invalid Google OAuth configuration');
+		expect(() =>
+			buildGoogleAuthorizationUrl({ clientId, redirectUri, state, nonce, codeChallenge: 'short' })
+		).toThrow('Invalid OAuth PKCE challenge');
 		expect(() => validateOAuthOpaqueValue('short')).toThrow('Invalid OAuth opaque value');
 		expect(() => validateOAuthOpaqueValue(`${state}.bad`)).toThrow('Invalid OAuth opaque value');
 	});

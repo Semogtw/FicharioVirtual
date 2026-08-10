@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+	createOAuthPkceChallenge,
 	generateOAuthOpaqueValue,
 	hashOAuthState,
+	isOAuthPkceVerifier,
 	refreshGoogleAccessToken,
 	requestInitialGoogleTokens,
 	verifyGoogleIdToken
@@ -12,6 +14,8 @@ const clientId = '123456789012-example.apps.googleusercontent.com';
 const clientSecret = 'google-client-secret-value';
 const redirectUri = 'https://example.supabase.co/functions/v1/drive-oauth-callback';
 const nonce = 'nonce_abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG';
+const codeVerifier = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
+const codeChallenge = 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM';
 
 function jsonResponse(body: unknown, status = 200) {
 	return new Response(JSON.stringify(body), {
@@ -21,18 +25,21 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 describe('Google OAuth HTTP helpers', () => {
-	it('generates URL-safe 256-bit state and hashes it without padding', async () => {
+	it('generates URL-safe 256-bit state and a deterministic S256 PKCE challenge', async () => {
 		const state = generateOAuthOpaqueValue(
 			new Uint8Array(Array.from({ length: 32 }, (_, index) => index))
 		);
 
 		expect(state).toMatch(/^[A-Za-z0-9_-]{43}$/);
 		expect(state).not.toContain('=');
+		expect(isOAuthPkceVerifier(state)).toBe(true);
+		await expect(createOAuthPkceChallenge(codeVerifier)).resolves.toBe(codeChallenge);
+		await expect(createOAuthPkceChallenge('short')).rejects.toThrow('Invalid OAuth PKCE verifier');
 		await expect(hashOAuthState(state)).resolves.toMatch(/^[A-Za-z0-9_-]{43}$/);
 		await expect(hashOAuthState('short')).rejects.toThrow('Invalid OAuth opaque value');
 	});
 
-	it('exchanges the authorization code with exact form fields and strict tokens', async () => {
+	it('exchanges the authorization code with the exact PKCE form fields and strict tokens', async () => {
 		const fetchImpl = vi.fn().mockResolvedValue(
 			jsonResponse({
 				access_token: 'initial-access-token',
@@ -49,6 +56,7 @@ describe('Google OAuth HTTP helpers', () => {
 			clientSecret,
 			redirectUri,
 			code: 'authorization-code-value',
+			codeVerifier,
 			fetchImpl
 		});
 
@@ -63,9 +71,25 @@ describe('Google OAuth HTTP helpers', () => {
 			client_id: clientId,
 			client_secret: clientSecret,
 			code: 'authorization-code-value',
+			code_verifier: codeVerifier,
 			grant_type: 'authorization_code',
 			redirect_uri: redirectUri
 		});
+	});
+
+	it('rejects an invalid PKCE verifier before contacting the token endpoint', async () => {
+		const fetchImpl = vi.fn();
+		await expect(
+			requestInitialGoogleTokens({
+				clientId,
+				clientSecret,
+				redirectUri,
+				code: 'authorization-code-value',
+				codeVerifier: 'short',
+				fetchImpl
+			})
+		).rejects.toThrow('Invalid OAuth PKCE verifier');
+		expect(fetchImpl).not.toHaveBeenCalled();
 	});
 
 	it('refreshes an access token without returning or accepting a new refresh token', async () => {
