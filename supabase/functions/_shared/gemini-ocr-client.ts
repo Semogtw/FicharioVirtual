@@ -54,8 +54,36 @@ export type GeminiOcrBatchRequest = {
 	fetchImpl?: typeof fetch;
 };
 
+export type GeminiTokenDetail = Readonly<{
+	modality: string;
+	tokenCount: number;
+}>;
+
+export type GeminiUsageMetadata = Readonly<{
+	promptTokenCount: number | null;
+	cachedContentTokenCount: number | null;
+	candidatesTokenCount: number | null;
+	toolUsePromptTokenCount: number | null;
+	thoughtsTokenCount: number | null;
+	totalTokenCount: number | null;
+	promptTokensDetails: readonly GeminiTokenDetail[];
+	cacheTokensDetails: readonly GeminiTokenDetail[];
+	candidatesTokensDetails: readonly GeminiTokenDetail[];
+	toolUsePromptTokensDetails: readonly GeminiTokenDetail[];
+	serviceTier: string | null;
+}>;
+
+export type GeminiOcrBatchOutcome = OcrBatchParseOutcome &
+	Readonly<{
+		usage: GeminiUsageMetadata | null;
+		modelVersion: string | null;
+		responseId: string | null;
+	}>;
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MIME = /^(?:image\/(?:jpeg|png|webp)|application\/pdf)$/;
+const MODALITY = /^[A-Z][A-Z0-9_]{0,63}$/;
+const SERVICE_TIER = /^[A-Z][A-Z0-9_]{0,63}$/;
 const MAX_BATCH_PAGES = 100;
 const MAX_PAGE_BYTES = 14 * 1024 * 1024;
 // Gemini limits the entire inline request to 20 MB. Raw bytes expand by roughly
@@ -64,6 +92,7 @@ const MAX_PAGE_BYTES = 14 * 1024 * 1024;
 const MAX_BATCH_BYTES = 14 * 1024 * 1024;
 const MAX_PROVIDER_ERROR_BYTES = 64 * 1024;
 const MAX_PROVIDER_RESPONSE_BYTES = 4 * 1024 * 1024;
+const MAX_TOKEN_COUNT = Number.MAX_SAFE_INTEGER;
 
 const prompt = `Você é um transcritor literal de anotações acadêmicas.
 Transcreva todo texto visível da imagem em português, preservando ordem de leitura, títulos, listas, quebras relevantes, símbolos e fórmulas em texto quando possível.
@@ -172,6 +201,55 @@ function candidateText(payload: unknown): string | null {
 	return null;
 }
 
+function safeTokenCount(value: unknown): number | null {
+	return Number.isSafeInteger(value) && Number(value) >= 0 && Number(value) <= MAX_TOKEN_COUNT
+		? Number(value)
+		: null;
+}
+
+function tokenDetails(value: unknown): readonly GeminiTokenDetail[] {
+	if (!Array.isArray(value)) return Object.freeze([]);
+	const details: GeminiTokenDetail[] = [];
+	for (const item of value.slice(0, 32)) {
+		if (!item || typeof item !== 'object') continue;
+		const modality = (item as { modality?: unknown }).modality;
+		const count = safeTokenCount((item as { tokenCount?: unknown }).tokenCount);
+		if (typeof modality !== 'string' || !MODALITY.test(modality) || count === null) continue;
+		details.push(Object.freeze({ modality, tokenCount: count }));
+	}
+	return Object.freeze(details);
+}
+
+function usageMetadata(payload: unknown): GeminiUsageMetadata | null {
+	if (!payload || typeof payload !== 'object') return null;
+	const raw = (payload as { usageMetadata?: unknown }).usageMetadata;
+	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+	const record = raw as Record<string, unknown>;
+	const serviceTier =
+		typeof record.serviceTier === 'string' && SERVICE_TIER.test(record.serviceTier)
+			? record.serviceTier
+			: null;
+	return Object.freeze({
+		promptTokenCount: safeTokenCount(record.promptTokenCount),
+		cachedContentTokenCount: safeTokenCount(record.cachedContentTokenCount),
+		candidatesTokenCount: safeTokenCount(record.candidatesTokenCount),
+		toolUsePromptTokenCount: safeTokenCount(record.toolUsePromptTokenCount),
+		thoughtsTokenCount: safeTokenCount(record.thoughtsTokenCount),
+		totalTokenCount: safeTokenCount(record.totalTokenCount),
+		promptTokensDetails: tokenDetails(record.promptTokensDetails),
+		cacheTokensDetails: tokenDetails(record.cacheTokensDetails),
+		candidatesTokensDetails: tokenDetails(record.candidatesTokensDetails),
+		toolUsePromptTokensDetails: tokenDetails(record.toolUsePromptTokensDetails),
+		serviceTier
+	});
+}
+
+function providerString(payload: unknown, key: 'modelVersion' | 'responseId', maxLength: number) {
+	if (!payload || typeof payload !== 'object') return null;
+	const value = (payload as Record<string, unknown>)[key];
+	return typeof value === 'string' && value.length > 0 && value.length <= maxLength ? value : null;
+}
+
 async function providerJson(response: Response) {
 	if (!response.ok) {
 		let responseBody = '';
@@ -246,7 +324,7 @@ function validateBatchPages(pages: readonly GeminiOcrBatchPage[]) {
 
 export async function requestGeminiOcrBatch(
 	request: GeminiOcrBatchRequest
-): Promise<OcrBatchParseOutcome> {
+): Promise<GeminiOcrBatchOutcome> {
 	validateBatchPages(request.pages);
 	const parts: Array<Record<string, unknown>> = [
 		{
@@ -275,10 +353,16 @@ export async function requestGeminiOcrBatch(
 	const text = candidateText(payload);
 	if (text === null) throw new GeminiResponseError();
 	try {
-		return parseOcrBatchPayload(
+		const parsed = parseOcrBatchPayload(
 			text,
 			request.pages.map(({ pageId, pageNumber }) => ({ pageId, pageNumber }))
 		);
+		return Object.freeze({
+			...parsed,
+			usage: usageMetadata(payload),
+			modelVersion: providerString(payload, 'modelVersion', 200),
+			responseId: providerString(payload, 'responseId', 256)
+		});
 	} catch {
 		throw new GeminiResponseError();
 	}
