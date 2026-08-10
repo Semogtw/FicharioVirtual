@@ -61,8 +61,8 @@ requirePattern(
 	'artifact must be downloaded from the explicitly selected build run'
 );
 requirePattern(
-	/checks\/check-deployed-site\.mjs checks\/deployment-contract\.mjs/u,
-	'artifact verification must require the pinned post-deploy checker and contract'
+	/checks\/check-deployed-site\.mjs checks\/deployment-contract\.mjs checks\/validate-pages-deploy-output\.mjs/u,
+	'artifact verification must require all pinned deployment validators'
 );
 requirePattern(
 	/\^\[0-9a-f\]\{40\}\$/u,
@@ -93,12 +93,8 @@ requirePattern(
 requirePattern(/pages_branch='main'/u, 'production deployments must target the production branch');
 requirePattern(/pages_branch='staging'/u, 'staging deployments must target a preview branch');
 requirePattern(
-	/entry\.type === 'pages-deploy-detailed'/u,
-	'workflow must consume Wrangler structured Pages deployment output'
-);
-requirePattern(
-	/deployment\.deployment_trigger\?\.metadata\?\.commit_hash !== process\.env\.EXPECTED_SOURCE_COMMIT/u,
-	'workflow must verify the source SHA returned by Cloudflare'
+	/node "\$ARTIFACT_ROOT\/checks\/validate-pages-deploy-output\.mjs"/u,
+	'Wrangler structured output must be validated by code carried in the artifact'
 );
 requirePattern(
 	/node "\$ARTIFACT_ROOT\/checks\/check-deployed-site\.mjs" "\$DEPLOYMENT_URL"/u,
@@ -121,6 +117,10 @@ forbidPattern(
 forbidPattern(
 	/https:\/\/staging\.fichario-virtual\.pages\.dev/u,
 	'staging verification must use Wrangler exact deployment output instead of an assumed alias'
+);
+forbidPattern(
+	/pages-deploy-detailed/u,
+	'Wrangler output parsing must stay in the artifact-pinned validator instead of inline workflow code'
 );
 
 if (failures.length > 0) {
