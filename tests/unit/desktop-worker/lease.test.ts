@@ -100,14 +100,10 @@ describe('runWithLeaseRenewal', () => {
 		const client = { renew: vi.fn() };
 		const sleep = vi.fn(untilAbort());
 
-		const result = await runWithLeaseRenewal(
-			{ client, lease: lease() },
-			async () => 'done',
-			{
-				now: () => Date.parse('2026-08-10T02:00:00.000Z'),
-				sleep
-			}
-		);
+		const result = await runWithLeaseRenewal({ client, lease: lease() }, async () => 'done', {
+			now: () => Date.parse('2026-08-10T02:00:00.000Z'),
+			sleep
+		});
 
 		expect(result.value).toBe('done');
 		expect(client.renew).not.toHaveBeenCalled();
