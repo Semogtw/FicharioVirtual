@@ -28,6 +28,7 @@ deno check --no-config supabase/functions/_shared/drive-folder-chain.ts
 deno check --no-config supabase/functions/_shared/drive-job-runner.ts
 deno check --no-config supabase/functions/process-ocr/index.ts
 deno check --no-config supabase/functions/semantic-coverage/index.ts
+deno check --no-config supabase/functions/semantic-search/index.ts
 deno check --no-config supabase/functions/delete-document/index.ts
 deno check --no-config supabase/functions/drive-oauth-start/index.ts
 deno check --no-config supabase/functions/drive-oauth-callback/index.ts
