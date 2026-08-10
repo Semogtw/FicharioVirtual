@@ -137,6 +137,12 @@ function extension(blob: Blob) {
 	return blob.type === 'image/webp' ? 'webp' : 'jpg';
 }
 
+function sourceExtension(file: File) {
+	if (file.type === 'image/png') return 'png';
+	if (file.type === 'image/webp') return 'webp';
+	return 'jpg';
+}
+
 function defaultTitle(filename: string) {
 	const value = filename.replace(/\.[^.]+$/, '').trim();
 	return value.slice(0, 240) || 'Imagem sem título';
@@ -217,6 +223,9 @@ export async function uploadPreparedImageToSupabase(
 	if (!Number.isInteger(promptVersion) || promptVersion < 1 || promptVersion > 10_000) {
 		throw new TypeError('Invalid OCR prompt version');
 	}
+	if (!(input.prepared.original instanceof File) || input.prepared.original.size < 1) {
+		throw new TypeError('Invalid source image');
+	}
 	const gateway = client ?? getSupabaseClient();
 
 	return uploadSlots.run(async () => {
@@ -232,7 +241,10 @@ export async function uploadPreparedImageToSupabase(
 			throw new ImageUploadError('not_authenticated');
 		}
 		const userId = sessionData.session.user.id;
-		const sha256 = await calculateSha256(input.prepared.image);
+		const [sha256, sourceSha256] = await Promise.all([
+			calculateSha256(input.prepared.image),
+			calculateSha256(input.prepared.original)
+		]);
 		if (signal?.aborted) throw abortError();
 
 		let duplicateResult: { data: unknown; error: unknown };
@@ -259,15 +271,23 @@ export async function uploadPreparedImageToSupabase(
 		const pageId = uuid();
 		const ocrJobId = uuid();
 		const root = `${userId}/${documentId}`;
-		const storagePath = `${root}/original.${extension(input.prepared.image)}`;
+		const storagePath = `${root}/prepared.${extension(input.prepared.image)}`;
+		const sourcePath = `${root}/source.${sourceExtension(input.prepared.original)}`;
 		const thumbnailPath = `${root}/thumbnail.${extension(input.prepared.thumbnail)}`;
+		const uploadedPaths = [storagePath, sourcePath, thumbnailPath] as const;
 		const bucket = gateway.storage.from('documents');
-		let originalUpload: { error: unknown };
+		let preparedUpload: { error: unknown };
+		let sourceUpload: { error: unknown };
 		let thumbnailUpload: { error: unknown };
 		try {
-			[originalUpload, thumbnailUpload] = await Promise.all([
+			[preparedUpload, sourceUpload, thumbnailUpload] = await Promise.all([
 				bucket.upload(storagePath, input.prepared.image, {
 					contentType: input.prepared.image.type,
+					cacheControl: '3600',
+					upsert: false
+				}),
+				bucket.upload(sourcePath, input.prepared.original, {
+					contentType: input.prepared.original.type,
 					cacheControl: '3600',
 					upsert: false
 				}),
@@ -278,41 +298,58 @@ export async function uploadPreparedImageToSupabase(
 				})
 			]);
 		} catch {
-			await removeUploaded(gateway, [storagePath, thumbnailPath]);
+			await removeUploaded(gateway, uploadedPaths);
 			throw new ImageUploadError('upload_failed');
 		}
-		if (originalUpload.error || thumbnailUpload.error) {
-			await removeUploaded(gateway, [storagePath, thumbnailPath]);
+		if (preparedUpload.error || sourceUpload.error || thumbnailUpload.error) {
+			await removeUploaded(gateway, uploadedPaths);
 			throw new ImageUploadError('upload_failed');
 		}
 		if (signal?.aborted) {
-			await removeUploaded(gateway, [storagePath, thumbnailPath]);
+			await removeUploaded(gateway, uploadedPaths);
 			throw abortError();
 		}
 
 		type RpcClient = {
 			rpc(
-				name: 'create_image_import',
+				name: 'create_image_import_v2',
 				args: Record<string, unknown>
 			): Promise<{ data: unknown; error: unknown }>;
 		};
+		const preprocessing = input.prepared.preprocessing;
 		let metadataResult: { data: unknown; error: unknown };
 		try {
-			metadataResult = await (gateway as unknown as RpcClient).rpc('create_image_import', {
+			metadataResult = await (gateway as unknown as RpcClient).rpc('create_image_import_v2', {
 				target_document_id: documentId,
 				target_page_id: pageId,
 				target_job_id: ocrJobId,
 				target_notebook_id: notebookId,
 				document_title: input.title?.trim() || defaultTitle(input.prepared.originalName),
 				original_filename: input.prepared.originalName,
-				original_storage_path: storagePath,
+				prepared_storage_path: storagePath,
+				source_storage_path: sourcePath,
 				thumbnail_storage_path: thumbnailPath,
 				prepared_sha256: sha256,
+				source_sha256: sourceSha256,
+				preprocessing_profile: preprocessing.profile,
+				preprocessing_version: preprocessing.version,
+				preprocessing_auto_crop: preprocessing.autoCropApplied,
+				preprocessing_retained_permille: preprocessing.retainedAreaPermille,
+				preprocessing_deskew_mdeg: preprocessing.deskewMilliDegrees,
+				preprocessing_illumination: preprocessing.illuminationNormalized,
+				preprocessing_contrast: preprocessing.contrastEnhanced,
+				preprocessing_fallback: preprocessing.fallbackToStandard,
+				preprocessing_source_width: preprocessing.sourceWidth,
+				preprocessing_source_height: preprocessing.sourceHeight,
+				preprocessing_prepared_width: preprocessing.preparedWidth,
+				preprocessing_prepared_height: preprocessing.preparedHeight,
+				preprocessing_original_bytes: input.prepared.original.size,
+				preprocessing_prepared_bytes: input.prepared.image.size,
 				source_created_at: input.sourceCreatedAt ?? null,
 				prompt_version: promptVersion
 			});
 		} catch {
-			await removeUploaded(gateway, [storagePath, thumbnailPath]);
+			await removeUploaded(gateway, uploadedPaths);
 			throw new ImageUploadError('metadata_failed');
 		}
 		let imported: Readonly<ImageImportIdentifiers>;
@@ -320,7 +357,7 @@ export async function uploadPreparedImageToSupabase(
 			if (metadataResult.error) invalidImageImportResult();
 			imported = parseImageImportResult(metadataResult.data, { documentId, pageId, ocrJobId });
 		} catch {
-			await removeUploaded(gateway, [storagePath, thumbnailPath]);
+			await removeUploaded(gateway, uploadedPaths);
 			throw new ImageUploadError('metadata_failed');
 		}
 
