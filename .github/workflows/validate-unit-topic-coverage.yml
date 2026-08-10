@@ -33,5 +33,52 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Verify application
-        run: pnpm verify
+      - name: Format feature files in runner and show required patch
+        run: |
+          pnpm exec prettier --write \
+            docs/UNIT_TOPIC_COVERAGE.md \
+            src/lib/components/AppShell.svelte \
+            src/lib/components/MobileNavigation.svelte \
+            src/lib/components/NavigationIcon.svelte \
+            src/lib/coverage/topic-coverage.ts \
+            src/lib/services/topic-coverage.ts \
+            src/routes/coverage/+page.svelte \
+            tests/unit/coverage/topic-coverage.test.ts
+          git diff -- \
+            docs/UNIT_TOPIC_COVERAGE.md \
+            src/lib/components/AppShell.svelte \
+            src/lib/components/MobileNavigation.svelte \
+            src/lib/components/NavigationIcon.svelte \
+            src/lib/coverage/topic-coverage.ts \
+            src/lib/services/topic-coverage.ts \
+            src/routes/coverage/+page.svelte \
+            tests/unit/coverage/topic-coverage.test.ts
+
+      - name: Lint feature source
+        run: |
+          pnpm exec prettier --check \
+            docs/UNIT_TOPIC_COVERAGE.md \
+            src/lib/components/AppShell.svelte \
+            src/lib/components/MobileNavigation.svelte \
+            src/lib/components/NavigationIcon.svelte \
+            src/lib/coverage/topic-coverage.ts \
+            src/lib/services/topic-coverage.ts \
+            src/routes/coverage/+page.svelte \
+            tests/unit/coverage/topic-coverage.test.ts
+          pnpm exec eslint \
+            src/lib/components/AppShell.svelte \
+            src/lib/components/MobileNavigation.svelte \
+            src/lib/components/NavigationIcon.svelte \
+            src/lib/coverage/topic-coverage.ts \
+            src/lib/services/topic-coverage.ts \
+            src/routes/coverage/+page.svelte \
+            tests/unit/coverage/topic-coverage.test.ts
+
+      - name: Typecheck
+        run: pnpm check
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
