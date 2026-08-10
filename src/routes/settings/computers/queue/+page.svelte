@@ -62,7 +62,10 @@
 				? 'Lease expirado recuperado. O trabalho voltou para a fila do Gemini.'
 				: 'O trabalho voltou para a fila do Gemini.';
 		} catch (caught) {
-			error = caught instanceof Error ? caught.message : 'Não foi possível devolver o trabalho ao Gemini.';
+			error =
+				caught instanceof Error
+					? caught.message
+					: 'Não foi possível devolver o trabalho ao Gemini.';
 		} finally {
 			if (movingPageId === job.pageId) movingPageId = null;
 		}
