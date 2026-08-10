@@ -123,7 +123,8 @@ function validateOptions(query: string, options: SearchOptions) {
 	if (notebookId !== null && !UUID.test(notebookId)) throw new TypeError('Invalid search notebook');
 	const limit = options.limit ?? 30;
 	const offset = options.offset ?? 0;
-	if (!Number.isInteger(limit) || limit < 1 || limit > 50) throw new TypeError('Invalid search limit');
+	if (!Number.isInteger(limit) || limit < 1 || limit > 50)
+		throw new TypeError('Invalid search limit');
 	if (!Number.isInteger(offset) || offset < 0 || offset > 10_000) {
 		throw new TypeError('Invalid search offset');
 	}
@@ -175,7 +176,9 @@ export async function recordSemanticSearchConsent(
 		if (error || data !== true) throw new SemanticSearchServiceError();
 	} catch (error) {
 		if (error instanceof SemanticSearchServiceError) throw error;
-		throw new SemanticSearchServiceError('Não foi possível registrar o consentimento da busca semântica.');
+		throw new SemanticSearchServiceError(
+			'Não foi possível registrar o consentimento da busca semântica.'
+		);
 	}
 }
 
