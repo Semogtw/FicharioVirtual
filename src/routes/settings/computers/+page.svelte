@@ -5,6 +5,7 @@
 	import { parsePublicEnv } from '$lib/env/public';
 	import {
 		createDesktopOcrPairingCode,
+		deleteDesktopOcrDevice,
 		listDesktopOcrDevices,
 		renameDesktopOcrDevice,
 		revokeDesktopOcrDevice,
@@ -25,10 +26,12 @@
 	let loading = $state(true);
 	let creatingPairingCode = $state(false);
 	let revokingId = $state<string | null>(null);
+	let deletingId = $state<string | null>(null);
 	let savingLabelId = $state<string | null>(null);
 	let editingId = $state<string | null>(null);
 	let editingLabel = $state('');
 	let confirmingId = $state<string | null>(null);
+	let deleteConfirmingId = $state<string | null>(null);
 	let error = $state<string | null>(null);
 	let message = $state<string | null>(null);
 	const requests = new RequestVersion();
@@ -110,8 +113,9 @@
 	}
 
 	function beginRename(device: DesktopOcrDevice) {
-		if (device.status !== 'active' || revokingId || savingLabelId) return;
+		if (device.status !== 'active' || revokingId || deletingId || savingLabelId) return;
 		confirmingId = null;
+		deleteConfirmingId = null;
 		message = null;
 		error = null;
 		editingId = device.id;
@@ -124,7 +128,13 @@
 	}
 
 	async function saveRename(device: DesktopOcrDevice) {
-		if (device.status !== 'active' || editingId !== device.id || revokingId || savingLabelId) {
+		if (
+			device.status !== 'active' ||
+			editingId !== device.id ||
+			revokingId ||
+			deletingId ||
+			savingLabelId
+		) {
 			return;
 		}
 
@@ -161,9 +171,10 @@
 	}
 
 	async function revoke(device: DesktopOcrDevice) {
-		if (revokingId || savingLabelId || device.status !== 'active') return;
+		if (revokingId || deletingId || savingLabelId || device.status !== 'active') return;
 		if (confirmingId !== device.id) {
 			cancelRename();
+			deleteConfirmingId = null;
 			confirmingId = device.id;
 			message = 'Confirme a revogação. Trabalhos em execução voltarão para a fila.';
 			return;
@@ -189,8 +200,8 @@
 			);
 			message =
 				receipt.requeuedJobs === 0
-					? `${device.label} foi revogado.`
-					: `${device.label} foi revogado e ${receipt.requeuedJobs} trabalho(s) voltaram para a fila.`;
+					? `${device.label} foi revogado. Apague a credencial local com fichario-worker-forget --after-web-revoke.`
+					: `${device.label} foi revogado e ${receipt.requeuedJobs} trabalho(s) voltaram para a fila. Apague a credencial local com fichario-worker-forget --after-web-revoke.`;
 		} catch (caught) {
 			if (!requests.isCurrent(version)) return;
 			error = caught instanceof Error ? caught.message : 'Não foi possível revogar o computador.';
@@ -199,8 +210,40 @@
 		}
 	}
 
+	async function removeRevoked(device: DesktopOcrDevice) {
+		if (revokingId || deletingId || savingLabelId || device.status !== 'revoked') return;
+		if (deleteConfirmingId !== device.id) {
+			confirmingId = null;
+			deleteConfirmingId = device.id;
+			message = 'Confirme a remoção. O computador já revogado desaparecerá desta lista.';
+			return;
+		}
+
+		const version = requests.next();
+		deletingId = device.id;
+		deleteConfirmingId = null;
+		error = null;
+		message = null;
+		try {
+			await deleteDesktopOcrDevice(device.id);
+			if (!requests.isCurrent(version)) return;
+			devices = devices.filter((item) => item.id !== device.id);
+			message = `${device.label} foi removido da lista.`;
+		} catch (caught) {
+			if (!requests.isCurrent(version)) return;
+			error = caught instanceof Error ? caught.message : 'Não foi possível remover o computador.';
+		} finally {
+			if (requests.isCurrent(version)) deletingId = null;
+		}
+	}
+
 	function cancelConfirmation() {
 		confirmingId = null;
+		message = null;
+	}
+
+	function cancelDeleteConfirmation() {
+		deleteConfirmingId = null;
 		message = null;
 	}
 
@@ -231,7 +274,7 @@
 			</div>
 			<Button
 				label={loading ? 'Atualizando…' : 'Atualizar'}
-				disabled={loading || !!revokingId || !!savingLabelId}
+				disabled={loading || !!revokingId || !!deletingId || !!savingLabelId}
 				onclick={() => void refreshDevices()}
 			/>
 		</div>
@@ -368,7 +411,7 @@
 										<button
 											type="button"
 											class="secondary"
-											disabled={!!revokingId || !!savingLabelId}
+											disabled={!!revokingId || !!deletingId || !!savingLabelId}
 											onclick={() => beginRename(device)}
 										>
 											Renomear
@@ -387,7 +430,7 @@
 									<button
 										type="button"
 										class:confirming={confirmingId === device.id}
-										disabled={!!revokingId || !!savingLabelId}
+										disabled={!!revokingId || !!deletingId || !!savingLabelId}
 										onclick={() => void revoke(device)}
 									>
 										{revokingId === device.id
@@ -397,6 +440,31 @@
 												: 'Revogar'}
 									</button>
 								{/if}
+							</div>
+						{:else}
+							<div class="device-actions">
+								{#if deleteConfirmingId === device.id}
+									<button
+										type="button"
+										class="secondary"
+										disabled={!!deletingId}
+										onclick={cancelDeleteConfirmation}
+									>
+										Cancelar
+									</button>
+								{/if}
+								<button
+									type="button"
+									class:confirming={deleteConfirmingId === device.id}
+									disabled={!!revokingId || !!deletingId || !!savingLabelId}
+									onclick={() => void removeRevoked(device)}
+								>
+									{deletingId === device.id
+										? 'Removendo…'
+										: deleteConfirmingId === device.id
+											? 'Confirmar remoção'
+											: 'Remover da lista'}
+								</button>
 							</div>
 						{/if}
 					</article>
