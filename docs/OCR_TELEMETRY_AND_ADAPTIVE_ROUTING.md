@@ -1,6 +1,6 @@
 # Telemetria de OCR e roteamento adaptativo Gemini/local
 
-**Status:** telemetria de uso implementada; roteamento adaptativo ainda não ativado  
+**Status:** telemetria de uso e classificação Gemini por página implementadas; roteamento adaptativo ainda não ativado  
 **Última revisão:** 10 de agosto de 2026  
 **Objetivo:** maximizar qualidade e quantidade usando Gemini como recurso de maior qualidade e OCR local como capacidade de overflow, sem depender de estimativas fixas de quota
 
@@ -44,6 +44,8 @@ Referência oficial:
 - <https://ai.google.dev/gemini-api/docs/generate-content/tokens>
 
 O parser limita modalidades/contagens, não persiste o JSON bruto da resposta e não inclui prompt, texto OCR ou bytes de imagem na telemetria.
+
+A mesma resposta multipágina também solicita um `contentClass` fechado para cada página. Essa classificação é explicitamente **telemetria**: o prompt diz que ela não pode resumir, normalizar ou alterar a transcrição. Não existe uma segunda chamada Gemini para classificar.
 
 ### 2.2 Persistência no PostgreSQL
 
@@ -93,9 +95,9 @@ ocr_provider_page_metrics
 
 1. gera um UUID de telemetria antes da chamada Gemini;
 2. mede somente a latência da chamada ao provedor;
-3. em sucesso, grava tokens oficiais + métricas por página;
+3. em sucesso, grava tokens oficiais + métricas por página + `contentClass` retornado pelo Gemini;
 4. em erro, grava páginas/bytes/latência/código seguro mesmo quando não existe `usageMetadata`;
-5. trata a persistência de telemetria como **best-effort**: falha de observabilidade nunca transforma um OCR válido em erro.
+5. trata a persistência de telemetria como **best-effort**: inclusive exceção de transporte na escrita da telemetria é isolada e nunca transforma um OCR válido em erro.
 
 Isso permite observar inclusive quantas chamadas terminaram por quota sem armazenar o corpo de erro do Google.
 
@@ -122,7 +124,10 @@ O RPC verifica:
 - ownership e vínculo do lote quando existe;
 - pertencimento de cada página ao documento;
 - unicidade do manifesto;
-- limites numéricos e classes permitidas.
+- limites numéricos e classes permitidas;
+- coerência entre evento de sucesso e ausência de código de erro.
+
+O vínculo opcional com `ocr_batches` usa `ON DELETE RESTRICT`, evitando apagar silenciosamente a proveniência de uma chamada já medida.
 
 ## 4. Tokens exatos x atribuição por página
 
@@ -140,7 +145,7 @@ Hoje:
 
 No futuro, se for útil estimar custo por página, a estimativa deve carregar explicitamente um método de atribuição, por exemplo resolução/tiles + proporção de saída, e permanecer separada do total oficial.
 
-## 5. Taxonomia preparada
+## 5. Classificação de conteúdo implementada
 
 A telemetria aceita as seguintes classes:
 
@@ -155,17 +160,27 @@ math
 sparse
 ```
 
-**Estado atual:** o `process-ocr` grava `unknown` porque ainda não existe classificador confiável antes do OCR.
+Nas chamadas Gemini multipágina, o contrato pede exatamente uma dessas classes por página. O parser:
 
-Isso é intencional. Não inferir “manuscrito”, “livro” ou “scan ruim” a partir de filename, tamanho do arquivo ou um warning isolado.
+- valida a enumeração;
+- persiste a classe junto da métrica da página;
+- continua aceitando a forma antiga sem `contentClass`, atribuindo `unknown` para compatibilidade;
+- rejeita classes fora da lista;
+- não usa a classe para modificar o texto OCR.
 
-A próxima camada de roteamento poderá preencher essas classes a partir de:
+Isso já permite começar a construir estatísticas reais de uso e `needsReview` por tipo visual nas páginas que passam pelo Gemini.
+
+Limitação importante: **essa classe é uma classificação do próprio Gemini depois que a rota Gemini já foi escolhida**. Ela é excelente para observabilidade e para treinar/calibrar políticas futuras, mas ainda não serve sozinha para decidir se uma página deve gastar Gemini antes da chamada.
+
+Para classificação **pré-rota**, a próxima camada poderá combinar:
 
 1. hint explícito do usuário/documento;
 2. classificador local barato;
 3. sinais de layout/qualidade da preparação da página;
-4. resultado de uma execução anterior;
+4. classe histórica de páginas semelhantes ou reprocessamentos;
 5. combinação versionada desses sinais.
+
+Não inferir “manuscrito”, “livro” ou “scan ruim” apenas de filename ou tamanho do arquivo.
 
 ## 6. RPC de análise implementado
 
@@ -187,7 +202,7 @@ A resposta inclui:
 - agrupamento por `content_class`;
 - série diária de requests, páginas e tokens.
 
-Enquanto `content_class=unknown`, o agrupamento de classe ainda não oferece decisão semântica; ele passa a ser útil quando a classificação for introduzida.
+Com a classificação Gemini agora incluída na mesma resposta OCR, `byContentClass` começa a ganhar dados semânticos assim que a migration e a função atual forem implantadas e chamadas reais forem processadas. Falhas antes de uma resposta classificável continuam corretamente em `unknown`.
 
 ## 7. Política alvo de prioridade
 
@@ -325,14 +340,18 @@ Exemplos de perguntas que o banco deverá responder:
 - [x] RLS e writer RPC validado;
 - [x] overview de 1–365 dias;
 - [x] testes unitários de sanitização/payload;
-- [x] testes estáticos do contrato SQL.
+- [x] testes estáticos do contrato SQL;
+- [x] isolamento best-effort para falha da telemetria.
 
-### Fase B — classificação
+### Fase B — classificação — PARCIALMENTE IMPLEMENTADA
 
-- [ ] definir classificador/hints de conteúdo;
-- [ ] preencher `content_class` antes da decisão de rota;
-- [ ] versionar classificador;
-- [ ] medir matriz classe x backend.
+- [x] taxonomia fechada de conteúdo;
+- [x] classificação Gemini na mesma chamada OCR, sem request adicional;
+- [x] fallback compatível para `unknown`;
+- [x] persistência por página para análise posterior;
+- [ ] classificador/hints **antes** da decisão de rota;
+- [ ] versionar o classificador pré-rota;
+- [ ] medir matriz classe x backend quando a rota local equivalente estiver disponível.
 
 ### Fase C — shadow
 
@@ -366,6 +385,7 @@ migration aplicada em Supabase limpo/staging: PASS
 pgTAP/verify local: PASS
 Edge Function type-check: PASS
 smoke Gemini real com usageMetadata: PASS
+contentClass real retornado e persistido: PASS
 RLS owner isolation: PASS
 nenhum OCR/prompt/imagem em tabela de telemetria: PASS
 get_ocr_telemetry_overview com dados reais: PASS
@@ -374,7 +394,7 @@ quota/rate-limit gerando evento sanitizado: PASS
 
 Até esses gates passarem, o estado correto é:
 
-> **telemetria implementada em código / validação de staging pendente**.
+> **telemetria e classificação implementadas em código / validação de staging pendente**.
 
 ## 15. Relação com OCR local
 
@@ -384,8 +404,8 @@ Ela existe justamente para decidir com dados reais entre estratégias como:
 
 ```text
 Gemini principal
-+ OvisOCR2/Paddle pequeno para volume
-+ Chandra para casos difíceis
++ OCR local pequeno para volume
++ OCR local de alta qualidade para casos difíceis
 ```
 
 ou qualquer alternativa que os benchmarks do hardware e a telemetria de produção demonstrarem melhor.
