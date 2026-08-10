@@ -22,6 +22,7 @@ jobs:
     timeout-minutes: 5
     environment: staging
     env:
+      TARGET_ENVIRONMENT: staging
       PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
       PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
       PUBLIC_GOOGLE_CLIENT_ID: ${{ secrets.PUBLIC_GOOGLE_CLIENT_ID }}
@@ -29,51 +30,13 @@ jobs:
       PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER: ${{ secrets.PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER }}
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
       - name: Validate protected public artifact configuration
-        shell: bash
-        run: |
-          set -euo pipefail
-          node <<'NODE'
-          const urlValue = (process.env.PUBLIC_SUPABASE_URL ?? '').trim();
-          const key = (process.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? '').trim();
-          if (!urlValue) throw new Error('PUBLIC_SUPABASE_URL is not configured in staging.');
-          if (!key) throw new Error('PUBLIC_SUPABASE_PUBLISHABLE_KEY is not configured in staging.');
-
-          const url = new URL(urlValue);
-          if (
-            url.protocol !== 'https:' ||
-            url.username ||
-            url.password ||
-            url.pathname !== '/' ||
-            url.search ||
-            url.hash
-          ) {
-            throw new Error('PUBLIC_SUPABASE_URL must be a credential-free HTTPS origin.');
-          }
-          if (!key.startsWith('sb_publishable_') || key.length < 20 || key.length > 512) {
-            throw new Error('PUBLIC_SUPABASE_PUBLISHABLE_KEY is invalid.');
-          }
-
-          const clientId = (process.env.PUBLIC_GOOGLE_CLIENT_ID ?? '').trim();
-          const pickerKey = (process.env.PUBLIC_GOOGLE_PICKER_API_KEY ?? '').trim();
-          const projectNumber = (process.env.PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER ?? '').trim();
-          if (!clientId) throw new Error('PUBLIC_GOOGLE_CLIENT_ID is not configured in staging.');
-          if (!pickerKey) throw new Error('PUBLIC_GOOGLE_PICKER_API_KEY is not configured in staging.');
-          if (!projectNumber) {
-            throw new Error('PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER is not configured in staging.');
-          }
-          if (!/^\d+-[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$/.test(clientId)) {
-            throw new Error('PUBLIC_GOOGLE_CLIENT_ID is invalid.');
-          }
-          if (!/^AIza[A-Za-z0-9_-]+$/.test(pickerKey) || pickerKey.length > 256) {
-            throw new Error('PUBLIC_GOOGLE_PICKER_API_KEY is invalid.');
-          }
-          if (!/^\d{6,20}$/.test(projectNumber)) {
-            throw new Error('PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER is invalid.');
-          }
-
-          console.log('Protected staging public configuration is valid, including Google Drive Picker.');
-          NODE
+        run: node tools/checks/check-staging-public-config.mjs
 
       - name: Publish readiness summary
         if: always()
