@@ -17,9 +17,7 @@
 		type PdfQueueItem
 	} from '$lib/stores/pdf-import-queue.svelte';
 
-	type QueueEntry =
-		| { kind: 'image'; item: ImportQueueItem }
-		| { kind: 'pdf'; item: PdfQueueItem };
+	type QueueEntry = { kind: 'image'; item: ImportQueueItem } | { kind: 'pdf'; item: PdfQueueItem };
 
 	const REFRESH_INTERVAL_MS = 10_000;
 	let open = $state(false);
