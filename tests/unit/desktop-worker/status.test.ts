@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { inspectWorkerStatus } from '../../../tools/desktop-worker/status.mjs';
 
-const CREDENTIAL = 'A'.repeat(43);
+const PRIVATE_SENTINEL = 'synthetic-private-value';
 const DEVICE_ID = '11111111-1111-4111-8111-111111111111';
 const roots: string[] = [];
 
@@ -27,21 +27,21 @@ describe('inspectWorkerStatus', () => {
 	it('reports setup readiness and aggregate spool state without returning credentials or OCR payloads', async () => {
 		const paths = await pathsFixture();
 		await writeFile(paths.databasePath, 'placeholder');
-		const credentialStore = { load: vi.fn(async () => CREDENTIAL) };
+		const credentialStore = { load: vi.fn(async () => PRIVATE_SENTINEL) };
 		const database = {
 			prepare: vi.fn((sql: string) => ({
 				all: () =>
 					sql.includes('result_dead_letter')
 						? [
-							{
-								reason_code: 'desktop_ocr_completion_rejected',
-								count: 2
-							}
-						]
+								{
+									reason_code: 'desktop_ocr_completion_rejected',
+									count: 2
+								}
+							]
 						: [
-							{ state: 'pending', count: 1 },
-							{ state: 'accepted', count: 3 }
-						]
+								{ state: 'pending', count: 1 },
+								{ state: 'accepted', count: 3 }
+							]
 			})),
 			close: vi.fn()
 		};
@@ -87,7 +87,7 @@ describe('inspectWorkerStatus', () => {
 				rejectionReasons: { desktop_ocr_completion_rejected: 2 }
 			}
 		});
-		expect(JSON.stringify(status)).not.toContain(CREDENTIAL);
+		expect(JSON.stringify(status)).not.toContain(PRIVATE_SENTINEL);
 		expect(JSON.stringify(status)).not.toContain('rawText');
 		expect(database.close).toHaveBeenCalledOnce();
 	});
@@ -132,7 +132,7 @@ describe('inspectWorkerStatus', () => {
 
 	it('collapses malformed local state and keyring errors to bounded status categories', async () => {
 		const paths = await pathsFixture();
-		const privateFailure = new Error(`private ${CREDENTIAL}`);
+		const privateFailure = new Error(`private ${PRIVATE_SENTINEL}`);
 		const status = await inspectWorkerStatus(
 			{
 				paths,
@@ -158,6 +158,6 @@ describe('inspectWorkerStatus', () => {
 		expect(status.config.state).toBe('invalid');
 		expect(status.model.state).toBe('invalid');
 		expect(status.credential.state).toBe('unavailable');
-		expect(JSON.stringify(status)).not.toContain(CREDENTIAL);
+		expect(JSON.stringify(status)).not.toContain(PRIVATE_SENTINEL);
 	});
 });
