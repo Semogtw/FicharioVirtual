@@ -2,7 +2,7 @@
 
 **Data:** 2026-08-10  
 **Branch:** `main`  
-**Estado:** migration validada em `fichario-staging`; Edge Function atualizada/Gemini real ainda precisam de validação
+**Estado:** migration e bundle de telemetria implantados em `fichario-staging`; primeiro evento Gemini real ainda pendente
 
 ## Objetivo
 
@@ -71,7 +71,19 @@ Projeto conectado: `fichario-staging`.
 - `record_ocr_provider_usage`: `SECURITY DEFINER` intencional, com validação interna de `auth.uid`, allowlist, documento, lote e páginas;
 - `get_ocr_telemetry_overview`: `SECURITY INVOKER`;
 - Supabase Advisor não apontou falta de RLS/policy nas novas tabelas;
-- Advisor sinaliza o writer `SECURITY DEFINER` executável por `authenticated`; o aviso é conhecido e intencional nesta arquitetura, pois o `process-ocr` opera com JWT do usuário e o writer valida ownership antes de inserir.
+- Advisor sinaliza o writer `SECURITY DEFINER` executável por `authenticated`; o aviso é conhecido e intencional nesta arquitetura, pois o `process-ocr` opera com JWT do usuário e o writer valida ownership antes de inserir;
+- `process-ocr` foi implantada como versão `21`, `ACTIVE`, com `verify_jwt=true`, contendo captura de `usageMetadata`, classificação de página e writer best-effort;
+- logo após o deploy havia `0` eventos e `0` page metrics: o banco está limpo para a primeira amostra real.
+
+### Concorrência observada durante o deploy
+
+A `main` avançou em paralelo depois do checkpoint com uma extensão backward-compatible de `ocr-batch-contract.ts` para geometria de palavras. A comparação mostrou que `process-ocr`, `gemini-ocr-client` e o helper de telemetria não foram alterados por esses commits concorrentes.
+
+Consequência:
+
+- a versão 21 valida e executa a **fundação de telemetria** deste checkpoint;
+- ela não deve ser descrita como snapshot completo do HEAD posterior, porque o parser do HEAD passou a aceitar também geometria de palavras;
+- essa diferença não bloqueia tokens/classificação atuais, pois o contrato Gemini implantado não solicita geometria e o parser anterior permanece válido para a resposta atual.
 
 ## O que ainda não foi ativado
 
@@ -90,7 +102,8 @@ Esses itens dependem dos dados desta fundação e não devem ser ativados com am
 migration aplicada em fichario-staging: PASS
 RLS + FORCE RLS no catálogo de staging: PASS
 políticas SELECT owner-scoped presentes: PASS
-Edge Function process-ocr do HEAD implantada: PENDING
+bundle de telemetria process-ocr implantado (v21): PASS
+process-ocr exatamente igual ao HEAD posterior inteiro: N/A — HEAD avançou com geometria concorrente
 unit/DB gates no HEAD: PENDING
 smoke Gemini real com usageMetadata: PENDING
 contentClass real retornado/persistido: PENDING
