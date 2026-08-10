@@ -107,14 +107,19 @@ Deno.serve(async (request) => {
 
 	const startedAt = performance.now();
 	const abort = new AbortController();
-	const timeoutMs = 110_000;
-	const timeout = setTimeout(() => abort.abort(), timeoutMs);
+	const timeout = setTimeout(() => abort.abort(), 110_000);
 	let processedPages = 0;
 	let indexedPages = 0;
 	let failedPages = 0;
 	let storedChunks = 0;
 	let batches = 0;
-	let stopReason: 'complete' | 'batch_limit' | 'rate_limited' | 'timeout' | 'provider_error' = 'batch_limit';
+	let stopReason:
+		| 'complete'
+		| 'batch_limit'
+		| 'rate_limited'
+		| 'no_progress'
+		| 'timeout'
+		| 'provider_error' = 'batch_limit';
 
 	try {
 		await supabase.rpc('prune_stale_semantic_chunks', { target_model: SEMANTIC_EMBEDDING_MODEL });
@@ -141,6 +146,10 @@ Deno.serve(async (request) => {
 			}
 			if (result.attemptedPages === 0) {
 				stopReason = 'complete';
+				break;
+			}
+			if (result.indexedPages === 0) {
+				stopReason = 'no_progress';
 				break;
 			}
 		}
