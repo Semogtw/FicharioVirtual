@@ -23,6 +23,17 @@ const warningSchema = z
 			.refine((value) => value.trim().length > 0)
 	})
 	.strict();
+const wordGeometrySchema = z
+	.array(
+		z.tuple([
+			z.string().trim().min(1).max(256),
+			z.number().int().min(0).max(10_000),
+			z.number().int().min(0).max(10_000),
+			z.number().int().min(0).max(10_000),
+			z.number().int().min(0).max(10_000)
+		])
+	)
+	.max(20_000);
 const pageRecordSchema = z
 	.object({
 		id: z.string().regex(UUID),
@@ -31,6 +42,7 @@ const pageRecordSchema = z
 		ocr_raw_text: z.string().max(MAX_CORRECTION_LENGTH).nullable(),
 		corrected_text: z.string().max(MAX_CORRECTION_LENGTH).nullable(),
 		extraction_source: z.enum(['native_pdf', 'ocr', 'manual']).nullable(),
+		ocr_word_geometry: wordGeometrySchema,
 		warnings: z.array(warningSchema).max(100),
 		status: z.enum([
 			'pending',
@@ -270,7 +282,7 @@ class SupabaseDocumentGateway implements DocumentDetailGateway {
 		const { data, error } = await this.client
 			.from('documents')
 			.select(
-				'id,title,kind,status,page_count,notebook_id,original_filename,storage_path,created_at,updated_at'
+				'id,title,kind,status,page_count,notebook_id,original_filename,storage_path,drive_file_id,physical_state,created_at,updated_at'
 			)
 			.eq('id', validId(documentId, 'document'))
 			.maybeSingle();
@@ -282,7 +294,7 @@ class SupabaseDocumentGateway implements DocumentDetailGateway {
 		const { data, error } = await this.client
 			.from('pages')
 			.select(
-				'id,page_number,native_text,ocr_raw_text,corrected_text,extraction_source,warnings,status,was_manually_reviewed,updated_at'
+				'id,page_number,native_text,ocr_raw_text,corrected_text,extraction_source,ocr_word_geometry,warnings,status,was_manually_reviewed,updated_at'
 			)
 			.eq('document_id', validId(documentId, 'document'))
 			.order('page_number', { ascending: true });
@@ -312,7 +324,7 @@ class SupabaseDocumentGateway implements DocumentDetailGateway {
 			})
 			.eq('id', validId(pageId, 'page'))
 			.select(
-				'id,page_number,native_text,ocr_raw_text,corrected_text,extraction_source,warnings,status,was_manually_reviewed,updated_at'
+				'id,page_number,native_text,ocr_raw_text,corrected_text,extraction_source,ocr_word_geometry,warnings,status,was_manually_reviewed,updated_at'
 			)
 			.maybeSingle();
 		if (error) throw new DocumentDetailError('unavailable');
