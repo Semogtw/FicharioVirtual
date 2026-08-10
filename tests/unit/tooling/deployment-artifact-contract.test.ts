@@ -41,6 +41,10 @@ function createFixture() {
 		['source/pnpm-lock.yaml', lockSource],
 		['checks/check-deployed-site.mjs', 'import "./deployment-contract.mjs";\n'],
 		['checks/deployment-contract.mjs', 'export const deploymentContract = true;\n'],
+		[
+			'checks/validate-pages-deploy-output.mjs',
+			'export const validatePagesDeployOutput = () => true;\n'
+		],
 		['site/200.html', '<!doctype html><title>Fichário</title>'],
 		['site/_headers', '/*\n  X-Content-Type-Options: nosniff\n'],
 		['site/manifest.webmanifest', '{"name":"Fichário"}'],
@@ -96,15 +100,22 @@ describe('deployable artifact verification', () => {
 			schemaVersion: 2,
 			sourceCommit: '0123456789abcdef0123456789abcdef01234567',
 			targetEnvironment: 'staging',
-			verifiedFiles: 10
+			verifiedFiles: 11
 		});
 	});
 
-	it('requires the post-deploy verifier to travel with the immutable artifact', async () => {
-		const root = createFixture();
-		rmSync(join(root, 'checks', 'check-deployed-site.mjs'));
+	it('requires deployment verification code to travel with the immutable artifact', async () => {
+		const checkerRoot = createFixture();
+		rmSync(join(checkerRoot, 'checks', 'check-deployed-site.mjs'));
+		await expect(verifyDeploymentArtifact(checkerRoot)).rejects.toThrow(
+			/checks\/check-deployed-site/
+		);
 
-		await expect(verifyDeploymentArtifact(root)).rejects.toThrow(/checks\/check-deployed-site/);
+		const outputValidatorRoot = createFixture();
+		rmSync(join(outputValidatorRoot, 'checks', 'validate-pages-deploy-output.mjs'));
+		await expect(verifyDeploymentArtifact(outputValidatorRoot)).rejects.toThrow(
+			/checks\/validate-pages-deploy-output/
+		);
 	});
 
 	it('rejects an obsolete manifest schema after source snapshots became mandatory', async () => {
