@@ -92,10 +92,13 @@ requireText(
 	'mkdir -p fichario-deploy/site fichario-deploy/source fichario-deploy/checks',
 	'artifact package must keep public site, source identity and checks separate'
 );
-requireText(
-	'cp tools/checks/check-deployed-site.mjs tools/checks/deployment-contract.mjs fichario-deploy/checks/',
-	'artifact must carry the exact post-deployment checker and contract'
-);
+for (const validator of [
+	'tools/checks/check-deployed-site.mjs',
+	'tools/checks/deployment-contract.mjs',
+	'tools/checks/validate-pages-deploy-output.mjs'
+]) {
+	requireText(validator, `artifact must carry deployment validator ${validator}`);
+}
 requireText("echo 'schema_version=2'", 'artifact manifest schema must remain explicit');
 requireText(
 	'find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS',
