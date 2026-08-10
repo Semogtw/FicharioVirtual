@@ -344,16 +344,48 @@ A busca atual é lexical/fuzzy, não semântica. Portanto:
 
 ## Evolução semântica planejada
 
-O contrato atual continua preparado para uma segunda camada:
+O contrato atual continua preparado para uma segunda camada. A implementação deve evoluir como uma infraestrutura semântica compartilhada pelo produto, e não como um mecanismo exclusivo da tela de Cobertura:
 
 1. dividir texto efetivo em blocos/páginas;
 2. gerar embeddings no processamento/indexação;
-3. recuperar candidatos por similaridade semântica;
-4. combinar sinal semântico + `search_pages`;
-5. opcionalmente enviar apenas poucos trechos candidatos a Gemini para avaliar profundidade da cobertura;
-6. manter as mesmas evidências e classificação explicável na UI.
+3. persistir os vetores e metadados de evidência em um índice reutilizável;
+4. recuperar candidatos por similaridade semântica;
+5. combinar sinal semântico + `search_pages`, preservando a busca textual/fuzzy para erros de OCR, grafias aproximadas e coincidências lexicais fortes;
+6. opcionalmente enviar apenas poucos trechos candidatos a Gemini para avaliar profundidade da **cobertura**;
+7. manter as mesmas evidências, links para página/documento e classificação explicável na UI;
+8. depois de estabilizar essa camada na Cobertura, integrar obrigatoriamente o mesmo índice à busca normal do Fichário.
 
 Gemini deve continuar opcional para a **análise de cobertura**. Ausência de cota/chave não pode inutilizar a análise lexical básica.
+
+### Reuso obrigatório na busca normal
+
+A infraestrutura criada para Cobertura também deve tornar a busca principal híbrida. O objetivo é permitir consultas por significado, inclusive quando os documentos não contêm as mesmas palavras usadas pelo usuário.
+
+Exemplo de comportamento esperado:
+
+```text
+consulta: "processo de geração de energia das plantas"
+
+resultado relevante:
+"Na fotossíntese, a energia luminosa é convertida em energia química..."
+```
+
+A integração deve seguir estes requisitos:
+
+1. **Não criar um segundo índice semântico.** Reutilizar os mesmos chunks, embeddings, modelo, hashes de origem e RPCs/serviços semânticos usados pela Cobertura, incluindo `page_semantic_chunks` e `search_pages_semantic` enquanto esses continuarem sendo os contratos canônicos.
+2. **Executar busca lexical/fuzzy e semântica em paralelo** para a consulta normal e fundir/deduplicar os candidatos em um ranking híbrido.
+3. **Gerar apenas o embedding da consulta em tempo de busca.** Embeddings de documentos devem ser persistidos e reutilizados enquanto o texto efetivo e o modelo não mudarem.
+4. **Preservar o fuzzy como sinal de primeira classe.** A busca semântica não substitui trigram/full-text: ela complementa o mecanismo que tolera erros de OCR e grafia.
+5. **Não usar o verificador generativo da Cobertura na busca comum por padrão.** A pesquisa normal deve depender de recuperação lexical + embeddings; chamadas generativas adicionais só podem ser introduzidas se houver um benefício separado, explícito e controlado de cota/latência.
+6. **Manter fallback transparente.** Sem consentimento semântico, chave, cota ou disponibilidade do provedor, a busca continua funcionando em modo lexical/fuzzy sem erro fatal.
+7. **Levar o usuário à evidência original.** Resultados semânticos devem preservar documento, página e trecho mais próximo; quando possível, abrir o documento já posicionado na página/chunk relevante.
+8. **Distinguir relevância semântica de correspondência textual na UX sem exigir um modo separado.** A busca híbrida deve ser o comportamento normal; um indicador discreto de “encontrado por significado” pode ser usado quando ajudar a explicar um resultado sem coincidência lexical forte.
+9. **Tornar a indexação independente da tela de Cobertura.** O estado final desejado é enfileirar/atualizar embeddings quando `page_effective_text` se torna disponível ou muda (OCR, texto nativo ou correção manual), mantendo o backfill incremental/lazy como mecanismo de recuperação para páginas antigas ou falhas temporárias.
+10. **Evitar rajadas na migração inicial.** Documentos existentes devem ser indexados por lotes com limites, backoff para `429` e telemetria de progresso; uma cota esgotada não deve impedir pesquisa lexical.
+11. **Reutilizar a telemetria de IA.** Registrar pelo menos modelo, operação (`document_embedding`/`query_embedding`), quantidade de chunks/entradas, falhas e `429`, sem registrar embeddings ou conteúdo sensível desnecessário.
+12. **Cobrir o ranking híbrido com testes.** Incluir casos em que fuzzy vence por erro de OCR, semântica vence por paráfrase, ambos apontam para a mesma página, índice está incompleto e provedor semântico está indisponível.
+
+Esta etapa faz parte da evolução semântica da feature e deve ser tratada como continuidade do trabalho atual antes de considerar a camada de embeddings “concluída” para o produto.
 
 ## Testes
 
