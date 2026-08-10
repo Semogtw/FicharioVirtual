@@ -3,6 +3,7 @@
 	import Button from '$lib/components/Button.svelte';
 	import {
 		listDesktopOcrJobs,
+		returnDesktopOcrJobToGemini,
 		type DesktopOcrJob,
 		type DesktopOcrJobStatus
 	} from '$lib/services/desktop-ocr-jobs';
@@ -11,6 +12,8 @@
 	let jobs = $state<readonly DesktopOcrJob[]>([]);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
+	let notice = $state<string | null>(null);
+	let movingPageId = $state<string | null>(null);
 	const requests = new RequestVersion();
 
 	const dateTime = new Intl.DateTimeFormat('pt-BR', {
@@ -37,16 +40,39 @@
 		return labels[status];
 	}
 
+	function canReturnToGemini(job: DesktopOcrJob) {
+		return job.status === 'waiting_desktop' || (job.status === 'processing' && job.leaseExpired);
+	}
+
 	function isActive(job: DesktopOcrJob) {
 		return (
 			job.status === 'waiting_desktop' || job.status === 'processing' || job.status === 'retryable'
 		);
 	}
 
+	async function returnToGemini(job: DesktopOcrJob) {
+		if (!canReturnToGemini(job) || loading || movingPageId !== null) return;
+		movingPageId = job.pageId;
+		error = null;
+		notice = null;
+		try {
+			const change = await returnDesktopOcrJobToGemini(job.pageId);
+			jobs = jobs.filter((item) => item.pageId !== job.pageId);
+			notice = change.recoveredExpiredLease
+				? 'Lease expirado recuperado. O trabalho voltou para a fila do Gemini.'
+				: 'O trabalho voltou para a fila do Gemini.';
+		} catch (caught) {
+			error = caught instanceof Error ? caught.message : 'Não foi possível devolver o trabalho ao Gemini.';
+		} finally {
+			if (movingPageId === job.pageId) movingPageId = null;
+		}
+	}
+
 	async function refreshJobs() {
 		const version = requests.next();
 		loading = true;
 		error = null;
+		notice = null;
 		try {
 			const next = await listDesktopOcrJobs();
 			if (!requests.isCurrent(version)) return;
@@ -85,7 +111,7 @@
 		</div>
 		<Button
 			label={loading ? 'Atualizando…' : 'Atualizar fila'}
-			disabled={loading}
+			disabled={loading || movingPageId !== null}
 			onclick={() => void refreshJobs()}
 		/>
 	</header>
@@ -96,6 +122,7 @@
 	</nav>
 
 	{#if error}<p class="error" role="alert">{error}</p>{/if}
+	{#if notice}<p class="notice" role="status">{notice}</p>{/if}
 
 	<section class="summary" aria-label="Resumo da fila">
 		<div>
@@ -156,8 +183,8 @@
 
 							{#if job.leaseExpired}
 								<p class="lease-warning">
-									O computador perdeu o lease. O próximo claim de um dispositivo ativo recuperará
-									esse trabalho automaticamente.
+									O computador perdeu o lease. Você pode devolver este trabalho ao Gemini agora ou
+									aguardar outro dispositivo ativo recuperá-lo automaticamente.
 								</p>
 							{/if}
 
@@ -187,6 +214,16 @@
 									</div>
 								{/if}
 							</dl>
+
+							{#if canReturnToGemini(job)}
+								<div class="job-actions">
+									<Button
+										label={movingPageId === job.pageId ? 'Movendo…' : 'Usar Gemini'}
+										disabled={loading || movingPageId !== null}
+										onclick={() => void returnToGemini(job)}
+									/>
+								</div>
+							{/if}
 						</div>
 					</article>
 				{/each}
@@ -406,6 +443,12 @@
 		font-size: 0.78rem;
 	}
 
+	.job-actions {
+		display: flex;
+		justify-content: flex-end;
+		margin-top: 0.75rem;
+	}
+
 	.empty {
 		margin-top: 0.8rem;
 		padding: 1.1rem;
@@ -417,6 +460,15 @@
 	.empty strong {
 		display: block;
 		margin-bottom: 0.25rem;
+	}
+
+	.notice {
+		margin: 0;
+		padding: 0.75rem 0.9rem;
+		border: 1px solid rgb(var(--success-rgb) / 28%);
+		border-radius: var(--radius-sm);
+		background: rgb(var(--success-rgb) / 8%);
+		color: var(--success);
 	}
 
 	.error {
