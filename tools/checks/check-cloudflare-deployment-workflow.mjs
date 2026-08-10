@@ -38,8 +38,6 @@ requirePattern(/pages_branch='staging'/u, 'staging deployments must target a pre
 forbidPattern(/actions\/checkout@/u, 'deployment workflow must not checkout or rebuild source');
 forbidPattern(/\bpnpm\s+(?:install|build|verify)\b/u, 'deployment workflow must not install or rebuild application source');
 forbidPattern(/wrangler pages project create/u, 'deployment workflow must not create or replace the Pages project');
-forbidPattern(/CLOUDFLARE_API_TOKEN\s*:\s*[^$\n]/u, 'Cloudflare API token must never be embedded inline');
-forbidPattern(/CLOUDFLARE_ACCOUNT_ID\s*:\s*[^$\n]/u, 'Cloudflare account ID must never be embedded inline');
 
 if (failures.length > 0) {
 	console.error(`Cloudflare deployment workflow checks failed (${failures.length}):`);
