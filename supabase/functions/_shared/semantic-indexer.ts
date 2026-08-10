@@ -42,6 +42,31 @@ function asPendingPages(value: unknown): PendingPage[] {
 	});
 }
 
+function failureStatus(cause: unknown) {
+	if (cause instanceof GeminiEmbeddingHttpError) {
+		if (cause.status === 429) return 'rate_limited';
+		if (cause.status >= 500) return 'provider_http_error';
+		return 'provider_rejected';
+	}
+	return 'index_error';
+}
+
+async function recordFailure(
+	supabase: SupabaseClient,
+	page: PendingPage,
+	status: string
+) {
+	try {
+		await supabase.rpc('record_semantic_index_failure', {
+			target_page_id: page.page_id,
+			target_model: SEMANTIC_EMBEDDING_MODEL,
+			failure_status: status
+		});
+	} catch {
+		// Failure quarantine is best effort; the caller still reports the failed page.
+	}
+}
+
 async function indexPage(input: {
 	supabase: SupabaseClient;
 	apiKey: string;
@@ -129,7 +154,9 @@ export async function indexNextSemanticBatch(input: {
 				else failedPages += 1;
 				storedChunks += result.storedChunks;
 			} catch (cause) {
+				if (cause instanceof DOMException && cause.name === 'AbortError') throw cause;
 				failedPages += 1;
+				await recordFailure(input.supabase, page, failureStatus(cause));
 				if (cause instanceof GeminiEmbeddingHttpError && cause.status === 429) {
 					rateLimited = true;
 					return;
