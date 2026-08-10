@@ -1,10 +1,7 @@
 #!/usr/bin/env node
 
 import process from 'node:process';
-import {
-	createProcessShutdownSignal,
-	runDesktopWorkerService
-} from './service.mjs';
+import { createProcessShutdownSignal, runDesktopWorkerService } from './service.mjs';
 
 function writeStatus(stream, value) {
 	stream.write(`${JSON.stringify(value)}\n`);
