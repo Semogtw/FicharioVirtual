@@ -33,8 +33,8 @@ Deno.serve(async (request) => {
 
 	const supabaseUrl = Deno.env.get('SUPABASE_URL');
 	const publishableKey = Deno.env.get('SUPABASE_ANON_KEY');
-	const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-	if (!supabaseUrl || !publishableKey || !serviceRoleKey) {
+	const workerKey = Deno.env.get('OCR_BACKGROUND_WORKER_KEY');
+	if (!supabaseUrl || !publishableKey || !workerKey) {
 		return respond(503, { code: 'ocr_background_not_configured' });
 	}
 
@@ -61,7 +61,7 @@ Deno.serve(async (request) => {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
-				'X-Fichario-Worker-Key': serviceRoleKey
+				'X-Fichario-Worker-Key': workerKey
 			},
 			body: JSON.stringify({ source: 'authenticated-kick', userId: user.id })
 		});
