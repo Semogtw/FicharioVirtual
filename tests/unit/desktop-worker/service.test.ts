@@ -54,9 +54,12 @@ describe('runDesktopWorkerService', () => {
 
 	it('reports only a safe coded setup failure and never forwards the original message', async () => {
 		const onError = vi.fn();
-		const error = Object.assign(new Error('credential AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA leaked'), {
-			code: 'worker_credential_missing'
-		});
+		const error = Object.assign(
+			new Error('credential AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA leaked'),
+			{
+				code: 'worker_credential_missing'
+			}
+		);
 
 		const result = await runDesktopWorkerService({
 			paths: { configDir: '/tmp/fichario-worker' },
@@ -70,7 +73,9 @@ describe('runDesktopWorkerService', () => {
 
 		expect(result).toEqual({ status: 'failed', code: 'worker_credential_missing' });
 		expect(onError).toHaveBeenCalledWith({ status: 'failed', code: 'worker_credential_missing' });
-		expect(JSON.stringify(onError.mock.calls)).not.toContain('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
+		expect(JSON.stringify(onError.mock.calls)).not.toContain(
+			'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+		);
 	});
 
 	it('uses a generic failure code for unsafe or malformed error codes', async () => {
