@@ -35,7 +35,8 @@ Depois que o documento foi publicado e os jobs de OCR existem no banco, o navega
 
 A fila passa a mostrar `Leitura em segundo plano`. A partir desse ponto:
 
-- o documento já está salvo;
+- o documento já está salvo e pode ser aberto no Fichário;
+- páginas com texto nativo já podem ser usadas sem esperar o Gemini;
 - o OCR pode continuar com o Fichário fechado;
 - uma queda de uma Edge Function não perde o job;
 - claims `processing` antigos são recuperados depois do limite de staleness;
@@ -68,14 +69,17 @@ Esses limites mantêm cada execução curta em vez de transformar um PDF grande 
 
 `ocr-queue-kick` é o endpoint autenticado usado pelo aplicativo para acordar o worker. Ele valida a sessão e a allowlist antes de fazer a chamada server-to-server.
 
-Além disso, a migration `202608101205_background_ocr_cron.sql` agenda um wake-up a cada minuto com Supabase Cron + `pg_net`. O cron lê as credenciais do Vault em runtime e é deliberadamente no-op quando elas ainda não foram provisionadas.
+Além disso, a migration `202608101205_background_ocr_cron.sql` agenda um wake-up a cada cinco minutos com Supabase Cron + `pg_net`. Trabalho ativo não espera o cron: o worker encadeia outra execução curta quando ainda existem candidatos imediatamente elegíveis. O cron existe para recuperar trabalho diferido, rate limits e filas que ficaram sem um navegador aberto.
 
-O ambiente hospedado precisa possuir no Vault:
+O cron lê as credenciais do Vault em runtime e é deliberadamente no-op quando elas ainda não foram provisionadas.
 
-- `project_url` — URL HTTPS do projeto Supabase;
-- `ocr_background_worker_key` — segredo aceito pelo `ocr-queue-worker`.
+O ambiente hospedado precisa possuir:
 
-Na implementação atual o worker compara `ocr_background_worker_key` com a service-role key recebida por variável de ambiente. O valor nunca deve ser versionado, exibido em logs ou incorporado à definição do cron.
+- secret de Edge Function `OCR_BACKGROUND_WORKER_KEY` — valor aleatório de alta entropia usado exclusivamente para autenticar chamadas server-to-server ao worker;
+- Vault `project_url` — URL HTTPS do projeto Supabase;
+- Vault `ocr_background_worker_key` — o mesmo valor de `OCR_BACKGROUND_WORKER_KEY`.
+
+A service-role key continua sendo usada somente dentro do worker para o cliente administrativo do Supabase. Ela não é reutilizada como credencial HTTP do worker, não entra no cron e não deve ser registrada em logs.
 
 ## Segurança
 
@@ -90,9 +94,11 @@ O dispatcher aceita somente uma lista fixa de operações e reutiliza os contrat
 
 O resumo usado pela UI (`get_document_ocr_summary`) é diferente: ele é `security invoker`, exige usuário autorizado e só agrega jobs pertencentes ao documento do próprio usuário.
 
+Jobs `blocked_quota` só voltam à seleção do worker quando possuem `next_retry_at` definido e a janela de retry realmente chegou. Isso evita ciclos de wake-up em estados de quota incompletos ou malformados.
+
 ## Estado parcial do documento
 
-PDFs com texto nativo continuam aproveitando esse texto sem OCR. Somente páginas visuais recebem jobs Gemini. Portanto um PDF de 500 páginas pode ter, por exemplo, centenas de páginas indexáveis imediatamente e um conjunto menor em `Leitura em segundo plano`.
+PDFs com texto nativo continuam aproveitando esse texto sem OCR. Somente páginas visuais recebem jobs Gemini. Assim que a ingestão local termina e o documento é publicado, as páginas nativas ficam disponíveis sem esperar a conclusão das páginas em `Leitura em segundo plano`.
 
 A conclusão de uma página não depende da conclusão das outras. Falhas permanecem associadas ao job/página correspondente e não invalidam resultados já persistidos.
 
