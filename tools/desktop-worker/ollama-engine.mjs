@@ -89,7 +89,10 @@ function requireDigest(value) {
 }
 
 function jsonContentType(response) {
-	return response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase() === 'application/json';
+	return (
+		response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase() ===
+		'application/json'
+	);
 }
 
 async function readBoundedJson(response) {
@@ -141,7 +144,8 @@ function findPinnedModel(body, model, expectedDigest) {
 			(item.name === model || item.model === model)
 	);
 	if (!candidate) throw new OllamaEngineError('ollama_model_missing');
-	if (candidate.digest !== expectedDigest) throw new OllamaEngineError('ollama_model_digest_mismatch');
+	if (candidate.digest !== expectedDigest)
+		throw new OllamaEngineError('ollama_model_digest_mismatch');
 	if (
 		(typeof candidate.remote_model === 'string' && candidate.remote_model.length > 0) ||
 		(typeof candidate.remote_host === 'string' && candidate.remote_host.length > 0)
@@ -177,7 +181,11 @@ function parseOcrContent(value) {
 	if (!['printed', 'handwritten', 'mixed', 'unknown'].includes(value.contentType)) {
 		throw new OllamaEngineError('ollama_ocr_invalid');
 	}
-	if (typeof value.needsReview !== 'boolean' || !Array.isArray(value.warnings) || value.warnings.length > 4) {
+	if (
+		typeof value.needsReview !== 'boolean' ||
+		!Array.isArray(value.warnings) ||
+		value.warnings.length > 4
+	) {
 		throw new OllamaEngineError('ollama_ocr_invalid');
 	}
 	const seen = new Set();
@@ -252,12 +260,7 @@ export class OllamaOcrEngine {
 	#fetch;
 	#verifiedDigest = null;
 
-	constructor({
-		model,
-		expectedDigest,
-		baseUrl = 'http://127.0.0.1:11434/',
-		fetchImpl = fetch
-	}) {
+	constructor({ model, expectedDigest, baseUrl = 'http://127.0.0.1:11434/', fetchImpl = fetch }) {
 		this.#baseUrl = parseBaseUrl(baseUrl);
 		this.#model = requireModel(model);
 		this.#expectedDigest = requireDigest(expectedDigest);
