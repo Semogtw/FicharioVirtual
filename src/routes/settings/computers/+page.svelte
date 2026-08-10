@@ -46,7 +46,8 @@
 			devices = next;
 		} catch (caught) {
 			if (!requests.isCurrent(version)) return;
-			error = caught instanceof Error ? caught.message : 'Não foi possível carregar os computadores.';
+			error =
+				caught instanceof Error ? caught.message : 'Não foi possível carregar os computadores.';
 		} finally {
 			if (requests.isCurrent(version)) loading = false;
 		}
@@ -119,7 +120,11 @@
 					nunca são exibidas nesta tela.
 				</p>
 			</div>
-			<Button label={loading ? 'Atualizando…' : 'Atualizar'} disabled={loading || !!revokingId} onclick={() => void refreshDevices()} />
+			<Button
+				label={loading ? 'Atualizando…' : 'Atualizar'}
+				disabled={loading || !!revokingId}
+				onclick={() => void refreshDevices()}
+			/>
 		</div>
 	</header>
 
@@ -185,7 +190,12 @@
 						{#if device.status === 'active'}
 							<div class="device-actions">
 								{#if confirmingId === device.id}
-									<button type="button" class="secondary" disabled={!!revokingId} onclick={cancelConfirmation}>
+									<button
+										type="button"
+										class="secondary"
+										disabled={!!revokingId}
+										onclick={cancelConfirmation}
+									>
 										Cancelar
 									</button>
 								{/if}
