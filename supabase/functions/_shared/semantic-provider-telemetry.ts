@@ -1,3 +1,4 @@
+import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import {
 	GeminiEmbeddingHttpError,
 	GeminiEmbeddingResponseError,
@@ -6,13 +7,6 @@ import {
 	type GeminiEmbeddingInput,
 	type GeminiEmbeddingTask
 } from './gemini-embedding-client.ts';
-
-type RpcClient = {
-	rpc: (
-		name: string,
-		args: Record<string, unknown>
-	) => PromiseLike<{ data?: unknown; error?: unknown }>;
-};
 
 type SemanticOperation = 'document_embedding' | 'query_embedding';
 type SemanticSurface = 'coverage' | 'search' | 'indexer';
@@ -49,7 +43,7 @@ function inputMetrics(inputs: readonly GeminiEmbeddingInput[]) {
 }
 
 async function persistTelemetry(
-	supabase: RpcClient,
+	supabase: SupabaseClient,
 	input: {
 		model: string;
 		operation: SemanticOperation;
@@ -87,7 +81,7 @@ async function persistTelemetry(
 }
 
 export async function requestGeminiEmbeddingsWithTelemetry(input: {
-	supabase: RpcClient;
+	supabase: SupabaseClient;
 	apiKey: string;
 	model: string;
 	inputs: readonly GeminiEmbeddingInput[];
@@ -107,8 +101,8 @@ export async function requestGeminiEmbeddingsWithTelemetry(input: {
 			inputs: input.inputs,
 			taskType: input.taskType,
 			outputDimensionality: input.outputDimensionality,
-			signal: input.signal,
-			fetchImpl: input.fetchImpl
+			...(input.signal ? { signal: input.signal } : {}),
+			...(input.fetchImpl ? { fetchImpl: input.fetchImpl } : {})
 		});
 		await persistTelemetry(input.supabase, {
 			model: input.model,
