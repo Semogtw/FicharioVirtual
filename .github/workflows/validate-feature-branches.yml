@@ -51,29 +51,101 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run frontend verification
+        id: frontend
+        continue-on-error: true
         run: pnpm verify
 
+      - name: Prepare Prettier repair patch
+        id: formatting
+        if: steps.frontend.outcome == 'failure'
+        continue-on-error: true
+        run: |
+          pnpm exec prettier --write .
+          git diff --binary -- . > /tmp/prettier-repair.patch
+          test -s /tmp/prettier-repair.patch
+
+      - name: Upload Prettier repair patch
+        if: steps.formatting.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: prettier-repair-${{ github.sha }}
+          path: /tmp/prettier-repair.patch
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Run offline source gates
+        id: source
+        continue-on-error: true
         run: pnpm test:source:offline
 
       - name: Set up Deno
+        id: deno
+        continue-on-error: true
         uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
         with:
           deno-version: 2.8.1
 
       - name: Check Edge Functions
+        id: edge
+        if: steps.deno.outcome == 'success'
+        continue-on-error: true
         run: pnpm test:functions:check
 
       - name: Set up Supabase CLI
+        id: supabase
+        continue-on-error: true
         uses: supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf # v2
         with:
           version: 2.111.0
 
       - name: Run local database gates
+        id: database
+        if: steps.supabase.outcome == 'success'
+        continue-on-error: true
         run: pnpm test:db:local
 
       - name: Install Chromium
+        id: chromium
+        continue-on-error: true
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Run browser tests
+        id: browser
+        if: steps.chromium.outcome == 'success'
+        continue-on-error: true
         run: pnpm test:e2e
+
+      - name: Reject incomplete verification
+        if: always()
+        env:
+          FRONTEND_OUTCOME: ${{ steps.frontend.outcome }}
+          SOURCE_OUTCOME: ${{ steps.source.outcome }}
+          DENO_OUTCOME: ${{ steps.deno.outcome }}
+          EDGE_OUTCOME: ${{ steps.edge.outcome }}
+          SUPABASE_OUTCOME: ${{ steps.supabase.outcome }}
+          DATABASE_OUTCOME: ${{ steps.database.outcome }}
+          CHROMIUM_OUTCOME: ${{ steps.chromium.outcome }}
+          BROWSER_OUTCOME: ${{ steps.browser.outcome }}
+        run: |
+          printf '%s\n' \
+            "frontend=$FRONTEND_OUTCOME" \
+            "source=$SOURCE_OUTCOME" \
+            "deno=$DENO_OUTCOME" \
+            "edge=$EDGE_OUTCOME" \
+            "supabase=$SUPABASE_OUTCOME" \
+            "database=$DATABASE_OUTCOME" \
+            "chromium=$CHROMIUM_OUTCOME" \
+            "browser=$BROWSER_OUTCOME"
+          for outcome in \
+            "$FRONTEND_OUTCOME" \
+            "$SOURCE_OUTCOME" \
+            "$DENO_OUTCOME" \
+            "$EDGE_OUTCOME" \
+            "$SUPABASE_OUTCOME" \
+            "$DATABASE_OUTCOME" \
+            "$CHROMIUM_OUTCOME" \
+            "$BROWSER_OUTCOME"; do
+            if [ "$outcome" != 'success' ]; then
+              exit 1
+            fi
+          done
