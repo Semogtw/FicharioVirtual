@@ -16,6 +16,8 @@
 
 	const notebookRequests = new RequestVersion();
 	const coverageRequests = new RequestVersion();
+	const topicPlaceholder =
+		'3.1 Temperatura\n3.2 Calor específico\n3.3 Mudanças de fase\n3.4 Primeira lei da termodinâmica';
 	let unitName = $state('');
 	let topicInput = $state('');
 	let notebookId = $state('');
@@ -152,7 +154,7 @@
 			<textarea
 				bind:value={topicInput}
 				rows="9"
-				placeholder={'3.1 Temperatura\n3.2 Calor específico\n3.3 Mudanças de fase\n3.4 Primeira lei da termodinâmica'}
+				placeholder={topicPlaceholder}
 			></textarea>
 			<small>Uma linha por assunto. Numeração e marcadores são removidos automaticamente.</small>
 		</label>
