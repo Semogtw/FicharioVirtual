@@ -7,6 +7,7 @@ import type { Database } from '$lib/types/database';
 import { getSupabaseClient } from '$lib/services/supabase';
 import { parseDuplicateDocumentId } from './duplicate-result';
 import { calculateSha256 } from './hash';
+import type { ImagePreprocessingMetadata } from './image-types';
 import {
 	DuplicateImageError,
 	ImageUploadError,
@@ -28,8 +29,13 @@ export type DriveImageCreateImportInput = {
 	title: string;
 	originalFilename: string;
 	driveFile: DriveFile;
+	ocrPath: string;
 	thumbnailPath: string;
-	sha256: string;
+	preparedSha256: string;
+	sourceSha256: string;
+	preprocessing: ImagePreprocessingMetadata;
+	originalBytes: number;
+	preparedBytes: number;
 	sourceCreatedAt: string | null;
 	promptVersion: number;
 };
@@ -74,6 +80,9 @@ function validateBoundaryInput(input: UploadPreparedImageInput) {
 	if (!Number.isInteger(promptVersion) || promptVersion < 1 || promptVersion > 10_000) {
 		throw new TypeError('Invalid OCR prompt version');
 	}
+	if (!(input.prepared.original instanceof File) || input.prepared.original.size < 1) {
+		throw new TypeError('Invalid source image');
+	}
 	if (input.notebookId !== null && input.notebookId !== undefined) {
 		requireUuid(input.notebookId, 'notebook identifier');
 	}
@@ -107,12 +116,13 @@ export async function uploadPreparedImageToDriveWithGateway(
 	validateBoundaryInput(input);
 	const promptVersion = input.promptVersion ?? 1;
 
-	const [userId, sha256] = await Promise.all([
+	const [userId, preparedSha256, sourceSha256] = await Promise.all([
 		gateway.currentUserId(),
-		dependencies.calculateSha256(input.prepared.image)
+		dependencies.calculateSha256(input.prepared.image),
+		dependencies.calculateSha256(input.prepared.original)
 	]);
 	requireUuid(userId, 'user identifier');
-	const duplicateId = await gateway.findDuplicate(sha256);
+	const duplicateId = await gateway.findDuplicate(preparedSha256);
 	if (duplicateId) throw new DuplicateImageError(duplicateId);
 	if (input.signal?.aborted) throw abortError();
 
@@ -123,20 +133,24 @@ export async function uploadPreparedImageToDriveWithGateway(
 	if (input.signal?.aborted) throw abortError();
 
 	let driveFile: DriveFile | null = null;
+	const ocrPath = `${userId}/${documentId}/ocr.${extension(input.prepared.image)}`;
 	const thumbnailPath = `${userId}/${documentId}/thumbnail.${extension(input.prepared.thumbnail)}`;
 	const temporaryPaths: string[] = [];
 	try {
 		driveFile = await gateway.uploadOriginal(
-			input.prepared.image,
-			`${defaultTitle(input.prepared.originalName)}.${extension(input.prepared.image)}`,
+			input.prepared.original,
+			input.prepared.originalName,
 			parentFolderId
 		);
 		if (driveFile.parents.length !== 1 || driveFile.parents[0] !== parentFolderId) {
 			throw new ImageUploadError('upload_failed');
 		}
 		if (input.signal?.aborted) throw abortError();
-		await gateway.uploadTemporary(thumbnailPath, input.prepared.thumbnail);
-		temporaryPaths.push(thumbnailPath);
+		await Promise.all([
+			gateway.uploadTemporary(ocrPath, input.prepared.image),
+			gateway.uploadTemporary(thumbnailPath, input.prepared.thumbnail)
+		]);
+		temporaryPaths.push(ocrPath, thumbnailPath);
 		if (input.signal?.aborted) throw abortError();
 		const imported = await gateway.createImport({
 			documentId,
@@ -146,14 +160,19 @@ export async function uploadPreparedImageToDriveWithGateway(
 			title: input.title?.trim() || defaultTitle(input.prepared.originalName),
 			originalFilename: input.prepared.originalName,
 			driveFile,
+			ocrPath,
 			thumbnailPath,
-			sha256,
+			preparedSha256,
+			sourceSha256,
+			preprocessing: input.prepared.preprocessing,
+			originalBytes: input.prepared.original.size,
+			preparedBytes: input.prepared.image.size,
 			sourceCreatedAt: input.sourceCreatedAt ?? null,
 			promptVersion
 		});
 		return Object.freeze({
 			...imported,
-			sha256,
+			sha256: preparedSha256,
 			storagePath: `drive:${driveFile.id}`,
 			thumbnailPath
 		});
@@ -223,12 +242,13 @@ class SupabaseDriveImageGateway implements DriveImageImportGateway {
 	async createImport(input: DriveImageCreateImportInput) {
 		type RpcClient = {
 			rpc(
-				name: 'create_drive_image_import',
+				name: 'create_drive_image_import_v2',
 				args: Record<string, unknown>
 			): Promise<{ data: unknown; error: unknown }>;
 		};
+		const preprocessing = input.preprocessing;
 		const { data, error } = await (this.#client as unknown as RpcClient).rpc(
-			'create_drive_image_import',
+			'create_drive_image_import_v2',
 			{
 				target_document_id: input.documentId,
 				target_page_id: input.pageId,
@@ -242,8 +262,24 @@ class SupabaseDriveImageGateway implements DriveImageImportGateway {
 				target_drive_modified_time: input.driveFile.modifiedTime,
 				target_drive_version: input.driveFile.version,
 				target_drive_md5_checksum: input.driveFile.md5Checksum,
+				ocr_storage_path: input.ocrPath,
 				thumbnail_storage_path: input.thumbnailPath,
-				prepared_sha256: input.sha256,
+				prepared_sha256: input.preparedSha256,
+				source_sha256: input.sourceSha256,
+				preprocessing_profile: preprocessing.profile,
+				preprocessing_version: preprocessing.version,
+				preprocessing_auto_crop: preprocessing.autoCropApplied,
+				preprocessing_retained_permille: preprocessing.retainedAreaPermille,
+				preprocessing_deskew_mdeg: preprocessing.deskewMilliDegrees,
+				preprocessing_illumination: preprocessing.illuminationNormalized,
+				preprocessing_contrast: preprocessing.contrastEnhanced,
+				preprocessing_fallback: preprocessing.fallbackToStandard,
+				preprocessing_source_width: preprocessing.sourceWidth,
+				preprocessing_source_height: preprocessing.sourceHeight,
+				preprocessing_prepared_width: preprocessing.preparedWidth,
+				preprocessing_prepared_height: preprocessing.preparedHeight,
+				preprocessing_original_bytes: input.originalBytes,
+				preprocessing_prepared_bytes: input.preparedBytes,
 				source_created_at: input.sourceCreatedAt,
 				prompt_version: input.promptVersion
 			}
