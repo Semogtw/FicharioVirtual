@@ -2,7 +2,9 @@
 
 **Última revisão:** 10 de agosto de 2026
 
-Este documento é o runbook canônico de promoção do site. A regra central é simples: **o conteúdo validado em preview deve ser exatamente o mesmo conteúdo promovido**, identificado por SHA e por checksums. Durante desenvolvimento concorrente, não reconstruir a partir de uma `main` mais nova entre preview e produção.
+Este é o runbook canônico do site. A regra central é: **construir, verificar e publicar bytes identificados por SHA e checksums, sem reconstruir durante a promoção**.
+
+No estado atual, o pipeline executável é deliberadamente **staging-only**. Não existe backend Supabase de produção nem configuração pública de produção pronta; portanto o repositório não oferece atualmente um caminho de artifact/deploy de produção. Não aponte produção para staging para contornar essa ausência.
 
 Runbooks complementares:
 
@@ -10,10 +12,10 @@ Runbooks complementares:
 - `docs/SUPABASE_STAGING.md` — backend de staging;
 - `docs/OCR_STAGING.md` — validação do OCR;
 - `docs/GOOGLE_DRIVE_SETUP.md` — OAuth/Drive/Picker;
-- `docs/DESKTOP_OCR_WORKER.md` — worker local posterior ao site;
+- `docs/DESKTOP_OCR_WORKER.md` — worker local;
 - `docs/READINESS.md` — evidências e bloqueios atuais.
 
-## 1. Topologia alvo
+## 1. Topologia
 
 ```text
 Cloudflare Pages — fichario-virtual
@@ -22,7 +24,7 @@ Cloudflare Pages — fichario-virtual
 Cloudflare Pages — fichario-models
 └── artefatos públicos e fragmentados de modelos
 
-Supabase
+Supabase staging
 ├── Auth
 ├── PostgreSQL + RLS
 ├── Storage privado temporário
@@ -37,68 +39,61 @@ Computador confiável
 └── Fichário Desktop OCR Worker
 ```
 
-Cloudflare não recebe documentos privados, texto OCR, refresh token do Drive, service-role do Supabase ou chave Gemini. O Gemini permanece no backend. O worker local inicia somente conexões HTTPS de saída e não exige porta pública.
+Cloudflare não recebe documentos privados, texto OCR, refresh token do Drive, service-role do Supabase ou chave Gemini. O worker local inicia somente conexões HTTPS de saída e não exige porta pública.
 
 ## 2. Estado operacional atual
 
 Em 10 de agosto de 2026:
 
 - os projetos Pages `fichario-virtual` e `fichario-models` já existem;
-- `fichario-virtual` possui production branch `main`, build para `build/`, cache e Node 22 configurados;
+- `fichario-virtual` possui production branch administrativa `main`, build estático para `build/`, cache e Node 22 configurados;
 - preview do Pages possui a configuração pública do Supabase staging;
 - production do Pages **não** possui URL/chave do Supabase, por fail-closed deliberado;
 - não existe backend Supabase de produção;
 - auto-deploy Git está desligado enquanto a `main` recebe mudanças concorrentes;
-- o primeiro Direct Upload real ainda está pendente;
-- build, empacotamento, identidade do artifact e gate HTTP pós-deploy já possuem contratos versionados.
+- o primeiro Direct Upload real de staging ainda está pendente;
+- build, empacotamento, identidade do artifact e gate HTTP pós-deploy possuem contratos versionados;
+- o fluxo executável de build/publicação é restrito a staging até a infraestrutura de produção existir.
 
-A ausência de backend de produção não deve ser “resolvida” apontando produção para staging.
+## 3. Fronteiras de ambiente
 
-## 3. Separação de ambientes
+Há duas fronteiras independentes.
 
-Há duas fronteiras diferentes: **construir** um artifact e **publicar** um artifact.
+### Build de staging
 
-### Build
+Environment GitHub:
 
 ```text
 staging
-└── configuração pública usada para construir artifact staging
-
-production
-└── configuração pública usada para construir artifact production
 ```
 
-### Publicação
+Contém somente a configuração pública necessária para congelar o frontend, como URL/publishable key do Supabase e, quando habilitado, o trio público do Google Picker.
+
+### Publicação de staging
+
+Environment GitHub:
 
 ```text
 staging-deploy
-└── credenciais Cloudflare para preview/staging
-
-production-deploy
-└── credenciais Cloudflare para promoção de produção
 ```
 
-Não misture credenciais de deploy no environment de build.
+Contém as credenciais Cloudflare de escopo mínimo usadas pelo Direct Upload.
 
-### Travas de produção
+Não misture credenciais de deploy no environment de build e não forneça segredos backend ao frontend.
 
-Construir artifact de produção exige, além de configuração pública válida:
+### Produção
 
-```text
-PRODUCTION_ARTIFACT_BUILD_ENABLED=true
-```
+`production` e `production-deploy` são estados futuros, não caminhos executáveis atuais. Antes de reintroduzir suporte a produção, precisam existir no mínimo:
 
-Essa variável pertence ao environment `production`.
+1. backend Supabase de produção isolado;
+2. configuração pública de produção;
+3. secrets/vars de produção nos environments corretos;
+4. políticas de proteção/revisão apropriadas;
+5. artifact de produção com contrato próprio;
+6. promoção do mesmo artifact validado, sem rebuild;
+7. smoke e rollback ensaiados.
 
-Publicar em produção exige separadamente:
-
-```text
-CLOUDFLARE_PRODUCTION_DEPLOY_ENABLED=true
-```
-
-Essa variável pertence a `production-deploy`.
-
-As duas travas são independentes. A primeira autoriza gerar bytes de produção; a segunda autoriza publicá-los. Enquanto infraestrutura de produção não existir, ambas devem permanecer ausentes ou diferentes de `true`.
+Até isso existir, qualquer mudança que reintroduza opções de `production` nos workflows atuais deve falhar nos gates offline.
 
 ## 4. Preparar o Supabase
 
@@ -184,13 +179,13 @@ supabase secrets set \
 
 Esses valores protegem memória/tamanho/duração. Não representam franquia diária da aplicação.
 
-Implante as funções usadas pela PWA conforme o runbook Supabase. A política JWT fica versionada em `supabase/config.toml`; não enfraqueça funções autenticadas na linha de comando. O callback OAuth é a exceção documentada porque recebe redirecionamento externo e aplica `state` de uso único + PKCE.
+A política JWT fica versionada em `supabase/config.toml`; não enfraqueça funções autenticadas na linha de comando. O callback OAuth é a exceção documentada porque recebe redirecionamento externo e aplica `state` de uso único + PKCE.
 
 O segredo antigo `OCR_DAILY_HARD_LIMIT` não deve ser reintroduzido como autoridade de bloqueio.
 
 ## 7. Configuração pública do frontend
 
-Obrigatória por artifact:
+Obrigatória para o artifact staging:
 
 ```text
 PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
@@ -217,42 +212,65 @@ DRIVE_REFRESH_TOKEN
 OCR_WORKER_DEVICE_TOKEN
 ```
 
-## 8. Etapa A — construir artifact imutável
+## 8. Gate do SHA candidato
+
+O workflow normal do próprio repositório é a fonte principal de validação:
+
+```text
+Validate current head
+```
+
+Ele cobre frontend, gates source/offline, Chromium/E2E, Deno/Edge Functions e banco local. Durante desenvolvimento concorrente, `cancel-in-progress: true` pode encerrar um run quando a `main` avança. Run cancelado não é PASS nem falha funcional do código.
+
+Para release/deploy, o recibo terminal deve corresponder ao **mesmo SHA** que será empacotado. Não use um SHA verde antigo para aprovar um SHA novo.
+
+O repositório `Offline-Toolchains` continua útil quando for realmente necessário trabalhar a partir de um checkout/snapshot transportável; para gates normais, prefira Actions deste repositório.
+
+## 9. Etapa A — construir artifact imutável de staging
 
 Workflow:
 
 ```text
-Build deployable Fichário artifact
+Build deployable Fichário staging artifact
 ```
 
-Entrada:
+O workflow é `workflow_dispatch` manual e não recebe seletor de ambiente. Ele usa `environment: staging` e `TARGET_ENVIRONMENT: staging` fixos.
 
-```text
-target_environment: staging | production
-```
+O fluxo:
 
-O workflow é manual e usa o environment protegido correspondente. Ele:
-
-1. faz checkout do SHA que disparou o workflow com `persist-credentials: false`;
-2. usa Node/pnpm pinados;
+1. faz checkout do SHA disparado com `persist-credentials: false`;
+2. usa pnpm e Node pinados;
 3. instala com `pnpm install --frozen-lockfile`;
-4. bloqueia produção sem `PRODUCTION_ARTIFACT_BUILD_ENABLED=true`;
-5. valida URL e publishable key públicas;
-6. valida o trio do Google Picker como all-or-none;
-7. executa `pnpm verify`;
-8. confirma que a configuração pública correta foi congelada no build;
-9. rejeita URL/chave fake de desenvolvimento;
-10. empacota site, identidade mínima da fonte e checker pós-deploy;
-11. gera `DEPLOYMENT-MANIFEST.txt` schema 2;
-12. gera `SHA256SUMS` com cobertura exata;
-13. revalida o próprio pacote;
-14. publica o artifact do GitHub Actions.
+4. valida URL e publishable key públicas;
+5. valida o trio Google Picker como all-or-none;
+6. executa `pnpm verify`;
+7. confirma que a configuração pública esperada foi congelada no `build/`;
+8. rejeita URL/chave fake de desenvolvimento;
+9. chama `tools/deploy/package-static-artifact.sh`;
+10. revalida o pacote com `pnpm test:deployment:artifact`;
+11. publica o artifact do GitHub Actions.
 
 Nome do artifact:
 
 ```text
-fichario-static-<sha-completo>-<environment>
+fichario-static-<sha-completo>-staging
 ```
+
+### Empacotador compartilhado
+
+`tools/deploy/package-static-artifact.sh` é a única implementação de empacotamento usada pelo workflow. Ele:
+
+- exige `GITHUB_SHA` completo em lowercase;
+- exige `TARGET_ENVIRONMENT=staging`;
+- restringe o diretório de saída a um nome local simples;
+- exige os arquivos essenciais do build e os verificadores de deploy;
+- separa site público, snapshot de fonte e checks;
+- rejeita symlinks;
+- gera manifesto schema 2;
+- gera `SHA256SUMS` com cobertura determinística;
+- verifica os próprios checksums antes de retornar sucesso.
+
+O campo `created_utc` do manifesto não usa o relógio do runner. Ele deriva de `SOURCE_DATE_EPOCH`, quando explicitamente fornecido, ou do timestamp do próprio `GITHUB_SHA`. Isso evita que duas execuções normais do mesmo commit mudem a identidade do manifesto só por ocorrerem em horários diferentes.
 
 Estrutura:
 
@@ -262,7 +280,9 @@ fichario-deploy/
 ├── SHA256SUMS
 ├── checks/
 │   ├── check-deployed-site.mjs
-│   └── deployment-contract.mjs
+│   ├── check-deployment-artifact.mjs
+│   ├── deployment-contract.mjs
+│   └── validate-pages-deploy-output.mjs
 ├── source/
 │   ├── package.json
 │   └── pnpm-lock.yaml
@@ -287,56 +307,53 @@ pnpm test:deployment:artifact -- /caminho/para/fichario-deploy
 
 Sirva/publice somente `fichario-deploy/site/`.
 
-## 9. Etapa B — publicar exatamente o artifact validado
+## 10. Etapa B — publicar exatamente o artifact validado
 
 Workflow:
 
 ```text
-Deploy validated artifact to Cloudflare Pages
+Deploy validated staging artifact to Cloudflare Pages
 ```
 
 Entradas:
 
 ```text
-target_environment:      staging | production
 artifact_run_id:         run que produziu o artifact
 expected_source_commit:  SHA completo de 40 caracteres
 ```
 
-O workflow de publicação deliberadamente:
+O workflow usa `environment: staging-deploy` e é deliberadamente artifact-only:
 
 - **não faz checkout**;
 - não executa `pnpm install`;
 - não executa `pnpm build`;
 - não executa `pnpm verify`;
-- não cria/substitui o projeto Pages.
+- não cria nem substitui o projeto Pages.
 
-Ele baixa somente o artifact nomeado pelo SHA + ambiente a partir do run informado e, antes do Wrangler:
+Ele baixa somente `fichario-static-<sha>-staging` do run informado e, antes do Wrangler:
 
 - confirma manifesto schema 2;
 - confirma `Semogtw/FicharioVirtual` como repositório de origem;
 - confirma SHA completo;
-- confirma target environment;
+- confirma `target_environment=staging`;
 - recalcula hashes de `package.json` e lockfile;
 - executa `sha256sum -c SHA256SUMS`;
 - rejeita symlinks;
-- exige `_headers`, fallback, manifest, service worker e checker pinado;
+- exige `_headers`, fallback, manifest, service worker e verificadores pinados;
 - rejeita configuração Supabase local/fake.
 
-### Credenciais
+### Credenciais de publicação
 
-Staging usa `staging-deploy`. Produção usa `production-deploy`.
-
-Secrets exigidos no environment de publicação:
+Secrets exigidos em `staging-deploy`:
 
 ```text
 CLOUDFLARE_API_TOKEN
 CLOUDFLARE_ACCOUNT_ID
 ```
 
-O token deve ter somente o escopo necessário para Pages na conta correta.
+O token deve ter somente o escopo necessário para Pages na conta correta. Não revele valores em logs ou documentação.
 
-## 10. Identidade do Direct Upload
+## 11. Identidade do Direct Upload
 
 O workflow usa Wrangler com versão explícita e parâmetros equivalentes a:
 
@@ -348,20 +365,11 @@ wrangler pages deploy <artifact>/site \
   --commit-dirty=false
 ```
 
-Produção troca somente a branch para `main` e continua usando o mesmo SHA/artifact já validado.
-
-O workflow habilita `WRANGLER_OUTPUT_FILE_PATH` e consome o registro estruturado `pages-deploy-detailed`. Ele rejeita a publicação se a Cloudflare retornar:
-
-- projeto diferente de `fichario-virtual`;
-- ambiente diferente do solicitado;
-- production branch diferente de `main`;
-- `commit_hash` diferente do SHA validado;
-- deployment ID inválido;
-- URL que não seja uma origem HTTPS limpa.
+`WRANGLER_OUTPUT_FILE_PATH` captura o registro estruturado `pages-deploy-detailed`. `validate-pages-deploy-output.mjs`, transportado dentro do próprio artifact, rejeita respostas incompatíveis com o contrato esperado, incluindo projeto/SHA/deployment ID/URL inválidos.
 
 Não derive a URL de staging por convenção. Use a URL única retornada pelo deployment.
 
-## 11. Gate HTTP do deployment exato
+## 12. Gate HTTP do deployment exato
 
 Depois do upload, o workflow executa:
 
@@ -385,15 +393,9 @@ O contrato valida, entre outros pontos:
 - comportamento de asset inexistente;
 - upgrade HTTP → HTTPS.
 
-Produção executa o mesmo checker também contra:
-
-```text
-https://fichario-virtual.pages.dev
-```
-
 A execução só é concluída com identidade do artifact **e** contrato HTTP aprovados.
 
-## 12. CSP do site hospedado
+## 13. CSP do site hospedado
 
 `static/_headers` é versionado e o build valida o `_headers` realmente emitido.
 
@@ -408,43 +410,9 @@ A primeira atende ao loader do Google Picker. A segunda atende a upload resumív
 
 Não abra `*.google.com` preventivamente. Se o Picker real exigir uma origem de frame, capture a violação no preview e adicione somente a origem exata comprovada.
 
-## 13. Regra de promoção staging → produção
+## 14. Smoke de staging
 
-Um preview aprovado não autoriza rebuild.
-
-A promoção correta é:
-
-```text
-SHA X
-  ↓
-Build artifact X/staging ou X/production conforme configuração-alvo
-  ↓
-checksums + contrato do artifact
-  ↓
-Direct Upload do artifact X
-  ↓
-URL exata retornada pela Cloudflare
-  ↓
-gate HTTP + smoke
-  ↓
-promoção do MESMO artifact de produção para branch main
-  ↓
-gate URL exata + alias público
-```
-
-Se a configuração pública de produção difere de staging — o caso esperado — construa um artifact `production` separado **a partir do mesmo SHA**, valide-o em preview apropriado e promova exatamente esses bytes. Nunca promova bytes de staging como produção apenas para evitar um build de produção.
-
-## 14. Gates do SHA candidato
-
-No mesmo SHA que será promovido, execute os gates aplicáveis. O `pnpm verify` já cobre a parte frontend principal; o pipeline completo inclui também Edge, banco e E2E conforme workflows do repositório/toolchains.
-
-Não use um SHA verde antigo para aprovar SHA novo. Um gate cancelado também não equivale a PASS.
-
-Se um gate externo não puder executar por rate limit, indisponibilidade de serviço ou limitação da ferramenta, registre a evidência e continue resolvendo código; antes da promoção final, o gate obrigatório precisa de recibo terminal ou risco explicitamente aprovado.
-
-## 15. Smoke de staging
-
-Depois do gate HTTP automatizado, validar no host real:
+Depois do gate HTTP automatizado, valide no host real.
 
 ### Autenticação e dados
 
@@ -469,13 +437,18 @@ Depois do gate HTTP automatizado, validar no host real:
 - upload retomável funciona;
 - downloads/ranges não geram violação de CSP;
 - PDF grande permanece no fluxo Drive-first;
-- tokens não aparecem em URL/log.
+- tokens não aparecem em URL/log;
+- crash entre cópia e staging é reconciliado por `appProperties`.
 
 ### OCR
 
 Siga `docs/OCR_STAGING.md`, incluindo PDF textual com zero chamadas, lote visual real, cancelamento/retomada, quota do provedor e persistência.
 
-## 16. Domínio canônico e `APP_ORIGIN`
+### Worker desktop
+
+Siga `docs/DESKTOP_OCR_WORKER.md` para pareamento, lease, spool, interrupções de rede/processo e benchmark do hardware alvo. O primeiro deploy do site pode registrar o worker como limitação operacional se essa fronteira ainda não tiver sido validada em hardware real.
+
+## 15. Domínio canônico e `APP_ORIGIN`
 
 Só adicione domínio customizado depois de um preview estável.
 
@@ -490,92 +463,66 @@ Ao escolher a origem canônica:
 
 Evite duas origens de produção aceitando sessão simultaneamente.
 
-## 17. Limitação atual do conector Cloudflare
+## 16. Quando produção puder ser criada
 
-A integração administrativa disponível consegue configurar o projeto Pages e obter o token temporário emitido pelo serviço de upload, mas não permite trocar sua própria autenticação pelo JWT temporário exigido pelos endpoints `/pages/assets/*`.
+Um preview aprovado **não** autoriza simplesmente publicar os bytes de staging como produção se a configuração pública for diferente.
 
-Uma sonda reproduzindo os headers do Wrangler com JWT novo continua retornando `403` / Cloudflare `8000013` (`Authorization failed`).
+Quando a infraestrutura de produção existir, o desenho deve preservar esta sequência:
 
-Não exporte, revele ou persista o JWT para contornar essa limitação. Use o workflow artifact-only com `CLOUDFLARE_API_TOKEN` de escopo mínimo em `staging-deploy`, ou outro executor oficialmente compatível com Wrangler Direct Upload.
+```text
+SHA X
+  ↓
+build de artifact com configuração de produção
+  ↓
+checksums + contrato do artifact
+  ↓
+preview/validação dos mesmos bytes
+  ↓
+promoção dos mesmos bytes
+  ↓
+gate HTTP do host exato + alias canônico
+```
 
-## 18. Worker desktop e modelos
+A implementação futura precisa ser adicionada com gates que provem isolamento de environments, credenciais e artifact. Até lá, não mantenha código morto de produção no workflow staging.
 
-O worker é marco separado do primeiro deploy do site. Siga `docs/DESKTOP_OCR_WORKER.md`.
+## 17. Rollback
 
-Modelos públicos ficam no projeto `fichario-models`, fragmentados com licença/checksums. Eles não entram no precache da PWA e o tablet não deve baixá-los automaticamente.
+### Frontend staging
 
-O worker nunca recebe service-role, chave Gemini ou refresh token do Drive.
-
-## 19. Rollback
-
-### Frontend
-
-- selecione um deployment anterior identificado por SHA;
+- selecione um artifact/deployment anterior identificado por SHA;
 - preserve banco e Drive;
 - confirme compatibilidade do schema;
-- reexecute o checker correspondente ao artifact;
+- use os checks do artifact correspondente;
 - reexecute smoke essencial.
 
 ### Banco
 
-Use migration corretiva. Não edite migrations aplicadas.
+Migrations são forward-only. Não reverta editando migration já aplicada. Em caso de defeito, crie migration corretiva compatível com os clientes que ainda possam estar ativos.
 
 ### Edge Functions
 
-Rollback só pode usar versão compatível com o schema implantado; em incompatibilidade, falhar fechado é preferível a corromper estado.
+Redeploy de uma função deve preservar a política JWT versionada e o conjunto mínimo de secrets. Não use flags de deploy para enfraquecer autenticação.
 
-### Modelos
+## 18. Limites de ferramentas e segurança operacional
 
-Não substitua bytes de uma versão publicada. Rollback altera a versão recomendada e preserva a última versão válida.
+A integração administrativa Cloudflare observada consegue configurar o projeto e emitir token temporário do serviço de upload, mas não fornece um caminho seguro/equivalente ao Wrangler para usar esse JWT nos endpoints `/pages/assets/*`. Não exporte, revele ou persista esse token para contornar a fronteira.
 
-## 20. Checklist de primeiro preview
+Use o workflow artifact-only com credencial Cloudflare de escopo mínimo em `staging-deploy` para o Direct Upload real.
 
-```text
-[ ] SHA candidato capturado
-[ ] toolchain/CI do SHA revisado
-[ ] artifact staging criado pelo workflow
-[ ] artifact contract PASS
-[ ] CLOUDFLARE_API_TOKEN provisionado em staging-deploy
-[ ] CLOUDFLARE_ACCOUNT_ID provisionado em staging-deploy
-[ ] workflow artifact-only executado
-[ ] identidade pages-deploy-detailed PASS
-[ ] URL exata do deployment registrada
-[ ] checker HTTP do artifact PASS
-[ ] smoke Auth/PWA PASS
-[ ] smoke Drive/Picker PASS ou limitação registrada
-[ ] APP_ORIGIN coordenado com a origem escolhida
-[ ] nenhum dado privado na Cloudflare
-```
+Para gates normais, use GitHub Actions deste repositório. Use o repo de toolchains apenas quando um checkout/snapshot isolado for realmente necessário.
 
-## 21. Checklist de produção
+## 19. Critério mínimo para avançar staging
 
-```text
-[ ] Supabase de produção existe e foi validado
-[ ] environment production possui somente configuração pública correta
-[ ] PRODUCTION_ARTIFACT_BUILD_ENABLED=true aprovado explicitamente
-[ ] artifact production do SHA candidato criado e validado
-[ ] preview dos bytes de produção aprovado
-[ ] production-deploy criado/protegido
-[ ] token Cloudflare de escopo mínimo provisionado
-[ ] CLOUDFLARE_PRODUCTION_DEPLOY_ENABLED=true aprovado explicitamente
-[ ] o MESMO artifact é publicado na branch main
-[ ] URL exata do deployment PASS
-[ ] fichario-virtual.pages.dev PASS
-[ ] domínio canônico/redirects PASS
-[ ] APP_ORIGIN/Auth/OAuth coordenados
-[ ] rollback ensaiado
-```
+Antes de tratar o preview como candidato sério:
 
-## 22. Proibições
+- `Validate current head` terminal verde no mesmo SHA;
+- artifact staging construído desse SHA;
+- contrato do artifact aprovado;
+- Direct Upload do artifact exato;
+- identidade Wrangler aprovada;
+- gate HTTP da URL exata aprovado;
+- smoke de autenticação/PWA;
+- smoke Drive/OCR aplicável ou risco explicitamente registrado;
+- nenhum conteúdo privado na Cloudflare.
 
-- não publicar secrets backend;
-- não tornar bucket privado público;
-- não cachear endpoints autenticados;
-- não colocar documentos privados na Cloudflare;
-- não ativar R2 ou billing automaticamente;
-- não abrir porta doméstica para o worker;
-- não reinserir teto diário interno de OCR;
-- não inserir fallback pago silencioso;
-- não habilitar produção apontando para staging;
-- não reconstruir entre preview aprovado e promoção do mesmo artifact;
-- não declarar release pronta sem gates e smoke correspondentes ao SHA promovido.
+Os estados detalhados e recibos correntes ficam em `docs/READINESS.md`.
