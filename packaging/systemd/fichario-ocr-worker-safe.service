@@ -1,0 +1,33 @@
+[Unit]
+Description=Fichário Digital local OCR worker
+Documentation=https://github.com/Semogtw/FicharioVirtual/blob/main/docs/DESKTOP_OCR_WORKER_LOCAL_RUNTIME.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/env node %h/.local/lib/fichario-worker/bin.mjs
+Restart=on-failure
+RestartSec=15s
+UMask=0077
+
+# Protect system-owned paths while keeping the user's XDG state writable.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictRealtime=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=default.target
