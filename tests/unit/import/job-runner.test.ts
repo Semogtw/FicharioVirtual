@@ -94,19 +94,29 @@ describe('OcrJobRunner', () => {
 		expect(runner.state).toBe('paused');
 	});
 
-	it('uses the bounded backoff schedule for transient work', async () => {
+	it('keeps a deferred retry alive while database polls are temporarily empty', async () => {
 		const wait = vi.fn(async () => undefined);
 		const gateway: OcrQueueGateway = {
-			listRunnableJobs: vi.fn().mockResolvedValueOnce([jobs[0]]).mockResolvedValueOnce([]),
-			processJob: vi.fn(async () => ({ state: 'retry_later' as const }))
+			listRunnableJobs: vi
+				.fn()
+				.mockResolvedValueOnce([jobs[0]])
+				.mockResolvedValueOnce([])
+				.mockResolvedValueOnce([])
+				.mockResolvedValueOnce([jobs[0]]),
+			processJob: vi
+				.fn()
+				.mockResolvedValueOnce({ state: 'retry_later' as const })
+				.mockResolvedValueOnce({ state: 'complete' as const, needsReview: false, warningCount: 0 })
 		};
 		const runner = new OcrJobRunner(gateway, coordinator(), { wait });
 
 		await runner.startQueue();
 
-		expect(wait).toHaveBeenCalledTimes(1);
-		expect(wait).toHaveBeenCalledWith(5_000, expect.any(AbortSignal));
-		expect(gateway.listRunnableJobs).toHaveBeenCalledTimes(2);
+		expect(wait.mock.calls.map(([delay]) => delay)).toEqual([5_000, 20_000, 60_000]);
+		expect(gateway.listRunnableJobs).toHaveBeenCalledTimes(4);
+		expect(gateway.processJob).toHaveBeenCalledTimes(2);
+		expect(gateway.processJob).toHaveBeenNthCalledWith(1, jobs[0].pageId, expect.any(AbortSignal));
+		expect(gateway.processJob).toHaveBeenNthCalledWith(2, jobs[0].pageId, expect.any(AbortSignal));
 	});
 
 	it('does not loop automatically after a daily quota result', async () => {
