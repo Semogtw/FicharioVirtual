@@ -151,7 +151,11 @@ export function parseDesktopWorkerRequest(value: unknown): DesktopWorkerRequest 
 	const wordGeometry = hasGeometryCompleteShape
 		? parseStoredWordGeometry(record.wordGeometry)
 		: Object.freeze([]);
-	if (hasGeometryCompleteShape && Array.isArray(record.wordGeometry) && record.wordGeometry.length > 0 && wordGeometry.length === 0) {
+	if (
+		hasGeometryCompleteShape &&
+		(!Array.isArray(record.wordGeometry) ||
+			(record.wordGeometry.length > 0 && wordGeometry.length === 0))
+	) {
 		return null;
 	}
 
