@@ -54,8 +54,8 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub', '81111111-1111-4111-8111-111111111111', true);
 
 select ok(
-  not has_function_privilege('authenticated', 'public.is_valid_ocr_word_geometry(jsonb)', 'EXECUTE'),
-  'geometry validator is not exposed as a client RPC'
+  has_function_privilege('authenticated', 'public.is_valid_ocr_word_geometry(jsonb)', 'EXECUTE'),
+  'authenticated page writes can execute the pure geometry check constraint helper'
 );
 
 select lives_ok(
