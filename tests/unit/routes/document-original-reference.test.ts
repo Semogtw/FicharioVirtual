@@ -8,7 +8,9 @@ describe('document original reference rendering', () => {
 	it('keeps Drive originals as explicit references while delegating media rendering to the viewer', () => {
 		expect(route).toContain("detail.originalReference.provider === 'google_drive'");
 		expect(route).toContain('Abrir no Google Drive');
-		expect(route).toContain('<DocumentMediaViewer {detail} page={selectedPage} query={highlightedQuery} />');
+		expect(route).toContain(
+			'<DocumentMediaViewer {detail} page={selectedPage} query={highlightedQuery} />'
+		);
 		expect(route).not.toContain('<img src={detail.originalReference.url}');
 		expect(viewer).toContain("detail.originalReference.provider === 'supabase'");
 		expect(viewer).toContain("detail.originalReference.provider === 'google_drive'");

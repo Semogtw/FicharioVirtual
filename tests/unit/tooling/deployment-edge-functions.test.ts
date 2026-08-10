@@ -5,10 +5,7 @@ const config = readFileSync('supabase/config.toml', 'utf8');
 const staging = readFileSync('docs/SUPABASE_STAGING.md', 'utf8');
 const driveSetup = readFileSync('docs/GOOGLE_DRIVE_SETUP.md', 'utf8');
 const desktopWorker = readFileSync('docs/DESKTOP_OCR_WORKER.md', 'utf8');
-const desktopWorkerAuth = readFileSync(
-	'supabase/functions/_shared/desktop-worker-auth.ts',
-	'utf8'
-);
+const desktopWorkerAuth = readFileSync('supabase/functions/_shared/desktop-worker-auth.ts', 'utf8');
 const ocrRollout = readFileSync('docs/OCR_MIGRATION_ROLLOUT.md', 'utf8');
 
 const versionedFunctions = readdirSync('supabase/functions', { withFileTypes: true })
@@ -31,8 +28,12 @@ describe('Edge Function deployment contract', () => {
 		for (const functionName of versionedFunctions) {
 			expect(config).toContain(`[functions.${functionName}]`);
 		}
-		expect(staging).toContain('supabase functions deploy --project-ref "$STAGING_SUPABASE_PROJECT_REF"');
-		expect(staging).toContain('supabase functions list --project-ref "$STAGING_SUPABASE_PROJECT_REF"');
+		expect(staging).toContain(
+			'supabase functions deploy --project-ref "$STAGING_SUPABASE_PROJECT_REF"'
+		);
+		expect(staging).toContain(
+			'supabase functions list --project-ref "$STAGING_SUPABASE_PROJECT_REF"'
+		);
 	});
 
 	it('keeps the complete provider-only OCR migration sequence in its dedicated rollout', () => {
