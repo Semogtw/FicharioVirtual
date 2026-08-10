@@ -7,9 +7,11 @@ const SHA256 = /^[0-9a-f]{64}$/;
 const MODEL = /^[A-Za-z0-9._:/-]+$/;
 const SOURCE_MIME_TYPES = new Set(['image/webp', 'image/jpeg']);
 const MAX_SOURCE_BYTES = 12 * 1024 * 1024;
-const MAX_API_RESPONSE_BYTES = 2 * 1024 * 1024;
+const MAX_API_RESPONSE_BYTES = 4 * 1024 * 1024;
 const MAX_TEXT_LENGTH = 1_000_000;
 const MAX_TIMING_MS = 86_400_000;
+const MAX_WORD_GEOMETRY = 20_000;
+const COMPACT_GEOMETRY = /^(\d{1,5}),(\d{1,5}),(\d{1,5}),(\d{1,5})\|(.+)$/u;
 const WARNING_CODES = new Set([
 	'low_legibility',
 	'uncertain_characters',
@@ -29,6 +31,11 @@ const OCR_SCHEMA = Object.freeze({
 	properties: {
 		rawText: { type: 'string' },
 		contentType: { type: 'string', enum: ['printed', 'handwritten', 'mixed', 'unknown'] },
+		wordGeometry: {
+			type: 'array',
+			maxItems: MAX_WORD_GEOMETRY,
+			items: { type: 'string' }
+		},
 		warnings: {
 			type: 'array',
 			maxItems: 4,
@@ -39,13 +46,14 @@ const OCR_SCHEMA = Object.freeze({
 		},
 		needsReview: { type: 'boolean' }
 	},
-	required: ['rawText', 'contentType', 'warnings', 'needsReview']
+	required: ['rawText', 'contentType', 'wordGeometry', 'warnings', 'needsReview']
 });
 
 const OCR_PROMPT = `Transcreva fielmente todo o texto visível desta página para rawText.
 Não resuma, não explique e não invente conteúdo ausente.
 Preserve quebras de linha quando ajudarem a representar parágrafos, listas ou tabelas.
 Classifique contentType como printed, handwritten, mixed ou unknown.
+Para wordGeometry, localize cada palavra visível usando exatamente a grafia de rawText. Use coordenadas inteiras normalizadas de 0 a 10000, origem no canto superior esquerdo, e o formato compacto esquerda,topo,direita,base|palavra. Não invente caixas para texto que não puder localizar com segurança.
 Use warnings somente quando aplicável: low_legibility, uncertain_characters, layout_complex, possible_omission.
 Marque needsReview=true se qualquer parte relevante estiver incerta, ilegível, possivelmente omitida ou com ordem duvidosa.
 Responda estritamente no JSON solicitado pelo schema.`;
@@ -166,13 +174,50 @@ function requireVisionCapabilities(body) {
 	}
 }
 
+function parseWordGeometry(value) {
+	if (value === undefined) return Object.freeze([]);
+	if (!Array.isArray(value) || value.length > MAX_WORD_GEOMETRY) {
+		throw new OllamaEngineError('ollama_ocr_invalid');
+	}
+	const geometry = [];
+	for (const item of value) {
+		if (typeof item !== 'string' || item.length > 320) continue;
+		const match = COMPACT_GEOMETRY.exec(item);
+		if (!match) continue;
+		const left = Number(match[1]);
+		const top = Number(match[2]);
+		const right = Number(match[3]);
+		const bottom = Number(match[4]);
+		const text = match[5]?.trim() ?? '';
+		if (
+			text.length < 1 ||
+			text.length > 256 ||
+			![left, top, right, bottom].every(Number.isSafeInteger) ||
+			left < 0 ||
+			top < 0 ||
+			right > 10_000 ||
+			bottom > 10_000 ||
+			right <= left ||
+			bottom <= top
+		) {
+			continue;
+		}
+		geometry.push(Object.freeze([text, left, top, right, bottom]));
+	}
+	return Object.freeze(geometry);
+}
+
 function parseOcrContent(value) {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) {
 		throw new OllamaEngineError('ollama_ocr_invalid');
 	}
 	const keys = Object.keys(value).sort();
-	const expected = ['contentType', 'needsReview', 'rawText', 'warnings'];
-	if (keys.length !== expected.length || !keys.every((key, index) => key === expected[index])) {
+	const legacy = ['contentType', 'needsReview', 'rawText', 'warnings'];
+	const withGeometry = ['contentType', 'needsReview', 'rawText', 'warnings', 'wordGeometry'].sort();
+	if (
+		(keys.length !== legacy.length || !keys.every((key, index) => key === legacy[index])) &&
+		(keys.length !== withGeometry.length || !keys.every((key, index) => key === withGeometry[index]))
+	) {
 		throw new OllamaEngineError('ollama_ocr_invalid');
 	}
 	if (typeof value.rawText !== 'string' || value.rawText.length > MAX_TEXT_LENGTH) {
@@ -204,6 +249,7 @@ function parseOcrContent(value) {
 		rawText: value.rawText,
 		correctedText: null,
 		contentType: value.contentType,
+		wordGeometry: parseWordGeometry(value.wordGeometry),
 		warnings: Object.freeze(warnings),
 		needsReview: value.needsReview
 	});
