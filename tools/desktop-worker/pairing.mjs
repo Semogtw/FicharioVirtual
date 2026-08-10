@@ -58,13 +58,27 @@ function requireCapabilities(value) {
 	return Object.freeze(parsed);
 }
 
+function canonicalJson(value) {
+	if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+	if (value && typeof value === 'object') {
+		return `{${Object.keys(value)
+			.sort()
+			.map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+			.join(',')}}`;
+	}
+	return JSON.stringify(value);
+}
+
 function pairEndpoint(workerEndpoint) {
 	const worker = new URL(parseWorkerEndpoint(workerEndpoint));
 	return new URL('/functions/v1/desktop-ocr-pair', worker.origin).toString();
 }
 
 async function readBoundedJson(response) {
-	if (response.headers.get('content-type')?.split(';', 1)[0]?.trim() !== 'application/json') {
+	if (
+		response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase() !==
+		'application/json'
+	) {
 		throw new DesktopPairingError('desktop_ocr_pair_response_invalid', response.status);
 	}
 	const declared = response.headers.get('content-length');
@@ -112,7 +126,7 @@ function parsePairingReceipt(value, expectedLabel, expectedCapabilities) {
 		!value.capabilities ||
 		typeof value.capabilities !== 'object' ||
 		Array.isArray(value.capabilities) ||
-		JSON.stringify(value.capabilities) !== JSON.stringify(expectedCapabilities)
+		canonicalJson(value.capabilities) !== canonicalJson(expectedCapabilities)
 	) {
 		throw new DesktopPairingError('desktop_ocr_pair_response_invalid', 201);
 	}
