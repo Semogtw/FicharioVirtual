@@ -2,7 +2,7 @@
 
 **Data:** 2026-08-10  
 **Branch:** `main`  
-**Estado:** implementação em código concluída; migration/Edge Function/Gemini real ainda precisam de validação em staging
+**Estado:** migration validada em `fichario-staging`; Edge Function atualizada/Gemini real ainda precisam de validação
 
 ## Objetivo
 
@@ -30,6 +30,7 @@ Criar dados reais para decidir onde a capacidade gratuita do Gemini agrega mais 
 - RLS forçada e RPC de escrita com validação de ownership/documento/lote/páginas;
 - agregação de 1 a 365 dias por requests, páginas, bytes, tokens, tipo de documento, classe visual e dia;
 - escrita de telemetria best-effort, isolada do sucesso/falha do OCR;
+- versão independente `contentClassificationVersion=1` dentro dos detalhes sanitizados de uso;
 - testes unitários do parser, sanitização e payload de telemetria;
 - teste estático do contrato da migration;
 - plano documentado para shadow evaluation, correction delta e roteamento adaptativo posterior.
@@ -49,13 +50,28 @@ As tabelas de telemetria não recebem:
 
 Tokens oficiais permanecem no nível do request. Não foi criada atribuição falsa de tokens exatos por página.
 
-## Proveniência do prompt
+## Proveniência
 
-Adicionar `contentClass` altera o contrato pedido ao Gemini e deve iniciar uma nova série de prompt.
+`OCR_PROMPT_VERSION` continua representando a versão do fluxo de transcrição já propagada pelos jobs/importações. A classificação de telemetria é versionada separadamente como:
 
-**Requisito de rollout:** configurar `OCR_PROMPT_VERSION=2` no ambiente que receber esta versão antes de coletar dados de produção/staging destinados a comparação histórica.
+```text
+contentClassificationVersion=1
+```
 
-O conector desta sessão não permitiu editar `.env.example` porque o arquivo contém nomes de secrets; portanto esse valor precisa ser alinhado por um ambiente/tooling autorizado no rollout. Não marcar a proveniência como validada enquanto o ambiente continuar declarando a versão anterior.
+Isso evita alterar apenas a Edge Function e criar divergência entre a versão persistida no job e a versão lida no runtime. Se o prompt de **transcrição** mudar de forma material, `OCR_PROMPT_VERSION` deve ser incrementado de forma coordenada em todos os produtores/ambientes.
+
+## Validação de staging já executada
+
+Projeto conectado: `fichario-staging`.
+
+- migration `ocr_provider_telemetry`: aplicada com sucesso;
+- `ocr_provider_usage_events`: `RLS=true`, `FORCE RLS=true`;
+- `ocr_provider_page_metrics`: `RLS=true`, `FORCE RLS=true`;
+- políticas expostas ao papel `authenticated`: somente `SELECT` owner-scoped;
+- `record_ocr_provider_usage`: `SECURITY DEFINER` intencional, com validação interna de `auth.uid`, allowlist, documento, lote e páginas;
+- `get_ocr_telemetry_overview`: `SECURITY INVOKER`;
+- Supabase Advisor não apontou falta de RLS/policy nas novas tabelas;
+- Advisor sinaliza o writer `SECURITY DEFINER` executável por `authenticated`; o aviso é conhecido e intencional nesta arquitetura, pois o `process-ocr` opera com JWT do usuário e o writer valida ownership antes de inserir.
 
 ## O que ainda não foi ativado
 
@@ -68,17 +84,18 @@ O conector desta sessão não permitiu editar `.env.example` porque o arquivo co
 
 Esses itens dependem dos dados desta fundação e não devem ser ativados com amostra zero.
 
-## Gates pendentes
+## Gates
 
 ```text
-migration aplicada em Supabase limpo/staging: PENDING
-Edge Function type-check no HEAD: PENDING
+migration aplicada em fichario-staging: PASS
+RLS + FORCE RLS no catálogo de staging: PASS
+políticas SELECT owner-scoped presentes: PASS
+Edge Function process-ocr do HEAD implantada: PENDING
 unit/DB gates no HEAD: PENDING
-OCR_PROMPT_VERSION=2 no ambiente de validação: PENDING
 smoke Gemini real com usageMetadata: PENDING
 contentClass real retornado/persistido: PENDING
-RLS owner isolation em banco aplicado: PENDING
-overview 30 dias consultável: PENDING
+RLS owner isolation com sessão real: PENDING
+overview com evento real: PENDING
 quota/rate-limit persistido sem conteúdo privado: PENDING
 ```
 
