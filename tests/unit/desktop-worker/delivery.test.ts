@@ -84,6 +84,7 @@ describe('flushResultSpool', () => {
 					cleanupPending: false
 				}
 			],
+			rejected: [],
 			failures: [],
 			remainingPending: 0
 		});
@@ -100,7 +101,7 @@ describe('flushResultSpool', () => {
 		expect(spool.get(JOB_ID)?.state).toBe('accepted');
 	});
 
-	it('keeps a rejected result pending and reports only the safe API code', async () => {
+	it('preserves a permanent completion rejection in dead letter and releases the pending queue', async () => {
 		const spool = await createSpool();
 		spool.enqueue(result());
 		const client = {
@@ -111,22 +112,52 @@ describe('flushResultSpool', () => {
 
 		const summary = await flushResultSpool({ spool, client });
 
-		expect(spool.get(JOB_ID)?.state).toBe('pending');
-		expect(spool.get(JOB_ID)?.attemptCount).toBe(1);
+		expect(spool.get(JOB_ID)).toBeNull();
+		expect(spool.getRejected(JOB_ID)?.attemptCount).toBe(1);
+		expect(spool.getRejected(JOB_ID)?.result).toEqual(result());
 		expect(summary).toEqual({
 			delivered: [],
-			failures: [
+			rejected: [
 				{
 					jobId: JOB_ID,
 					code: 'desktop_ocr_completion_rejected',
 					httpStatus: 409
 				}
 			],
+			failures: [],
+			remainingPending: 0
+		});
+	});
+
+	it('keeps retryable network or server failures pending', async () => {
+		const spool = await createSpool();
+		spool.enqueue(result());
+		const client = {
+			complete: vi.fn(async () => {
+				throw new DesktopWorkerApiError(503, 'desktop_ocr_worker_failed');
+			})
+		};
+
+		const summary = await flushResultSpool({ spool, client });
+
+		expect(spool.get(JOB_ID)?.state).toBe('pending');
+		expect(spool.get(JOB_ID)?.attemptCount).toBe(1);
+		expect(spool.getRejected(JOB_ID)).toBeNull();
+		expect(summary).toEqual({
+			delivered: [],
+			rejected: [],
+			failures: [
+				{
+					jobId: JOB_ID,
+					code: 'desktop_ocr_worker_failed',
+					httpStatus: 503
+				}
+			],
 			remainingPending: 1
 		});
 	});
 
-	it('continues flushing independent pending results after one server rejection', async () => {
+	it('continues flushing independent pending results after one permanent rejection', async () => {
 		const spool = await createSpool();
 		spool.enqueue(result(JOB_ID), new Date('2026-08-10T01:00:00.000Z'));
 		spool.enqueue(result(SECOND_JOB_ID), new Date('2026-08-10T01:00:01.000Z'));
@@ -140,9 +171,12 @@ describe('flushResultSpool', () => {
 		const summary = await flushResultSpool({ spool, client });
 
 		expect(client.complete).toHaveBeenCalledTimes(2);
-		expect(spool.get(JOB_ID)?.state).toBe('pending');
+		expect(spool.get(JOB_ID)).toBeNull();
+		expect(spool.getRejected(JOB_ID)?.reasonCode).toBe('desktop_ocr_completion_rejected');
 		expect(spool.get(SECOND_JOB_ID)?.state).toBe('accepted');
-		expect(summary.remainingPending).toBe(1);
+		expect(summary.rejected).toHaveLength(1);
+		expect(summary.delivered).toHaveLength(1);
+		expect(summary.remainingPending).toBe(0);
 	});
 
 	it('does not start another delivery when the caller signal is already aborted', async () => {
