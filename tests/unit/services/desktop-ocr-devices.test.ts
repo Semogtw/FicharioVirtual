@@ -1,0 +1,124 @@
+import { describe, expect, it, vi } from 'vitest';
+import {
+	DesktopOcrDevicesError,
+	listDesktopOcrDevices,
+	revokeDesktopOcrDevice
+} from '../../../src/lib/services/desktop-ocr-devices';
+
+const DEVICE_ID = '11111111-1111-4111-8111-111111111111';
+
+function device(overrides: Record<string, unknown> = {}) {
+	return {
+		device_id: DEVICE_ID,
+		label: 'Desktop principal',
+		status: 'active',
+		capabilities: {
+			protocolVersion: 1,
+			backend: 'ollama',
+			model: 'qwen3-vl:4b',
+			modelDigest: 'a'.repeat(64),
+			maxConcurrency: 1,
+			privateUnexpectedField: 'ignored'
+		},
+		last_seen_at: '2026-08-10T02:00:00.000Z',
+		revoked_at: null,
+		created_at: '2026-08-09T22:00:00.000Z',
+		updated_at: '2026-08-10T02:00:00.000Z',
+		...overrides
+	};
+}
+
+describe('desktop OCR device service', () => {
+	it('lists devices while exposing only bounded display capabilities', async () => {
+		const rpc = vi.fn(async () => ({ data: [device()], error: null }));
+		const devices = await listDesktopOcrDevices({ rpc } as never);
+
+		expect(rpc).toHaveBeenCalledWith('list_ocr_worker_devices');
+		expect(devices).toEqual([
+			{
+				id: DEVICE_ID,
+				label: 'Desktop principal',
+				status: 'active',
+				capabilities: {
+					protocolVersion: 1,
+					backend: 'ollama',
+					model: 'qwen3-vl:4b',
+					maxConcurrency: 1
+				},
+				lastSeenAt: '2026-08-10T02:00:00.000Z',
+				revokedAt: null,
+				createdAt: '2026-08-09T22:00:00.000Z',
+				updatedAt: '2026-08-10T02:00:00.000Z'
+			}
+		]);
+		expect(JSON.stringify(devices)).not.toContain('modelDigest');
+		expect(JSON.stringify(devices)).not.toContain('privateUnexpectedField');
+	});
+
+	it('accepts a revoked device only when a valid revoked timestamp is present', async () => {
+		const rpc = vi.fn(async () => ({
+			data: [
+				device({
+					status: 'revoked',
+					revoked_at: '2026-08-10T03:00:00.000Z'
+				})
+			],
+			error: null
+		}));
+
+		const devices = await listDesktopOcrDevices({ rpc } as never);
+		expect(devices[0]?.status).toBe('revoked');
+		expect(devices[0]?.revokedAt).toBe('2026-08-10T03:00:00.000Z');
+	});
+
+	it('fails closed on malformed device rows instead of partially trusting them', async () => {
+		const rpc = vi.fn(async () => ({ data: [device({ device_id: '../escape' })], error: null }));
+		await expect(listDesktopOcrDevices({ rpc } as never)).rejects.toBeInstanceOf(
+			DesktopOcrDevicesError
+		);
+	});
+
+	it('revokes only the requested UUID and parses the bounded receipt', async () => {
+		const rpc = vi.fn(async () => ({
+			data: {
+				deviceId: DEVICE_ID,
+				status: 'revoked',
+				revokedAt: '2026-08-10T03:00:00.000Z',
+				requeuedJobs: 2
+			},
+			error: null
+		}));
+
+		await expect(revokeDesktopOcrDevice(DEVICE_ID, { rpc } as never)).resolves.toEqual({
+			deviceId: DEVICE_ID,
+			status: 'revoked',
+			revokedAt: '2026-08-10T03:00:00.000Z',
+			requeuedJobs: 2
+		});
+		expect(rpc).toHaveBeenCalledWith('revoke_ocr_worker_device', {
+			target_device_id: DEVICE_ID
+		});
+	});
+
+	it('rejects invalid ids before reaching Supabase', async () => {
+		const rpc = vi.fn();
+		await expect(revokeDesktopOcrDevice('../device', { rpc } as never)).rejects.toThrow('device id');
+		expect(rpc).not.toHaveBeenCalled();
+	});
+
+	it('maps transport and backend failures to safe user-facing errors', async () => {
+		const throwingRpc = vi.fn(async () => {
+			throw new Error('private backend details');
+		});
+		await expect(listDesktopOcrDevices({ rpc: throwingRpc } as never)).rejects.toMatchObject({
+			name: 'DesktopOcrDevicesError'
+		});
+
+		const failingRpc = vi.fn(async () => ({ data: null, error: { private: 'details' } }));
+		const error = await revokeDesktopOcrDevice(DEVICE_ID, { rpc: failingRpc } as never).catch(
+			(caught) => caught
+		);
+		expect(error).toBeInstanceOf(DesktopOcrDevicesError);
+		expect(String(error)).not.toContain('details');
+	});
+});
