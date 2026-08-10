@@ -14,11 +14,25 @@ describe('deployable static artifact workflow', () => {
 		expect(workflow).toContain('workflow_dispatch:');
 		expect(workflow).toContain('environment: staging');
 		expect(workflow).toContain('TARGET_ENVIRONMENT: staging');
+		expect(workflow).toContain('actions: read');
 		expect(workflow).toContain('contents: read');
 		expect(workflow).toContain('persist-credentials: false');
 		expect(workflow).not.toContain('target_environment:');
 		expect(workflow).not.toContain('environment: production');
 		expect(workflow).not.toContain('- production');
+	});
+
+	it('requires a successful current-head validation for the exact current main SHA', () => {
+		const workflow = read('.github/workflows/build-deployment-artifact.yml');
+
+		expect(workflow).toContain('- name: Require green current-head validation for this SHA');
+		expect(workflow).toContain('/git/ref/heads/main');
+		expect(workflow).toContain('if [[ "$main_sha" != "$GITHUB_SHA" ]]');
+		expect(workflow).toContain('/actions/workflows/validate-current-head.yml/runs?head_sha=${GITHUB_SHA}');
+		expect(workflow).toContain('.head_branch == \\"main\\"');
+		expect(workflow).toContain('.event == \\"push\\"');
+		expect(workflow).toContain('.conclusion == \\"success\\"');
+		expect(workflow).toContain('No successful Validate current head push run exists');
 	});
 
 	it('builds with public Supabase values supplied through step environment variables', () => {
