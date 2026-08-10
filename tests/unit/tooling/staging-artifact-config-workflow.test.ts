@@ -48,8 +48,9 @@ describe('staging artifact public configuration workflow', () => {
 			'PUBLIC_GOOGLE_PICKER_API_KEY',
 			'PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER'
 		]) {
-			expect(checker).toContain(`${name} is not configured in staging.`);
+			expect(checker).toContain(`requireValue('${name}')`);
 		}
+		expect(checker).toContain('is not configured in staging.');
 		expect(checker).toContain(
 			'TARGET_ENVIRONMENT must remain staging until production infrastructure exists.'
 		);
