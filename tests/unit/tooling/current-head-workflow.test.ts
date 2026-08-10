@@ -22,4 +22,28 @@ describe('current head validation workflow', () => {
 		expect(workflow).toContain('- tests/**');
 		expect(workflow).toContain('- tools/**');
 	});
+
+	it('materializes every prerequisite outcome before rejecting an incomplete verification', () => {
+		const workflow = readFileSync(workflowPath, 'utf8');
+		const rejectStep = workflow.slice(workflow.indexOf('- name: Reject incomplete verification'));
+		const finalReceiptIndex = rejectStep.indexOf('- name: Publish final receipt');
+		const rejectBlock = rejectStep.slice(0, finalReceiptIndex);
+
+		expect(rejectBlock).toContain('if: always()');
+		for (const [name, step] of [
+			['FRONTEND_OUTCOME', 'frontend'],
+			['SOURCE_OUTCOME', 'source'],
+			['CHROMIUM_OUTCOME', 'chromium'],
+			['BROWSER_OUTCOME', 'browser'],
+			['DENO_OUTCOME', 'deno'],
+			['EDGE_OUTCOME', 'edge'],
+			['SUPABASE_OUTCOME', 'supabase'],
+			['DATABASE_OUTCOME', 'database']
+		] as const) {
+			expect(rejectBlock).toContain(`${name}: \${{ steps.${step}.outcome }}`);
+		}
+		expect(rejectBlock).toContain(`if [ "$outcome" != 'success' ]; then`);
+		expect(rejectBlock).toContain('exit "$failed"');
+		expect(rejectBlock).not.toContain("steps.frontend.outcome != 'success'");
+	});
 });
