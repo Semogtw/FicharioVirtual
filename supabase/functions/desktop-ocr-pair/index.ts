@@ -85,7 +85,9 @@ function parseWorkerDeviceRequest(value: unknown): WorkerDeviceRequest | null {
 	if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
 	const record = value as Record<string, unknown>;
 	if (hasExactKeys(record, ['action', 'deviceId'])) {
-		return record.action === 'revoke' && typeof record.deviceId === 'string' && UUID.test(record.deviceId)
+		return record.action === 'revoke' &&
+			typeof record.deviceId === 'string' &&
+			UUID.test(record.deviceId)
 			? Object.freeze({ action: 'revoke', deviceId: record.deviceId })
 			: null;
 	}
@@ -123,7 +125,10 @@ function parseRegisteredDevice(value: unknown): Readonly<{
 	});
 }
 
-function parseRevokedDevice(value: unknown, expectedDeviceId: string): Readonly<{
+function parseRevokedDevice(
+	value: unknown,
+	expectedDeviceId: string
+): Readonly<{
 	deviceId: string;
 	status: 'revoked';
 	revokedAt: string;
