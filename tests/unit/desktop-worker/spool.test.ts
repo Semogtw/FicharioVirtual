@@ -82,8 +82,6 @@ describe('desktop worker result spool', () => {
 		const { spool } = await createSpool();
 		expect(() => spool.enqueue(result({ jobId: '../escape' }))).toThrow('jobId');
 		expect(() => spool.enqueue(result({ sourceSha256: 'bad' }))).toThrow('sourceSha256');
-		expect(() => spool.enqueue(result({ text: 'x'.repeat(2 * 1024 * 1024) }))).toThrow(
-			'too large'
-		);
+		expect(() => spool.enqueue(result({ text: 'x'.repeat(2 * 1024 * 1024) }))).toThrow('too large');
 	});
 });
