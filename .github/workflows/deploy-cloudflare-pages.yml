@@ -1,18 +1,10 @@
-name: Deploy validated artifact to Cloudflare Pages
+name: Deploy validated staging artifact to Cloudflare Pages
 
 on:
   workflow_dispatch:
     inputs:
-      target_environment:
-        description: Protected artifact environment and Pages branch to deploy
-        required: true
-        type: choice
-        default: staging
-        options:
-          - staging
-          - production
       artifact_run_id:
-        description: Run ID of Build deployable Fichário artifact
+        description: Run ID of Build deployable Fichário staging artifact
         required: true
         type: string
       expected_source_commit:
@@ -25,20 +17,19 @@ permissions:
   contents: read
 
 concurrency:
-  group: deploy-fichario-cloudflare-${{ inputs.target_environment }}
+  group: deploy-fichario-cloudflare-staging
   cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    environment: ${{ inputs.target_environment == 'production' && 'production-deploy' || 'staging-deploy' }}
+    environment: staging-deploy
     env:
-      TARGET_ENVIRONMENT: ${{ inputs.target_environment }}
+      TARGET_ENVIRONMENT: staging
       EXPECTED_SOURCE_COMMIT: ${{ inputs.expected_source_commit }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      CLOUDFLARE_PRODUCTION_DEPLOY_ENABLED: ${{ vars.CLOUDFLARE_PRODUCTION_DEPLOY_ENABLED }}
       WRANGLER_SEND_METRICS: 'false'
       WRANGLER_VERSION: '4.120.0'
       WRANGLER_OUTPUT_FILE_PATH: /tmp/wrangler-pages-output.jsonl
@@ -48,6 +39,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          [[ "$TARGET_ENVIRONMENT" == 'staging' ]] || {
+            echo 'this workflow is intentionally staging-only until production infrastructure exists' >&2
+            exit 1
+          }
           if [[ ! "$EXPECTED_SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
             echo 'expected_source_commit must be a full lowercase Git SHA' >&2
             exit 1
@@ -57,18 +52,14 @@ jobs:
             exit 1
           fi
           if [[ -z "$CLOUDFLARE_API_TOKEN" || -z "$CLOUDFLARE_ACCOUNT_ID" ]]; then
-            echo 'Cloudflare deployment credentials are not provisioned in the protected deploy environment' >&2
-            exit 1
-          fi
-          if [[ "$TARGET_ENVIRONMENT" == 'production' && "$CLOUDFLARE_PRODUCTION_DEPLOY_ENABLED" != 'true' ]]; then
-            echo 'production deployment is disabled until production-deploy explicitly enables it' >&2
+            echo 'Cloudflare deployment credentials are not provisioned in staging-deploy' >&2
             exit 1
           fi
 
       - name: Download the validated deployment artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: fichario-static-${{ inputs.expected_source_commit }}-${{ inputs.target_environment }}
+          name: fichario-static-${{ inputs.expected_source_commit }}-staging
           path: deployment-artifact
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
@@ -111,7 +102,7 @@ jobs:
           [[ "$(manifest_value schema_version)" == '2' ]] || { echo 'unsupported deployment manifest schema' >&2; exit 1; }
           [[ "$(manifest_value source_repository)" == 'Semogtw/FicharioVirtual' ]] || { echo 'unexpected source repository' >&2; exit 1; }
           [[ "$(manifest_value source_commit)" == "$EXPECTED_SOURCE_COMMIT" ]] || { echo 'artifact source SHA does not match requested SHA' >&2; exit 1; }
-          [[ "$(manifest_value target_environment)" == "$TARGET_ENVIRONMENT" ]] || { echo 'artifact target environment does not match requested environment' >&2; exit 1; }
+          [[ "$(manifest_value target_environment)" == 'staging' ]] || { echo 'artifact must target staging' >&2; exit 1; }
 
           package_sha="$(sha256sum "$artifact_root/source/package.json" | cut -d' ' -f1)"
           lock_sha="$(sha256sum "$artifact_root/source/pnpm-lock.yaml" | cut -d' ' -f1)"
@@ -142,18 +133,13 @@ jobs:
         run: |
           set -euo pipefail
           rm -f "$WRANGLER_OUTPUT_FILE_PATH"
-          if [[ "$TARGET_ENVIRONMENT" == 'production' ]]; then
-            pages_branch='main'
-          else
-            pages_branch='staging'
-          fi
 
           npm exec --yes --package="wrangler@${WRANGLER_VERSION}" -- \
             wrangler pages deploy "$ARTIFACT_ROOT/site" \
               --project-name=fichario-virtual \
-              --branch="$pages_branch" \
+              --branch=staging \
               --commit-hash="$EXPECTED_SOURCE_COMMIT" \
-              --commit-message="Deploy validated Fichário artifact ${EXPECTED_SOURCE_COMMIT} (${TARGET_ENVIRONMENT})" \
+              --commit-message="Deploy validated Fichário staging artifact ${EXPECTED_SOURCE_COMMIT}" \
               --commit-dirty=false
 
           node "$ARTIFACT_ROOT/checks/validate-pages-deploy-output.mjs"
@@ -167,15 +153,6 @@ jobs:
           set -euo pipefail
           node "$ARTIFACT_ROOT/checks/check-deployed-site.mjs" "$DEPLOYMENT_URL"
 
-      - name: Verify production alias
-        if: inputs.target_environment == 'production'
-        shell: bash
-        env:
-          ARTIFACT_ROOT: ${{ steps.artifact.outputs.root }}
-        run: |
-          set -euo pipefail
-          node "$ARTIFACT_ROOT/checks/check-deployed-site.mjs" 'https://fichario-virtual.pages.dev'
-
       - name: Record verified deployment target
         shell: bash
         env:
@@ -185,9 +162,9 @@ jobs:
         run: |
           set -euo pipefail
           {
-            echo '### Cloudflare Pages deployment'
+            echo '### Cloudflare Pages staging deployment'
             echo
-            echo "- Environment: \`$TARGET_ENVIRONMENT\`"
+            echo '- Environment: `staging`'
             echo "- Source SHA: \`$EXPECTED_SOURCE_COMMIT\`"
             echo "- Deployment ID: \`$DEPLOYMENT_ID\`"
             echo "- Exact verified URL: \`$DEPLOYMENT_URL\`"
@@ -195,5 +172,5 @@ jobs:
               echo "- Alias reported by Wrangler: \`$DEPLOYMENT_ALIAS\`"
             fi
             echo
-            echo 'Artifact checksum verification and the HTTP deployment contract both passed for the exact deployment URL.'
+            echo 'Artifact checksum verification and the HTTP deployment contract both passed for the exact staging deployment URL.'
           } >> "$GITHUB_STEP_SUMMARY"
