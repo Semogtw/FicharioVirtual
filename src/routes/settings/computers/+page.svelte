@@ -1,16 +1,29 @@
 <script lang="ts">
+	import { env } from '$env/dynamic/public';
 	import { onDestroy, onMount } from 'svelte';
 	import Button from '$lib/components/Button.svelte';
+	import { parsePublicEnv } from '$lib/env/public';
 	import {
+		createDesktopOcrPairingCode,
 		listDesktopOcrDevices,
 		renameDesktopOcrDevice,
 		revokeDesktopOcrDevice,
-		type DesktopOcrDevice
+		type DesktopOcrDevice,
+		type DesktopOcrPairingCode
 	} from '$lib/services/desktop-ocr-devices';
 	import { RequestVersion } from '$lib/services/request-version';
 
+	const publicConfig = parsePublicEnv(env);
+	const workerEndpoint = new URL(
+		'/functions/v1/desktop-ocr-worker',
+		publicConfig.PUBLIC_SUPABASE_URL
+	).toString();
+	const preferredPairCommand = `fichario-worker-pair-code ${workerEndpoint} "Meu computador"`;
+
 	let devices = $state<readonly DesktopOcrDevice[]>([]);
+	let pairing = $state<DesktopOcrPairingCode | null>(null);
 	let loading = $state(true);
+	let creatingPairingCode = $state(false);
 	let revokingId = $state<string | null>(null);
 	let savingLabelId = $state<string | null>(null);
 	let editingId = $state<string | null>(null);
@@ -19,6 +32,7 @@
 	let error = $state<string | null>(null);
 	let message = $state<string | null>(null);
 	const requests = new RequestVersion();
+	const pairingRequests = new RequestVersion();
 
 	const dateTime = new Intl.DateTimeFormat('pt-BR', {
 		dateStyle: 'medium',
@@ -54,6 +68,44 @@
 				caught instanceof Error ? caught.message : 'Não foi possível carregar os computadores.';
 		} finally {
 			if (requests.isCurrent(version)) loading = false;
+		}
+	}
+
+	async function generatePairingCode() {
+		if (creatingPairingCode) return;
+		const version = pairingRequests.next();
+		creatingPairingCode = true;
+		error = null;
+		message = null;
+		try {
+			const next = await createDesktopOcrPairingCode();
+			if (!pairingRequests.isCurrent(version)) return;
+			pairing = next;
+			message = 'Código criado. O código anterior, se existia, foi invalidado.';
+		} catch (caught) {
+			if (!pairingRequests.isCurrent(version)) return;
+			error = caught instanceof Error ? caught.message : 'Não foi possível gerar o código.';
+		} finally {
+			if (pairingRequests.isCurrent(version)) creatingPairingCode = false;
+		}
+	}
+
+	async function copyPairingCode() {
+		if (!pairing) return;
+		try {
+			await navigator.clipboard.writeText(pairing.code);
+			message = 'Código copiado.';
+		} catch {
+			message = 'Selecione e copie o código exibido abaixo.';
+		}
+	}
+
+	async function copyPairCommand() {
+		try {
+			await navigator.clipboard.writeText(preferredPairCommand);
+			message = 'Comando copiado.';
+		} catch {
+			message = 'Selecione e copie o comando exibido abaixo.';
 		}
 	}
 
@@ -163,6 +215,7 @@
 
 	onDestroy(() => {
 		requests.next();
+		pairingRequests.next();
 	});
 </script>
 
@@ -192,15 +245,50 @@
 	{#if error}<p class="error" role="alert">{error}</p>{/if}
 	{#if message}<p class="message" role="status">{message}</p>{/if}
 
-	<section class="info-card" aria-labelledby="pairing-title">
-		<div>
+	<section class="info-card pairing-card" aria-labelledby="pairing-title">
+		<div class="pairing-copy">
+			<p class="eyebrow">Novo computador</p>
 			<h2 id="pairing-title">Pareamento seguro</h2>
 			<p>
-				O worker usa uma credencial própria guardada no Secret Service do computador. A sessão do
-				navegador não é persistida no dispositivo e nenhum computador abre porta pública.
+				Gere um código de uso único e informe-o somente ao worker local. O token da sua sessão web
+				não sai do navegador; a credencial permanente é gerada no próprio computador e guardada no
+				Secret Service.
 			</p>
 		</div>
-		<span class="badge">Saída HTTPS apenas</span>
+		<div class="pairing-action">
+			<span class="badge">Saída HTTPS apenas</span>
+			<Button
+				label={creatingPairingCode ? 'Gerando…' : pairing ? 'Gerar outro código' : 'Gerar código'}
+				disabled={creatingPairingCode}
+				onclick={() => void generatePairingCode()}
+			/>
+		</div>
+
+		{#if pairing}
+			<div class="pairing-receipt" role="region" aria-label="Código de pareamento ativo">
+				<div class="pairing-code-row">
+					<div>
+						<span class="field-label">Código de uso único</span>
+						<code class="pairing-code">{pairing.code}</code>
+					</div>
+					<button type="button" class="copy-button" onclick={() => void copyPairingCode()}>
+						Copiar código
+					</button>
+				</div>
+				<p class="expiry">Expira em {formatDate(pairing.expiresAt)}. Um novo código invalida este.</p>
+				<div class="command-block">
+					<span class="field-label">No computador, execute</span>
+					<code>{preferredPairCommand}</code>
+					<button type="button" class="copy-button" onclick={() => void copyPairCommand()}>
+						Copiar comando
+					</button>
+				</div>
+				<p class="pairing-help">
+					Troque “Meu computador” pelo nome desejado. O comando solicitará o código em seguida para
+					evitá-lo no histórico do shell. Depois do sucesso, use “Atualizar” para ver o dispositivo.
+				</p>
+			</div>
+		{/if}
 	</section>
 
 	<section class="devices" aria-labelledby="devices-title" aria-busy={loading}>
@@ -216,7 +304,7 @@
 		{:else if devices.length === 0}
 			<div class="empty">
 				<strong>Nenhum computador pareado.</strong>
-				<p>Quando um worker for pareado, ele aparecerá aqui para acompanhamento e revogação.</p>
+				<p>Gere um código acima e conclua o pareamento no worker local.</p>
 			</div>
 		{:else}
 			<div class="device-list">
@@ -386,6 +474,89 @@
 		font-size: 1.35rem;
 	}
 
+	.pairing-card {
+		align-items: start;
+	}
+
+	.pairing-copy {
+		min-width: 0;
+	}
+
+	.pairing-action {
+		display: grid;
+		justify-items: end;
+		gap: 0.6rem;
+	}
+
+	.pairing-receipt {
+		grid-column: 1 / -1;
+		display: grid;
+		gap: 0.8rem;
+		padding: 0.9rem;
+		border: 1px solid var(--line);
+		border-radius: var(--radius-sm);
+		background: var(--surface-strong);
+	}
+
+	.pairing-code-row,
+	.command-block {
+		display: flex;
+		align-items: end;
+		justify-content: space-between;
+		gap: 0.75rem;
+	}
+
+	.pairing-code-row > div,
+	.command-block {
+		min-width: 0;
+	}
+
+	.field-label {
+		display: block;
+		margin-bottom: 0.25rem;
+		color: var(--muted);
+		font-size: 0.72rem;
+		font-weight: 760;
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
+	}
+
+	.pairing-code,
+	.command-block code {
+		display: block;
+		max-width: 100%;
+		overflow-x: auto;
+		padding: 0.45rem 0.6rem;
+		border-radius: 0.45rem;
+		background: var(--surface);
+		color: var(--ink);
+		font-size: 0.9rem;
+		white-space: nowrap;
+	}
+
+	.pairing-code {
+		font-size: clamp(1.1rem, 3vw, 1.55rem);
+		font-weight: 780;
+		letter-spacing: 0.08em;
+	}
+
+	.expiry,
+	.pairing-help {
+		font-size: 0.82rem;
+	}
+
+	.copy-button {
+		min-height: 2.35rem;
+		padding: 0.5rem 0.7rem;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--radius-sm);
+		background: transparent;
+		color: var(--muted-strong);
+		font-weight: 720;
+		cursor: pointer;
+		white-space: nowrap;
+	}
+
 	.badge,
 	.status-badge {
 		display: inline-flex;
@@ -490,7 +661,8 @@
 		font: inherit;
 	}
 
-	.rename-form input:focus-visible {
+	.rename-form input:focus-visible,
+	.copy-button:focus-visible {
 		outline: 3px solid var(--focus-ring);
 		outline-offset: 2px;
 	}
@@ -559,6 +731,20 @@
 		.info-card,
 		article {
 			grid-template-columns: 1fr;
+		}
+
+		.pairing-action {
+			justify-items: stretch;
+		}
+
+		.pairing-code-row,
+		.command-block {
+			align-items: stretch;
+			flex-direction: column;
+		}
+
+		.copy-button {
+			width: 100%;
 		}
 
 		.device-actions,
