@@ -3,23 +3,54 @@
 	import Button from '$lib/components/Button.svelte';
 	import NativeSelect from '$lib/components/ui/native-select/NativeSelect.svelte';
 	import type { NotebookSummary } from '$lib/domain/notebook';
+	import type { OcrTopicCandidate, TopicImportConfidence } from '$lib/coverage/topic-import';
 	import {
+		MAX_TOPIC_LENGTH,
 		MAX_UNIT_TOPICS,
+		normalizeTopic,
 		parseUnitTopics,
 		type TopicCoverageStatus,
 		type UnitCoverageSummary
 	} from '$lib/coverage/topic-coverage';
 	import { highlightSnippet } from '$lib/search/highlight';
+	import {
+		extractTopicsFromPhoto,
+		type CoveragePhotoImportStage
+	} from '$lib/services/coverage-photo-import';
 	import { listNotebooks } from '$lib/services/notebooks';
 	import { RequestVersion } from '$lib/services/request-version';
 	import { analyzeUnitCoverage } from '$lib/services/topic-coverage';
 
+	type EditableTopic = {
+		id: string;
+		text: string;
+		source: 'manual' | 'ocr';
+		confidence: TopicImportConfidence;
+		reviewRequired: boolean;
+		level: number;
+	};
+
 	const notebookRequests = new RequestVersion();
 	const coverageRequests = new RequestVersion();
-	const topicPlaceholder =
+	const bulkPlaceholder =
 		'3.1 Temperatura\n3.2 Calor específico\n3.3 Mudanças de fase\n3.4 Primeira lei da termodinâmica';
+	const confidenceLabel: Record<TopicImportConfidence, string> = {
+		high: 'alta',
+		medium: 'média',
+		low: 'baixa'
+	};
+	const photoStageLabel: Record<CoveragePhotoImportStage, string> = {
+		preparing: 'Preparando a foto…',
+		uploading: 'Enviando temporariamente…',
+		reading: 'Lendo com OCR…',
+		extracting: 'Separando os conteúdos…',
+		cleaning_up: 'Removendo o arquivo temporário…'
+	};
+
 	let unitName = $state('');
-	let topicInput = $state('');
+	let bulkInput = $state('');
+	let bulkError = $state<string | null>(null);
+	let topics = $state<EditableTopic[]>([]);
 	let notebookId = $state('');
 	let notebooks = $state<readonly NotebookSummary[]>([]);
 	let notebookLoading = $state(true);
@@ -28,23 +59,226 @@
 	let loading = $state(false);
 	let error = $state<string | null>(null);
 	let controller: AbortController | null = null;
+	let photoConsent = $state(false);
+	let photoImporting = $state(false);
+	let photoStage = $state<CoveragePhotoImportStage | null>(null);
+	let photoError = $state<string | null>(null);
+	let photoNotice = $state<string | null>(null);
+	let photoController: AbortController | null = null;
 
-	let topicPreview = $derived.by(() => {
+	let topicValidation = $derived.by(() => {
 		try {
-			return { topics: parseUnitTopics(topicInput), error: null as string | null };
+			const active = topics.map((topic) => topic.text.trim()).filter(Boolean);
+			return {
+				topics: parseUnitTopics(active.join('\n')),
+				error: null as string | null,
+				nonEmptyCount: active.length
+			};
 		} catch (caught) {
 			return {
 				topics: Object.freeze([]) as readonly string[],
-				error: caught instanceof Error ? caught.message : 'A lista de assuntos não é válida.'
+				error: caught instanceof Error ? caught.message : 'A lista de assuntos não é válida.',
+				nonEmptyCount: topics.filter((topic) => topic.text.trim()).length
 			};
 		}
 	});
+
+	let duplicateCount = $derived(
+		Math.max(0, topicValidation.nonEmptyCount - topicValidation.topics.length)
+	);
 
 	const statusLabel: Record<TopicCoverageStatus, string> = {
 		covered: 'Coberto',
 		partial: 'Parcial',
 		missing: 'Não encontrado'
 	};
+
+	function topicId() {
+		return (
+			globalThis.crypto?.randomUUID?.() ??
+			`topic_${Date.now()}_${Math.random().toString(36).slice(2)}`
+		);
+	}
+
+	function invalidateCoverage() {
+		coverageRequests.next();
+		controller?.abort();
+		controller = null;
+		loading = false;
+		error = null;
+		summary = null;
+	}
+
+	function appendEditableTopics(incoming: readonly EditableTopic[]) {
+		const seen = new Set(
+			topics.map((topic) => normalizeTopic(topic.text)).filter((value) => value.length > 0)
+		);
+		const accepted: EditableTopic[] = [];
+		let duplicates = 0;
+		let truncated = false;
+
+		for (const topic of incoming) {
+			const normalized = normalizeTopic(topic.text);
+			if (!normalized) continue;
+			if (seen.has(normalized)) {
+				duplicates += 1;
+				continue;
+			}
+			if (topics.length + accepted.length >= MAX_UNIT_TOPICS) {
+				truncated = true;
+				break;
+			}
+			seen.add(normalized);
+			accepted.push(topic);
+		}
+
+		if (accepted.length > 0) {
+			topics = [...topics, ...accepted];
+			invalidateCoverage();
+		}
+		return { added: accepted.length, duplicates, truncated };
+	}
+
+	function manualTopic(text: string): EditableTopic {
+		return {
+			id: topicId(),
+			text,
+			source: 'manual',
+			confidence: 'high',
+			reviewRequired: false,
+			level: 0
+		};
+	}
+
+	function ocrTopic(candidate: OcrTopicCandidate): EditableTopic {
+		return {
+			id: topicId(),
+			text: candidate.text,
+			source: 'ocr',
+			confidence: candidate.confidence,
+			reviewRequired: candidate.reviewRequired,
+			level: candidate.level
+		};
+	}
+
+	function convertBulkInput() {
+		bulkError = null;
+		let parsed: readonly string[];
+		try {
+			parsed = parseUnitTopics(bulkInput);
+		} catch (caught) {
+			bulkError = caught instanceof Error ? caught.message : 'Não foi possível separar esta lista.';
+			return;
+		}
+		if (parsed.length === 0) {
+			bulkError = 'Cole ou escreva pelo menos um assunto.';
+			return;
+		}
+		const result = appendEditableTopics(parsed.map(manualTopic));
+		if (result.added > 0) bulkInput = '';
+		if (result.truncated) {
+			bulkError = `A unidade aceita até ${MAX_UNIT_TOPICS} assuntos. Os itens excedentes não foram adicionados.`;
+		} else if (result.duplicates > 0) {
+			bulkError = `${result.duplicates} assunto(s) repetido(s) não foram adicionados.`;
+		}
+	}
+
+	function addBlankTopic() {
+		if (topics.length >= MAX_UNIT_TOPICS) {
+			bulkError = `A unidade aceita até ${MAX_UNIT_TOPICS} assuntos.`;
+			return;
+		}
+		topics = [...topics, manualTopic('')];
+		invalidateCoverage();
+	}
+
+	function updateTopic(id: string, event: Event) {
+		const value = (event.currentTarget as HTMLInputElement).value;
+		topics = topics.map((topic) => (topic.id === id ? { ...topic, text: value } : topic));
+		invalidateCoverage();
+	}
+
+	function removeTopic(id: string) {
+		topics = topics.filter((topic) => topic.id !== id);
+		invalidateCoverage();
+	}
+
+	function moveTopic(index: number, direction: -1 | 1) {
+		const target = index + direction;
+		if (target < 0 || target >= topics.length) return;
+		const reordered = [...topics];
+		const current = reordered[index];
+		const other = reordered[target];
+		if (!current || !other) return;
+		reordered[index] = other;
+		reordered[target] = current;
+		topics = reordered;
+		invalidateCoverage();
+	}
+
+	function adjustLevel(id: string, delta: -1 | 1) {
+		topics = topics.map((topic) =>
+			topic.id === id ? { ...topic, level: Math.min(3, Math.max(0, topic.level + delta)) } : topic
+		);
+		invalidateCoverage();
+	}
+
+	async function importPhoto(file: File) {
+		photoError = null;
+		photoNotice = null;
+		if (!photoConsent) {
+			photoError = 'Confirme o aviso de privacidade antes de enviar a foto para leitura.';
+			return;
+		}
+		if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+			photoError = 'Selecione uma foto JPG, PNG ou WebP.';
+			return;
+		}
+
+		photoController?.abort();
+		const activeController = new AbortController();
+		photoController = activeController;
+		photoImporting = true;
+		photoStage = 'preparing';
+		try {
+			const result = await extractTopicsFromPhoto(file, {
+				signal: activeController.signal,
+				onStage: (stage) => (photoStage = stage)
+			});
+			const merged = appendEditableTopics(result.topics.map(ocrTopic));
+			const notes = [`${merged.added} conteúdo(s) extraído(s) viraram campos editáveis.`];
+			if (merged.duplicates > 0) notes.push(`${merged.duplicates} repetido(s) foram ignorados.`);
+			if (merged.truncated || result.truncated) {
+				notes.push(`O limite de ${MAX_UNIT_TOPICS} assuntos foi atingido.`);
+			}
+			if (result.topics.some((topic) => topic.reviewRequired)) {
+				notes.push('Os itens com confiança baixa ficaram marcados para revisão.');
+			}
+			if (result.reusedExistingDocument) {
+				notes.push('A foto já existia no fichário e o OCR existente foi reaproveitado.');
+			}
+			if (result.cleanupWarning) {
+				notes.push('A limpeza do arquivo temporário falhou; ele pode aparecer na biblioteca até nova limpeza.');
+			}
+			photoNotice = notes.join(' ');
+		} catch (caught) {
+			if (caught instanceof DOMException && caught.name === 'AbortError') return;
+			photoError = caught instanceof Error ? caught.message : 'Não foi possível ler esta foto agora.';
+		} finally {
+			if (photoController === activeController) {
+				photoController = null;
+				photoImporting = false;
+				photoStage = null;
+			}
+		}
+	}
+
+	function selectPhoto(event: Event) {
+		const input = event.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		if (file) void importPhoto(file);
+		input.value = '';
+	}
 
 	async function loadNotebookOptions(version = notebookRequests.next()) {
 		notebookLoading = true;
@@ -62,11 +296,11 @@
 	}
 
 	async function analyze() {
-		if (topicPreview.error) {
-			error = topicPreview.error;
+		if (topicValidation.error) {
+			error = topicValidation.error;
 			return;
 		}
-		if (topicPreview.topics.length === 0) {
+		if (topicValidation.topics.length === 0) {
 			error = 'Adicione pelo menos um assunto para analisar.';
 			return;
 		}
@@ -78,7 +312,7 @@
 		loading = true;
 		error = null;
 		try {
-			const result = await analyzeUnitCoverage(topicPreview.topics, {
+			const result = await analyzeUnitCoverage(topicValidation.topics, {
 				notebookId: notebookId || null,
 				signal: activeController.signal
 			});
@@ -107,6 +341,7 @@
 		notebookRequests.next();
 		coverageRequests.next();
 		controller?.abort();
+		photoController?.abort();
 	});
 </script>
 
@@ -119,8 +354,8 @@
 		<p class="eyebrow">Cobertura de conteúdo</p>
 		<h1 id="page-title">O que do conteúdo já está no seu fichário?</h1>
 		<p>
-			Cole os assuntos de uma unidade. O Fichário compara cada item com o texto nativo, OCR e
-			correções já pesquisáveis, sem depender de IA generativa.
+			Monte a ementa digitando, colando uma lista ou fotografando o conteúdo. Antes da análise, cada
+			assunto fica em um campo independente para você revisar e corrigir.
 		</p>
 	</header>
 
@@ -130,7 +365,7 @@
 				<p class="eyebrow">Unidade</p>
 				<h2 id="setup-title">Assuntos para verificar</h2>
 			</div>
-			<span>{topicPreview.topics.length}/{MAX_UNIT_TOPICS} assuntos</span>
+			<span>{topicValidation.nonEmptyCount}/{MAX_UNIT_TOPICS} assuntos</span>
 		</div>
 
 		<div class="fields">
@@ -140,7 +375,7 @@
 			</label>
 			<label>
 				<span>Buscar em</span>
-				<NativeSelect bind:value={notebookId} disabled={notebookLoading}>
+				<NativeSelect bind:value={notebookId} disabled={notebookLoading} onchange={invalidateCoverage}>
 					<option value="">Todo o fichário</option>
 					{#each notebooks as notebook}
 						<option value={notebook.id}>{notebook.name}</option>
@@ -149,19 +384,164 @@
 			</label>
 		</div>
 
-		<label class="topics-field">
-			<span>Lista de assuntos</span>
-			<textarea
-				bind:value={topicInput}
-				rows="9"
-				placeholder={topicPlaceholder}
-			></textarea>
-			<small>Uma linha por assunto. Numeração e marcadores são removidos automaticamente.</small>
-		</label>
+		<div class="input-methods">
+			<section class="input-card" aria-labelledby="manual-input-title">
+				<div>
+					<p class="eyebrow">Digitar ou colar</p>
+					<h3 id="manual-input-title">Lista escrita</h3>
+				</div>
+				<label class="bulk-field">
+					<span>Conteúdos</span>
+					<textarea bind:value={bulkInput} rows="6" placeholder={bulkPlaceholder}></textarea>
+					<small>Uma linha por assunto. Numeração e marcadores são removidos ao converter.</small>
+				</label>
+				<div class="compact-actions">
+					<Button label="Transformar em campos" variant="secondary" onclick={convertBulkInput} />
+					<Button label="Adicionar campo vazio" variant="secondary" onclick={addBlankTopic} />
+				</div>
+				{#if bulkError}<p class="validation" role="status">{bulkError}</p>{/if}
+			</section>
 
-		{#if topicPreview.error}
-			<p class="validation" role="alert">{topicPreview.error}</p>
-		{/if}
+			<section class="input-card photo-card" aria-labelledby="photo-input-title">
+				<div>
+					<p class="eyebrow">Foto da ementa</p>
+					<h3 id="photo-input-title">Extrair com OCR</h3>
+					<p>
+						O Fichário prepara a imagem, lê o texto e separa a lista em campos individuais. A foto é
+						usada temporariamente e removida depois da extração.
+					</p>
+				</div>
+				<label class="consent">
+					<input type="checkbox" bind:checked={photoConsent} disabled={photoImporting} />
+					<span>
+						<strong>Autorizo a leitura automática desta foto.</strong>
+						<small>
+							No nível gratuito do provedor, o conteúdo pode ser usado para melhorar produtos. A chave
+							nunca fica neste navegador e nenhuma cobrança é ativada automaticamente.
+						</small>
+					</span>
+				</label>
+				<div class="photo-actions">
+					<label class:disabled={!photoConsent || photoImporting} class="file-button">
+						Selecionar foto
+						<input
+							type="file"
+							accept="image/jpeg,image/png,image/webp"
+							disabled={!photoConsent || photoImporting}
+							onchange={selectPhoto}
+						/>
+					</label>
+					<label class:disabled={!photoConsent || photoImporting} class="file-button secondary">
+						Usar câmera
+						<input
+							type="file"
+							accept="image/*"
+							capture="environment"
+							disabled={!photoConsent || photoImporting}
+							onchange={selectPhoto}
+						/>
+					</label>
+					{#if photoImporting}
+						<button type="button" class="cancel-link" onclick={() => photoController?.abort()}>
+							Cancelar
+						</button>
+					{/if}
+				</div>
+				{#if photoImporting && photoStage}
+					<p class="photo-status" role="status">{photoStageLabel[photoStage]}</p>
+				{/if}
+				{#if photoError}<p class="validation" role="alert">{photoError}</p>{/if}
+				{#if photoNotice}<p class="photo-notice" role="status">{photoNotice}</p>{/if}
+			</section>
+		</div>
+
+		<section class="topic-editor" aria-labelledby="topic-editor-title">
+			<div class="editor-heading">
+				<div>
+					<p class="eyebrow">Revisão</p>
+					<h3 id="topic-editor-title">Conteúdos estruturados</h3>
+				</div>
+				<Button label="Adicionar assunto" variant="secondary" onclick={addBlankTopic} />
+			</div>
+
+			{#if topics.length === 0}
+				<p class="empty-editor">
+					Os conteúdos aparecerão aqui como campos individuais. Você pode editar, excluir, reordenar e
+					ajustar a hierarquia antes de verificar a cobertura.
+				</p>
+			{:else}
+				<ol class="editable-topics">
+					{#each topics as topic, index (topic.id)}
+						<li class:needs-review={topic.reviewRequired} style={`--topic-level: ${topic.level}`}>
+							<div class="topic-index" aria-hidden="true">{index + 1}</div>
+							<div class="editable-topic-main">
+								<label>
+									<span class="sr-only">Conteúdo {index + 1}</span>
+									<input
+										value={topic.text}
+										maxlength={MAX_TOPIC_LENGTH}
+										placeholder="Digite o assunto"
+										oninput={(event) => updateTopic(topic.id, event)}
+									/>
+								</label>
+								<div class="topic-meta">
+									{#if topic.source === 'ocr'}
+										<span class={`confidence ${topic.confidence}`}>
+											OCR · confiança {confidenceLabel[topic.confidence]}
+										</span>
+									{:else}
+										<span>Manual</span>
+									{/if}
+									{#if topic.level > 0}<span>nível {topic.level + 1}</span>{/if}
+									{#if topic.reviewRequired}<strong>revisar</strong>{/if}
+								</div>
+							</div>
+							<div class="topic-controls" aria-label={`Ações do conteúdo ${index + 1}`}>
+								<button
+									type="button"
+									disabled={topic.level === 0}
+									onclick={() => adjustLevel(topic.id, -1)}
+									aria-label="Promover nível"
+								>←</button>
+								<button
+									type="button"
+									disabled={topic.level === 3}
+									onclick={() => adjustLevel(topic.id, 1)}
+									aria-label="Rebaixar nível"
+								>→</button>
+								<button
+									type="button"
+									disabled={index === 0}
+									onclick={() => moveTopic(index, -1)}
+									aria-label="Mover para cima"
+								>↑</button>
+								<button
+									type="button"
+									disabled={index === topics.length - 1}
+									onclick={() => moveTopic(index, 1)}
+									aria-label="Mover para baixo"
+								>↓</button>
+								<button type="button" class="remove" onclick={() => removeTopic(topic.id)}>Excluir</button>
+							</div>
+						</li>
+					{/each}
+				</ol>
+			{/if}
+
+			{#if topicValidation.error}
+				<p class="validation" role="alert">{topicValidation.error}</p>
+			{/if}
+			{#if duplicateCount > 0}
+				<p class="editor-note" role="status">
+					{duplicateCount} campo(s) repetido(s) serão considerados uma única vez na análise.
+				</p>
+			{/if}
+			<p class="editor-note">
+				A confiança do OCR é um sinal heurístico de revisão, não uma probabilidade estatística. Campos
+				marcados como “revisar” devem ser conferidos antes da análise.
+			</p>
+		</section>
+
 		{#if notebookError}
 			<div class="warning" role="status">
 				<p>{notebookError}</p>
@@ -172,7 +552,7 @@
 		<div class="actions">
 			<Button
 				label={loading ? 'Analisando…' : 'Verificar cobertura'}
-				disabled={loading || topicPreview.topics.length === 0 || Boolean(topicPreview.error)}
+				disabled={loading || topicValidation.topics.length === 0 || Boolean(topicValidation.error)}
 				onclick={() => void analyze()}
 			/>
 			<p>Até quatro pesquisas são executadas em paralelo para evitar rajadas desnecessárias.</p>
@@ -263,13 +643,15 @@
 	.setup,
 	.coverage,
 	.topic-results,
-	.evidence {
+	.evidence,
+	.topic-editor,
+	.input-card {
 		display: grid;
 		gap: 1.25rem;
 	}
 
 	header > p:last-child {
-		max-width: 52rem;
+		max-width: 56rem;
 		color: var(--muted);
 		line-height: 1.65;
 	}
@@ -318,7 +700,10 @@
 	.evidence-meta,
 	.actions,
 	.warning,
-	.error {
+	.error,
+	.editor-heading,
+	.compact-actions,
+	.photo-actions {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
@@ -327,22 +712,39 @@
 
 	.section-heading h2,
 	.coverage-summary h2,
-	.topic-heading h3 {
+	.topic-heading h3,
+	.editor-heading h3,
+	.input-card h3 {
 		margin-bottom: 0;
 	}
 
 	.section-heading > span,
 	.strength,
 	.actions p,
-	.topics-field small {
+	.bulk-field small,
+	.editor-note,
+	.photo-card > div > p:last-child {
 		color: var(--muted);
 		font-size: 0.8rem;
 	}
 
-	.fields {
+	.fields,
+	.input-methods {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) minmax(13rem, 0.38fr);
+		grid-template-columns: minmax(0, 1fr) minmax(13rem, 0.5fr);
 		gap: 0.85rem;
+	}
+
+	.input-methods {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.input-card,
+	.topic-editor {
+		padding: 1rem;
+		border: 1px solid var(--line);
+		border-radius: var(--radius-md);
+		background: var(--surface-strong);
 	}
 
 	label {
@@ -368,15 +770,109 @@
 	}
 
 	textarea {
-		min-height: 13rem;
+		min-height: 9rem;
 		resize: vertical;
+		line-height: 1.55;
+	}
+
+	.compact-actions,
+	.photo-actions,
+	.actions {
+		justify-content: flex-start;
+		flex-wrap: wrap;
+	}
+
+	.consent {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.65rem;
+		padding: 0.85rem;
+		border: 1px solid var(--line);
+		border-radius: var(--radius-sm);
+		background: var(--paper);
+	}
+
+	.consent input {
+		width: auto;
+		margin-top: 0.2rem;
+	}
+
+	.consent span {
+		display: grid;
+		gap: 0.25rem;
+	}
+
+	.consent small {
+		color: var(--muted);
+		font-weight: 500;
+		line-height: 1.45;
+	}
+
+	.file-button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 2.6rem;
+		padding: 0.65rem 0.9rem;
+		border-radius: var(--radius-sm);
+		background: var(--archive);
+		color: var(--surface-strong);
+		cursor: pointer;
+		font-weight: 750;
+	}
+
+	.file-button.secondary {
+		border: 1px solid var(--line-strong);
+		background: var(--surface-strong);
+		color: var(--ink);
+	}
+
+	.file-button.disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.file-button input {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		opacity: 0;
+		pointer-events: none;
+	}
+
+	.cancel-link,
+	.topic-controls button {
+		border: 1px solid var(--line);
+		border-radius: var(--radius-sm);
+		background: var(--surface-strong);
+		color: var(--ink);
+		cursor: pointer;
+		font: inherit;
+	}
+
+	.cancel-link {
+		padding: 0.6rem 0.75rem;
+	}
+
+	.photo-status,
+	.photo-notice,
+	.validation,
+	.warning p,
+	.error p,
+	.editor-note {
+		margin: 0;
+	}
+
+	.photo-status,
+	.photo-notice {
+		color: var(--muted);
 		line-height: 1.55;
 	}
 
 	.validation,
 	.warning p,
 	.error p {
-		margin: 0;
 		color: var(--danger);
 	}
 
@@ -392,8 +888,119 @@
 		background: rgb(155 63 54 / 7%);
 	}
 
-	.actions {
-		justify-content: flex-start;
+	.empty-editor {
+		margin: 0;
+		padding: 1rem;
+		border: 1px dashed var(--line-strong);
+		border-radius: var(--radius-sm);
+		color: var(--muted);
+		line-height: 1.6;
+	}
+
+	.editable-topics {
+		display: grid;
+		gap: 0.65rem;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.editable-topics li {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr) auto;
+		align-items: center;
+		gap: 0.65rem;
+		margin-left: calc(var(--topic-level) * 1.25rem);
+		padding: 0.75rem;
+		border: 1px solid var(--line);
+		border-radius: var(--radius-sm);
+		background: var(--paper);
+	}
+
+	.editable-topics li.needs-review {
+		border-left: 0.3rem solid var(--accent);
+	}
+
+	.topic-index {
+		display: grid;
+		width: 1.8rem;
+		height: 1.8rem;
+		place-items: center;
+		border-radius: 999px;
+		background: var(--archive-soft);
+		color: var(--archive);
+		font-size: 0.75rem;
+		font-weight: 800;
+	}
+
+	.editable-topic-main {
+		display: grid;
+		gap: 0.35rem;
+	}
+
+	.editable-topic-main input {
+		background: var(--surface-strong);
+	}
+
+	.topic-meta {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+		color: var(--muted);
+		font-size: 0.72rem;
+	}
+
+	.topic-meta span,
+	.topic-meta strong {
+		padding: 0.2rem 0.4rem;
+		border-radius: 999px;
+		background: var(--surface-strong);
+	}
+
+	.topic-meta strong {
+		color: var(--accent);
+		text-transform: uppercase;
+	}
+
+	.confidence.high {
+		color: var(--archive);
+	}
+
+	.confidence.low {
+		color: var(--danger);
+	}
+
+	.topic-controls {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: flex-end;
+		gap: 0.35rem;
+	}
+
+	.topic-controls button {
+		min-width: 2rem;
+		padding: 0.45rem 0.55rem;
+	}
+
+	.topic-controls button:disabled {
+		opacity: 0.35;
+		cursor: not-allowed;
+	}
+
+	.topic-controls .remove {
+		color: var(--danger);
+	}
+
+	.sr-only {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip: rect(0, 0, 0, 0);
+		white-space: nowrap;
+		border: 0;
 	}
 
 	.actions p {
@@ -525,6 +1132,12 @@
 		font-size: 0.84rem;
 	}
 
+	@media (max-width: 900px) {
+		.input-methods {
+			grid-template-columns: 1fr;
+		}
+	}
+
 	@media (max-width: 760px) {
 		.fields {
 			grid-template-columns: 1fr;
@@ -535,9 +1148,20 @@
 		.topic-heading,
 		.actions,
 		.warning,
-		.error {
+		.error,
+		.editor-heading {
 			align-items: flex-start;
 			flex-direction: column;
+		}
+
+		.editable-topics li {
+			grid-template-columns: auto minmax(0, 1fr);
+			margin-left: calc(var(--topic-level) * 0.65rem);
+		}
+
+		.topic-controls {
+			grid-column: 1 / -1;
+			justify-content: flex-start;
 		}
 
 		.coverage-summary strong {
