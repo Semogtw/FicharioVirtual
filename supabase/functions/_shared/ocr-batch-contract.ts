@@ -1,11 +1,24 @@
 import { parseOcrPayload, type OcrPayload } from './ocr-contract.ts';
 
+export type OcrContentClass =
+	| 'unknown'
+	| 'book_clean'
+	| 'scan_degraded'
+	| 'handwriting'
+	| 'mixed'
+	| 'table_layout'
+	| 'math'
+	| 'sparse';
+
 export type OcrBatchRequestedPage = {
 	pageId: string;
 	pageNumber: number;
 };
 
-export type OcrBatchPagePayload = OcrPayload & OcrBatchRequestedPage;
+export type OcrBatchPagePayload = OcrPayload &
+	OcrBatchRequestedPage & {
+		contentClass: OcrContentClass;
+	};
 
 export type OcrBatchParseOutcome = {
 	valid: boolean;
@@ -17,6 +30,16 @@ export type OcrBatchParseOutcome = {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_BATCH_PAGES = 100;
+const CONTENT_CLASSES = new Set<OcrContentClass>([
+	'unknown',
+	'book_clean',
+	'scan_degraded',
+	'handwriting',
+	'mixed',
+	'table_layout',
+	'math',
+	'sparse'
+]);
 
 function invalidRequest(): never {
 	throw new TypeError('Invalid OCR batch request');
@@ -93,7 +116,15 @@ export function parseOcrBatchPayload(
 			return invalidProviderResponse(requestedPages);
 		}
 		const page = item as Record<string, unknown>;
-		if (!hasExactKeys(page, ['pageId', 'pageNumber', 'text', 'warnings'])) {
+		const hasLegacyShape = hasExactKeys(page, ['pageId', 'pageNumber', 'text', 'warnings']);
+		const hasClassifiedShape = hasExactKeys(page, [
+			'pageId',
+			'pageNumber',
+			'text',
+			'warnings',
+			'contentClass'
+		]);
+		if (!hasLegacyShape && !hasClassifiedShape) {
 			return invalidProviderResponse(requestedPages);
 		}
 		if (
@@ -101,6 +132,13 @@ export function parseOcrBatchPayload(
 			!UUID.test(page.pageId) ||
 			typeof page.pageNumber !== 'number' ||
 			!Number.isInteger(page.pageNumber)
+		) {
+			return invalidProviderResponse(requestedPages);
+		}
+		if (
+			hasClassifiedShape &&
+			(typeof page.contentClass !== 'string' ||
+				!CONTENT_CLASSES.has(page.contentClass as OcrContentClass))
 		) {
 			return invalidProviderResponse(requestedPages);
 		}
@@ -126,6 +164,9 @@ export function parseOcrBatchPayload(
 			Object.freeze({
 				pageId: page.pageId,
 				pageNumber: page.pageNumber,
+				contentClass: hasClassifiedShape
+					? (page.contentClass as OcrContentClass)
+					: 'unknown',
 				...payload
 			})
 		);
