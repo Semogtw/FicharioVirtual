@@ -31,6 +31,7 @@ Ao registrar progresso, prefira atualizar um desses arquivos em vez de adicionar
 - [`DESKTOP_OCR_WORKER_LOCAL_RUNTIME.md`](DESKTOP_OCR_WORKER_LOCAL_RUNTIME.md) — runtime local do worker.
 - [`CHANDRA_OCR2_DESKTOP_INTEGRATION.md`](CHANDRA_OCR2_DESKTOP_INTEGRATION.md) — decisão e integração do Chandra OCR 2.
 - [`OCR_TELEMETRY_AND_ADAPTIVE_ROUTING.md`](OCR_TELEMETRY_AND_ADAPTIVE_ROUTING.md) — telemetria e estratégia de roteamento adaptativo.
+- [`OCR_IMAGE_PREPROCESSING.md`](OCR_IMAGE_PREPROCESSING.md) — preparação conservadora de fotos/imagens, preservação do original e telemetria do perfil OCR.
 - [`OCR_FAILURE_MATRIX.md`](OCR_FAILURE_MATRIX.md) — matriz de falhas e comportamento esperado.
 - [`OCR_MIGRATION_ROLLOUT.md`](OCR_MIGRATION_ROLLOUT.md) — rollout/migração do fluxo de OCR.
 - [`OCR_STAGING.md`](OCR_STAGING.md) — validação e operação do OCR em staging.

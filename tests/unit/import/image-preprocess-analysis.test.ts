@@ -12,9 +12,9 @@ function darkPixel(target: ReturnType<typeof plane>, x: number, y: number, value
 
 function horizontalText(target: ReturnType<typeof plane>, skewDegrees = 0) {
 	const slope = Math.tan((skewDegrees * Math.PI) / 180);
-	for (let line = 0; line < 7; line += 1) {
-		const baseY = 42 + line * 24;
-		for (let x = 42; x < target.width - 42; x += 1) {
+	for (let line = 0; line < 8; line += 1) {
+		const baseY = 32 + line * 24;
+		for (let x = 26; x < target.width - 26; x += 1) {
 			const y = Math.round(baseY + slope * (x - target.width / 2));
 			for (let thickness = 0; thickness < 3; thickness += 1) {
 				darkPixel(target, x, y + thickness);

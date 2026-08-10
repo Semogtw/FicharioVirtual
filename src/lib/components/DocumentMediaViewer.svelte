@@ -4,8 +4,13 @@
 	import WordGeometryOverlay from '$lib/components/WordGeometryOverlay.svelte';
 	import { downloadBrowserDriveFile } from '$lib/drive/browser-files';
 	import type { PageDetail } from '$lib/domain/page';
+	import type { WordGeometry } from '$lib/ocr/word-geometry';
 	import { openDrivePdfRangeDocument } from '$lib/pdf/drive-range-transport';
 	import { renderPdfDocumentPage, renderPdfPage } from '$lib/pdf/renderer';
+	import {
+		extractPdfDocumentWordGeometry,
+		extractPdfFileWordGeometry
+	} from '$lib/pdf/text-geometry';
 	import type { DocumentDetail } from '$lib/services/document-detail';
 	import { getSupabaseClient } from '$lib/services/supabase';
 
@@ -15,12 +20,21 @@
 		query: string;
 	}
 
+	type RenderedPdf = Readonly<{
+		blob: Blob;
+		geometry: readonly WordGeometry[];
+	}>;
+
 	let { detail, page, query }: DocumentMediaViewerProps = $props();
 	let renderedUrl = $state<string | null>(null);
+	let nativeGeometry = $state<readonly WordGeometry[]>([]);
 	let loading = $state(false);
 	let renderError = $state<string | null>(null);
 	let generation = 0;
 	let ownedObjectUrl: string | null = null;
+	let effectiveGeometry = $derived(
+		page.wordGeometry.length > 0 ? page.wordGeometry : nativeGeometry
+	);
 
 	function releaseObjectUrl() {
 		if (ownedObjectUrl) URL.revokeObjectURL(ownedObjectUrl);
@@ -33,13 +47,29 @@
 		renderedUrl = ownedObjectUrl;
 	}
 
-	async function renderSupabasePdf(sourceUrl: string, pageNumber: number) {
+	function shouldExtractNativeGeometry() {
+		return (
+			detail.kind === 'pdf' &&
+			query.trim().length > 0 &&
+			page.wordGeometry.length === 0 &&
+			typeof page.nativeText === 'string' &&
+			page.nativeText.trim().length > 0
+		);
+	}
+
+	async function renderSupabasePdf(sourceUrl: string, pageNumber: number): Promise<RenderedPdf> {
 		const response = await fetch(sourceUrl, { cache: 'no-store' });
 		if (!response.ok) throw new Error('PDF indisponível');
 		const blob = await response.blob();
 		if (blob.size < 1 || blob.size > 256 * 1024 * 1024) throw new Error('PDF inválido');
 		const file = new File([blob], detail.originalFilename, { type: 'application/pdf' });
-		return renderPdfPage(file, pageNumber);
+		const [rendered, geometry] = await Promise.all([
+			renderPdfPage(file, pageNumber),
+			shouldExtractNativeGeometry()
+				? extractPdfFileWordGeometry(file, pageNumber)
+				: Promise.resolve(Object.freeze([]) as readonly WordGeometry[])
+		]);
+		return Object.freeze({ blob: rendered, geometry });
 	}
 
 	async function drivePdfReferenceSize(documentId: string) {
@@ -48,19 +78,30 @@
 			.select('source_size_bytes')
 			.eq('document_id', documentId)
 			.maybeSingle();
-		if (error || !data || !Number.isSafeInteger(data.source_size_bytes) || data.source_size_bytes < 1) {
+		if (
+			error ||
+			!data ||
+			!Number.isSafeInteger(data.source_size_bytes) ||
+			data.source_size_bytes < 1
+		) {
 			return null;
 		}
 		return data.source_size_bytes;
 	}
 
-	async function renderDrivePdf(fileId: string, pageNumber: number) {
+	async function renderDrivePdf(fileId: string, pageNumber: number): Promise<RenderedPdf> {
 		const client = getSupabaseClient();
 		const totalBytes = await drivePdfReferenceSize(detail.id);
 		if (totalBytes !== null) {
 			const opened = await openDrivePdfRangeDocument({ client, fileId, totalBytes });
 			try {
-				return await renderPdfDocumentPage(opened.document, pageNumber);
+				const [blob, geometry] = await Promise.all([
+					renderPdfDocumentPage(opened.document, pageNumber),
+					shouldExtractNativeGeometry()
+						? extractPdfDocumentWordGeometry(opened.document, pageNumber)
+						: Promise.resolve(Object.freeze([]) as readonly WordGeometry[])
+				]);
+				return Object.freeze({ blob, geometry });
 			} finally {
 				await opened.destroy();
 			}
@@ -68,13 +109,20 @@
 
 		const blob = await downloadBrowserDriveFile({ client, fileId, maximumBytes: 64 * 1024 * 1024 });
 		const file = new File([blob], detail.originalFilename, { type: 'application/pdf' });
-		return renderPdfPage(file, pageNumber);
+		const [rendered, geometry] = await Promise.all([
+			renderPdfPage(file, pageNumber),
+			shouldExtractNativeGeometry()
+				? extractPdfFileWordGeometry(file, pageNumber)
+				: Promise.resolve(Object.freeze([]) as readonly WordGeometry[])
+		]);
+		return Object.freeze({ blob: rendered, geometry });
 	}
 
 	async function refreshMedia(expectedGeneration: number) {
 		loading = true;
 		renderError = null;
 		renderedUrl = null;
+		nativeGeometry = Object.freeze([]);
 		releaseObjectUrl();
 		try {
 			if (detail.originalReference.provider === 'missing') return;
@@ -99,7 +147,8 @@
 					? await renderSupabasePdf(detail.originalReference.url, page.pageNumber)
 					: await renderDrivePdf(detail.originalReference.driveFileId, page.pageNumber);
 			if (expectedGeneration !== generation) return;
-			publishBlob(rendered);
+			nativeGeometry = rendered.geometry;
+			publishBlob(rendered.blob);
 		} catch {
 			if (expectedGeneration !== generation) return;
 			renderError = 'Não foi possível renderizar esta página para marcação espacial.';
@@ -114,6 +163,7 @@
 		detail.originalReference.url;
 		page.id;
 		page.pageNumber;
+		query;
 		generation += 1;
 		void refreshMedia(generation);
 	});
@@ -132,15 +182,17 @@
 	{:else if renderedUrl}
 		<div class="page-image">
 			<img src={renderedUrl} alt={`Página ${page.pageNumber} do original de ${detail.title}`} />
-			{#if query && page.wordGeometry.length > 0}
-				<WordGeometryOverlay geometry={page.wordGeometry} {query} />
+			{#if query && effectiveGeometry.length > 0}
+				<WordGeometryOverlay geometry={effectiveGeometry} {query} />
 			{/if}
 		</div>
 	{:else}
 		<div class="status" role="status">
 			<p>{renderError ?? 'O original não pôde ser exibido aqui.'}</p>
 			{#if detail.originalReference.provider === 'google_drive'}
-				<a href={detail.originalReference.url} target="_blank" rel="noreferrer">Abrir no Google Drive</a>
+				<a href={detail.originalReference.url} target="_blank" rel="noreferrer"
+					>Abrir no Google Drive</a
+				>
 			{:else}
 				<a href={detail.originalReference.url} target="_blank" rel="noreferrer">Abrir original</a>
 			{/if}
@@ -152,7 +204,7 @@
 			<SearchMatch
 				text={page.text}
 				{query}
-				label={page.wordGeometry.length > 0 ? 'Trecho correspondente' : 'Encontrado nesta mídia'}
+				label={effectiveGeometry.length > 0 ? 'Trecho correspondente' : 'Encontrado nesta mídia'}
 				maximumLength={220}
 				compact
 			/>

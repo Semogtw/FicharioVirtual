@@ -1,5 +1,6 @@
 import { parseOcrPayload, type OcrPayload } from './ocr-contract.ts';
 import {
+	filterWordGeometryByTranscription,
 	parseCompactWordGeometry,
 	type OcrWordGeometry
 } from './ocr-word-geometry.ts';
@@ -181,7 +182,9 @@ export function parseOcrBatchPayload(
 			return invalidProviderResponse(requestedPages);
 		}
 		const hasGeometry = hasGeometryShape || hasClassifiedGeometryShape;
-		const wordGeometry = hasGeometry ? parseCompactWordGeometry(page.wordGeometry) : Object.freeze([]);
+		const wordGeometry = hasGeometry
+			? filterWordGeometryByTranscription(parseCompactWordGeometry(page.wordGeometry), payload.text)
+			: Object.freeze([]);
 		parsedById.set(
 			page.pageId,
 			Object.freeze({

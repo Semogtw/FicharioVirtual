@@ -1,6 +1,7 @@
 import type {
 	ImagePreparationMode,
 	ImagePreparationOptions,
+	ImagePreprocessingMetadata,
 	ImageWorkerRequest,
 	ImageWorkerResponse,
 	PreparedImage
@@ -85,6 +86,74 @@ function invalidWorkerResponse(): never {
 	throw new TypeError('Invalid image worker response');
 }
 
+function parsePreprocessingMetadata(
+	value: unknown,
+	width: number,
+	height: number,
+	maxDimension: number
+): ImagePreprocessingMetadata {
+	if (value === null || typeof value !== 'object' || Array.isArray(value)) invalidWorkerResponse();
+	const record = value as Record<string, unknown>;
+	if (
+		!hasExactKeys(record, [
+			'profile',
+			'version',
+			'autoCropApplied',
+			'retainedAreaPermille',
+			'deskewMilliDegrees',
+			'illuminationNormalized',
+			'contrastEnhanced',
+			'fallbackToStandard',
+			'sourceWidth',
+			'sourceHeight',
+			'preparedWidth',
+			'preparedHeight'
+		]) ||
+		record.profile !== 'ocr_clean_v1' ||
+		record.version !== 1 ||
+		typeof record.autoCropApplied !== 'boolean' ||
+		typeof record.retainedAreaPermille !== 'number' ||
+		!Number.isInteger(record.retainedAreaPermille) ||
+		record.retainedAreaPermille < 1 ||
+		record.retainedAreaPermille > 1000 ||
+		typeof record.deskewMilliDegrees !== 'number' ||
+		!Number.isInteger(record.deskewMilliDegrees) ||
+		record.deskewMilliDegrees < -4000 ||
+		record.deskewMilliDegrees > 4000 ||
+		typeof record.illuminationNormalized !== 'boolean' ||
+		typeof record.contrastEnhanced !== 'boolean' ||
+		typeof record.fallbackToStandard !== 'boolean' ||
+		typeof record.sourceWidth !== 'number' ||
+		!Number.isInteger(record.sourceWidth) ||
+		record.sourceWidth < 1 ||
+		record.sourceWidth > 100_000 ||
+		typeof record.sourceHeight !== 'number' ||
+		!Number.isInteger(record.sourceHeight) ||
+		record.sourceHeight < 1 ||
+		record.sourceHeight > 100_000 ||
+		record.preparedWidth !== width ||
+		record.preparedHeight !== height ||
+		width > Math.ceil(maxDimension * 1.1) ||
+		height > Math.ceil(maxDimension * 1.1)
+	) {
+		invalidWorkerResponse();
+	}
+	return Object.freeze({
+		profile: 'ocr_clean_v1',
+		version: 1,
+		autoCropApplied: record.autoCropApplied,
+		retainedAreaPermille: record.retainedAreaPermille,
+		deskewMilliDegrees: record.deskewMilliDegrees,
+		illuminationNormalized: record.illuminationNormalized,
+		contrastEnhanced: record.contrastEnhanced,
+		fallbackToStandard: record.fallbackToStandard,
+		sourceWidth: record.sourceWidth,
+		sourceHeight: record.sourceHeight,
+		preparedWidth: width,
+		preparedHeight: height
+	});
+}
+
 export function parseImageWorkerResponse(
 	data: unknown,
 	expectedId: string,
@@ -120,7 +189,16 @@ export function parseImageWorkerResponse(
 	}
 	if (
 		value.type !== 'success' ||
-		!hasExactKeys(value, ['type', 'id', 'image', 'thumbnail', 'width', 'height', 'format'])
+		!hasExactKeys(value, [
+			'type',
+			'id',
+			'image',
+			'thumbnail',
+			'width',
+			'height',
+			'format',
+			'preprocessing'
+		])
 	) {
 		invalidWorkerResponse();
 	}
@@ -129,6 +207,7 @@ export function parseImageWorkerResponse(
 	const width = value.width;
 	const height = value.height;
 	const format = value.format;
+	const maximumPreparedDimension = Math.ceil(maxDimension * 1.1);
 	if (
 		value.id !== expectedId ||
 		!(image instanceof Blob) ||
@@ -140,16 +219,17 @@ export function parseImageWorkerResponse(
 		typeof width !== 'number' ||
 		!Number.isInteger(width) ||
 		width < 1 ||
-		width > maxDimension ||
+		width > maximumPreparedDimension ||
 		typeof height !== 'number' ||
 		!Number.isInteger(height) ||
 		height < 1 ||
-		height > maxDimension ||
+		height > maximumPreparedDimension ||
 		(format !== 'image/webp' && format !== 'image/jpeg') ||
 		image.type !== format
 	) {
 		invalidWorkerResponse();
 	}
+	const preprocessing = parsePreprocessingMetadata(value.preprocessing, width, height, maxDimension);
 	return Object.freeze({
 		type: 'success',
 		id: expectedId,
@@ -157,7 +237,8 @@ export function parseImageWorkerResponse(
 		thumbnail,
 		width,
 		height,
-		format
+		format,
+		preprocessing
 	});
 }
 
@@ -250,11 +331,13 @@ export class ImagePreparationClient {
 				return;
 			}
 			this.#finish(task, null, {
+				original: task.file,
 				image: response.image,
 				thumbnail: response.thumbnail,
 				width: response.width,
 				height: response.height,
 				format: response.format,
+				preprocessing: response.preprocessing,
 				originalName: task.file.name,
 				originalBytes: task.file.size,
 				preparedBytes: response.image.size + response.thumbnail.size
@@ -271,7 +354,8 @@ export class ImagePreparationClient {
 				file: task.file,
 				maxDimension: selected.maxDimension,
 				thumbnailDimension: 480,
-				quality: selected.quality
+				quality: selected.quality,
+				preprocessingProfile: 'ocr_clean_v1'
 			});
 		} catch {
 			this.#finish(task, new ImagePreparationError('worker_failed'));

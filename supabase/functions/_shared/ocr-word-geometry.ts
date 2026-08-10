@@ -9,6 +9,7 @@ export type OcrWordGeometry = readonly [
 const MAX_WORDS = 20_000;
 const MAX_WORD_LENGTH = 256;
 const COMPACT_GEOMETRY = /^(\d{1,5}),(\d{1,5}),(\d{1,5}),(\d{1,5})\|(.+)$/u;
+const TOKEN = /[\p{L}\p{N}]+/gu;
 
 function validBox(text: string, left: number, top: number, right: number, bottom: number) {
 	return (
@@ -29,6 +30,17 @@ function validBox(text: string, left: number, top: number, right: number, bottom
 	);
 }
 
+function normalizeToken(value: string) {
+	return value
+		.normalize('NFD')
+		.replace(/\p{M}+/gu, '')
+		.toLocaleLowerCase('pt-BR');
+}
+
+function transcriptionTokens(text: string) {
+	return new Set((text.match(TOKEN) ?? []).map(normalizeToken));
+}
+
 export function parseCompactWordGeometry(value: unknown): readonly OcrWordGeometry[] {
 	if (!Array.isArray(value) || value.length > MAX_WORDS) return Object.freeze([]);
 	const geometry: OcrWordGeometry[] = [];
@@ -45,6 +57,20 @@ export function parseCompactWordGeometry(value: unknown): readonly OcrWordGeomet
 		geometry.push(Object.freeze([text, left, top, right, bottom] as const));
 	}
 	return Object.freeze(geometry);
+}
+
+export function filterWordGeometryByTranscription(
+	geometry: readonly OcrWordGeometry[],
+	text: string
+): readonly OcrWordGeometry[] {
+	if (geometry.length === 0 || text.length === 0) return Object.freeze([]);
+	const tokens = transcriptionTokens(text);
+	return Object.freeze(
+		geometry.filter((box) => {
+			const boxTokens = box[0].match(TOKEN) ?? [];
+			return boxTokens.length > 0 && boxTokens.every((token) => tokens.has(normalizeToken(token)));
+		})
+	);
 }
 
 export function parseStoredWordGeometry(value: unknown): readonly OcrWordGeometry[] {

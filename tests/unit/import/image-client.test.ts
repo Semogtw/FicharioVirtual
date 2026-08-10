@@ -26,7 +26,21 @@ class FakeWorker implements ImageWorkerLike {
 				thumbnail: new Blob(['thumb'], { type: 'image/webp' }),
 				width: 1600,
 				height: 1200,
-				format: 'image/webp'
+				format: 'image/webp',
+				preprocessing: {
+					profile: 'ocr_clean_v1',
+					version: 1,
+					autoCropApplied: true,
+					retainedAreaPermille: 910,
+					deskewMilliDegrees: -500,
+					illuminationNormalized: true,
+					contrastEnhanced: true,
+					fallbackToStandard: false,
+					sourceWidth: 2400,
+					sourceHeight: 1800,
+					preparedWidth: 1600,
+					preparedHeight: 1200
+				}
 			}
 		} as MessageEvent<ImageWorkerResponse>);
 	}
@@ -44,23 +58,30 @@ describe('ImagePreparationClient', () => {
 			workers.push(worker);
 			return worker;
 		});
-
-		const pending = client.prepare(image('page.jpg'));
+		const source = image('page.jpg');
+		const pending = client.prepare(source);
 		expect(workers[0]?.request).toEqual(
 			expect.objectContaining({
 				maxDimension: 2560,
 				thumbnailDimension: 480,
-				quality: 0.85
+				quality: 0.85,
+				preprocessingProfile: 'ocr_clean_v1'
 			})
 		);
 		workers[0]?.succeed();
 
 		await expect(pending).resolves.toEqual(
 			expect.objectContaining({
+				original: source,
 				width: 1600,
 				height: 1200,
 				format: 'image/webp',
-				originalName: 'page.jpg'
+				originalName: 'page.jpg',
+				preprocessing: expect.objectContaining({
+					profile: 'ocr_clean_v1',
+					autoCropApplied: true,
+					deskewMilliDegrees: -500
+				})
 			})
 		);
 		expect(workers[0]?.terminated).toBe(true);
