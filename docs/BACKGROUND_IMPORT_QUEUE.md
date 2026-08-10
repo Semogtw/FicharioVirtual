@@ -73,15 +73,17 @@ Além disso, a migration `202608101205_background_ocr_cron.sql` agenda um wake-u
 
 O cron lê as credenciais do Vault em runtime e é deliberadamente no-op quando elas ainda não foram provisionadas.
 
-O ambiente hospedado precisa possuir:
+O ambiente hospedado usa três nomes de configuração:
 
-- secret de Edge Function `OCR_BACKGROUND_WORKER_KEY` — valor aleatório de alta entropia usado exclusivamente para autenticar chamadas server-to-server ao worker;
+- Edge Function `OCR_BACKGROUND_WORKER_KEY` — segredo aleatório usado exclusivamente para autenticar chamadas server-to-server ao worker;
 - Vault `project_url` — URL HTTPS do projeto Supabase;
-- Vault `ocr_background_worker_key` — o mesmo valor de `OCR_BACKGROUND_WORKER_KEY`.
+- Vault `ocr_background_worker_key` — cópia do mesmo segredo interno.
+
+Isso **não exige uma key nova criada manualmente pelo usuário**. O deploy de staging é responsável por garantir `project_url`, gerar `ocr_background_worker_key` no próprio Vault caso ainda não exista, mascarar o valor no runner e sincronizá-lo para `OCR_BACKGROUND_WORKER_KEY` com `supabase secrets set` antes de publicar as Edge Functions. O valor não é salvo no GitHub e não aparece na documentação ou nos logs.
 
 A service-role key continua sendo usada somente dentro do worker para o cliente administrativo do Supabase. Ela não é reutilizada como credencial HTTP do worker, não entra no cron e não deve ser registrada em logs.
 
-A rotação de `OCR_BACKGROUND_WORKER_KEY` deve atualizar o secret das Edge Functions e o valor `ocr_background_worker_key` no Vault como uma única operação administrativa, evitando deixar kick/cron temporariamente apontando para credenciais diferentes.
+A rotação do segredo deve acontecer pelo mesmo caminho administrativo, mantendo Vault e Edge Functions sincronizados como uma única operação.
 
 ## Segurança
 
