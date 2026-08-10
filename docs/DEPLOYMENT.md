@@ -179,7 +179,7 @@ supabase secrets set \
 
 Esses valores protegem memória/tamanho/duração. Não representam franquia diária da aplicação.
 
-A política JWT fica versionada em `supabase/config.toml`; não enfraqueça funções autenticadas na linha de comando. O callback OAuth é a exceção documentada porque recebe redirecionamento externo e aplica `state` de uso único + PKCE.
+A política JWT fica versionada em `supabase/config.toml`; não enfraqueça funções autenticadas na linha de comando. As exceções `verify_jwt=false` são fronteiras deliberadas: o callback OAuth recebe o redirecionamento externo e aplica origem + `state` de uso único + PKCE; `desktop-ocr-pair` permite o resgate inicial por código de uso único antes de existir identidade do dispositivo; e `desktop-ocr-worker` autentica cada chamada pelo esquema dedicado `FicharioWorker`. Nenhuma dessas exceções transforma a função em API irrestrita.
 
 O segredo antigo `OCR_DAILY_HARD_LIMIT` não deve ser reintroduzido como autoridade de bloqueio.
 

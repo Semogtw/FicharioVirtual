@@ -8,17 +8,17 @@ function read(path: string) {
 }
 
 describe('deployable static artifact workflow', () => {
-	it('is manual, read-only, and selects a protected deployment environment', () => {
+	it('is manual, read-only, and hard-coded to the protected staging environment', () => {
 		const workflow = read('.github/workflows/build-deployment-artifact.yml');
 
 		expect(workflow).toContain('workflow_dispatch:');
-		expect(workflow).toContain('target_environment:');
-		expect(workflow).toContain('type: choice');
-		expect(workflow).toContain('- staging');
-		expect(workflow).toContain('- production');
-		expect(workflow).toContain('environment: ${{ inputs.target_environment }}');
+		expect(workflow).toContain('environment: staging');
+		expect(workflow).toContain('TARGET_ENVIRONMENT: staging');
 		expect(workflow).toContain('contents: read');
 		expect(workflow).toContain('persist-credentials: false');
+		expect(workflow).not.toContain('target_environment:');
+		expect(workflow).not.toContain('environment: production');
+		expect(workflow).not.toContain('- production');
 	});
 
 	it('builds with public Supabase values supplied through step environment variables', () => {
@@ -50,27 +50,22 @@ describe('deployable static artifact workflow', () => {
 		);
 	});
 
-	it('packages only the static output with portable checksums and a commit manifest', () => {
+	it('delegates deterministic packaging to the shared staging-only packager', () => {
 		const workflow = read('.github/workflows/build-deployment-artifact.yml');
+		const packager = read('tools/deploy/package-static-artifact.sh');
 
-		expect(workflow).toContain('mkdir -p fichario-deploy/site fichario-deploy/source');
-		expect(workflow).toContain('cp -a build/. fichario-deploy/site/');
-		expect(workflow).toContain('cp package.json pnpm-lock.yaml fichario-deploy/source/');
-		expect(workflow).toContain(
-			"package_sha256=$(sha256sum fichario-deploy/source/package.json | cut -d' ' -f1)"
+		expect(workflow).toContain('run: bash tools/deploy/package-static-artifact.sh fichario-deploy');
+		expect(packager).toContain('mkdir -p "$output_name/site" "$output_name/source" "$output_name/checks"');
+		expect(packager).toContain('cp -a build/. "$output_name/site/"');
+		expect(packager).toContain('cp package.json pnpm-lock.yaml "$output_name/source/"');
+		expect(packager).toContain("echo 'schema_version=2'");
+		expect(packager).toContain('echo "source_commit=$source_commit"');
+		expect(packager).toContain("echo 'target_environment=staging'");
+		expect(packager).toContain(
+			'find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS'
 		);
-		expect(workflow).toContain(
-			"lock_sha256=$(sha256sum fichario-deploy/source/pnpm-lock.yaml | cut -d' ' -f1)"
-		);
-		expect(workflow).toContain(
-			'find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum'
-		);
-		expect(workflow).toContain("echo 'schema_version=2'");
-		expect(workflow).toContain('source_commit=${GITHUB_SHA}');
-		expect(workflow).toContain('target_environment=${TARGET_ENVIRONMENT}');
-		expect(workflow).toContain(
-			'fichario-static-${{ github.sha }}-${{ inputs.target_environment }}'
-		);
+		expect(packager).toContain('sha256sum -c SHA256SUMS');
+		expect(workflow).toContain('name: fichario-static-${{ github.sha }}-staging');
 		expect(workflow).toContain('path: fichario-deploy/');
 		expect(workflow).toContain('if-no-files-found: error');
 		expect(workflow).not.toContain('supabase db push');

@@ -32,8 +32,8 @@ Esta página não publica porcentagem global. Prontidão significa evidência re
 - URLs assinadas curtas;
 - Edge Functions com CORS fail-closed e `Cache-Control: no-store`;
 - JWT explícito em `supabase/config.toml`;
-- somente o callback OAuth sem JWT de gateway;
-- callback protegido por origem, `state` de uso único e PKCE;
+- exceções `verify_jwt=false` limitadas ao callback OAuth, ao resgate de pareamento e ao endpoint do worker, cada uma com autenticação própria no código;
+- callback OAuth protegido por origem, `state` de uso único e PKCE;
 - gates que proíbem secrets no frontend e workflows inseguros;
 - recibo CI completo do SHA `f87e1edc` / run `31333367357` com frontend, source/offline, Chromium, Deno/Edge e banco local aprovados;
 - deploy Supabase do mesmo checkpoint concluído em `31333367356`;

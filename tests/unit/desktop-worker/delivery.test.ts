@@ -34,6 +34,7 @@ function result(jobId = JOB_ID) {
 		rawText: 'synthetic transcript',
 		correctedText: null,
 		warnings: [],
+		wordGeometry: [],
 		contentType: 'printed',
 		needsReview: false,
 		timingMs: 1000
