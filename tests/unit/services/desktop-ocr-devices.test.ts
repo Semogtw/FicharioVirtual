@@ -102,7 +102,9 @@ describe('desktop OCR device service', () => {
 
 	it('rejects invalid ids before reaching Supabase', async () => {
 		const rpc = vi.fn();
-		await expect(revokeDesktopOcrDevice('../device', { rpc } as never)).rejects.toThrow('device id');
+		await expect(revokeDesktopOcrDevice('../device', { rpc } as never)).rejects.toThrow(
+			'device id'
+		);
 		expect(rpc).not.toHaveBeenCalled();
 	});
 
