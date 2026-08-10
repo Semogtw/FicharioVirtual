@@ -110,9 +110,7 @@ export async function analyzeUnitCoverage(
 
 			if (response.analysis.mode === 'hybrid') {
 				return summarizeSemanticCoverage(
-					response.topics.map((item) =>
-						classifySemanticTopicCoverage(item.topic, item.candidates)
-					),
+					response.topics.map((item) => classifySemanticTopicCoverage(item.topic, item.candidates)),
 					response.analysis
 				);
 			}
