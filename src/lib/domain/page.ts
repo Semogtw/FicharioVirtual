@@ -1,3 +1,4 @@
+import { parseWordGeometry, type WordGeometry } from '$lib/ocr/word-geometry';
 import type { ExtractionSource, Json, ProcessingStatus } from '$lib/types/database';
 
 export type PageWarning = {
@@ -16,6 +17,7 @@ export type PageDetail = PageTextSources & {
 	pageNumber: number;
 	text: string;
 	extractionSource: ExtractionSource | null;
+	wordGeometry: readonly WordGeometry[];
 	warnings: readonly PageWarning[];
 	status: ProcessingStatus;
 	wasManuallyReviewed: boolean;
@@ -29,6 +31,7 @@ export type PageRecord = {
 	ocr_raw_text: string | null;
 	corrected_text: string | null;
 	extraction_source: ExtractionSource | null;
+	ocr_word_geometry: Json;
 	warnings: Json;
 	status: ProcessingStatus;
 	was_manually_reviewed: boolean;
@@ -76,6 +79,7 @@ export function mapPageRecord(record: PageRecord): PageDetail {
 		...sources,
 		text: effectivePageText(sources),
 		extractionSource: record.extraction_source,
+		wordGeometry: parseWordGeometry(record.ocr_word_geometry),
 		warnings: safeWarnings(record.warnings),
 		status: record.status,
 		wasManuallyReviewed: record.was_manually_reviewed,
