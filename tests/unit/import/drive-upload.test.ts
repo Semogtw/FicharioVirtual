@@ -54,7 +54,13 @@ function driveFile() {
 	};
 }
 
-function fixture({ failTemporary = false, failMetadata = false } = {}) {
+function fixture({
+	failTemporaryAt = null,
+	failMetadata = false
+}: {
+	failTemporaryAt?: 'ocr' | 'thumbnail' | null;
+	failMetadata?: boolean;
+} = {}) {
 	const uploadedTemporary: string[] = [];
 	const uploadedOriginal: Array<{ blob: Blob; name: string; parentFolderId: string }> = [];
 	const removedTemporary: string[][] = [];
@@ -76,7 +82,12 @@ function fixture({ failTemporary = false, failMetadata = false } = {}) {
 		},
 		async uploadTemporary(path) {
 			uploadedTemporary.push(path);
-			if (failTemporary) throw new Error('temporary failed');
+			if (
+				(failTemporaryAt === 'ocr' && path.endsWith('/ocr.webp')) ||
+				(failTemporaryAt === 'thumbnail' && path.endsWith('/thumbnail.jpg'))
+			) {
+				throw new Error('temporary failed');
+			}
 		},
 		async removeTemporary(paths) {
 			removedTemporary.push([...paths]);
@@ -158,8 +169,8 @@ describe('Drive-first image upload', () => {
 		});
 	});
 
-	it('deletes the Drive original when temporary upload or metadata publication fails', async () => {
-		const temporary = fixture({ failTemporary: true });
+	it('deletes the Drive original when the first temporary upload fails', async () => {
+		const temporary = fixture({ failTemporaryAt: 'ocr' });
 		await expect(
 			uploadPreparedImageToDriveWithGateway(
 				{ prepared: prepared() },
@@ -167,8 +178,24 @@ describe('Drive-first image upload', () => {
 				dependencies()
 			)
 		).rejects.toThrow('temporary failed');
+		expect(temporary.removedTemporary).toEqual([]);
 		expect(temporary.deletedDrive).toEqual([driveFileId]);
+	});
 
+	it('cleans the first derivative if the second temporary upload fails', async () => {
+		const temporary = fixture({ failTemporaryAt: 'thumbnail' });
+		await expect(
+			uploadPreparedImageToDriveWithGateway(
+				{ prepared: prepared() },
+				temporary.gateway,
+				dependencies()
+			)
+		).rejects.toThrow('temporary failed');
+		expect(temporary.removedTemporary).toEqual([[`${userId}/${documentId}/ocr.webp`]]);
+		expect(temporary.deletedDrive).toEqual([driveFileId]);
+	});
+
+	it('cleans both derivatives and Drive source when metadata publication fails', async () => {
 		const metadata = fixture({ failMetadata: true });
 		await expect(
 			uploadPreparedImageToDriveWithGateway(
@@ -178,11 +205,8 @@ describe('Drive-first image upload', () => {
 			)
 		).rejects.toThrow('metadata failed');
 		expect(metadata.removedTemporary).toEqual([
-		[
-			`${userId}/${documentId}/ocr.webp`,
-			`${userId}/${documentId}/thumbnail.jpg`
-		]
-	]);
+			[`${userId}/${documentId}/ocr.webp`, `${userId}/${documentId}/thumbnail.jpg`]
+		]);
 		expect(metadata.deletedDrive).toEqual([driveFileId]);
 	});
 

@@ -39,14 +39,14 @@ Ao registrar progresso, prefira atualizar um desses arquivos em vez de adicionar
 
 ## Onde registrar cada tipo de informação
 
-| Informação | Arquivo preferencial |
-| --- | --- |
-| Estado atual e progresso recente | `CURRENT_STATUS.md` |
-| O que falta para release/deploy | `READINESS.md` |
-| Próximas etapas de implementação | `IMPLEMENTATION_PLAN.md` |
-| Runs, gates, testes e evidências | `TESTING.md` |
-| Decisão arquitetural duradoura | `PROJECT_SPEC.md` ou `superpowers/specs/` |
-| Procedimento operacional | runbook específico em `docs/` |
-| Detalhes de OCR/IA | documentação específica de OCR/IA |
+| Informação                       | Arquivo preferencial                      |
+| -------------------------------- | ----------------------------------------- |
+| Estado atual e progresso recente | `CURRENT_STATUS.md`                       |
+| O que falta para release/deploy  | `READINESS.md`                            |
+| Próximas etapas de implementação | `IMPLEMENTATION_PLAN.md`                  |
+| Runs, gates, testes e evidências | `TESTING.md`                              |
+| Decisão arquitetural duradoura   | `PROJECT_SPEC.md` ou `superpowers/specs/` |
+| Procedimento operacional         | runbook específico em `docs/`             |
+| Detalhes de OCR/IA               | documentação específica de OCR/IA         |
 
 A regra geral é manter o `README.md` da raiz útil mesmo meses depois: detalhes voláteis devem viver aqui, nos documentos responsáveis por acompanhar sua evolução.

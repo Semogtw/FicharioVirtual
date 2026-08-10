@@ -60,9 +60,7 @@ describe('parseOcrBatchPayload', () => {
 		);
 
 		expect(parsed.valid).toBe(true);
-		expect(parsed.pages[0]?.wordGeometry).toEqual([
-			['fotossintcse', 1200, 2400, 3500, 2900]
-		]);
+		expect(parsed.pages[0]?.wordGeometry).toEqual([['fotossintcse', 1200, 2400, 3500, 2900]]);
 	});
 
 	it('drops a geometrically valid provider box when its word is absent from the OCR transcription', () => {
@@ -72,10 +70,7 @@ describe('parseOcrBatchPayload', () => {
 					{
 						...result(first, 'A fotossintcse ocorre.'),
 						contentClass: 'scan_degraded',
-						wordGeometry: [
-							'1200,2400,3500,2900|fotossintcse',
-							'4000,2400,5200,2900|inventada'
-						]
+						wordGeometry: ['1200,2400,3500,2900|fotossintcse', '4000,2400,5200,2900|inventada']
 					}
 				]
 			}),
@@ -83,9 +78,7 @@ describe('parseOcrBatchPayload', () => {
 		);
 
 		expect(parsed.valid).toBe(true);
-		expect(parsed.pages[0]?.wordGeometry).toEqual([
-			['fotossintcse', 1200, 2400, 3500, 2900]
-		]);
+		expect(parsed.pages[0]?.wordGeometry).toEqual([['fotossintcse', 1200, 2400, 3500, 2900]]);
 	});
 
 	it('keeps valid unique pages while reporting omissions for subset retry', () => {

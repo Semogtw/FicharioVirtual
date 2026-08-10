@@ -62,7 +62,9 @@ Deno.serve(async (request) => {
 
 	const { data: document, error: loadError } = await supabase
 		.from('documents')
-		.select('storage_path,source_storage_path,thumbnail_path,drive_file_id,pages(temporary_image_path)')
+		.select(
+			'storage_path,source_storage_path,thumbnail_path,drive_file_id,pages(temporary_image_path)'
+		)
 		.eq('id', documentId)
 		.maybeSingle();
 	if (loadError) return respond(503, 'document_lookup_failed');

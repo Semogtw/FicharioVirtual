@@ -291,10 +291,14 @@ export async function listGeminiOcrCandidates(
 	try {
 		result = await gateway(client).rpc('list_gemini_ocr_candidates');
 	} catch {
-		throw new DesktopOcrJobsError('Não foi possível carregar os trabalhos disponíveis para OCR local.');
+		throw new DesktopOcrJobsError(
+			'Não foi possível carregar os trabalhos disponíveis para OCR local.'
+		);
 	}
 	if (result.error) {
-		throw new DesktopOcrJobsError('Não foi possível carregar os trabalhos disponíveis para OCR local.');
+		throw new DesktopOcrJobsError(
+			'Não foi possível carregar os trabalhos disponíveis para OCR local.'
+		);
 	}
 	const candidates = parseCandidates(result.data);
 	if (!candidates) {
@@ -331,12 +335,22 @@ export function returnDesktopOcrJobToGemini(
 	pageId: string,
 	client?: SupabaseClient<Database>
 ): Promise<DesktopOcrJobRouteChange> {
-	return changeRoute(pageId, 'gemini', client, 'Não foi possível devolver este trabalho ao Gemini.');
+	return changeRoute(
+		pageId,
+		'gemini',
+		client,
+		'Não foi possível devolver este trabalho ao Gemini.'
+	);
 }
 
 export function sendGeminiOcrJobToDesktop(
 	pageId: string,
 	client?: SupabaseClient<Database>
 ): Promise<DesktopOcrJobRouteChange> {
-	return changeRoute(pageId, 'desktop', client, 'Não foi possível enviar este trabalho ao OCR local.');
+	return changeRoute(
+		pageId,
+		'desktop',
+		client,
+		'Não foi possível enviar este trabalho ao OCR local.'
+	);
 }

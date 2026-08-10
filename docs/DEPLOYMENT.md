@@ -1,42 +1,103 @@
 # Deployment do Fichário Virtual
 
-## Topologia alvo
+**Última revisão:** 10 de agosto de 2026
+
+Este é o runbook canônico do site. A regra central é: **construir, verificar e publicar bytes identificados por SHA e checksums, sem reconstruir durante a promoção**.
+
+No estado atual, o pipeline executável é deliberadamente **staging-only**. Não existe backend Supabase de produção nem configuração pública de produção pronta; portanto o repositório não oferece atualmente um caminho de artifact/deploy de produção. Não aponte produção para staging para contornar essa ausência.
+
+Runbooks complementares:
+
+- `docs/CLOUDFLARE_SETUP.md` — configuração e operação do Cloudflare Pages;
+- `docs/SUPABASE_STAGING.md` — backend de staging;
+- `docs/OCR_STAGING.md` — validação do OCR;
+- `docs/GOOGLE_DRIVE_SETUP.md` — OAuth/Drive/Picker;
+- `docs/DESKTOP_OCR_WORKER.md` — worker local;
+- `docs/READINESS.md` — evidências e bloqueios atuais.
+
+## 1. Topologia
 
 ```text
-Cloudflare Pages
-└── frontend estático SvelteKit
+Cloudflare Pages — fichario-virtual
+└── frontend estático SvelteKit/PWA
 
-Cloudflare Pages — projeto separado
+Cloudflare Pages — fichario-models
 └── artefatos públicos e fragmentados de modelos
 
-Google Drive
-└── arquivos originais permanentes
-
-Supabase
+Supabase staging
 ├── Auth
 ├── PostgreSQL + RLS
 ├── Storage privado temporário
-├── Edge Functions Drive e Gemini
+├── Edge Functions Drive/Gemini
 ├── manifestos e filas OCR
 └── API restrita do worker desktop
+
+Google Drive
+└── originais permanentes
 
 Computador confiável
 └── Fichário Desktop OCR Worker
 ```
 
-Cloudflare não recebe documentos privados. O Gemini permanece isolado no backend. O worker local inicia somente conexões HTTPS de saída e não exige porta pública.
+Cloudflare não recebe documentos privados, texto OCR, refresh token do Drive, service-role do Supabase ou chave Gemini. O worker local inicia somente conexões HTTPS de saída e não exige porta pública.
 
-Runbooks complementares:
+## 2. Estado operacional atual
 
-- `docs/CLOUDFLARE_SETUP.md`;
-- `docs/DESKTOP_OCR_WORKER.md`;
-- `docs/GOOGLE_DRIVE_SETUP.md`;
-- `docs/SUPABASE_STAGING.md`;
-- `docs/OCR_STAGING.md`.
+Em 10 de agosto de 2026:
 
-## 1. Preparar o Supabase
+- os projetos Pages `fichario-virtual` e `fichario-models` já existem;
+- `fichario-virtual` possui production branch administrativa `main`, build estático para `build/`, cache e Node 22 configurados;
+- preview do Pages possui a configuração pública do Supabase staging;
+- production do Pages **não** possui URL/chave do Supabase, por fail-closed deliberado;
+- não existe backend Supabase de produção;
+- auto-deploy Git está desligado enquanto a `main` recebe mudanças concorrentes;
+- o primeiro Direct Upload real de staging ainda está pendente;
+- build, empacotamento, identidade do artifact e gate HTTP pós-deploy possuem contratos versionados;
+- o fluxo executável de build/publicação é restrito a staging até a infraestrutura de produção existir.
 
-Crie o projeto e aplique as migrations em ordem:
+## 3. Fronteiras de ambiente
+
+Há duas fronteiras independentes.
+
+### Build de staging
+
+Environment GitHub:
+
+```text
+staging
+```
+
+Contém somente a configuração pública necessária para congelar o frontend, como URL/publishable key do Supabase e, quando habilitado, o trio público do Google Picker.
+
+### Publicação de staging
+
+Environment GitHub:
+
+```text
+staging-deploy
+```
+
+Contém as credenciais Cloudflare de escopo mínimo usadas pelo Direct Upload.
+
+Não misture credenciais de deploy no environment de build e não forneça segredos backend ao frontend.
+
+### Produção
+
+`production` e `production-deploy` são estados futuros, não caminhos executáveis atuais. Antes de reintroduzir suporte a produção, precisam existir no mínimo:
+
+1. backend Supabase de produção isolado;
+2. configuração pública de produção;
+3. secrets/vars de produção nos environments corretos;
+4. políticas de proteção/revisão apropriadas;
+5. artifact de produção com contrato próprio;
+6. promoção do mesmo artifact validado, sem rebuild;
+7. smoke e rollback ensaiados.
+
+Até isso existir, qualquer mudança que reintroduza opções de `production` nos workflows atuais deve falhar nos gates offline.
+
+## 4. Preparar o Supabase
+
+Para um ambiente novo:
 
 ```bash
 supabase link --project-ref <project-ref>
@@ -44,68 +105,45 @@ supabase db push
 supabase test db
 ```
 
-O rollout de OCR em lotes depende, no mínimo, de:
-
-```text
-202608060014_provider_only_ocr_batches.sql
-202608060015_ocr_batch_usage_and_hardening.sql
-202608060016_harden_ocr_batch_transitions.sql
-```
-
-Essas migrations:
-
-- removem a assinatura com limite diário do aplicativo;
-- criam `ocr_batches` e vínculos ordenados em `ocr_jobs`;
-- mantêm páginas, lotes, chamadas e tentativas como telemetria;
-- restringem escrita de manifestos aos RPCs validados;
-- tornam transições terminais idempotentes;
-- preservam `blocked_quota` somente para quota real do provedor.
-
-Depois regenere os tipos:
+Depois regenere e compare os tipos:
 
 ```bash
 supabase gen types typescript --linked > src/lib/types/database.ts
 pnpm format src/lib/types/database.ts
 ```
 
-O arquivo versionado é um espelho provisório. Não promova a release sem comparar os tipos gerados com o schema implantado.
+Migrations são forward-only. Corrija por uma migration nova; não edite migration já aplicada.
 
-Migrations são forward-only. Corrija por nova migration; não edite uma migration já aplicada.
+### Usuário autorizado
 
-## 2. Configurar usuário autorizado
-
-Crie a conta no Supabase Auth e adicione o UUID em `public.app_users`:
+Crie a conta no Auth e adicione o UUID em `public.app_users`:
 
 ```sql
 insert into public.app_users (user_id, is_active)
 values ('<auth-user-uuid>', true);
 ```
 
-Email não é chave de autorização nas políticas. A PWA usa `auth.uid()` e allowlist fail-closed.
+Email não é chave de autorização. A aplicação usa `auth.uid()` e allowlist fail-closed.
 
-Credenciais do worker desktop usam tabelas e funções próprias. Elas não substituem a sessão Supabase e não recebem SQL direto.
-
-## 3. Configurar Storage
+### Storage
 
 Confirme:
 
 - bucket `documents` privado;
-- uploads somente em `<auth.uid()>/<document-id>/...`;
+- uploads em `<auth.uid()>/<document-id>/...`;
 - download negado sem sessão;
-- URL assinada curta;
+- URLs assinadas curtas;
 - remoção recusada para outro usuário;
-- temporário preservado enquanto existir rota pendente;
+- temporário preservado enquanto existir processamento pendente;
 - limpeza somente depois de persistência segura ou cancelamento confirmado.
 
-O original permanente fica no Google Drive. O Storage Supabase contém páginas derivadas, fallback transitório e migração controlada.
+O original permanente pertence ao Google Drive. Storage Supabase é temporário/derivado, não repositório permanente dos originais.
 
-O `supabase/config.toml` mantém `file_size_limit = "20MiB"` para o ambiente local. Já a migration `202608060014_provider_only_ocr_batches.sql` eleva o bucket remoto `documents` para pelo menos 50 MiB como compatibilidade transitória durante a migração Drive-first. Esse valor não é o limite arquitetural do documento: o fluxo normal envia o original diretamente ao Drive, enquanto páginas temporárias acima de 12 MiB recebem uma segunda renderização conservadora antes do envio ao Storage. Não aumente o bucket além disso sem necessidade e não trate os 50 MiB transitórios como autorização para guardar originais permanentemente no Supabase.
-
-## 4. Configurar Google Drive
+## 5. Configurar Google Drive
 
 Siga `docs/GOOGLE_DRIVE_SETUP.md`.
 
-Requisitos:
+Requisitos principais:
 
 - escopo exato `https://www.googleapis.com/auth/drive.file`;
 - refresh token somente no backend;
@@ -116,15 +154,11 @@ Requisitos:
 - ausência, reconexão e conflitos;
 - migração com rollback.
 
-Uploads locais grandes usam sessão retomável do Drive. O download direto do Picker no navegador aceita até 50 MiB; acima disso o arquivo precisa permanecer ou ser copiado dentro do fluxo Drive-first, sem ser baixado integralmente pelo navegador.
+O callback OAuth continua em Edge Function do Supabase. Trocar o host do site exige revisar origens/retornos autorizados, mas não mover segredos Google para Cloudflare.
 
-A troca do host público altera a origem da aplicação e os retornos autorizados. O callback OAuth continua em Edge Function do Supabase.
+## 6. Configurar Gemini e Edge Functions
 
-## 5. Configurar Gemini e Edge Functions
-
-Crie projeto Gemini sem billing vinculado e escolha versão estável disponível no nível gratuito na data do deployment.
-
-Secrets obrigatórios:
+Secrets backend típicos:
 
 ```bash
 supabase secrets set \
@@ -143,90 +177,32 @@ supabase secrets set \
   OCR_REQUEST_TIMEOUT_MS=120000
 ```
 
-Esses controles protegem memória, tamanho e duração; não são franquia diária. Valores padrão em código:
+Esses valores protegem memória/tamanho/duração. Não representam franquia diária da aplicação.
 
-```text
-páginas por lote: 40
-bytes derivados por chamada: 12 MiB
-prazo da chamada: 120 segundos
-```
+A política JWT fica versionada em `supabase/config.toml`; não enfraqueça funções autenticadas na linha de comando. O callback OAuth é a exceção documentada porque recebe redirecionamento externo e aplica `state` de uso único + PKCE.
 
-Limites absolutos da Edge Function:
+O segredo antigo `OCR_DAILY_HARD_LIMIT` não deve ser reintroduzido como autoridade de bloqueio.
 
-```text
-até 100 páginas por invocação
-até 48 MiB de derivados por chamada
-até 14 MiB por página derivada
-```
+## 7. Configuração pública do frontend
 
-Remova o segredo obsoleto depois da implantação:
-
-```bash
-supabase secrets unset OCR_DAILY_HARD_LIMIT
-```
-
-A função não lê esse valor. Mantê-lo no painel não bloqueia o código novo, mas removê-lo evita confusão operacional.
-
-Implante todas as funções atualmente usadas pela PWA:
-
-```bash
-supabase functions deploy process-ocr
-supabase functions deploy delete-document
-supabase functions deploy drive-oauth-start
-supabase functions deploy drive-oauth-callback
-supabase functions deploy drive-access-token
-supabase functions deploy drive-resolve-folder
-supabase functions deploy drive-run-jobs
-supabase functions deploy drive-sync
-```
-
-A política JWT está versionada em `supabase/config.toml`. Todas as APIs autenticadas usam `verify_jwt = true`. Somente `drive-oauth-callback` usa `verify_jwt = false`, pois o redirecionamento do Google não carrega uma sessão Supabase; essa função valida a origem configurada, o `state` OAuth de uso único e o fluxo PKCE antes de concluir a conexão. Não use `supabase functions deploy --no-verify-jwt` nem enfraqueça as demais funções na linha de comando.
-
-Funções futuras do worker precisam de autenticação de dispositivo explícita e fail-closed.
-
-## 6. Contrato de OCR implantado
-
-`process-ocr` aceita:
-
-```json
-{ "pageId": "<uuid>" }
-```
-
-para compatibilidade, ou:
-
-```json
-{ "pageIds": ["<uuid>", "<uuid>"] }
-```
-
-Um `batchId` persistido pode acompanhar a lista quando o chamador já possui manifesto.
-
-A função:
-
-1. valida páginas únicas de um único documento;
-2. reivindica cada trabalho sem teto diário local;
-3. baixa derivados sequencialmente;
-4. respeita limite agregado;
-5. registra um manifesto e uma chamada;
-6. envia várias imagens em uma única requisição Gemini;
-7. exige retorno associado por `pageId` e número original;
-8. persiste páginas válidas independentemente;
-9. marca omissões, duplicações e truncamento para divisão;
-10. limpa somente temporários concluídos;
-11. preserva quota real e falhas transitórias para retomada.
-
-O original não é reescrito ou comprimido. A compressão significa apenas uma segunda renderização temporária conservadora quando uma página derivada ultrapassa 12 MiB.
-
-## 7. Variáveis públicas do frontend
+Obrigatória para o artifact staging:
 
 ```text
 PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
 PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_<valor>
-PUBLIC_GOOGLE_CLIENT_ID=<quando o Picker estiver habilitado>
-PUBLIC_GOOGLE_PICKER_API_KEY=<chave pública restrita>
-PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER=<número do projeto>
 ```
 
-Nunca cadastrar no Cloudflare Pages:
+Google Picker, quando habilitado, usa o trio público opcional:
+
+```text
+PUBLIC_GOOGLE_CLIENT_ID
+PUBLIC_GOOGLE_PICKER_API_KEY
+PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER
+```
+
+Os três precisam estar presentes juntos ou todos ausentes. O workflow de artifact falha em configuração parcial.
+
+Nunca fornecer ao frontend/Pages:
 
 ```text
 GEMINI_API_KEY
@@ -236,127 +212,207 @@ DRIVE_REFRESH_TOKEN
 OCR_WORKER_DEVICE_TOKEN
 ```
 
-## 8. Construir o frontend
+## 8. Gate do SHA candidato
 
-```bash
-corepack enable
-pnpm install --frozen-lockfile
-pnpm verify
+O workflow normal do próprio repositório é a fonte principal de validação:
+
+```text
+Validate current head
 ```
 
-O output estático fica em `build/`.
+Ele cobre frontend, gates source/offline, Chromium/E2E, Deno/Edge Functions e banco local. Durante desenvolvimento concorrente, `cancel-in-progress: true` pode encerrar um run quando a `main` avança. Run cancelado não é PASS nem falha funcional do código.
 
-O workflow manual `Build deployable Fichário artifact` usa environment protegido e executa `pnpm verify` antes de empacotar. Depois de baixar:
+Para release/deploy, o recibo terminal deve corresponder ao **mesmo SHA** que será empacotado. Não use um SHA verde antigo para aprovar um SHA novo.
+
+O repositório `Offline-Toolchains` continua útil quando for realmente necessário trabalhar a partir de um checkout/snapshot transportável; para gates normais, prefira Actions deste repositório.
+
+## 9. Etapa A — construir artifact imutável de staging
+
+Workflow:
+
+```text
+Build deployable Fichário staging artifact
+```
+
+O workflow é `workflow_dispatch` manual e não recebe seletor de ambiente. Ele usa `environment: staging` e `TARGET_ENVIRONMENT: staging` fixos.
+
+O fluxo:
+
+1. faz checkout do SHA disparado com `persist-credentials: false`;
+2. usa pnpm e Node pinados;
+3. instala com `pnpm install --frozen-lockfile`;
+4. valida URL e publishable key públicas;
+5. valida o trio Google Picker como all-or-none;
+6. executa `pnpm verify`;
+7. confirma que a configuração pública esperada foi congelada no `build/`;
+8. rejeita URL/chave fake de desenvolvimento;
+9. chama `tools/deploy/package-static-artifact.sh`;
+10. revalida o pacote com `pnpm test:deployment:artifact`;
+11. publica o artifact do GitHub Actions.
+
+Nome do artifact:
+
+```text
+fichario-static-<sha-completo>-staging
+```
+
+### Empacotador compartilhado
+
+`tools/deploy/package-static-artifact.sh` é a única implementação de empacotamento usada pelo workflow. Ele:
+
+- exige `GITHUB_SHA` completo em lowercase;
+- exige `TARGET_ENVIRONMENT=staging`;
+- restringe o diretório de saída a um nome local simples;
+- exige os arquivos essenciais do build e os verificadores de deploy;
+- separa site público, snapshot de fonte e checks;
+- rejeita symlinks;
+- gera manifesto schema 2;
+- gera `SHA256SUMS` com cobertura determinística;
+- verifica os próprios checksums antes de retornar sucesso.
+
+O campo `created_utc` do manifesto não usa o relógio do runner. Ele deriva de `SOURCE_DATE_EPOCH`, quando explicitamente fornecido, ou do timestamp do próprio `GITHUB_SHA`. Isso evita que duas execuções normais do mesmo commit mudem a identidade do manifesto só por ocorrerem em horários diferentes.
+
+Estrutura:
+
+```text
+fichario-deploy/
+├── DEPLOYMENT-MANIFEST.txt
+├── SHA256SUMS
+├── checks/
+│   ├── check-deployed-site.mjs
+│   ├── check-deployment-artifact.mjs
+│   ├── deployment-contract.mjs
+│   └── validate-pages-deploy-output.mjs
+├── source/
+│   ├── package.json
+│   └── pnpm-lock.yaml
+└── site/
+    └── build estático publicável
+```
+
+`checks/` pertence ao mesmo SHA e é coberto por `SHA256SUMS`. O gate pós-deploy não consulta uma versão mais nova do repositório.
+
+### Verificação manual do pacote
 
 ```bash
 cd fichario-deploy
 sha256sum -c SHA256SUMS
-cat DEPLOYMENT-MANIFEST.txt
 ```
 
-Do checkout do mesmo SHA:
+Do workspace do mesmo SHA:
 
 ```bash
 pnpm test:deployment:artifact -- /caminho/para/fichario-deploy
 ```
 
-Sirva somente `fichario-deploy/site/` como raiz pública.
+Sirva/publice somente `fichario-deploy/site/`.
 
-## 9. Hospedar no Cloudflare Pages
+## 10. Etapa B — publicar exatamente o artifact validado
 
-O projeto usa `@sveltejs/adapter-static`.
+Workflow:
 
 ```text
-Production branch: main
-Build command: corepack enable && pnpm install --frozen-lockfile && pnpm build
-Build directory: build
+Deploy validated staging artifact to Cloudflare Pages
 ```
 
-O host precisa:
+Entradas:
 
-- servir `build/`;
-- usar `200.html` como fallback de SPA;
-- preservar `static/_headers`;
-- usar HTTPS e origem canônica única;
-- não reescrever `/assets/*` para HTML;
-- servir service worker e manifesto com tipos corretos;
-- nunca receber conteúdo privado.
+```text
+artifact_run_id:         run que produziu o artifact
+expected_source_commit:  SHA completo de 40 caracteres
+```
 
-Siga `docs/CLOUDFLARE_SETUP.md`.
+O workflow usa `environment: staging-deploy` e é deliberadamente artifact-only:
 
-## 10. Distribuir e implantar o worker desktop
+- **não faz checkout**;
+- não executa `pnpm install`;
+- não executa `pnpm build`;
+- não executa `pnpm verify`;
+- não cria nem substitui o projeto Pages.
 
-Siga `docs/DESKTOP_OCR_WORKER.md`.
+Ele baixa somente `fichario-static-<sha>-staging` do run informado e, antes do Wrangler:
 
-Modelos públicos ficam em projeto Pages separado, fragmentados em partes de até 20 MiB, com licença e SHA-256. O tablet não baixa esses modelos.
+- confirma manifesto schema 2;
+- confirma `Semogtw/FicharioVirtual` como repositório de origem;
+- confirma SHA completo;
+- confirma `target_environment=staging`;
+- recalcula hashes de `package.json` e lockfile;
+- executa `sha256sum -c SHA256SUMS`;
+- rejeita symlinks;
+- exige `_headers`, fallback, manifest, service worker e verificadores pinados;
+- rejeita configuração Supabase local/fake.
 
-Ordem do worker:
+### Credenciais de publicação
 
-1. migrations de dispositivos, resultados e fila;
-2. Edge Functions exclusivas;
-3. UI de pareamento e revogação;
-4. pacote CPU-first;
-5. serviço systemd de usuário;
-6. instalação de modelo com checksums;
-7. claim, lease, heartbeat e conclusão;
-8. queda, spool e retomada;
-9. benchmark Vulkan e RX 6600.
+Secrets exigidos em `staging-deploy`:
 
-O worker nunca recebe service-role, chave Gemini ou refresh token do Drive. Esta funcionalidade continua separada do rollout de lotes Gemini.
+```text
+CLOUDFLARE_API_TOKEN
+CLOUDFLARE_ACCOUNT_ID
+```
 
-## 11. Gates pré-release
+O token deve ter somente o escopo necessário para Pages na conta correta. Não revele valores em logs ou documentação.
 
-No mesmo SHA que será implantado:
+## 11. Identidade do Direct Upload
+
+O workflow usa Wrangler com versão explícita e parâmetros equivalentes a:
 
 ```bash
-pnpm format:check
-pnpm check
-pnpm lint
-pnpm test:unit
-pnpm check:edge
-pnpm check:offline
-pnpm test:db
-pnpm build
-pnpm test:e2e
+wrangler pages deploy <artifact>/site \
+  --project-name=fichario-virtual \
+  --branch=staging \
+  --commit-hash=<sha-validado> \
+  --commit-dirty=false
 ```
 
-Gates específicos de OCR:
+`WRANGLER_OUTPUT_FILE_PATH` captura o registro estruturado `pages-deploy-detailed`. `validate-pages-deploy-output.mjs`, transportado dentro do próprio artifact, rejeita respostas incompatíveis com o contrato esperado, incluindo projeto/SHA/deployment ID/URL inválidos.
 
-- `supabase/tests/ocr_batches.sql`;
-- `supabase/tests/ocr_batch_transitions.sql`;
-- `tools/checks/test-ocr-claim-contracts.sh`;
-- `tools/checks/test-ocr-claim-concurrency.sh`;
-- `tools/checks/test-ocr-idempotency.sh`;
-- `tools/checks/check-provider-only-ocr.mjs`.
+Não derive a URL de staging por convenção. Use a URL única retornada pelo deployment.
 
-Não use um SHA verde antigo para aprovar um SHA novo. Artifacts de reparo ou passos E2E pulados impedem `PASS`.
+## 12. Gate HTTP do deployment exato
 
-## 12. Validação de staging
-
-Siga `docs/OCR_STAGING.md`.
-
-A promoção exige:
-
-- smoke real de imagem;
-- PDF textual com zero chamadas;
-- PDF visual multipágina com menos chamadas do que páginas;
-- omissão, duplicação e JSON truncado sem perda;
-- cancelamento e retomada sem repetir páginas concluídas;
-- contador local elevado sem bloqueio;
-- `429` temporário e quota diária real preservados;
-- fixtures acima de 50 MB e 1.000 páginas;
-- hash do original inalterado;
-- confirmação administrativa de billing desativado.
-
-## 13. Validação pós-deployment
-
-Execute:
+Depois do upload, o workflow executa:
 
 ```bash
-pnpm test:deployment -- https://app.example.com
+node <artifact>/checks/check-deployed-site.mjs https://<url-exata-retornada>
 ```
 
-Valide ainda:
+Como o checker veio dentro do artifact, a lógica de validação também está presa ao SHA e coberta por checksum.
+
+O contrato valida, entre outros pontos:
+
+- HTTPS;
+- CSP;
+- HSTS;
+- `nosniff`;
+- framing/permissions policies;
+- manifest PWA;
+- service worker;
+- fallback SPA;
+- cache adequado;
+- comportamento de asset inexistente;
+- upgrade HTTP → HTTPS.
+
+A execução só é concluída com identidade do artifact **e** contrato HTTP aprovados.
+
+## 13. CSP do site hospedado
+
+`static/_headers` é versionado e o build valida o `_headers` realmente emitido.
+
+As origens Google adicionais atualmente necessárias são restritas a:
+
+```text
+script-src:  https://apis.google.com
+connect-src: https://www.googleapis.com
+```
+
+A primeira atende ao loader do Google Picker. A segunda atende a upload resumível e downloads/ranges do Drive feitos pelo navegador.
+
+Não abra `*.google.com` preventivamente. Se o Picker real exigir uma origem de frame, capture a violação no preview e adicione somente a origem exata comprovada.
+
+## 14. Smoke de staging
+
+Depois do gate HTTP automatizado, valide no host real.
 
 ### Autenticação e dados
 
@@ -366,61 +422,107 @@ Valide ainda:
 - PWA offline não revela documentos;
 - Cloudflare não recebe documentos privados.
 
-### Importação e Drive
+### PWA e navegação
 
-- original fica no Drive;
-- PDF textual não chama OCR;
-- PDF misto envia somente páginas necessárias;
-- PDF grande não é rejeitado por teto de 20 MB;
-- cancelamento preserva estado;
-- reload retoma páginas persistidas;
-- ausência preserva OCR e metadados.
+- refresh em rota interna funciona;
+- service worker instala/atualiza;
+- manifest é carregado;
+- asset inexistente não vira fallback HTML silencioso;
+- logout remove acesso.
 
-### OCR Gemini
+### Drive
 
-- consentimento obrigatório;
-- segredo ausente falha fechado;
-- lotes aparecem no painel;
-- páginas, chamadas e tentativas são coerentes;
-- 429 preserva trabalho;
-- resposta parcial divide somente afetados;
-- correção manual permanece autoridade final.
+- OAuth conclui com a origem correta;
+- Picker abre;
+- upload retomável funciona;
+- downloads/ranges não geram violação de CSP;
+- PDF grande permanece no fluxo Drive-first;
+- tokens não aparecem em URL/log;
+- crash entre cópia e staging é reconciliado por `appProperties`.
+
+### OCR
+
+Siga `docs/OCR_STAGING.md`, incluindo PDF textual com zero chamadas, lote visual real, cancelamento/retomada, quota do provedor e persistência.
 
 ### Worker desktop
 
-- executar somente depois da implementação e dos gates próprios;
-- computador offline mantém fila;
-- credencial revogada deixa de reivindicar;
-- conclusão é idempotente;
-- logs não contêm texto;
-- CPU funciona sem GPU.
+Siga `docs/DESKTOP_OCR_WORKER.md` para pareamento, lease, spool, interrupções de rede/processo e benchmark do hardware alvo. O primeiro deploy do site pode registrar o worker como limitação operacional se essa fronteira ainda não tiver sido validada em hardware real.
 
-## 14. Rollback
+## 15. Domínio canônico e `APP_ORIGIN`
 
-### Frontend
+Só adicione domínio customizado depois de um preview estável.
 
-Selecione deployment anterior no Cloudflare, preserve banco e Drive e reexecute os gates do host.
+Ao escolher a origem canônica:
+
+1. configurar domínio no Pages;
+2. configurar redirects e HTTPS;
+3. atualizar Site URL/redirects do Supabase Auth;
+4. atualizar `APP_ORIGIN` nas Edge Functions;
+5. revisar tela/origens Google OAuth;
+6. reexecutar gate e smoke.
+
+Evite duas origens de produção aceitando sessão simultaneamente.
+
+## 16. Quando produção puder ser criada
+
+Um preview aprovado **não** autoriza simplesmente publicar os bytes de staging como produção se a configuração pública for diferente.
+
+Quando a infraestrutura de produção existir, o desenho deve preservar esta sequência:
+
+```text
+SHA X
+  ↓
+build de artifact com configuração de produção
+  ↓
+checksums + contrato do artifact
+  ↓
+preview/validação dos mesmos bytes
+  ↓
+promoção dos mesmos bytes
+  ↓
+gate HTTP do host exato + alias canônico
+```
+
+A implementação futura precisa ser adicionada com gates que provem isolamento de environments, credenciais e artifact. Até lá, não mantenha código morto de produção no workflow staging.
+
+## 17. Rollback
+
+### Frontend staging
+
+- selecione um artifact/deployment anterior identificado por SHA;
+- preserve banco e Drive;
+- confirme compatibilidade do schema;
+- use os checks do artifact correspondente;
+- reexecute smoke essencial.
 
 ### Banco
 
-Use migration corretiva. Não remova `ocr_batches` nem volte à assinatura diária de `claim_ocr_job`; versões antigas incompatíveis devem falhar fechado.
+Migrations são forward-only. Não reverta editando migration já aplicada. Em caso de defeito, crie migration corretiva compatível com os clientes que ainda possam estar ativos.
 
 ### Edge Functions
 
-Mantenha commit anterior disponível. Um rollback precisa compreender o schema implantado ou recusar inicialização sem corromper estado.
+Redeploy de uma função deve preservar a política JWT versionada e o conjunto mínimo de secrets. Não use flags de deploy para enfraquecer autenticação.
 
-### Modelos e worker
+## 18. Limites de ferramentas e segurança operacional
 
-Nunca substitua bytes de versão publicada. Preserve spool e última versão compatível. Não reprocese páginas automaticamente.
+A integração administrativa Cloudflare observada consegue configurar o projeto e emitir token temporário do serviço de upload, mas não fornece um caminho seguro/equivalente ao Wrangler para usar esse JWT nos endpoints `/pages/assets/*`. Não exporte, revele ou persista esse token para contornar a fronteira.
 
-## 15. Proibições
+Use o workflow artifact-only com credencial Cloudflare de escopo mínimo em `staging-deploy` para o Direct Upload real.
 
-- não publicar secrets;
-- não tornar bucket privado público;
-- não cachear endpoints autenticados;
-- não colocar documentos no Cloudflare;
-- não ativar R2 ou billing automaticamente;
-- não abrir porta doméstica para o worker;
-- não reinserir teto diário interno;
-- não inserir fallback pago silencioso;
-- não declarar release pronta sem gates locais, CI, staging e dispositivo no mesmo SHA.
+Para gates normais, use GitHub Actions deste repositório. Use o repo de toolchains apenas quando um checkout/snapshot isolado for realmente necessário.
+
+## 19. Critério mínimo para avançar staging
+
+Antes de tratar o preview como candidato sério:
+
+- `Validate current head` terminal verde no mesmo SHA;
+- artifact staging construído desse SHA;
+- contrato do artifact aprovado;
+- Direct Upload do artifact exato;
+- identidade Wrangler aprovada;
+- gate HTTP da URL exata aprovado;
+- smoke de autenticação/PWA;
+- smoke Drive/OCR aplicável ou risco explicitamente registrado;
+- nenhum conteúdo privado na Cloudflare.
+
+Os estados detalhados e recibos correntes ficam em `docs/READINESS.md`.

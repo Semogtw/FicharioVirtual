@@ -387,17 +387,17 @@ O lock v2 deve registrar precisão de cada artefato e parâmetros suficientes pa
 
 ```json
 {
-  "schemaVersion": 2,
-  "backend": "llama_cpp",
-  "model": "datalab-to/chandra-ocr-2",
-  "upstreamRevision": "REVISION_IMUTAVEL",
-  "weightsPrecision": "Q8_0",
-  "mmprojPrecision": "BF16",
-  "promptProfile": "chandra-ocr-2/ocr-layout-v1",
-  "weightsSha256": "SHA256",
-  "mmprojSha256": "SHA256",
-  "runtimeVersion": "LLAMA_CPP_COMMIT_OU_RELEASE",
-  "executionProfile": "rx6600-quality-max-v1"
+	"schemaVersion": 2,
+	"backend": "llama_cpp",
+	"model": "datalab-to/chandra-ocr-2",
+	"upstreamRevision": "REVISION_IMUTAVEL",
+	"weightsPrecision": "Q8_0",
+	"mmprojPrecision": "BF16",
+	"promptProfile": "chandra-ocr-2/ocr-layout-v1",
+	"weightsSha256": "SHA256",
+	"mmprojSha256": "SHA256",
+	"runtimeVersion": "LLAMA_CPP_COMMIT_OU_RELEASE",
+	"executionProfile": "rx6600-quality-max-v1"
 }
 ```
 
@@ -463,14 +463,14 @@ Fixtures privadas não entram no Git.
 
 Corpus mínimo recomendado: **100 páginas**.
 
-| Grupo | Páginas mínimas | Exemplos |
-| --- | ---: | --- |
-| livro/apostila limpos | 20 | impressão nítida, parágrafos, títulos |
-| livros/scans degradados | 20 | ruído, skew, contraste ruim, bleed-through |
-| manuscrito contemporâneo | 25 | letra de forma, cursiva, caneta, tablet |
-| misto | 15 | impresso + anotação, formulário preenchido |
-| tabelas/múltiplas colunas | 10 | tabelas, boxes, leitura não linear |
-| matemática/texto pequeno | 10 | fórmulas, subscritos, fonte pequena |
+| Grupo                     | Páginas mínimas | Exemplos                                   |
+| ------------------------- | --------------: | ------------------------------------------ |
+| livro/apostila limpos     |              20 | impressão nítida, parágrafos, títulos      |
+| livros/scans degradados   |              20 | ruído, skew, contraste ruim, bleed-through |
+| manuscrito contemporâneo  |              25 | letra de forma, cursiva, caneta, tablet    |
+| misto                     |              15 | impresso + anotação, formulário preenchido |
+| tabelas/múltiplas colunas |              10 | tabelas, boxes, leitura não linear         |
+| matemática/texto pequeno  |              10 | fórmulas, subscritos, fonte pequena        |
 
 ### Matriz de comparação
 

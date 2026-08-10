@@ -364,7 +364,7 @@ export async function uploadPreparedImageToSupabase(
 		return Object.freeze({
 			...imported,
 			sha256,
-			storagePath,
+			storagePath: sourcePath,
 			thumbnailPath
 		});
 	}, signal);

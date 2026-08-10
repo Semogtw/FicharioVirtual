@@ -1,31 +1,22 @@
-name: Build deployable Fichário artifact
+name: Build deployable Fichário staging artifact
 
 on:
   workflow_dispatch:
-    inputs:
-      target_environment:
-        description: Protected environment that supplies the public deployment configuration
-        required: true
-        type: choice
-        default: staging
-        options:
-          - staging
-          - production
 
 permissions:
   contents: read
 
 concurrency:
-  group: build-fichario-${{ inputs.target_environment }}
+  group: build-fichario-staging
   cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    environment: ${{ inputs.target_environment }}
+    environment: staging
     env:
-      TARGET_ENVIRONMENT: ${{ inputs.target_environment }}
+      TARGET_ENVIRONMENT: staging
 
     steps:
       - name: Checkout repository
@@ -56,6 +47,12 @@ jobs:
           PUBLIC_GOOGLE_PICKER_API_KEY: ${{ secrets.PUBLIC_GOOGLE_PICKER_API_KEY }}
           PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER: ${{ secrets.PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER }}
         run: |
+          set -euo pipefail
+          [[ "$TARGET_ENVIRONMENT" == 'staging' ]] || {
+            echo 'this workflow is intentionally staging-only until production infrastructure exists' >&2
+            exit 1
+          }
+
           node <<'NODE'
           const urlValue = process.env.PUBLIC_SUPABASE_URL ?? '';
           const key = process.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? '';
@@ -124,28 +121,7 @@ jobs:
           ! grep -R -F 'sb_publishable_test_key_1234567890' build
 
       - name: Package static artifact
-        run: |
-          set -euo pipefail
-          rm -rf fichario-deploy
-          mkdir -p fichario-deploy/site fichario-deploy/source
-          cp -a build/. fichario-deploy/site/
-          cp package.json pnpm-lock.yaml fichario-deploy/source/
-          {
-            echo 'schema_version=2'
-            echo 'source_repository=Semogtw/FicharioVirtual'
-            echo "source_commit=${GITHUB_SHA}"
-            echo "target_environment=${TARGET_ENVIRONMENT}"
-            echo "created_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            echo "node_version=$(node --version)"
-            echo "pnpm_version=$(pnpm --version)"
-            echo "package_sha256=$(sha256sum fichario-deploy/source/package.json | cut -d' ' -f1)"
-            echo "lock_sha256=$(sha256sum fichario-deploy/source/pnpm-lock.yaml | cut -d' ' -f1)"
-          } > fichario-deploy/DEPLOYMENT-MANIFEST.txt
-          (
-            cd fichario-deploy
-            find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
-            sha256sum -c SHA256SUMS
-          )
+        run: bash tools/deploy/package-static-artifact.sh fichario-deploy
 
       - name: Verify packaged deployment artifact
         run: pnpm test:deployment:artifact -- fichario-deploy
@@ -153,7 +129,7 @@ jobs:
       - name: Upload deployable static artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: fichario-static-${{ github.sha }}-${{ inputs.target_environment }}
+          name: fichario-static-${{ github.sha }}-staging
           path: fichario-deploy/
           if-no-files-found: error
           compression-level: 6
