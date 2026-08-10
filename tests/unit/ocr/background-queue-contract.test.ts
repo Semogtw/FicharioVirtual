@@ -12,6 +12,7 @@ const kick = read('supabase/functions/ocr-queue-kick/index.ts');
 const config = read('supabase/config.toml');
 const runtime = read('src/lib/services/ocr-background-runtime.ts');
 const ocrEntry = read('src/lib/services/ocr.ts');
+const providerGate = read('tools/checks/check-provider-only-ocr.mjs');
 const appShell = read('src/lib/components/AppShell.svelte');
 const importPage = read('src/lib/components/UnifiedImportPage.svelte');
 
@@ -49,6 +50,7 @@ describe('background OCR queue contract', () => {
 		expect(worker).toContain("await admin.rpc('recover_background_stale_ocr_jobs')");
 		expect(worker).toContain('requestGeminiOcrBatch({');
 		expect(worker).toContain("'complete_geometry'");
+		expect(providerGate).toContain("supabase.rpc('complete_ocr_job_with_geometry'");
 	});
 
 	it('exposes only an authenticated browser kick while keeping the worker gateway public', () => {
