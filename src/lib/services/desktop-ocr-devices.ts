@@ -39,6 +39,12 @@ export type DesktopOcrRename = Readonly<{
 	updatedAt: string;
 }>;
 
+export type DesktopOcrDeletion = Readonly<{
+	deviceId: string;
+	deleted: true;
+	pairingCodesDeleted: number;
+}>;
+
 export type DesktopOcrPairingCode = Readonly<{
 	pairingId: string;
 	code: string;
@@ -68,6 +74,10 @@ type DevicesRpcClient = {
 	rpc(
 		name: 'rename_ocr_worker_device',
 		args: { target_device_id: string; device_label: string }
+	): Promise<{ data: unknown; error: unknown }>;
+	rpc(
+		name: 'delete_ocr_worker_device',
+		args: { target_device_id: string }
 	): Promise<{ data: unknown; error: unknown }>;
 };
 
@@ -219,6 +229,24 @@ function parseRename(
 	});
 }
 
+function parseDeletion(value: unknown, expectedDeviceId: string): DesktopOcrDeletion | null {
+	if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+	const record = value as Record<string, Json | undefined>;
+	if (
+		record.deviceId !== expectedDeviceId ||
+		record.deleted !== true ||
+		!Number.isSafeInteger(record.pairingCodesDeleted) ||
+		Number(record.pairingCodesDeleted) < 0
+	) {
+		return null;
+	}
+	return Object.freeze({
+		deviceId: expectedDeviceId,
+		deleted: true,
+		pairingCodesDeleted: Number(record.pairingCodesDeleted)
+	});
+}
+
 function gateway(client?: SupabaseClient<Database>): DevicesRpcClient {
 	return (client ?? getSupabaseClient()) as unknown as DevicesRpcClient;
 }
@@ -309,4 +337,27 @@ export async function renameDesktopOcrDevice(
 		throw new DesktopOcrDevicesError('A confirmação de renomeação retornou um formato inválido.');
 	}
 	return rename;
+}
+
+export async function deleteDesktopOcrDevice(
+	deviceId: string,
+	client?: SupabaseClient<Database>
+): Promise<DesktopOcrDeletion> {
+	if (!UUID.test(deviceId)) throw new TypeError('Invalid desktop OCR device id');
+	let result: { data: unknown; error: unknown };
+	try {
+		result = await gateway(client).rpc('delete_ocr_worker_device', {
+			target_device_id: deviceId
+		});
+	} catch {
+		throw new DesktopOcrDevicesError('Não foi possível remover este computador de OCR.');
+	}
+	if (result.error) {
+		throw new DesktopOcrDevicesError('Não foi possível remover este computador de OCR.');
+	}
+	const deletion = parseDeletion(result.data, deviceId);
+	if (!deletion) {
+		throw new DesktopOcrDevicesError('A confirmação de remoção retornou um formato inválido.');
+	}
+	return deletion;
 }
