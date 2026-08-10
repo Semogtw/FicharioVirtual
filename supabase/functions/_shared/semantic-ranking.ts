@@ -24,12 +24,16 @@ function reciprocalRank(rank: number | null, weight: number) {
 export function hybridReciprocalRankScore(signal: HybridRankingSignal) {
 	const lexical = reciprocalRank(signal.lexicalRank, SEMANTIC_RRF_LEXICAL_WEIGHT);
 	const semantic = reciprocalRank(signal.semanticRank, SEMANTIC_RRF_VECTOR_WEIGHT);
-	const both = signal.lexicalRank !== null && signal.semanticRank !== null ? SEMANTIC_RRF_BOTH_BONUS : 0;
+	const both =
+		signal.lexicalRank !== null && signal.semanticRank !== null ? SEMANTIC_RRF_BOTH_BONUS : 0;
 	const similarityTieBreak = Math.max(0, Math.min(1, signal.semanticSimilarity ?? 0)) * 0.0001;
 	return lexical + semantic + both + similarityTieBreak;
 }
 
-export function compareHybridRanked<T extends HybridRankingSignal & { stableKey: string }>(a: T, b: T) {
+export function compareHybridRanked<T extends HybridRankingSignal & { stableKey: string }>(
+	a: T,
+	b: T
+) {
 	const scoreDelta = hybridReciprocalRankScore(b) - hybridReciprocalRankScore(a);
 	if (Math.abs(scoreDelta) > Number.EPSILON) return scoreDelta;
 	return a.stableKey.localeCompare(b.stableKey);
