@@ -15,22 +15,30 @@ const importPage = read('src/lib/components/UnifiedImportPage.svelte');
 
 describe('background OCR queue contract', () => {
 	it('keeps worker database capabilities service-role only', () => {
-		expect(migration).toContain('create or replace function public.list_background_gemini_ocr_candidates');
+		expect(migration).toContain(
+			'create or replace function public.list_background_gemini_ocr_candidates'
+		);
 		expect(migration).toContain('create or replace function public.background_ocr_as_user');
-		expect(migration).toContain('create or replace function public.recover_background_stale_ocr_jobs');
-		expect(migration).toContain('create or replace function public.reconcile_background_ocr_batches');
+		expect(migration).toContain(
+			'create or replace function public.recover_background_stale_ocr_jobs'
+		);
+		expect(migration).toContain(
+			'create or replace function public.reconcile_background_ocr_batches'
+		);
 		expect(migration).toContain(
 			'revoke execute on function public.background_ocr_as_user(uuid, text, jsonb) from public, anon, authenticated;'
 		);
 		expect(migration).toContain(
 			'grant execute on function public.background_ocr_as_user(uuid, text, jsonb) to service_role;'
 		);
-		expect(migration).not.toMatch(/grant execute on function public\.background_ocr_as_user[^;]+authenticated;/s);
+		expect(migration).not.toMatch(
+			/grant execute on function public\.background_ocr_as_user[^;]+authenticated;/s
+		);
 	});
 
 	it('runs provider work after the worker response and self-chains bounded invocations', () => {
 		expect(worker).toContain('EdgeRuntime.waitUntil(runAndChain(settings));');
-		expect(worker).toContain("return response(202, { accepted: true });");
+		expect(worker).toContain('return response(202, { accepted: true });');
 		expect(worker).toContain('OCR_BACKGROUND_MAX_PAGES');
 		expect(worker).toContain('OCR_BACKGROUND_TIMEOUT_MS');
 		expect(worker).toContain("'X-Fichario-Worker-Key': settings.serviceRoleKey");
@@ -49,8 +57,12 @@ describe('background OCR queue contract', () => {
 
 	it('defers normal browser OCR calls but preserves injected foreground clients for tests and probes', () => {
 		expect(ocrEntry).toContain("from './ocr-background-runtime';");
-		expect(runtime).toContain('if (client) return processPageOcrForeground(pageId, client, options);');
-		expect(runtime).toContain('if (client) return processOcrBatchForeground(pageIds, client, options);');
+		expect(runtime).toContain(
+			'if (client) return processPageOcrForeground(pageId, client, options);'
+		);
+		expect(runtime).toContain(
+			'if (client) return processOcrBatchForeground(pageIds, client, options);'
+		);
 		expect(runtime).toContain('await kick(options.signal);');
 		expect(runtime).toContain("state: 'retry_later' as const");
 	});
