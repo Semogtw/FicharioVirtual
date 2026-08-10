@@ -4,7 +4,10 @@ import process from 'node:process';
 
 const root = resolve(new URL('../..', import.meta.url).pathname);
 const sourceRoot = join(root, 'src');
-const databaseTypesPath = join(root, 'src/lib/types/database.ts');
+const databaseTypesPaths = [
+	join(root, 'src/lib/types/database.ts'),
+	join(root, 'src/lib/types/database-rpc-extensions.ts')
+];
 const sourceExtensions = new Set(['.ts', '.svelte']);
 
 async function sourceFiles(directory) {
@@ -49,8 +52,11 @@ for (const path of await sourceFiles(sourceRoot)) {
 	}
 }
 
-const databaseTypes = await readFile(databaseTypesPath, 'utf8');
-const typedFunctions = collectTypedFunctions(databaseTypes);
+const typedFunctions = new Set();
+for (const databaseTypesPath of databaseTypesPaths) {
+	const databaseTypes = await readFile(databaseTypesPath, 'utf8');
+	for (const name of collectTypedFunctions(databaseTypes)) typedFunctions.add(name);
+}
 const missing = [...calls.keys()].filter((name) => !typedFunctions.has(name)).sort();
 
 if (missing.length > 0) {
