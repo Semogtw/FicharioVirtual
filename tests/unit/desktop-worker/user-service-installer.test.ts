@@ -13,13 +13,16 @@ describe('desktop worker user service installer', () => {
 		expect(installer).not.toMatch(/^\s*systemctl --user (?:enable|start|restart)\b/m);
 	});
 
-	it('installs executable shims for service, pairing, and model setup without copying secrets', async () => {
+	it('installs executable shims for config, model setup, pairing, and service', async () => {
 		const installer = await readFile(INSTALLER_PATH, 'utf8');
-		expect(installer).toContain(
-			'chmod 0700 "$install_dir/bin.mjs" "$install_dir/pair-bin.mjs" "$install_dir/model-bin.mjs"'
-		);
+		for (const entrypoint of ['bin.mjs', 'config-bin.mjs', 'pair-bin.mjs', 'model-bin.mjs']) {
+			expect(installer).toContain(`"$install_dir/${entrypoint}"`);
+		}
 		expect(installer).toContain(
 			'ln -sfn ../lib/fichario-worker/bin.mjs "$bin_dir/fichario-worker"'
+		);
+		expect(installer).toContain(
+			'ln -sfn ../lib/fichario-worker/config-bin.mjs "$bin_dir/fichario-worker-config"'
 		);
 		expect(installer).toContain(
 			'ln -sfn ../lib/fichario-worker/pair-bin.mjs "$bin_dir/fichario-worker-pair"'
