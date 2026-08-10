@@ -1,30 +1,17 @@
 import { chmod } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
+import { requireCompletionRequest } from './contract.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const SHA256 = /^[0-9a-f]{64}$/i;
 const MAX_RESULT_BYTES = 2 * 1024 * 1024;
 
-function requireString(value, label, maximum = 256) {
-	if (typeof value !== 'string' || value.length < 1 || value.length > maximum) {
-		throw new TypeError(`Invalid desktop worker ${label}`);
-	}
-	return value;
-}
-
 function validateResult(result) {
-	if (!result || typeof result !== 'object' || Array.isArray(result)) {
-		throw new TypeError('Invalid desktop worker result');
-	}
-	if (!UUID.test(result.jobId)) throw new TypeError('Invalid desktop worker jobId');
-	if (!SHA256.test(result.sourceSha256)) throw new TypeError('Invalid desktop worker sourceSha256');
-	const modelId = requireString(result.modelId, 'modelId');
-	const modelVersion = requireString(result.modelVersion, 'modelVersion');
-	const json = JSON.stringify(result);
+	const parsed = requireCompletionRequest(result);
+	const json = JSON.stringify(parsed);
 	if (Buffer.byteLength(json, 'utf8') > MAX_RESULT_BYTES) {
 		throw new TypeError('Desktop worker result is too large');
 	}
-	return { json, modelId, modelVersion };
+	return { parsed, json };
 }
 
 function asRow(record) {
@@ -39,7 +26,7 @@ function asRow(record) {
 		createdAt: String(record.created_at),
 		updatedAt: String(record.updated_at),
 		acceptedAt: record.accepted_at == null ? null : String(record.accepted_at),
-		result: JSON.parse(String(record.result_json))
+		result: requireCompletionRequest(JSON.parse(String(record.result_json)))
 	});
 }
 
@@ -74,17 +61,17 @@ export class ResultSpool {
 	}
 
 	enqueue(result, now = new Date()) {
-		const { json, modelId, modelVersion } = validateResult(result);
+		const { parsed, json } = validateResult(result);
 		const timestamp = now.toISOString();
 		const existing = this.#database
 			.prepare('SELECT source_sha256, result_json, state FROM result_spool WHERE job_id = ?')
-			.get(result.jobId);
+			.get(parsed.jobId);
 		if (existing) {
-			if (existing.source_sha256 !== result.sourceSha256 || existing.result_json !== json) {
+			if (existing.source_sha256 !== parsed.sourceSha256 || existing.result_json !== json) {
 				throw new Error('Desktop worker spool idempotency conflict');
 			}
 			return asRow(
-				this.#database.prepare('SELECT * FROM result_spool WHERE job_id = ?').get(result.jobId)
+				this.#database.prepare('SELECT * FROM result_spool WHERE job_id = ?').get(parsed.jobId)
 			);
 		}
 		this.#database
@@ -96,8 +83,16 @@ export class ResultSpool {
 				) VALUES (?, ?, ?, ?, ?, 'pending', 0, ?, ?, NULL)
 			`
 			)
-			.run(result.jobId, result.sourceSha256, modelId, modelVersion, json, timestamp, timestamp);
-		return this.get(result.jobId);
+			.run(
+				parsed.jobId,
+				parsed.sourceSha256,
+				parsed.modelId,
+				parsed.modelVersion,
+				json,
+				timestamp,
+				timestamp
+			);
+		return this.get(parsed.jobId);
 	}
 
 	get(jobId) {
