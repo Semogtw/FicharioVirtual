@@ -22,14 +22,8 @@ export class WorkerForgetError extends Error {
 }
 
 export async function forgetLocalDevice(
-	{
-		paths = resolveWorkerPaths(),
-		credentialStore = new SecretServiceCredentialStore()
-	} = {},
-	{
-		loadDevice = loadDeviceMetadata,
-		removeMetadata = (path) => rm(path, { force: false })
-	} = {}
+	{ paths = resolveWorkerPaths(), credentialStore = new SecretServiceCredentialStore() } = {},
+	{ loadDevice = loadDeviceMetadata, removeMetadata = (path) => rm(path, { force: false }) } = {}
 ) {
 	if (!credentialStore || typeof credentialStore.clear !== 'function') {
 		throw new TypeError('Invalid desktop worker credential store');
@@ -66,11 +60,7 @@ export async function forgetLocalDevice(
 
 export async function runForgetCli(
 	argv = process.argv.slice(2),
-	{
-		stdout = process.stdout,
-		stderr = process.stderr,
-		forgetLocal = forgetLocalDevice
-	} = {}
+	{ stdout = process.stdout, stderr = process.stderr, forgetLocal = forgetLocalDevice } = {}
 ) {
 	if (!Array.isArray(argv) || argv.length !== 1 || argv[0] !== CONFIRMATION_FLAG) {
 		stderr.write(

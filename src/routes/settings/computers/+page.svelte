@@ -124,12 +124,7 @@
 	}
 
 	async function saveRename(device: DesktopOcrDevice) {
-		if (
-			device.status !== 'active' ||
-			editingId !== device.id ||
-			revokingId ||
-			savingLabelId
-		) {
+		if (device.status !== 'active' || editingId !== device.id || revokingId || savingLabelId) {
 			return;
 		}
 
@@ -275,7 +270,9 @@
 						Copiar código
 					</button>
 				</div>
-				<p class="expiry">Expira em {formatDate(pairing.expiresAt)}. Um novo código invalida este.</p>
+				<p class="expiry">
+					Expira em {formatDate(pairing.expiresAt)}. Um novo código invalida este.
+				</p>
 				<div class="command-block">
 					<span class="field-label">No computador, execute</span>
 					<code>{preferredPairCommand}</code>
@@ -354,11 +351,7 @@
 											aria-label={`Novo nome de ${device.label}`}
 											disabled={savingLabelId === device.id}
 										/>
-										<button
-											type="submit"
-											class="secondary"
-											disabled={savingLabelId === device.id}
-										>
+										<button type="submit" class="secondary" disabled={savingLabelId === device.id}>
 											{savingLabelId === device.id ? 'Salvando…' : 'Salvar nome'}
 										</button>
 										<button

@@ -18,7 +18,7 @@ describe('desktop OCR pairing and rollback boundary', () => {
 		expect(redeemBranch).toBeGreaterThanOrEqual(0);
 		expect(redeemBranch).toBeLessThan(authorizationLookup);
 		expect(source).toContain("admin.rpc('redeem_ocr_worker_pairing_code'");
-		expect(source).toContain("credentialDigest: string");
+		expect(source).toContain('credentialDigest: string');
 		expect(source).not.toContain('credential: input.credential');
 	});
 

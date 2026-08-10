@@ -206,11 +206,9 @@ describe('desktop OCR device service', () => {
 		expect(error).toBeInstanceOf(DesktopOcrDevicesError);
 		expect(String(error)).not.toContain('details');
 
-		const renameError = await renameDesktopOcrDevice(
-			DEVICE_ID,
-			'Nome novo',
-			{ rpc: failingRpc } as never
-		).catch((caught) => caught);
+		const renameError = await renameDesktopOcrDevice(DEVICE_ID, 'Nome novo', {
+			rpc: failingRpc
+		} as never).catch((caught) => caught);
 		expect(renameError).toBeInstanceOf(DesktopOcrDevicesError);
 		expect(String(renameError)).not.toContain('details');
 	});

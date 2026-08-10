@@ -93,7 +93,9 @@ function parsePairRequest(record: Record<string, unknown>): PairRequest | null {
 }
 
 function parseRedeemRequest(record: Record<string, unknown>): RedeemRequest | null {
-	if (!hasExactKeys(record, ['action', 'pairingCode', 'label', 'capabilities', 'credentialDigest'])) {
+	if (
+		!hasExactKeys(record, ['action', 'pairingCode', 'label', 'capabilities', 'credentialDigest'])
+	) {
 		return null;
 	}
 	const label = parseLabel(record.label);
@@ -138,8 +140,7 @@ function canonicalJson(value: unknown): string {
 		return `{${Object.keys(value as Record<string, unknown>)
 			.sort()
 			.map(
-				(key) =>
-					`${JSON.stringify(key)}:${canonicalJson((value as Record<string, unknown>)[key])}`
+				(key) => `${JSON.stringify(key)}:${canonicalJson((value as Record<string, unknown>)[key])}`
 			)
 			.join(',')}}`;
 	}

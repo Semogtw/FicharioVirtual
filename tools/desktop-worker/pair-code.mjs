@@ -155,7 +155,12 @@ export class DesktopPairingCodeError extends Error {
 
 export async function pairDesktopWorkerWithCode(
 	{ workerEndpoint, label, capabilities, pairingCode, devicePath, credentialStore },
-	{ fetchImpl = fetch, saveMetadata = saveDeviceMetadata, randomBytesImpl = randomBytes, signal } = {}
+	{
+		fetchImpl = fetch,
+		saveMetadata = saveDeviceMetadata,
+		randomBytesImpl = randomBytes,
+		signal
+	} = {}
 ) {
 	const endpoint = pairEndpoint(workerEndpoint);
 	const safeLabel = requireLabel(label);

@@ -19,9 +19,7 @@ const CAPABILITIES = {
 };
 const RANDOM_BYTES = Buffer.alloc(32, 7);
 const GENERATED_CREDENTIAL = RANDOM_BYTES.toString('base64url');
-const GENERATED_DIGEST = createHash('sha256')
-	.update(GENERATED_CREDENTIAL, 'utf8')
-	.digest('hex');
+const GENERATED_DIGEST = createHash('sha256').update(GENERATED_CREDENTIAL, 'utf8').digest('hex');
 
 function response(body: unknown, status = 201) {
 	return new Response(JSON.stringify(body), {
