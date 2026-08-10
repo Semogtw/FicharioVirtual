@@ -9,14 +9,20 @@ const telemetry = readFileSync(
 	'supabase/migrations/202608101236_ocr_preprocessing_telemetry.sql',
 	'utf8'
 );
+const sourceDisplay = readFileSync(
+	'supabase/migrations/202608101237_ocr_image_source_display.sql',
+	'utf8'
+);
 
 describe('OCR image preprocessing migrations', () => {
-	it('preserves a distinct raw source without replacing the OCR derivative', () => {
+	it('preserves a distinct raw source and gives OCR a temporary derivative', () => {
 		expect(provenance).toContain('add column if not exists source_storage_path text');
 		expect(provenance).toContain('add column if not exists source_sha256 text');
-		expect(provenance).toContain('create or replace function public.create_image_import_v2');
-		expect(provenance).toContain("'image', original_filename, prepared_storage_path, source_storage_path");
-		expect(provenance).toContain('prepared_storage_path = source_storage_path');
+		expect(sourceDisplay).toContain('create or replace function public.create_image_import_v2');
+		expect(sourceDisplay).toContain("'image', original_filename, source_storage_path, source_storage_path");
+		expect(sourceDisplay).toContain('page_number, temporary_image_path, status');
+		expect(sourceDisplay).toContain("1, prepared_storage_path, 'pending'");
+		expect(sourceDisplay).toContain('prepared_storage_path = source_storage_path');
 	});
 
 	it('keeps Drive originals remote and gives OCR a temporary derivative', () => {
@@ -31,6 +37,7 @@ describe('OCR image preprocessing migrations', () => {
 		expect(provenance).toContain('ocr_preprocessing_retained_permille between 1 and 1000');
 		expect(provenance).toContain('ocr_preprocessing_deskew_mdeg between -4000 and 4000');
 		expect(provenance).not.toMatch(/\b(ocr_text|prompt_text|image_bytes|base64|signed_url|api_key)\b/);
+		expect(sourceDisplay).not.toMatch(/\b(ocr_text|prompt_text|image_bytes|base64|signed_url|api_key)\b/);
 	});
 
 	it('enriches page telemetry without elevating the preprocessing trigger', () => {
