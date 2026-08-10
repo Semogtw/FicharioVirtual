@@ -73,6 +73,9 @@ const notebookRecordSchema = z
 		name: z.string().trim().min(1).max(120),
 		description: z.string().max(2_000).nullable(),
 		cover_style: z.string().trim().min(1).max(64),
+		banner_path: z.string().min(3).max(1_024).nullable(),
+		banner_position_x: z.number().int().min(0).max(100),
+		banner_position_y: z.number().int().min(0).max(100),
 		created_at: timestamp,
 		updated_at: timestamp
 	})
@@ -169,7 +172,9 @@ export async function createNotebook(
 				description: validatedInput.description ?? null,
 				cover_style: validatedInput.coverStyle ?? 'linen'
 			})
-			.select('id,name,description,cover_style,created_at,updated_at')
+			.select(
+				'id,name,description,cover_style,banner_path,banner_position_x,banner_position_y,created_at,updated_at'
+			)
 			.single();
 
 		if (error || data === null) throw new NotebookServiceError();
