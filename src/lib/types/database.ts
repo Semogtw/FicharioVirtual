@@ -494,7 +494,15 @@ export type Database = {
 				};
 				Returns: Json;
 			};
+			create_ocr_worker_pairing_code: {
+				Args: Record<string, never>;
+				Returns: Json;
+			};
 			create_tag: { Args: { tag_name: string }; Returns: string };
+			delete_ocr_worker_device: {
+				Args: { target_device_id: string };
+				Returns: Json;
+			};
 			delete_notebook: { Args: { target_notebook_id: string }; Returns: boolean };
 			delete_tag: { Args: { target_tag_id: string }; Returns: boolean };
 			export_portable_manifest: { Args: Record<string, never>; Returns: Json };
@@ -523,9 +531,42 @@ export type Database = {
 			};
 			get_usage_overview: { Args: Record<string, never>; Returns: Json };
 			is_authorized_user: { Args: Record<string, never>; Returns: boolean };
+			list_desktop_ocr_jobs: {
+				Args: Record<string, never>;
+				Returns: Array<{
+					job_id: string;
+					page_id: string;
+					document_id: string;
+					document_title: string;
+					page_number: number;
+					status: string;
+					attempt_count: number;
+					last_error_code: string | null;
+					device_id: string | null;
+					device_label: string | null;
+					lease_started_at: string | null;
+					lease_expires_at: string | null;
+					lease_expired: boolean;
+					created_at: string;
+					updated_at: string;
+				}>;
+			};
 			list_drive_pdf_reference_imports: {
 				Args: Record<string, never>;
 				Returns: Json;
+			};
+			list_ocr_worker_devices: {
+				Args: Record<string, never>;
+				Returns: Array<{
+					device_id: string;
+					label: string;
+					status: string;
+					capabilities: Json;
+					last_seen_at: string | null;
+					revoked_at: string | null;
+					created_at: string;
+					updated_at: string;
+				}>;
 			};
 			list_notebooks: {
 				Args: Record<string, never>;
@@ -609,9 +650,17 @@ export type Database = {
 				};
 				Returns: string | null;
 			};
+			rename_ocr_worker_device: {
+				Args: { target_device_id: string; device_label: string };
+				Returns: Json;
+			};
 			rename_tag: {
 				Args: { target_tag_id: string; tag_name: string };
 				Returns: boolean;
+			};
+			revoke_ocr_worker_device: {
+				Args: { target_device_id: string };
+				Returns: Json;
 			};
 			resolve_drive_conflict: {
 				Args: { target_conflict_id: string; target_resolution: 'retry_local' | 'mark_missing' };
@@ -659,6 +708,10 @@ export type Database = {
 					source_size_bytes: number;
 					source_modified_at: string;
 				};
+				Returns: Json;
+			};
+			set_ocr_job_route: {
+				Args: { target_page_id: string; target_route: OcrRoute };
 				Returns: Json;
 			};
 			set_tag_membership: {
