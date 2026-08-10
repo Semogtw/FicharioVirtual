@@ -3,6 +3,7 @@
 	import { onDestroy } from 'svelte';
 	import DocumentCard from '$lib/components/DocumentCard.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
+	import NotebookBanner from '$lib/components/NotebookBanner.svelte';
 	import type { DocumentSummary } from '$lib/domain/document';
 	import type { NotebookSummary } from '$lib/domain/notebook';
 	import { listAllDocuments } from '$lib/services/documents';
@@ -99,6 +100,13 @@
 			<button type="button" onclick={retryInitialize}>Tentar novamente</button>
 		</div>
 	{:else if notebook}
+		<NotebookBanner
+			notebookId={notebook.id}
+			bannerPath={notebook.bannerPath}
+			bannerPositionX={notebook.bannerPositionX}
+			bannerPositionY={notebook.bannerPositionY}
+		/>
+
 		<header>
 			<div>
 				<p class="eyebrow">Caderno</p>
