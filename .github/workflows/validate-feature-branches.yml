@@ -1,3 +1,4 @@
+# Read-only validation only: this workflow never deploys and never writes back to the repository.
 name: Validate feature branches
 
 on:
