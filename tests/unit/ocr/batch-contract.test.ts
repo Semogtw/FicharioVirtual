@@ -20,7 +20,24 @@ describe('parseOcrBatchPayload', () => {
 			[first.pageId, 'Um'],
 			[second.pageId, 'Dois']
 		]);
+		expect(parsed.pages.every((page) => page.contentClass === 'unknown')).toBe(true);
 		expect(parsed.missingPageIds).toEqual([]);
+	});
+
+	it('accepts and preserves a closed telemetry content class without changing OCR text', () => {
+		const parsed = parseOcrBatchPayload(
+			JSON.stringify({
+				pages: [{ ...result(first, 'Literal'), contentClass: 'handwriting' }]
+			}),
+			[first]
+		);
+
+		expect(parsed.valid).toBe(true);
+		expect(parsed.pages[0]).toMatchObject({
+			pageId: first.pageId,
+			text: 'Literal',
+			contentClass: 'handwriting'
+		});
 	});
 
 	it('keeps valid unique pages while reporting omissions for subset retry', () => {
@@ -50,10 +67,11 @@ describe('parseOcrBatchPayload', () => {
 		expect(parsed.missingPageIds).toEqual([second.pageId]);
 	});
 
-	it('turns malformed, mismatched or extended provider output into missing-page retry data', () => {
+	it('turns malformed, mismatched, invalid-class or extended provider output into missing-page retry data', () => {
 		for (const payload of [
 			'{',
 			JSON.stringify({ pages: [{ ...result(first), pageNumber: 9 }] }),
+			JSON.stringify({ pages: [{ ...result(first), contentClass: 'not_a_class' }] }),
 			JSON.stringify({ pages: [{ ...result(first), commentary: 'extra' }] })
 		]) {
 			expect(parseOcrBatchPayload(payload, [first])).toEqual({
@@ -104,7 +122,12 @@ describe('parseOcrBatchPayload', () => {
 		);
 
 		expect(parsed.pages[0]).toEqual(
-			expect.objectContaining({ needsReview: true, text: '', warnings: expect.any(Array) })
+			expect.objectContaining({
+				needsReview: true,
+				text: '',
+				contentClass: 'unknown',
+				warnings: expect.any(Array)
+			})
 		);
 	});
 });
