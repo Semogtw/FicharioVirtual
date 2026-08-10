@@ -117,12 +117,8 @@ Deno.serve(async (request) => {
 	let storedChunks = 0;
 	let batches = 0;
 	let stopReason:
-		| 'complete'
-		| 'batch_limit'
-		| 'rate_limited'
-		| 'no_progress'
-		| 'timeout'
-		| 'provider_error' = 'batch_limit';
+		'complete' | 'batch_limit' | 'rate_limited' | 'no_progress' | 'timeout' | 'provider_error' =
+		'batch_limit';
 
 	try {
 		await supabase.rpc('prune_stale_semantic_chunks', { target_model: SEMANTIC_EMBEDDING_MODEL });
