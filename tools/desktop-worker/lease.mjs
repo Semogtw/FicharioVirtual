@@ -57,7 +57,8 @@ export async function runWithLeaseRenewal(
 	) {
 		throw new TypeError('Invalid desktop worker lease');
 	}
-	if (typeof operation !== 'function') throw new TypeError('Invalid desktop worker lease operation');
+	if (typeof operation !== 'function')
+		throw new TypeError('Invalid desktop worker lease operation');
 	if (typeof now !== 'function' || typeof sleep !== 'function') {
 		throw new TypeError('Invalid desktop worker lease scheduler');
 	}
