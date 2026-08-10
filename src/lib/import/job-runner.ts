@@ -163,17 +163,25 @@ export class OcrJobRunner {
 	}
 
 	private async runRounds(signal: AbortSignal) {
+		const deferredRetryPageIds = new Set<string>();
 		for (const [round, delay] of BACKOFF_DELAYS.entries()) {
 			if (signal.aborted) return;
 			if (delay > 0) await this.delay.wait(delay, signal);
 			if (signal.aborted) return;
 
 			const jobs = await this.gateway.listRunnableJobs(BATCH_LIMIT);
-			if (jobs.length === 0) return;
+			if (jobs.length === 0) {
+				if (deferredRetryPageIds.size > 0 && round < BACKOFF_DELAYS.length - 1) continue;
+				return;
+			}
 			const outcomes = await Promise.all(jobs.map((job) => this.process(job, signal)));
 			if (signal.aborted) return;
 
-			const retryable = outcomes.some((outcome) => outcome === 'retry');
+			for (const [index, job] of jobs.entries()) {
+				if (outcomes[index] === 'retry') deferredRetryPageIds.add(job.pageId);
+				else deferredRetryPageIds.delete(job.pageId);
+			}
+			const retryable = deferredRetryPageIds.size > 0;
 			const fullBatch = jobs.length === BATCH_LIMIT;
 			if (!retryable && !fullBatch) return;
 			if (round === BACKOFF_DELAYS.length - 1) return;
