@@ -16,8 +16,8 @@ describe('delete-document Drive-first boundary', () => {
 		expect(source).toContain(
 			"import { refreshGoogleAccessToken } from '../_shared/google-oauth-http.ts';"
 		);
-		expect(source).toContain(
-			".select('storage_path,source_storage_path,thumbnail_path,drive_file_id,pages(temporary_image_path)')"
+		expect(source).toMatch(
+			/\.select\(\s*['"]storage_path,source_storage_path,thumbnail_path,drive_file_id,pages\(temporary_image_path\)['"]\s*\)/
 		);
 		expect(source).toContain("Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')");
 		expect(source).toContain("Deno.env.get('GOOGLE_CLIENT_ID')");

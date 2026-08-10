@@ -59,7 +59,7 @@ describe('Edge Function deployment contract', () => {
 
 	it('distinguishes the local 20 MiB setting from the transitional 50 MiB migration', () => {
 		expect(config).toContain('file_size_limit = "20MiB"');
-		expect(ocrRollout).toContain('`202608060014_provider_only_ocr_batches.sql`');
+		expect(ocrRollout).toContain('202608060014_provider_only_ocr_batches.sql');
 		expect(ocrRollout).toContain('50 MiB');
 		expect(ocrRollout).toContain('transitória');
 	});
