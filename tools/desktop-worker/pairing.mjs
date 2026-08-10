@@ -111,7 +111,10 @@ function parsePairingReceipt(value, expectedLabel, expectedCapabilities) {
 	}
 	const keys = Object.keys(value).sort();
 	const expectedKeys = ['capabilities', 'createdAt', 'credential', 'deviceId', 'label', 'status'];
-	if (keys.length !== expectedKeys.length || !keys.every((key, index) => key === expectedKeys[index])) {
+	if (
+		keys.length !== expectedKeys.length ||
+		!keys.every((key, index) => key === expectedKeys[index])
+	) {
 		throw new DesktopPairingError('desktop_ocr_pair_response_invalid', 201);
 	}
 	if (
@@ -148,14 +151,7 @@ export class DesktopPairingError extends Error {
 }
 
 export async function pairDesktopWorker(
-	{
-		workerEndpoint,
-		label,
-		capabilities,
-		accessToken,
-		devicePath,
-		credentialStore
-	},
+	{ workerEndpoint, label, capabilities, accessToken, devicePath, credentialStore },
 	{ fetchImpl = fetch, saveMetadata = saveDeviceMetadata, signal } = {}
 ) {
 	const endpoint = pairEndpoint(workerEndpoint);
