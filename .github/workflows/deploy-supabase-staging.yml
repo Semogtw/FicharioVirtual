@@ -84,7 +84,8 @@ jobs:
             .github/workflows/verify-supabase-staging.yml \
             .github/workflows/verify-ocr-staging.yml \
             tools/checks/check-supabase-staging.mjs \
-            tools/checks/check-ocr-staging.mjs; then
+            tools/checks/check-ocr-staging.mjs \
+            tools/checks/check-desktop-ocr-pairing-staging.mjs; then
             echo "required=false" >> "$GITHUB_OUTPUT"
           else
             echo "required=true" >> "$GITHUB_OUTPUT"
