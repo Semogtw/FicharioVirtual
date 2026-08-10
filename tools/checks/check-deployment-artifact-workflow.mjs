@@ -39,7 +39,10 @@ requireText(
 	'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803',
 	'checkout action must remain pinned to the reviewed commit'
 );
-requireText('persist-credentials: false', 'artifact checkout must not persist repository credentials');
+requireText(
+	'persist-credentials: false',
+	'artifact checkout must not persist repository credentials'
+);
 requireText(
 	'pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86',
 	'pnpm setup action must remain pinned to the reviewed commit'
