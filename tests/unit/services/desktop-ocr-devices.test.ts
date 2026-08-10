@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
 	createDesktopOcrPairingCode,
+	deleteDesktopOcrDevice,
 	DesktopOcrDevicesError,
 	listDesktopOcrDevices,
 	renameDesktopOcrDevice,
@@ -159,9 +160,32 @@ describe('desktop OCR device service', () => {
 		});
 	});
 
+	it('deletes only the requested revoked UUID and parses the bounded receipt', async () => {
+		const rpc = vi.fn(async () => ({
+			data: {
+				deviceId: DEVICE_ID,
+				deleted: true,
+				pairingCodesDeleted: 1
+			},
+			error: null
+		}));
+
+		await expect(deleteDesktopOcrDevice(DEVICE_ID, { rpc } as never)).resolves.toEqual({
+			deviceId: DEVICE_ID,
+			deleted: true,
+			pairingCodesDeleted: 1
+		});
+		expect(rpc).toHaveBeenCalledWith('delete_ocr_worker_device', {
+			target_device_id: DEVICE_ID
+		});
+	});
+
 	it('rejects invalid ids and labels before reaching Supabase', async () => {
 		const rpc = vi.fn();
 		await expect(revokeDesktopOcrDevice('../device', { rpc } as never)).rejects.toThrow(
+			'device id'
+		);
+		await expect(deleteDesktopOcrDevice('../device', { rpc } as never)).rejects.toThrow(
 			'device id'
 		);
 		await expect(renameDesktopOcrDevice(DEVICE_ID, '   ', { rpc } as never)).rejects.toThrow(
@@ -173,8 +197,8 @@ describe('desktop OCR device service', () => {
 		expect(rpc).not.toHaveBeenCalled();
 	});
 
-	it('fails closed when the rename receipt does not match the requested mutation', async () => {
-		const rpc = vi.fn(async () => ({
+	it('fails closed when mutation receipts do not match the requested mutation', async () => {
+		const renameRpc = vi.fn(async () => ({
 			data: {
 				deviceId: DEVICE_ID,
 				label: 'Outro nome',
@@ -184,8 +208,20 @@ describe('desktop OCR device service', () => {
 		}));
 
 		await expect(
-			renameDesktopOcrDevice(DEVICE_ID, 'Nome esperado', { rpc } as never)
+			renameDesktopOcrDevice(DEVICE_ID, 'Nome esperado', { rpc: renameRpc } as never)
 		).rejects.toBeInstanceOf(DesktopOcrDevicesError);
+
+		const deleteRpc = vi.fn(async () => ({
+			data: {
+				deviceId: DEVICE_ID,
+				deleted: true,
+				pairingCodesDeleted: -1
+			},
+			error: null
+		}));
+		await expect(deleteDesktopOcrDevice(DEVICE_ID, { rpc: deleteRpc } as never)).rejects.toBeInstanceOf(
+			DesktopOcrDevicesError
+		);
 	});
 
 	it('maps transport and backend failures to safe user-facing errors', async () => {
@@ -211,5 +247,11 @@ describe('desktop OCR device service', () => {
 		} as never).catch((caught) => caught);
 		expect(renameError).toBeInstanceOf(DesktopOcrDevicesError);
 		expect(String(renameError)).not.toContain('details');
+
+		const deleteError = await deleteDesktopOcrDevice(DEVICE_ID, { rpc: failingRpc } as never).catch(
+			(caught) => caught
+		);
+		expect(deleteError).toBeInstanceOf(DesktopOcrDevicesError);
+		expect(String(deleteError)).not.toContain('details');
 	});
 });
