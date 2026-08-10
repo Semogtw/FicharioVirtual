@@ -96,6 +96,14 @@ export async function runWorkerCycle(
 			purgedAccepted
 		});
 	}
+	if (replay.rejected.length > 0) {
+		return Object.freeze({
+			status: 'dead_lettered',
+			code: replay.rejected[0].code,
+			replay,
+			purgedAccepted
+		});
+	}
 
 	let lease;
 	try {
@@ -182,6 +190,17 @@ export async function runWorkerCycle(
 		return Object.freeze({
 			status: 'spooled',
 			jobId: lease.jobId,
+			renewalFailure,
+			delivery,
+			replay,
+			purgedAccepted
+		});
+	}
+	if (delivery.rejected.length > 0) {
+		return Object.freeze({
+			status: 'dead_lettered',
+			jobId: lease.jobId,
+			code: delivery.rejected[0].code,
 			renewalFailure,
 			delivery,
 			replay,
