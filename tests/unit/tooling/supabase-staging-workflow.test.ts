@@ -8,11 +8,21 @@ function read(path: string) {
 }
 
 describe('Supabase staging verification workflow', () => {
+	it('is reusable after deploy while keeping manual recovery', () => {
+		const workflow = read('.github/workflows/verify-supabase-staging.yml');
+
+		expect(workflow).toContain('workflow_call:');
+		expect(workflow).toContain('target_sha:');
+		expect(workflow).toContain('workflow_dispatch:');
+		expect(workflow).toContain(
+			"ref: ${{ inputs.target_sha != '' && inputs.target_sha || github.sha }}"
+		);
+		expect(workflow).toContain('environment: staging');
+	});
+
 	it('uses a protected staging environment and public client credentials only', () => {
 		const workflow = read('.github/workflows/verify-supabase-staging.yml');
 
-		expect(workflow).toContain('workflow_dispatch:');
-		expect(workflow).toContain('environment: staging');
 		expect(workflow).toContain('STAGING_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}');
 		expect(workflow).toContain(
 			'STAGING_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}'
@@ -28,6 +38,7 @@ describe('Supabase staging verification workflow', () => {
 		const workflow = read('.github/workflows/verify-supabase-staging.yml');
 
 		expect(workflow).toContain('contents: read');
+		expect(workflow).toContain('persist-credentials: false');
 		expect(workflow).toContain('version: 10');
 		expect(workflow).toContain('node-version: 22.16.0');
 		expect(workflow).toContain('cache-dependency-path: pnpm-lock.yaml');
