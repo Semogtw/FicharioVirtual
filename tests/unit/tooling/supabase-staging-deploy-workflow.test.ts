@@ -55,7 +55,25 @@ describe('Supabase staging migration deploy workflow', () => {
 		expect(source).toContain('--linked --include-all');
 	});
 
-	it('deploys versioned Edge Functions and chains Auth/RLS/Storage before persisted OCR verification', () => {
+	it('provisions the background OCR worker credential from Vault before function deployment', () => {
+		const provision = source.indexOf('name: Provision background OCR worker credential');
+		const deployFunctions = source.indexOf(
+			'supabase functions deploy --project-ref "$STAGING_SUPABASE_PROJECT_REF"'
+		);
+
+		expect(provision).toBeGreaterThan(-1);
+		expect(deployFunctions).toBeGreaterThan(provision);
+		expect(source).toContain('/database/query');
+		expect(source).toContain("vault.create_secret('${project_url}', 'project_url')");
+		expect(source).toContain("'ocr_background_worker_key'");
+		expect(source).toContain('vault.decrypted_secrets');
+		expect(source).toContain('echo "::add-mask::$worker_key"');
+		expect(source).toContain('supabase secrets set');
+		expect(source).toContain('OCR_BACKGROUND_WORKER_KEY="$worker_key"');
+		expect(source).not.toContain('OCR_BACKGROUND_WORKER_KEY: ${{ secrets.');
+	});
+
+	it('deploys versioned Edge Functions then verifies the deployed runtime with protected staging jobs', () => {
 		const push = source.indexOf('run: supabase db push --linked --include-all');
 		const deployFunctions = source.indexOf(
 			'supabase functions deploy --project-ref "$STAGING_SUPABASE_PROJECT_REF"'
@@ -68,14 +86,31 @@ describe('Supabase staging migration deploy workflow', () => {
 		expect(listFunctions).toBeGreaterThan(deployFunctions);
 		expect(source).not.toContain('--no-verify-jwt');
 		expect(source).not.toContain('--prune');
+
 		expect(source).toContain('verify-supabase:');
-		expect(source).toContain('uses: ./.github/workflows/verify-supabase-staging.yml');
-		expect(source).toContain('uses: ./.github/workflows/verify-ocr-staging.yml');
+		expect(source).toContain('verify-ocr:');
+		expect(source).not.toContain('uses: ./.github/workflows/verify-supabase-staging.yml');
+		expect(source).not.toContain('uses: ./.github/workflows/verify-ocr-staging.yml');
 		expect(source).toContain("if: needs.deploy.result == 'success'");
 		expect(source).toContain(
 			"if: needs.deploy.result == 'success' && needs.verify-supabase.result == 'success'"
 		);
 		expect(source).toContain('needs: [resolve, deploy, verify-supabase]');
+
+		const protectedVerificationJobs = source.match(/environment: staging$/gm) ?? [];
+		expect(protectedVerificationJobs).toHaveLength(2);
+		expect(source).toContain('group: staging-contract-verification');
+		expect(source).toContain('run: pnpm test:staging:supabase');
+		expect(source).toContain('run: pnpm test:staging:desktop-ocr-pairing');
+		expect(source).toContain('run: pnpm test:staging:ocr');
+		expect(source).toContain('STAGING_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}');
+		expect(source).toContain(
+			'STAGING_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}'
+		);
+		expect(source).toContain('STAGING_AUTHORIZED_EMAIL: ${{ secrets.STAGING_AUTHORIZED_EMAIL }}');
+		expect(source).toContain(
+			'STAGING_AUTHORIZED_PASSWORD: ${{ secrets.STAGING_AUTHORIZED_PASSWORD }}'
+		);
 	});
 
 	it('takes administrative connection material only from protected environment settings', () => {
