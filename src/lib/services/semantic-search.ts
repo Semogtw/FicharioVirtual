@@ -37,7 +37,10 @@ const indexSchema = z
 	})
 	.strict()
 	.superRefine((value, context) => {
-		if (value.indexedPages > value.totalPages || value.complete !== (value.indexedPages === value.totalPages)) {
+		if (
+			value.indexedPages > value.totalPages ||
+			value.complete !== (value.indexedPages === value.totalPages)
+		) {
 			context.addIssue({ code: 'custom', message: 'Invalid semantic search index state' });
 		}
 	});
@@ -121,12 +124,19 @@ function validateOptions(query: string, options: SearchOptions) {
 	const limit = options.limit ?? 30;
 	const offset = options.offset ?? 0;
 	if (!Number.isInteger(limit) || limit < 1 || limit > 50) throw new TypeError('Invalid search limit');
-	if (!Number.isInteger(offset) || offset < 0 || offset > 10_000) throw new TypeError('Invalid search offset');
+	if (!Number.isInteger(offset) || offset < 0 || offset > 10_000) {
+		throw new TypeError('Invalid search offset');
+	}
 	return { normalized, notebookId, limit, offset };
 }
 
 function parseResponse(value: unknown): SemanticSearchResponse {
-	const parsed = responseSchema.parse(value);
+	let parsed: z.infer<typeof responseSchema>;
+	try {
+		parsed = responseSchema.parse(value);
+	} catch {
+		throw new SemanticSearchServiceError('O serviço de busca devolveu uma resposta inválida.');
+	}
 	if (parsed.mode === 'hybrid' && parsed.embeddingModel === null) {
 		throw new SemanticSearchServiceError('O serviço de busca devolveu um modo semântico inválido.');
 	}
@@ -142,7 +152,11 @@ function parseResponse(value: unknown): SemanticSearchResponse {
 	});
 }
 
-async function lexicalFallback(query: string, options: SearchOptions, reason: string): Promise<SemanticSearchResponse> {
+async function lexicalFallback(
+	query: string,
+	options: SearchOptions,
+	reason: string
+): Promise<SemanticSearchResponse> {
 	const results = await searchPages(query, options);
 	return Object.freeze({
 		results: Object.freeze(results.map(lexicalResult)),
@@ -175,7 +189,12 @@ export async function searchPagesHybrid(
 		return Object.freeze({
 			results: Object.freeze([]),
 			hasMore: false,
-			analysis: Object.freeze({ mode: 'lexical', reason: 'blank_query', embeddingModel: null, index: null })
+			analysis: Object.freeze({
+				mode: 'lexical',
+				reason: 'blank_query',
+				embeddingModel: null,
+				index: null
+			})
 		});
 	}
 	if (options.signal?.aborted) throw new DOMException('Search cancelled', 'AbortError');
@@ -197,6 +216,7 @@ export async function searchPagesHybrid(
 		return parseResponse(data);
 	} catch (error) {
 		if (error instanceof DOMException && error.name === 'AbortError') throw error;
+		if (error instanceof SemanticSearchServiceError) throw error;
 		try {
 			return await lexicalFallback(validated.normalized, options, 'semantic_function_unavailable');
 		} catch {
