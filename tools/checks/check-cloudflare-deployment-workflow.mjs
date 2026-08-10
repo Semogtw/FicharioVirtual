@@ -37,7 +37,7 @@ requirePattern(
 	'production promotion must use an explicit protected-environment enable flag'
 );
 requirePattern(
-	/CLOUDFLARE_PRODUCTION_DEPLOY_ENABLED\" != 'true'/u,
+	/CLOUDFLARE_PRODUCTION_DEPLOY_ENABLED" != 'true'/u,
 	'production promotion must fail closed until explicitly enabled'
 );
 requirePattern(
@@ -74,9 +74,9 @@ requirePattern(
 	'artifact manifest target environment must be verified'
 );
 requirePattern(/sha256sum -c SHA256SUMS/u, 'artifact checksums must be revalidated before deployment');
-requirePattern(/find \"\$artifact_root\" -type l/u, 'artifact symlinks must be rejected');
+requirePattern(/find "\$artifact_root" -type l/u, 'artifact symlinks must be rejected');
 requirePattern(
-	/wrangler pages deploy \"\$ARTIFACT_ROOT\/site\"/u,
+	/wrangler pages deploy "\$ARTIFACT_ROOT\/site"/u,
 	'only the validated site directory may be deployed'
 );
 requirePattern(
@@ -84,7 +84,7 @@ requirePattern(
 	'deployment must remain scoped to the Fichário Pages project'
 );
 requirePattern(
-	/--commit-hash=\"\$EXPECTED_SOURCE_COMMIT\"/u,
+	/--commit-hash="\$EXPECTED_SOURCE_COMMIT"/u,
 	'Cloudflare deployment metadata must retain the validated source SHA'
 );
 requirePattern(/pages_branch='main'/u, 'production deployments must target the production branch');
@@ -98,11 +98,11 @@ requirePattern(
 	'workflow must verify the source SHA returned by Cloudflare'
 );
 requirePattern(
-	/node \"\$ARTIFACT_ROOT\/checks\/check-deployed-site\.mjs\" \"\$DEPLOYMENT_URL\"/u,
+	/node "\$ARTIFACT_ROOT\/checks\/check-deployed-site\.mjs" "\$DEPLOYMENT_URL"/u,
 	'exact deployment URL must pass the checker carried by the artifact'
 );
 requirePattern(
-	/node \"\$ARTIFACT_ROOT\/checks\/check-deployed-site\.mjs\" 'https:\/\/fichario-virtual\.pages\.dev'/u,
+	/node "\$ARTIFACT_ROOT\/checks\/check-deployed-site\.mjs" 'https:\/\/fichario-virtual\.pages\.dev'/u,
 	'production alias must pass the same artifact-pinned checker'
 );
 
