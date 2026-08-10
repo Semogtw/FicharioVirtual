@@ -37,19 +37,38 @@ describe('deployable static artifact workflow', () => {
 		expect(workflow).toContain('No successful Validate current head push run exists');
 	});
 
-	it('builds with public Supabase values supplied through step environment variables', () => {
+	it('requires the complete public Supabase and Google Drive release configuration', () => {
 		const workflow = read('.github/workflows/build-deployment-artifact.yml');
 
-		expect(workflow).toContain('PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}');
-		expect(workflow).toContain(
-			'PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_SUPABASE_PUBLISHABLE_KEY }}'
-		);
+		for (const binding of [
+			'PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}',
+			'PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_SUPABASE_PUBLISHABLE_KEY }}',
+			'PUBLIC_GOOGLE_CLIENT_ID: ${{ secrets.PUBLIC_GOOGLE_CLIENT_ID }}',
+			'PUBLIC_GOOGLE_PICKER_API_KEY: ${{ secrets.PUBLIC_GOOGLE_PICKER_API_KEY }}',
+			'PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER: ${{ secrets.PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER }}'
+		]) {
+			expect(workflow).toContain(binding);
+		}
+		expect(workflow).toContain('run: node tools/checks/check-staging-public-config.mjs');
 		expect(workflow).toContain('pnpm install --frozen-lockfile');
 		expect(workflow).toContain('pnpm verify');
-		expect(workflow).toContain('PUBLIC_SUPABASE_URL');
-		expect(workflow).toContain('PUBLIC_SUPABASE_PUBLISHABLE_KEY');
 		expect(workflow.toLowerCase()).not.toContain('service_role');
 		expect(workflow).not.toContain('GEMINI_API_KEY');
+	});
+
+	it('proves every required public value is frozen into the built site', () => {
+		const workflow = read('.github/workflows/build-deployment-artifact.yml');
+
+		for (const name of [
+			'PUBLIC_SUPABASE_URL',
+			'PUBLIC_SUPABASE_PUBLISHABLE_KEY',
+			'PUBLIC_GOOGLE_CLIENT_ID',
+			'PUBLIC_GOOGLE_PICKER_API_KEY',
+			'PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER'
+		]) {
+			expect(workflow).toContain(`grep -R -F -- "$${name}" build >/dev/null`);
+		}
+		expect(workflow).not.toContain('if [[ -n "$PUBLIC_GOOGLE_CLIENT_ID" ]]');
 	});
 
 	it('verifies the packaged artifact with the reusable post-download command before upload', () => {
