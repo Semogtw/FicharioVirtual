@@ -92,10 +92,12 @@ function parseRequest(value: unknown): ParsedRequest | null {
 	const query = record.query.trim();
 	if (query.length < 1 || query.length > MAX_QUERY_CHARS) return null;
 	const notebookId = record.notebookId ?? null;
-	if (notebookId !== null && (typeof notebookId !== 'string' || !UUID.test(notebookId))) return null;
+	if (notebookId !== null && (typeof notebookId !== 'string' || !UUID.test(notebookId)))
+		return null;
 	const limit = record.limit ?? 30;
 	const offset = record.offset ?? 0;
-	if (!Number.isInteger(limit) || Number(limit) < 1 || Number(limit) > MAX_RESULT_LIMIT) return null;
+	if (!Number.isInteger(limit) || Number(limit) < 1 || Number(limit) > MAX_RESULT_LIMIT)
+		return null;
 	if (!Number.isInteger(offset) || Number(offset) < 0 || Number(offset) > MAX_OFFSET) return null;
 	return Object.freeze({
 		query,
@@ -403,7 +405,8 @@ Deno.serve(async (request) => {
 	if (request.method !== 'POST') return respond(405, { code: 'method_not_allowed' });
 
 	const authorization = request.headers.get('Authorization');
-	if (!authorization?.startsWith('Bearer ')) return respond(401, { code: 'authentication_required' });
+	if (!authorization?.startsWith('Bearer '))
+		return respond(401, { code: 'authentication_required' });
 
 	let raw: unknown;
 	try {
@@ -435,9 +438,12 @@ Deno.serve(async (request) => {
 	try {
 		const apiKey = Deno.env.get('GEMINI_API_KEY');
 		const embeddingModel = Deno.env.get('SEMANTIC_EMBEDDING_MODEL') ?? 'gemini-embedding-2';
-		const { data: consent, error: consentError } = await supabase.rpc('has_search_semantic_consent', {
-			consent_version: CONSENT_VERSION
-		});
+		const { data: consent, error: consentError } = await supabase.rpc(
+			'has_search_semantic_consent',
+			{
+				consent_version: CONSENT_VERSION
+			}
+		);
 
 		if (
 			parsed.query.length < MIN_SEMANTIC_QUERY_CHARS ||
@@ -451,7 +457,8 @@ Deno.serve(async (request) => {
 			let reason = 'semantic_not_configured';
 			if (parsed.query.length < MIN_SEMANTIC_QUERY_CHARS) reason = 'query_too_short';
 			else if (!consentError && consent !== true) reason = 'consent_required';
-			else if (parsed.offset + parsed.limit > MAX_HYBRID_WINDOW) reason = 'semantic_window_exhausted';
+			else if (parsed.offset + parsed.limit > MAX_HYBRID_WINDOW)
+				reason = 'semantic_window_exhausted';
 			return respond(200, lexicalResponse(rows, parsed, reason));
 		}
 
