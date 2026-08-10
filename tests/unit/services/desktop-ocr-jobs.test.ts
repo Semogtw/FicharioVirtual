@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
 	DesktopOcrJobsError,
-	listDesktopOcrJobs
+	listDesktopOcrJobs,
+	returnDesktopOcrJobToGemini
 } from '../../../src/lib/services/desktop-ocr-jobs';
 
 const JOB_ID = '11111111-1111-4111-8111-111111111111';
@@ -105,6 +106,53 @@ describe('desktop OCR queue service', () => {
 			error: null
 		}));
 		await expect(listDesktopOcrJobs({ rpc } as never)).rejects.toBeInstanceOf(DesktopOcrJobsError);
+	});
+
+	it('returns waiting or expired desktop work to Gemini with a strict receipt', async () => {
+		for (const recoveredExpiredLease of [false, true]) {
+			const rpc = vi.fn(async () => ({
+				data: {
+					jobId: JOB_ID,
+					pageId: PAGE_ID,
+					route: 'gemini',
+					status: 'pending',
+					recoveredExpiredLease
+				},
+				error: null
+			}));
+			const result = await returnDesktopOcrJobToGemini(PAGE_ID, { rpc } as never);
+
+			expect(rpc).toHaveBeenCalledWith('set_ocr_job_route', {
+				target_page_id: PAGE_ID,
+				target_route: 'gemini'
+			});
+			expect(result).toEqual({
+				jobId: JOB_ID,
+				pageId: PAGE_ID,
+				route: 'gemini',
+				status: 'pending',
+				recoveredExpiredLease
+			});
+		}
+	});
+
+	it('rejects invalid route receipts and page identifiers before exposing state', async () => {
+		const rpc = vi.fn(async () => ({
+			data: {
+				jobId: JOB_ID,
+				pageId: PAGE_ID,
+				route: 'desktop',
+				status: 'waiting_desktop',
+				recoveredExpiredLease: false
+			},
+			error: null
+		}));
+		await expect(returnDesktopOcrJobToGemini(PAGE_ID, { rpc } as never)).rejects.toBeInstanceOf(
+			DesktopOcrJobsError
+		);
+		await expect(returnDesktopOcrJobToGemini('../escape', { rpc } as never)).rejects.toBeInstanceOf(
+			TypeError
+		);
 	});
 
 	it('maps transport/backend details to a safe error', async () => {
