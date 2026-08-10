@@ -95,7 +95,10 @@ describe('OcrJobRunner', () => {
 	});
 
 	it('keeps a deferred retry alive while database polls are temporarily empty', async () => {
-		const wait = vi.fn(async (_milliseconds: number, _signal: AbortSignal) => undefined);
+		const wait = vi.fn(async (milliseconds: number, signal: AbortSignal) => {
+			void milliseconds;
+			void signal;
+		});
 		const gateway: OcrQueueGateway = {
 			listRunnableJobs: vi
 				.fn()
