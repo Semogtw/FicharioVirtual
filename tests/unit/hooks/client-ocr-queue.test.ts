@@ -11,7 +11,9 @@ describe('client OCR queue lifecycle', () => {
 		expect(hook).toContain(
 			"import { createOcrQueueLifecycle } from '$lib/import/job-runner-lifecycle';"
 		);
-		expect(hook).toContain("import { kickOcrQueueBestEffort } from '$lib/services/ocr-background';");
+		expect(hook).toContain(
+			"import { kickOcrQueueBestEffort } from '$lib/services/ocr-background';"
+		);
 		expect(hook).toContain(
 			"import { restoreImageImports } from '$lib/stores/import-queue.svelte';"
 		);
