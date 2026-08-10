@@ -8,23 +8,25 @@ function read(path: string) {
 }
 
 describe('OCR staging verification', () => {
-	it('requires explicit manual confirmation and public client credentials only', () => {
+	it('is reusable after deploy without a recurring confirmation gate', () => {
 		const workflow = read('.github/workflows/verify-ocr-staging.yml');
 
+		expect(workflow).toContain('workflow_call:');
 		expect(workflow).toContain('workflow_dispatch:');
-		expect(workflow).toContain('confirm_external_ocr:');
-		expect(workflow).toContain('type: boolean');
-		expect(workflow).toContain('default: false');
+		expect(workflow).toContain('target_sha:');
+		expect(workflow).not.toContain('confirm_external_ocr:');
+		expect(workflow).not.toContain('Require explicit OCR confirmation');
 		expect(workflow).toContain('environment: staging');
 		expect(workflow).toContain('STAGING_SUPABASE_PUBLISHABLE_KEY');
 		expect(workflow.toLowerCase()).not.toContain('service_role');
 		expect(workflow).not.toContain('GEMINI_API_KEY');
 	});
 
-	it('uses the lockfile, pinned runtime, and dedicated OCR command', () => {
+	it('uses the validated SHA, lockfile, pinned runtime, and dedicated OCR command', () => {
 		const workflow = read('.github/workflows/verify-ocr-staging.yml');
 		const packageJson = read('package.json');
 
+		expect(workflow).toContain("ref: ${{ inputs.target_sha != '' && inputs.target_sha || github.sha }}");
 		expect(workflow).toContain('contents: read');
 		expect(workflow).toContain('persist-credentials: false');
 		expect(workflow).toContain('version: 10');
