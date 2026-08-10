@@ -5,23 +5,24 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { ResultSpool } from '../../../tools/desktop-worker/spool.mjs';
 
 const JOB_ID = '11111111-1111-4111-8111-111111111111';
+const LEASE_ID = '22222222-2222-4222-8222-222222222222';
 const SOURCE_SHA = 'a'.repeat(64);
 
 function result(overrides: Record<string, unknown> = {}) {
 	return {
+		action: 'complete',
 		jobId: JOB_ID,
-		claimNonce: 'opaque-test-nonce',
+		leaseId: LEASE_ID,
 		sourceSha256: SOURCE_SHA,
-		engine: 'desktop',
-		backend: 'cpu',
+		backend: 'transformers',
 		modelId: 'test-model',
 		modelVersion: '1.0.0',
-		text: 'synthetic transcript',
+		rawText: 'synthetic transcript',
+		correctedText: null,
 		warnings: [],
 		contentType: 'printed',
 		needsReview: false,
-		processingStartedAt: '2026-08-09T00:00:00.000Z',
-		processingFinishedAt: '2026-08-09T00:00:01.000Z',
+		timingMs: 1000,
 		...overrides
 	};
 }
@@ -48,6 +49,7 @@ describe('desktop worker result spool', () => {
 		expect(first).toEqual(second);
 		expect(first?.state).toBe('pending');
 		expect(first?.attemptCount).toBe(0);
+		expect(first?.result).toEqual(result());
 		expect(spool.listPending()).toHaveLength(1);
 		expect((await stat(path)).mode & 0o777).toBe(0o600);
 	});
@@ -55,7 +57,7 @@ describe('desktop worker result spool', () => {
 	it('rejects an idempotency collision for the same job', async () => {
 		const { spool } = await createSpool();
 		spool.enqueue(result());
-		expect(() => spool.enqueue(result({ text: 'different transcript' }))).toThrow(
+		expect(() => spool.enqueue(result({ rawText: 'different transcript' }))).toThrow(
 			'idempotency conflict'
 		);
 	});
@@ -78,10 +80,13 @@ describe('desktop worker result spool', () => {
 		expect(spool.get(JOB_ID)).toBeNull();
 	});
 
-	it('rejects invalid job ids, hashes and oversized payloads before persistence', async () => {
+	it('rejects payloads that diverge from the Edge Function contract', async () => {
 		const { spool } = await createSpool();
-		expect(() => spool.enqueue(result({ jobId: '../escape' }))).toThrow('jobId');
-		expect(() => spool.enqueue(result({ sourceSha256: 'bad' }))).toThrow('sourceSha256');
-		expect(() => spool.enqueue(result({ text: 'x'.repeat(2 * 1024 * 1024) }))).toThrow('too large');
+		expect(() => spool.enqueue(result({ jobId: '../escape' }))).toThrow('completion payload');
+		expect(() => spool.enqueue(result({ sourceSha256: 'bad' }))).toThrow('completion payload');
+		expect(() => spool.enqueue(result({ backend: 'cpu' }))).toThrow('completion payload');
+		expect(() => spool.enqueue(result({ rawText: 'x'.repeat(1_000_001) }))).toThrow(
+			'completion payload'
+		);
 	});
 });
