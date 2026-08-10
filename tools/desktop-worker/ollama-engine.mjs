@@ -1,9 +1,11 @@
+import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { performance } from 'node:perf_hooks';
 
 const SHA256 = /^[0-9a-f]{64}$/;
 const MODEL = /^[A-Za-z0-9._:/-]+$/;
+const SOURCE_MIME_TYPES = new Set(['image/webp', 'image/jpeg']);
 const MAX_SOURCE_BYTES = 12 * 1024 * 1024;
 const MAX_API_RESPONSE_BYTES = 2 * 1024 * 1024;
 const MAX_TEXT_LENGTH = 1_000_000;
@@ -207,7 +209,11 @@ async function readPrivateSource(input) {
 		typeof input.path !== 'string' ||
 		!Number.isSafeInteger(input.bytes) ||
 		input.bytes < 1 ||
-		input.bytes > MAX_SOURCE_BYTES
+		input.bytes > MAX_SOURCE_BYTES ||
+		typeof input.sha256 !== 'string' ||
+		!SHA256.test(input.sha256) ||
+		typeof input.mimeType !== 'string' ||
+		!SOURCE_MIME_TYPES.has(input.mimeType)
 	) {
 		throw new TypeError('Invalid Ollama OCR source');
 	}
@@ -218,7 +224,11 @@ async function readPrivateSource(input) {
 		if (!details.isFile() || details.size !== input.bytes || details.size > MAX_SOURCE_BYTES) {
 			throw new OllamaEngineError('ollama_source_changed');
 		}
-		return await handle.readFile();
+		const bytes = await handle.readFile();
+		if (createHash('sha256').update(bytes).digest('hex') !== input.sha256) {
+			throw new OllamaEngineError('ollama_source_changed');
+		}
+		return bytes;
 	} catch (error) {
 		if (error instanceof OllamaEngineError) throw error;
 		throw new OllamaEngineError('ollama_source_unavailable');
