@@ -21,6 +21,26 @@ if [[ "${TARGET_ENVIRONMENT:-}" != 'staging' ]]; then
   exit 1
 fi
 
+source_date_epoch="${SOURCE_DATE_EPOCH:-}"
+if [[ -z "$source_date_epoch" ]]; then
+  source_date_epoch="$(git show -s --format=%ct "$source_commit" 2>/dev/null || true)"
+fi
+if [[ ! "$source_date_epoch" =~ ^[0-9]+$ ]]; then
+  echo 'SOURCE_DATE_EPOCH must be an integer Unix timestamp or derivable from GITHUB_SHA' >&2
+  exit 1
+fi
+created_utc="$(
+  node -e '
+    const epoch = Number(process.argv[1]);
+    const instant = new Date(epoch * 1000);
+    if (!Number.isSafeInteger(epoch) || Number.isNaN(instant.getTime())) process.exit(1);
+    process.stdout.write(instant.toISOString().replace(".000Z", "Z"));
+  ' "$source_date_epoch"
+)" || {
+  echo 'SOURCE_DATE_EPOCH is outside the supported timestamp range' >&2
+  exit 1
+}
+
 for required in \
   build/200.html \
   build/_headers \
@@ -55,7 +75,7 @@ cp \
   echo 'source_repository=Semogtw/FicharioVirtual'
   echo "source_commit=$source_commit"
   echo 'target_environment=staging'
-  echo "created_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "created_utc=$created_utc"
   echo "node_version=$(node --version)"
   echo "pnpm_version=$(pnpm --version)"
   echo "package_sha256=$(sha256sum "$output_name/source/package.json" | cut -d' ' -f1)"
