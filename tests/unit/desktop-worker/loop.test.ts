@@ -40,29 +40,29 @@ describe('runWorkerLoop', () => {
 		const sleep = vi.fn(async () => undefined);
 		const statuses: unknown[] = [];
 
-		const result = await runWorkerLoop(
-			{ marker: true },
-			config,
-			{
-				runCycle,
-				sleep,
-				onStatus: (status) => statuses.push(status),
-				maxCycles: 4
-			}
-		);
+		const result = await runWorkerLoop({ marker: true }, config, {
+			runCycle,
+			sleep,
+			onStatus: (status) => statuses.push(status),
+			maxCycles: 4
+		});
 
 		expect(runCycle).toHaveBeenCalledTimes(4);
-		expect(runCycle).toHaveBeenNthCalledWith(1, { marker: true }, {
-			signal: undefined,
-			keepCompletedSpoolHours: 24
-		});
+		expect(runCycle).toHaveBeenNthCalledWith(
+			1,
+			{ marker: true },
+			{
+				signal: undefined,
+				keepCompletedSpoolHours: 24
+			}
+		);
 		expect(sleep.mock.calls.map(([delay]) => delay)).toEqual([10_000, 20_000, 10_000]);
 		expect(statuses).toEqual([
-		{ cycle: 1, status: 'claim_deferred', consecutiveFailures: 1, code: 'worker_network_failed' },
-		{ cycle: 2, status: 'claim_deferred', consecutiveFailures: 2, code: 'worker_network_failed' },
-		{ cycle: 3, status: 'completed', consecutiveFailures: 0, code: null },
-		{ cycle: 4, status: 'idle', consecutiveFailures: 0, code: null }
-	]);
+			{ cycle: 1, status: 'claim_deferred', consecutiveFailures: 1, code: 'worker_network_failed' },
+			{ cycle: 2, status: 'claim_deferred', consecutiveFailures: 2, code: 'worker_network_failed' },
+			{ cycle: 3, status: 'completed', consecutiveFailures: 0, code: null },
+			{ cycle: 4, status: 'idle', consecutiveFailures: 0, code: null }
+		]);
 		expect(result).toEqual({ cycles: 4, consecutiveFailures: 0 });
 	});
 
@@ -96,20 +96,16 @@ describe('runWorkerLoop', () => {
 
 	it('does not leak arbitrary cycle details through the status callback', async () => {
 		const onStatus = vi.fn();
-		await runWorkerLoop(
-			{},
-			config,
-			{
-				runCycle: vi.fn(async () => ({
-					status: 'source_deferred',
-					code: 'source_hash_mismatch',
-					jobId: 'private-job-id',
-					replay: { private: 'payload' }
-				})),
-				onStatus,
-				maxCycles: 1
-			}
-		);
+		await runWorkerLoop({}, config, {
+			runCycle: vi.fn(async () => ({
+				status: 'source_deferred',
+				code: 'source_hash_mismatch',
+				jobId: 'private-job-id',
+				replay: { private: 'payload' }
+			})),
+			onStatus,
+			maxCycles: 1
+		});
 
 		expect(onStatus).toHaveBeenCalledWith({
 			cycle: 1,

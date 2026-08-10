@@ -124,7 +124,9 @@ describe('runSecretTool', () => {
 			child = fakeChild({ stdout: 'x'.repeat(1025) });
 			return child;
 		});
-		await expect(runSecretTool(['lookup', 'application', 'fichario-worker'], { spawnImpl })).rejects.toMatchObject({
+		await expect(
+			runSecretTool(['lookup', 'application', 'fichario-worker'], { spawnImpl })
+		).rejects.toMatchObject({
 			code: 'secret_service_response_too_large'
 		});
 		expect(child.kill).toHaveBeenCalledWith('SIGKILL');

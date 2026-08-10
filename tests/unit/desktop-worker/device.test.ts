@@ -67,7 +67,9 @@ describe('desktop worker device metadata', () => {
 	});
 
 	it('requires the exact HTTPS desktop worker Edge Function path', () => {
-		expect(parseWorkerEndpoint(ENDPOINT)).toBe(`${ENDPOINT}/`.replace('/desktop-ocr-worker/', '/desktop-ocr-worker'));
+		expect(parseWorkerEndpoint(ENDPOINT)).toBe(
+			`${ENDPOINT}/`.replace('/desktop-ocr-worker/', '/desktop-ocr-worker')
+		);
 		expect(() => parseWorkerEndpoint('http://example.com/functions/v1/desktop-ocr-worker')).toThrow(
 			'endpoint'
 		);

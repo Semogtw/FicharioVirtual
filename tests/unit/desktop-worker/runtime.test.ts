@@ -7,10 +7,7 @@ import {
 	ensureWorkerDirectories,
 	resolveWorkerPaths
 } from '../../../tools/desktop-worker/paths.mjs';
-import {
-	WorkerRuntimeError,
-	createWorkerRuntime
-} from '../../../tools/desktop-worker/runtime.mjs';
+import { WorkerRuntimeError, createWorkerRuntime } from '../../../tools/desktop-worker/runtime.mjs';
 
 const DEVICE_ID = '11111111-1111-4111-8111-111111111111';
 const CREDENTIAL = 'A'.repeat(43);

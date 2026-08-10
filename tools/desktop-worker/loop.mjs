@@ -48,10 +48,7 @@ export function nextWorkerDelay(status, consecutiveFailures, config) {
 		throw new TypeError('Invalid desktop worker failure count');
 	}
 	const pollMs = secondsToMilliseconds(config?.pollIntervalSeconds, 'pollIntervalSeconds');
-	const idleMs = secondsToMilliseconds(
-		config?.idlePollIntervalSeconds,
-		'idlePollIntervalSeconds'
-	);
+	const idleMs = secondsToMilliseconds(config?.idlePollIntervalSeconds, 'idlePollIntervalSeconds');
 	if (idleMs < pollMs) throw new TypeError('Desktop worker idle polling must not be faster');
 	if (status === 'idle') return idleMs;
 	if (status === 'completed') return pollMs;
@@ -72,7 +69,11 @@ export async function runWorkerLoop(
 		maxCycles = Number.POSITIVE_INFINITY
 	} = {}
 ) {
-	if (typeof runCycle !== 'function' || typeof sleep !== 'function' || typeof onStatus !== 'function') {
+	if (
+		typeof runCycle !== 'function' ||
+		typeof sleep !== 'function' ||
+		typeof onStatus !== 'function'
+	) {
 		throw new TypeError('Invalid desktop worker loop dependency');
 	}
 	if (

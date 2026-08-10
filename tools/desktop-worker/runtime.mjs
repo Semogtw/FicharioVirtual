@@ -2,11 +2,7 @@ import { DesktopWorkerClient } from './client.mjs';
 import { loadWorkerConfig } from './config.mjs';
 import { loadDeviceMetadata } from './device.mjs';
 import { SecretServiceCredentialStore } from './keyring.mjs';
-import {
-	ensurePrivateFile,
-	ensureWorkerDirectories,
-	resolveWorkerPaths
-} from './paths.mjs';
+import { ensurePrivateFile, ensureWorkerDirectories, resolveWorkerPaths } from './paths.mjs';
 import { ResultSpool } from './spool.mjs';
 
 export class WorkerRuntimeError extends Error {

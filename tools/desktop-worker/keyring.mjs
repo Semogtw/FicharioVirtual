@@ -132,14 +132,7 @@ export class SecretServiceCredentialStore {
 		const id = requireDeviceId(deviceId);
 		const secret = requireCredential(credential);
 		await this.#run(
-			[
-				'store',
-				'--label=Fichario OCR Worker',
-				'application',
-				'fichario-worker',
-				'device-id',
-				id
-			],
+			['store', '--label=Fichario OCR Worker', 'application', 'fichario-worker', 'device-id', id],
 			{ input: secret, command: this.#command, signal }
 		);
 		return true;
@@ -149,10 +142,10 @@ export class SecretServiceCredentialStore {
 		const id = requireDeviceId(deviceId);
 		let output;
 		try {
-			output = await this.#run(
-				['lookup', 'application', 'fichario-worker', 'device-id', id],
-				{ command: this.#command, signal }
-			);
+			output = await this.#run(['lookup', 'application', 'fichario-worker', 'device-id', id], {
+				command: this.#command,
+				signal
+			});
 		} catch (error) {
 			if (error instanceof SecretServiceError && error.code === 'secret_service_rejected') {
 				return null;
@@ -169,10 +162,10 @@ export class SecretServiceCredentialStore {
 	async clear(deviceId, { signal } = {}) {
 		const id = requireDeviceId(deviceId);
 		try {
-			await this.#run(
-				['clear', 'application', 'fichario-worker', 'device-id', id],
-				{ command: this.#command, signal }
-			);
+			await this.#run(['clear', 'application', 'fichario-worker', 'device-id', id], {
+				command: this.#command,
+				signal
+			});
 			return true;
 		} catch (error) {
 			if (error instanceof SecretServiceError && error.code === 'secret_service_rejected') {
