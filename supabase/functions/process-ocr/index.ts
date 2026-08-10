@@ -287,6 +287,7 @@ Deno.serve(async (request) => {
 	const pendingPageIds: string[] = [];
 	const failedPageIds: string[] = [];
 	const splitRequiredPageIds: string[] = [];
+	const warningCounts = new Map<string, number>();
 	const claimedPages: ClaimedPage[] = [];
 	const claimedAt = new Date().toISOString();
 
@@ -547,6 +548,7 @@ Deno.serve(async (request) => {
 				pendingPageIds.push(result.pageId);
 				continue;
 			}
+			warningCounts.set(result.pageId, result.warnings.length);
 			completedPageIds.push(result.pageId);
 			if (result.needsReview) reviewPageIds.push(result.pageId);
 			await cleanupTemporaryImage(result.pageId, claimed.page.temporary_image_path);
@@ -582,7 +584,12 @@ Deno.serve(async (request) => {
 			unexpectedResultPageIds: outcome.unexpectedPageIds
 		});
 		if (parsedRequest.legacy && completedPageIds.includes(parsedRequest.pageIds[0]!)) {
-			return respond(200, { state: 'complete', needsReview: reviewPageIds.length > 0 });
+			const pageId = parsedRequest.pageIds[0]!;
+			return respond(200, {
+				state: 'complete',
+				needsReview: reviewPageIds.length > 0,
+				warningCount: warningCounts.get(pageId) ?? 0
+			});
 		}
 		await finishBatch(
 			parsedRequest.batchId,
