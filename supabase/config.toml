@@ -46,6 +46,9 @@ verify_jwt = true
 [functions.semantic-search]
 verify_jwt = true
 
+[functions.semantic-index]
+verify_jwt = true
+
 [functions.delete-document]
 verify_jwt = true
 
