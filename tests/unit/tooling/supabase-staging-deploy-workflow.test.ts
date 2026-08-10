@@ -6,12 +6,27 @@ const source = readFileSync(path, 'utf8');
 const currentHeadSource = readFileSync('.github/workflows/validate-current-head.yml', 'utf8');
 
 describe('Supabase staging migration deploy workflow', () => {
-	it('is manual, protected and cannot push repository contents', () => {
+	it('automates staging only after a successful validated main SHA and keeps manual recovery', () => {
+		expect(source).toContain('workflow_run:');
+		expect(source).toContain('workflows: [Validate current head]');
+		expect(source).toContain('types: [completed]');
+		expect(source).toContain("github.event.workflow_run.conclusion == 'success'");
+		expect(source).toContain("github.event.workflow_run.head_branch == 'main'");
 		expect(source).toContain('workflow_dispatch:');
 		expect(source).toContain('environment: staging-deploy');
-		expect(source).toMatch(/permissions:\s*\n\s*contents:\s*read/);
+		expect(source).toMatch(/permissions:\s*\n\s*contents:\s*read\s*\n\s*deployments:\s*read/);
 		expect(source).not.toMatch(/^\s*contents:\s*write\s*$/m);
 		expect(source).toContain('persist-credentials: false');
+	});
+
+	it('compares the validated SHA with the last successful staging deployment', () => {
+		expect(source).toContain('environment=staging-deploy&per_page=20');
+		expect(source).toContain("--jq '.[0].state // \"\"'");
+		expect(source).toContain('git merge-base --is-ancestor "$base_sha" "$TARGET_SHA"');
+		expect(source).toContain('git diff --quiet "$base_sha" "$TARGET_SHA" --');
+		expect(source).toContain('supabase');
+		expect(source).toContain('.github/workflows/verify-ocr-staging.yml');
+		expect(source).toContain("deploy_required: ${{ steps.changes.outputs.required }}");
 	});
 
 	it('pins the same immutable Supabase CLI action and CLI version used by current-head validation', () => {
@@ -36,7 +51,7 @@ describe('Supabase staging migration deploy workflow', () => {
 		expect(source).toContain('--linked --include-all');
 	});
 
-	it('deploys the versioned Edge Functions only after the database is synchronized', () => {
+	it('deploys versioned Edge Functions and automatically follows with persisted OCR verification', () => {
 		const push = source.indexOf('run: supabase db push --linked --include-all');
 		const deployFunctions = source.indexOf(
 			'supabase functions deploy --project-ref "$STAGING_SUPABASE_PROJECT_REF"'
@@ -48,6 +63,9 @@ describe('Supabase staging migration deploy workflow', () => {
 		expect(deployFunctions).toBeGreaterThan(push);
 		expect(listFunctions).toBeGreaterThan(deployFunctions);
 		expect(source).not.toContain('--no-verify-jwt');
+		expect(source).not.toContain('--prune');
+		expect(source).toContain('uses: ./.github/workflows/verify-ocr-staging.yml');
+		expect(source).toContain("if: needs.deploy.result == 'success'");
 	});
 
 	it('takes administrative connection material only from protected environment settings', () => {
