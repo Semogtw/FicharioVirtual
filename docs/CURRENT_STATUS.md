@@ -147,6 +147,10 @@ O cleanup [`31333977753`](https://github.com/Semogtw/FicharioVirtual/actions/run
 
 O workflow administrativo foi restaurado no commit `9ff4975bc046004628635834bdedadce8bb5e264`: apenas `workflow_dispatch`, `cancel-in-progress: false`, sem comando temporário de exclusão. O deploy mantém `supabase db push --linked --dry-run --include-all` e `supabase db push --linked --include-all` para reconciliar migrations locais pendentes inclusive fora de ordem.
 
+### Housekeeping final dos gates
+
+Depois da remoção da instrumentação temporária, os testes estáticos foram alinhados ao lifecycle provider-only atual. O checkpoint `0f71737f9fb1c0bdf62b5d3eaf6b88e0b5c69a55` terminou com **success** no `Validate current head` `31340782404` e no `Validate documentation` `31340782422`. Esse checkpoint fecha a consistência do repositório após o cleanup; a evidência funcional completa com Chromium do fix OCR continua sendo `f87e1edc` / `31333367357`.
+
 ### Gates obrigatórios
 
 ```bash
@@ -193,13 +197,12 @@ A fronteira backend está implementada em código: pareamento, credencial por di
 
 ## Pendências imediatas
 
-1. obter um recibo terminal do `Validate current head` após a documentação/housekeeping final;
-2. executar o fluxo OCR normal em staging com página/job e persistência, além da sonda sintética já aprovada;
-3. executar OAuth e Google Drive com conta real, incluindo crash/recovery, ranges e duas sessões concorrentes;
-4. regenerar `src/lib/types/database.ts` pelo schema efetivamente implantado;
-5. validar PDFs grandes reais e dispositivos móveis/tablet;
-6. implantar e verificar Cloudflare Pages e headers no domínio final;
-7. implementar o worker desktop em etapa separada.
+1. executar o fluxo OCR normal em staging com página/job e persistência, além da sonda sintética já aprovada;
+2. executar OAuth e Google Drive com conta real, incluindo crash/recovery, ranges e duas sessões concorrentes;
+3. regenerar `src/lib/types/database.ts` pelo schema efetivamente implantado;
+4. validar PDFs grandes reais e dispositivos móveis/tablet;
+5. implantar e verificar Cloudflare Pages e headers no domínio final;
+6. implementar o worker desktop em etapa separada.
 
 ## Regras de continuidade
 
