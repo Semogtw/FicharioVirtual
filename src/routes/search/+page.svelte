@@ -116,11 +116,16 @@
 				? `Busca textual + semântica ativa · ${index.indexedPages} páginas no índice.`
 				: `Busca textual + semântica ativa · ${index.indexedPages}/${index.totalPages} páginas indexadas; o restante continua coberto pela busca textual.`;
 		}
-		if (analysis.reason === 'query_too_short') return 'Consultas muito curtas usam somente a busca textual.';
-		if (analysis.reason === 'semantic_quota_or_rate_limit') return 'Busca textual ativa; a cota semântica está temporariamente indisponível.';
-		if (analysis.reason === 'semantic_provider_unavailable') return 'Busca textual ativa; o provedor semântico está temporariamente indisponível.';
-		if (analysis.reason === 'semantic_window_exhausted') return 'Resultados mais profundos continuam pela busca textual.';
-		if (analysis.reason === 'semantic_function_unavailable') return 'Busca textual ativa; a camada semântica ainda não está disponível neste ambiente.';
+		if (analysis.reason === 'query_too_short')
+			return 'Consultas muito curtas usam somente a busca textual.';
+		if (analysis.reason === 'semantic_quota_or_rate_limit')
+			return 'Busca textual ativa; a cota semântica está temporariamente indisponível.';
+		if (analysis.reason === 'semantic_provider_unavailable')
+			return 'Busca textual ativa; o provedor semântico está temporariamente indisponível.';
+		if (analysis.reason === 'semantic_window_exhausted')
+			return 'Resultados mais profundos continuam pela busca textual.';
+		if (analysis.reason === 'semantic_function_unavailable')
+			return 'Busca textual ativa; a camada semântica ainda não está disponível neste ambiente.';
 		return null;
 	}
 
@@ -218,14 +223,16 @@
 				<strong id="semantic-consent-title">Ativar relações de significado</strong>
 				<p>
 					A pesquisa atual continua textual. Para usar embeddings, autorize o envio da consulta e de
-					pequenos trechos das páginas ao Gemini. O índice é privado por usuário e não substitui seus
-					documentos originais.
+					pequenos trechos das páginas ao Gemini. O índice é privado por usuário e não substitui
+					seus documentos originais.
 				</p>
 				<label class="consent-check">
 					<input type="checkbox" bind:checked={semanticConsentChecked} />
 					<span>Concordo em usar meus textos para gerar embeddings de busca.</span>
 				</label>
-				{#if semanticConsentError}<p class="consent-error" role="alert">{semanticConsentError}</p>{/if}
+				{#if semanticConsentError}<p class="consent-error" role="alert">
+						{semanticConsentError}
+					</p>{/if}
 			</div>
 			<Button
 				label={semanticConsentSaving ? 'Ativando…' : 'Ativar busca semântica'}
