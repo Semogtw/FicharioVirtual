@@ -1,34 +1,43 @@
 # Chandra OCR 2 no Desktop OCR Worker
 
-**Status:** candidato local recomendado; integração e validação em hardware ainda pendentes  
+**Status:** candidato local recomendado; configuração final depende de benchmark no hardware  
 **Última revisão:** 10 de agosto de 2026  
 **Hardware alvo:** Radeon RX 6600 8 GiB + Ryzen 5 5500 + 16 GiB DDR4, CachyOS  
 **Escopo:** OCR local de livros digitalizados, páginas fotografadas, escrita à mão contemporânea em papel/tablet, conteúdo misto, tabelas, fórmulas e layouts complexos
 
 ## 1. Decisão
 
-O candidato principal para o OCR local do Fichário Virtual passa a ser **Chandra OCR 2**, da Datalab.
+O candidato principal para o OCR local do Fichário Virtual continua sendo **Chandra OCR 2**, da Datalab.
 
-Essa decisão significa **candidato recomendado**, não `PASS` operacional. O modelo só deve se tornar o padrão do Desktop OCR Worker depois de passar pelos gates de licença, proveniência, qualidade e estabilidade descritos neste documento na RX 6600 real.
+A decisão, porém, não presume mais que uma quantização do Chandra herda automaticamente a liderança do checkpoint de maior precisão. A diferença para concorrentes em alguns benchmarks é pequena o bastante para uma regressão de quantização potencialmente inverter a ordem.
+
+Portanto existem três papéis diferentes:
+
+1. **referência local de qualidade máxima:** Chandra OCR 2 F16/BF16 em execução híbrida GPU + CPU, se couber e permanecer estável no hardware;
+2. **provável perfil de produção:** Chandra OCR 2 **Q8_0 + projetor visual BF16**, via `llama.cpp` + Vulkan;
+3. **fallback de memória:** Chandra OCR 2 **Q6_K + projetor visual BF16** ou a maior precisão de projetor que o benchmark validar.
+
+Nenhum deles recebe `PASS` por antecipação.
+
+O perfil final será o que produzir a melhor qualidade no corpus real do Fichário entre todas as alternativas locais viáveis. Se OvisOCR2, dots.ocr ou outro concorrente local superar Chandra Q8/Q6 de forma consistente no corpus do projeto, o concorrente deve ser promovido em vez de Chandra.
 
 A estratégia pretendida é:
 
-1. usar o checkpoint oficial `datalab-to/chandra-ocr-2` como referência de qualidade;
-2. validar uma versão GGUF do mesmo modelo com `llama.cpp` + Vulkan na RX 6600;
-3. tentar primeiro **Q8_0 + projetor visual Q8_0** por priorizar qualidade;
-4. usar **Q6_K** somente se Q8_0 não couber de forma estável ou tiver regressão operacional relevante;
-5. manter concorrência `1`, processando uma página por vez;
-6. manter Gemini disponível como rota separada, comparação e fallback explícito — nunca como fallback pago automático;
-7. não redistribuir pesos/quantizações pelo projeto de modelos do Fichário antes de uma revisão de licença e proveniência.
+1. usar o checkpoint oficial `datalab-to/chandra-ocr-2` como referência upstream de qualidade e proveniência;
+2. tentar uma execução local F16/BF16 híbrida como **controle de perda por quantização**, sem exigir que ela seja rápida;
+3. validar **Q8_0 + mmproj BF16** como primeira configuração candidata a produção;
+4. testar Q6_K somente se Q8_0 apresentar OOM, instabilidade ou custo operacional inaceitável;
+5. comparar cada variante com o melhor concorrente local viável no mesmo corpus;
+6. manter concorrência `1`, processando uma página por vez;
+7. manter Gemini como rota separada, comparação e fallback explícito — nunca como fallback pago automático;
+8. não redistribuir pesos/quantizações pelo projeto de modelos do Fichário antes de revisão de licença e proveniência.
 
-O OvisOCR2 permanece um comparador importante para páginas impressas e parsing estrutural, mas não é o candidato padrão porque o corpus do Fichário inclui escrita à mão contemporânea e documentos reais heterogêneos, onde a evidência pública disponível para Chandra 2 é mais abrangente.
+## 2. Por que Chandra OCR 2 continua sendo o candidato principal
 
-## 2. Por que Chandra OCR 2
-
-O projeto precisa de um único modelo local que continue útil quando a página deixa de ser um PDF limpo. O caso de uso inclui:
+O projeto precisa de OCR que continue útil quando a página deixa de ser um PDF limpo. O corpus esperado inclui:
 
 - livros e apostilas digitalizados;
-- scans antigos ou degradados;
+- scans degradados;
 - páginas fotografadas;
 - texto pequeno e várias colunas;
 - português;
@@ -40,13 +49,15 @@ O projeto precisa de um único modelo local que continue útil quando a página 
 
 O Chandra OCR 2 foi publicado especificamente como OCR/document parser com suporte a mais de 90 idiomas, handwriting, formulários, tabelas, matemática e layout complexo, com saída Markdown/HTML/JSON.
 
-A evidência mais importante para o Fichário não é somente um leaderboard do próprio fabricante. O **RealDocBench** avalia documentos reais e difíceis com formulários densos, tabelas, small text, checkboxes, handwriting e artefatos de scanner. Nesse benchmark independente, Chandra-2 lidera os OCRs open-source avaliados com **86,2% de precisão por campo e 78,1% por questão**, enquanto Gemini 3.5 Flash marca **89,3% / 82,2%**. Isso não prova equivalência com Gemini 3.6 Flash, mas mostra que Chandra está próximo de um VLM comercial forte em documentos reais e supera claramente os outros OCRs open-source testados no mesmo protocolo.
+A evidência mais importante para o Fichário não é somente um leaderboard do próprio fabricante. O **RealDocBench** avalia documentos reais e difíceis com formulários densos, tabelas, small text, checkboxes, handwriting e artefatos de scanner. Nesse benchmark independente, Chandra-2 lidera os OCRs open-source avaliados com **86,2% de precisão por campo e 78,1% por questão**, enquanto Gemini 3.5 Flash marca **89,3% / 82,2%**.
 
-A própria Datalab reporta para Chandra 2 **85,9 no olmOCR benchmark**, com resultados fortes em old scans + matemática, tabelas, múltiplas colunas e texto minúsculo. No benchmark multilíngue do fabricante, português aparece com **95,2%** para Chandra 2. Como esse segundo benchmark é do fabricante, ele deve ser tratado como sinal adicional e não como prova final.
+A própria Datalab reporta Chandra 2 na faixa de **85,8–85,9 no olmOCR benchmark**, com resultados fortes em old scans + matemática, tabelas, múltiplas colunas e texto minúsculo. O segundo colocado nesse benchmark fica próximo o bastante para a diferença não ser tratada como margem garantida depois de quantização.
 
-O Chandra 2 também publica exemplos específicos de `Cursive Writing`, `Handwritten Notes` e `Handwritten Math`, que correspondem ao significado de “manuscrito” neste projeto: **texto contemporâneo escrito à mão em papel ou tablet**, não “escrita histórica/antiga”.
+No benchmark multilíngue do fabricante, português aparece com **95,2%** para Chandra 2. Como esse resultado é do fabricante, ele deve ser usado como sinal adicional, não como prova final.
 
-### Fontes primárias e reprodutíveis
+O Chandra 2 também publica exemplos específicos de `Cursive Writing`, `Handwritten Notes` e `Handwritten Math`, que correspondem ao significado de “manuscrito” neste projeto: **texto contemporâneo escrito à mão em papel ou tablet**, não escrita histórica/antiga.
+
+### Fontes de referência
 
 - projeto oficial: <https://github.com/datalab-to/chandra>
 - checkpoint oficial: <https://huggingface.co/datalab-to/chandra-ocr-2>
@@ -55,33 +66,87 @@ O Chandra 2 também publica exemplos específicos de `Cursive Writing`, `Handwri
 - harness do RealDocBench: <https://github.com/extend-hq/realdoc-bench>
 - llama.cpp multimodal: <https://github.com/ggml-org/llama.cpp/blob/master/docs/multimodal.md>
 
-## 3. Tamanho e precisão: o que cabe na RX 6600
+## 3. Quantização não é assumida como neutra
 
-O Hugging Face publica o checkpoint como **5B parâmetros / BF16**. A release da Datalab descreve Chandra 2 como “4B”; essa diferença de contagem não deve ser escondida. Para planejamento de memória, usar o tamanho efetivo dos artefatos e medir VRAM real é mais seguro do que depender do número arredondado de parâmetros.
+O checkpoint de maior precisão e uma quantização GGUF devem ser tratados como **modelos de execução diferentes para fins de validação**.
 
-O checkpoint BF16 completo não deve ser considerado o caminho de produção na RX 6600 de 8 GiB. Somente os pesos em BF16 já ficam na ordem de 10 GB antes de encoder visual, KV cache, buffers e runtime.
+Não existe, no momento desta decisão, um resultado público suficientemente completo de Chandra OCR 2 BF16 versus Q8_0 versus Q6_K no mesmo benchmark de OCR que permita declarar a perda exata.
 
-Há quantizações GGUF de terceiros compatíveis com o ecossistema `llama.cpp`. Exemplos públicos incluem:
+Consequências:
 
-- Q8_0 de aproximadamente 5,16 GB;
-- projetor visual Q8_0 de aproximadamente 367 MB;
-- Q6_K de aproximadamente 4,08 GB em outro repositório de quantização.
+- não afirmar que Q8 perde “quase nada” sem medir;
+- não inferir qualidade apenas por perplexidade de linguagem;
+- não usar resultado BF16 para preencher score de uma quantização;
+- não promover Q8 só porque é a maior quantização que cabe inteira na GPU;
+- medir regressão separadamente em texto impresso, manuscrito, layout, tabelas e matemática.
 
-Esses tamanhos deixam Q8_0 **plausível** em 8 GiB, mas não provado. A decisão final deve ser tomada por medição de peak VRAM na RX 6600, porque contexto, imagens, buffers Vulkan e implementação do encoder visual também consomem memória.
+A hipótese de trabalho é que Q8 tende a preservar melhor o checkpoint que quantizações agressivas, mas **hipótese não é gate de produção**.
 
-### Ordem de tentativa
+## 4. Tamanho e estratégia para RX 6600
+
+O Hugging Face publica o checkpoint na ordem de **5B parâmetros / BF16**. A release da Datalab usa uma contagem arredondada diferente. Para planejamento de memória, o tamanho real dos artefatos e a medição de VRAM/RAM valem mais que o número nominal de parâmetros.
+
+Somente os pesos BF16 ficam aproximadamente na ordem de 10 GB antes de encoder visual, KV cache, buffers e runtime. Portanto não cabe inteiro nos 8 GiB da RX 6600.
+
+Isso não impede uma tentativa de referência local em **F16/BF16 híbrido GPU + CPU** usando `llama.cpp`: carregar o máximo possível na GPU e manter o restante na RAM. Essa execução pode ser lenta; seu papel é medir a qualidade sem a incerteza da quantização.
+
+A máquina possui apenas 16 GiB de RAM, então o perfil F16/BF16 também precisa provar que cabe de forma estável junto do sistema operacional e buffers. Se não couber, ele é registrado como `REFERENCE_NOT_RUN_OOM` e não bloqueia o teste das quantizações.
+
+Há quantizações GGUF de terceiros com tamanhos aproximadamente nesta ordem:
+
+- Chandra Q8_0: ~5,16 GB;
+- mmproj Q8_0: ~367 MB;
+- mmproj BF16: ~676 MB;
+- Chandra Q6_K: ~4,08 GB em quantizações públicas.
+
+O tamanho do arquivo não equivale ao peak VRAM. O benchmark deve registrar uso real do runtime.
+
+## 5. Nova ordem de tentativa
 
 ```text
-1. Q8_0 + mmproj Q8_0
-   ↓ se OOM/instabilidade
-2. Q6_K + mmproj Q8_0 ou equivalente validado
-   ↓ somente se ainda necessário
+Controle de qualidade, se estável:
+0. F16/BF16 + mmproj BF16
+   GPU + CPU híbrido
+   objetivo: referência, não velocidade
+
+Candidato principal de produção:
+1. Q8_0 + mmproj BF16
+   Vulkan, máximo offload possível
+
+Fallback de memória:
+2. Q6_K + mmproj BF16
+   ou maior precisão de mmproj que permaneça estável
+
+Somente mediante benchmark explícito:
 3. Q5_K_M / Q4_K_M
 ```
 
-Q4 não é a escolha inicial. O objetivo do computador é qualidade máxima, não throughput, e o usuário aceita dedicar a máquina inteira ao OCR durante o processamento.
+### Por que mmproj BF16 com Q8
 
-## 4. Regra de proveniência
+O projetor visual é pequeno em relação aos pesos principais, e a diferença de memória entre mmproj Q8 e BF16 é muito menor que a diferença entre quantizações do modelo principal.
+
+Como OCR depende diretamente da fidelidade da representação visual, o perfil inicial deve gastar essa memória adicional para preservar o projetor em BF16.
+
+Isso é uma **decisão de engenharia a validar**, não uma alegação de que mmproj BF16 necessariamente melhora o score. O benchmark deve confirmar ou rejeitar a escolha.
+
+Q4 não é o alvo inicial. O computador pode ser dedicado integralmente ao OCR durante a execução, portanto qualidade tem prioridade sobre throughput.
+
+## 6. Comparadores obrigatórios
+
+A escolha final não pode ser apenas “qual variante de Chandra usar”. Ela precisa responder também “Chandra quantizado ainda é o melhor local?”.
+
+O corpus deve incluir, conforme disponibilidade de runtime no hardware:
+
+1. Chandra F16/BF16 híbrido — controle de qualidade;
+2. Chandra Q8_0 + mmproj BF16;
+3. Chandra Q6_K + mmproj BF16, se necessário;
+4. **OvisOCR2** — comparador forte de parsing/documentos impressos;
+5. **dots.ocr** ou o melhor concorrente local que estiver tecnicamente viável na data do teste;
+6. Gemini usado pelo projeto — referência externa, sem torná-lo dependência do benchmark local.
+
+Se um concorrente local vencer Chandra Q8 no agregado e não apresentar regressão importante em manuscrito, scans ou estrutura, ele deve substituir Chandra como candidato padrão.
+
+## 7. Regra de proveniência
 
 **Nenhuma quantização de terceiros é automaticamente confiável.**
 
@@ -92,14 +157,15 @@ O checkpoint oficial é a origem de referência. Antes de promover qualquer GGUF
 - SHA-256 dos pesos;
 - SHA-256 do projetor visual;
 - quantização;
-- versão/commit do `llama.cpp` usado para validar;
+- versão/commit do `llama.cpp`;
 - prompt profile;
+- parâmetros de execução e offload;
 - resultado do corpus de regressão;
 - licença upstream e licença/metadados declarados pelo quantizador.
 
 O model lock deve apontar para artefatos por hash, não somente para uma tag mutável.
 
-## 5. Licença: gate obrigatório
+## 8. Licença: gate obrigatório
 
 O **código** do projeto Chandra é Apache-2.0, mas os **pesos do modelo** usam licença OpenRAIL modificada. O model card oficial informa condições próprias para uso comercial/self-hosted.
 
@@ -107,15 +173,15 @@ Consequências para o Fichário:
 
 - uso local pessoal não autoriza assumir que redistribuição pública está liberada;
 - não copiar automaticamente Chandra/GGUF para o projeto Cloudflare Pages de modelos;
-- não re-licenciar uma quantização derivada como se a licença upstream tivesse desaparecido;
-- revisar os termos da versão exata do checkpoint antes de qualquer distribuição ou release público;
-- se a licença não permitir a distribuição pretendida, o instalador deve baixar o modelo diretamente da origem aprovada pelo usuário em vez de hospedá-lo pelo Fichário.
+- não re-licenciar quantização derivada como se a licença upstream tivesse desaparecido;
+- revisar os termos da versão exata antes de distribuição/release público;
+- se a licença não permitir a distribuição pretendida, o instalador deve baixar o modelo diretamente da origem aprovada pelo usuário.
 
 **Gate:** `LICENSE_REVIEW=PASS` é obrigatório antes de distribuição do artefato pelo projeto.
 
-## 6. Estado atual do worker e impacto da integração
+## 9. Estado atual do worker e impacto da integração
 
-O Desktop OCR Worker já possui a maior parte da infraestrutura que Chandra precisa:
+O Desktop OCR Worker já possui a maior parte da infraestrutura necessária:
 
 - modelo pull/outbound-only;
 - fonte privada temporária com hash;
@@ -123,36 +189,30 @@ O Desktop OCR Worker já possui a maior parte da infraestrutura que Chandra prec
 - spool e conclusão idempotente;
 - remoção da imagem temporária;
 - model lock;
-- concorrência efetivamente serial;
+- concorrência serial;
 - engine abstrata por método `process()`;
 - backend Ollama restrito a loopback.
 
 A integração não deve reescrever fila, lease, spool ou autenticação. A mudança correta é **adicionar uma engine local especializada e evoluir o model lock**.
 
-O ponto de extensão atual é:
+O `runner.mjs` não deve conhecer Chandra. Ele deve continuar recebendo qualquer engine que respeite o contrato genérico:
 
 ```text
-tools/desktop-worker/service.mjs
-└── createLockedOcrEngine(paths)
-    └── engine.process(source)
-        └── {
-              backend,
-              modelId,
-              modelVersion,
-              rawText,
-              correctedText,
-              contentType,
-              warnings,
-              needsReview,
-              timingMs
-            }
+engine.process(source)
+  -> backend
+  -> modelId
+  -> modelVersion
+  -> rawText
+  -> correctedText
+  -> contentType
+  -> warnings
+  -> needsReview
+  -> timingMs
 ```
 
-O `runner.mjs` não deve conhecer Chandra. Ele deve continuar recebendo qualquer engine que respeite esse contrato.
+## 10. Runtime recomendado
 
-## 7. Runtime recomendado na RX 6600
-
-### 7.1 Não depender de ROCm
+### 10.1 Vulkan-first
 
 O caminho alvo é **llama.cpp + Vulkan**.
 
@@ -160,17 +220,15 @@ Motivos:
 
 - RX 6600 deve ser tratada como hardware Vulkan-first neste projeto;
 - a arquitetura original já proíbe depender exclusivamente de ROCm;
-- `llama.cpp` possui backend Vulkan e suporte multimodal via `libmtmd`/`llama-server`;
-- isso permite usar GGUF quantizado e dedicar quase toda a VRAM ao modelo;
-- CPU continua disponível para offload/fallback, embora mais lenta.
+- `llama.cpp` possui backend Vulkan e suporte multimodal;
+- GGUF permite quantização e execução híbrida CPU/GPU;
+- CPU permanece disponível para offload/fallback.
 
-ROCm pode ser experimentado depois, mas não deve bloquear a integração nem ser requisito de release.
+ROCm pode ser experimentado depois, mas não deve bloquear integração nem ser requisito de release.
 
-### 7.2 Processo local gerenciado
+### 10.2 Processo local gerenciado
 
-Preferir que o Fichário gerencie uma instância própria de `llama-server` em vez de confiar em um daemon genérico compartilhado.
-
-Topologia alvo:
+Preferir instância própria de `llama-server` em vez de daemon genérico compartilhado.
 
 ```text
 fichario-ocr-worker.service
@@ -178,45 +236,43 @@ fichario-ocr-worker.service
 ├── valida SHA-256 dos artefatos
 ├── inicia/garante llama-server local
 │   ├── bind 127.0.0.1
-│   ├── Chandra OCR 2 GGUF fixado por hash
+│   ├── Chandra fixado por hash
 │   ├── mmproj fixado por hash
 │   ├── Vulkan
 │   └── concorrência 1
 ├── chama API local
-└── encerra/recupera runtime conforme política do serviço
+└── encerra/recupera runtime conforme política
 ```
 
-Uma unit separada `fichario-ocr-llama.service` também é aceitável, desde que:
+Uma unit separada `fichario-ocr-llama.service` é aceitável desde que:
 
-- o bind seja somente loopback;
-- o worker consiga verificar que os artefatos carregados correspondem ao lock;
-- a ordem de start/stop seja explícita;
-- nenhum endpoint remoto seja aceito;
-- não exista fallback silencioso para um modelo diferente.
+- bind seja somente loopback;
+- artefatos carregados correspondam ao lock;
+- start/stop sejam explícitos;
+- endpoint remoto seja proibido;
+- não exista fallback silencioso para outro modelo ou outra quantização.
 
-## 8. Backend `llama_cpp`
+## 11. Backend `llama_cpp`
 
-O contrato do worker hoje aceita `transformers` e `ollama`, mas usar o nome `transformers` para uma inferência feita por llama.cpp seria enganoso. A implementação recomendada é adicionar explicitamente:
+O contrato do worker hoje aceita `transformers` e `ollama`, mas usar `transformers` para inferência via llama.cpp seria enganoso. Adicionar explicitamente:
 
 ```text
 llama_cpp
 ```
 
-como backend permitido.
-
 Alterações necessárias:
 
 1. `tools/desktop-worker/contract.mjs` — incluir `llama_cpp` em `BACKENDS`;
 2. `supabase/functions/_shared/desktop-worker-contract.ts` — espelhar o enum;
-3. nova migration — permitir `llama_cpp` em `complete_desktop_ocr_job` sem editar migrations antigas;
-4. testes unitários e pgTAP — cobrir aceitação/rejeição do novo backend;
+3. nova migration — permitir `llama_cpp` em `complete_desktop_ocr_job` sem editar migration antiga;
+4. testes unitários e pgTAP — cobrir aceitação/rejeição;
 5. UI/status — mostrar backend público `llama.cpp` sem revelar paths locais.
 
-Não reutilizar `ollama` como nome apenas para evitar uma migration. Proveniência de resultado importa: o histórico precisa dizer qual runtime realmente produziu o texto.
+Não reutilizar `ollama` apenas para evitar migration. Proveniência de resultado importa.
 
-## 9. `LlamaCppChandraEngine`
+## 12. `LlamaCppChandraEngine`
 
-Adicionar uma engine dedicada, por exemplo:
+Adicionar, por exemplo:
 
 ```text
 tools/desktop-worker/llama-cpp-chandra-engine.mjs
@@ -226,16 +282,16 @@ Responsabilidades:
 
 - aceitar apenas `http://127.0.0.1:<porta>/` ou `[::1]`;
 - rejeitar redirect;
-- limitar tamanho de request/response;
+- limitar request/response;
 - respeitar `AbortSignal` e lease renewal;
-- reler a fonte por descriptor seguro e validar SHA-256 antes da inferência;
-- enviar a imagem ao endpoint multimodal local;
-- usar prompt profile versionado específico do Chandra;
-- validar e limitar a saída;
-- retornar o contrato genérico do worker;
+- reler fonte por descriptor seguro e validar SHA-256;
+- enviar imagem ao endpoint multimodal local;
+- usar prompt profile Chandra versionado;
+- validar e limitar saída;
+- retornar contrato genérico do worker;
 - nunca escrever imagem ou OCR em log.
 
-Erros devem continuar usando códigos fechados, por exemplo:
+Erros usam códigos fechados, por exemplo:
 
 ```text
 llama_cpp_unavailable
@@ -246,69 +302,65 @@ chandra_output_too_large
 chandra_repetition_detected
 ```
 
-## 10. Não usar o prompt genérico do Ollama
+## 13. Não usar o prompt genérico do Ollama
 
 O `OllamaOcrEngine` atual força um JSON próprio com `rawText`, `contentType`, `warnings` e `needsReview`.
 
-Esse prompt não deve ser copiado cegamente para Chandra.
+Esse prompt não deve ser copiado para Chandra.
 
-Chandra foi treinado para parsing de documento e possui prompt profile/estrutura próprios, incluindo `ocr_layout`. A primeira prioridade deve ser **preservar a distribuição de inferência em que o modelo foi treinado**. Forçar um schema estranho pode reduzir justamente a qualidade que motivou a troca.
+Chandra foi treinado para parsing de documento e possui prompt profile/estrutura próprios, incluindo `ocr_layout`. A prioridade é preservar a distribuição de inferência em que o modelo foi treinado.
 
-A implementação deve manter um prompt profile versionado, por exemplo:
+Usar um prompt profile versionado, por exemplo:
 
 ```text
 chandra-ocr-2/ocr-layout-v1
 ```
 
-O perfil deve ser parte da proveniência do resultado e do benchmark.
+O profile deve fazer parte da proveniência e do benchmark.
 
-## 11. Como adaptar a saída ao contrato do Fichário
+## 14. Adaptar a saída ao contrato do Fichário
 
-### 11.1 Primeira versão
+### Primeira versão
 
-Para não bloquear a integração em uma migração grande de dados:
-
-- executar Chandra no modo de OCR/layout recomendado;
-- armazenar a saída Markdown fiel em `rawText`;
+- executar Chandra no modo recomendado de OCR/layout;
+- armazenar saída Markdown fiel em `rawText`;
 - manter `correctedText = null`;
-- preservar quebras, tabelas e ordem de leitura em vez de achatá-las prematuramente;
-- preencher `contentType` a partir de hint do job quando disponível; caso contrário `unknown`;
+- preservar quebras, tabelas e ordem de leitura;
+- preencher `contentType` por hint do job quando disponível, senão `unknown`;
 - gerar warnings somente por regras verificáveis;
-- não inventar uma confiança numérica que o modelo não fornece de forma calibrada.
+- não inventar confiança numérica não calibrada.
 
-A pesquisa/FTS deve ser testada com Markdown. Se a marcação prejudicar busca, derivar uma representação plain-text determinística para indexação sem destruir o original.
+A pesquisa/FTS deve ser testada com Markdown. Se necessário, derivar plain text determinístico para indexação sem destruir a saída original.
 
-### 11.2 Evolução recomendada
+### Evolução recomendada
 
-Depois do primeiro E2E, preservar separadamente:
+Preservar separadamente:
 
 ```text
-raw_text              -> representação textual canônica usada hoje
+raw_text              -> representação textual canônica
 structured_text       -> Markdown/HTML original do parser
 structured_format     -> markdown | html | json
 prompt_profile        -> chandra-ocr-2/ocr-layout-v1
 ```
 
-Alternativamente `structured_text` pode ficar em metadata somente se houver limite explícito e testes de tamanho. Uma coluna própria é preferível para conteúdo potencialmente grande.
+Uma coluna própria é preferível para `structured_text` potencialmente grande.
 
-A UI pode então usar `structured_text` para comparação rica/tabelas, enquanto a busca usa texto normalizado.
+## 15. `contentType`, warnings e revisão
 
-## 12. `contentType`, warnings e revisão
-
-Não transformar autoavaliação do modelo em “confidence” sem calibração.
+Não transformar autoavaliação do modelo em confidence sem calibração.
 
 ### `contentType`
 
 Ordem de preferência:
 
 1. override explícito da página;
-2. hint de roteamento já persistido no job;
-3. classificação previamente produzida pelo Gemini, quando o fluxo passou por Gemini;
+2. hint de roteamento persistido no job;
+3. classificação Gemini previamente existente, quando aplicável;
 4. `unknown`.
 
-Não fazer uma segunda chamada Chandra somente para classificar se essa chamada puder alterar ou atrasar o resultado sem ganho medido.
+Não fazer segunda chamada Chandra apenas para classificar sem ganho medido.
 
-### Warnings determinísticos iniciais
+### Warnings iniciais
 
 ```text
 possible_omission
@@ -317,23 +369,21 @@ low_legibility
 uncertain_characters
 ```
 
-Só emitir quando houver sinal observável. Exemplos adicionais internos podem incluir:
+Também detectar deterministicamente quando possível:
 
 - saída vazia para imagem não vazia;
 - repetição anormal de tokens/linhas;
-- truncamento por limite de tokens;
-- parser de estrutura inválido;
-- diferença extrema de tamanho em reprocessamento conhecido.
+- truncamento por limite;
+- estrutura inválida;
+- diferença extrema em reprocessamento conhecido.
 
-`needsReview=true` deve ser consequência de warning relevante ou política da rota, não um palpite aleatório do modelo.
+`needsReview=true` deve resultar de warning relevante ou política da rota.
 
-## 13. Model lock v2
+## 16. Model lock v2
 
-O schema atual está preso a `backend: ollama` e um único digest de modelo. Chandra via GGUF multimodal possui pelo menos pesos + projetor visual.
+O schema atual está preso a `backend: ollama` e um digest. Chandra multimodal possui pelo menos pesos + projetor visual.
 
-Criar uma nova versão do lock sem quebrar leitura do v1 durante migração.
-
-Shape recomendado:
+O lock v2 deve registrar precisão de cada artefato e parâmetros suficientes para reproduzir a execução:
 
 ```json
 {
@@ -341,85 +391,75 @@ Shape recomendado:
   "backend": "llama_cpp",
   "model": "datalab-to/chandra-ocr-2",
   "upstreamRevision": "REVISION_IMUTAVEL",
-  "quantization": "Q8_0",
+  "weightsPrecision": "Q8_0",
+  "mmprojPrecision": "BF16",
   "promptProfile": "chandra-ocr-2/ocr-layout-v1",
   "weightsSha256": "SHA256",
   "mmprojSha256": "SHA256",
-  "runtimeVersion": "LLAMA_CPP_COMMIT_OU_RELEASE"
+  "runtimeVersion": "LLAMA_CPP_COMMIT_OU_RELEASE",
+  "executionProfile": "rx6600-quality-max-v1"
 }
 ```
 
-Não colocar no lock:
+Para F16/BF16 híbrido, `weightsPrecision` e `executionProfile` devem refletir isso explicitamente.
 
-- token Hugging Face;
-- URL assinada;
-- credencial do worker;
-- texto OCR;
-- caminhos privados desnecessários.
+Não colocar no lock token, URL assinada, credencial, OCR ou paths privados desnecessários.
 
-Paths locais podem ser derivados do cache por hash ou mantidos em configuração local não exibida pelo status.
+## 17. Instalação do runtime
 
-## 14. Instalação do runtime
-
-A integração deve ter um instalador explícito, separado do instalador do worker até ser validada:
+Criar instalador explícito, separado até a validação:
 
 ```text
 tools/desktop-worker/install-chandra-runtime.sh
 ```
 
-Responsabilidades pretendidas:
+Responsabilidades:
 
 1. verificar arquitetura/OS;
-2. verificar disponibilidade Vulkan;
-3. instalar ou apontar para build conhecido do `llama.cpp`;
-4. baixar os artefatos somente de origem permitida;
+2. verificar Vulkan;
+3. instalar ou apontar build conhecido do `llama.cpp`;
+4. baixar artefatos somente de origem permitida;
 5. validar tamanho e SHA-256;
 6. gravar em cache content-addressed;
-7. executar uma inferência de sanity-check sem documento privado;
-8. somente então permitir criar o model lock.
+7. executar sanity-check sem documento privado;
+8. permitir criação do model lock somente após validação.
 
-O instalador **não** deve:
+O instalador não deve usar `sudo` automaticamente, aceitar binário sem hash, endpoint remoto, downgrade silencioso de precisão ou segredo em `.env`.
 
-- usar `sudo` automaticamente;
-- baixar binário sem hash/proveniência;
-- aceitar endpoint remoto;
-- iniciar upload de documento;
-- escolher quantização inferior silenciosamente;
-- escrever segredo em `.env`.
+## 18. Configuração pretendida
 
-## 15. Comando de configuração pretendido
-
-Evoluir `fichario-worker-model` para aceitar backend/model profile explicitamente, por exemplo:
+Evoluir `fichario-worker-model` para backend/profile explícitos:
 
 ```bash
 fichario-worker-model chandra-ocr-2 --backend llama_cpp --quality max
 ```
 
-`--quality max` deve resolver para a maior quantização **já validada neste hardware**, não para “a maior existente na Internet”.
+`--quality max` significa **o melhor perfil já validado no corpus deste hardware**, não a maior quantização disponível.
 
-No perfil RX 6600:
+Exemplo de resolução depois do benchmark:
 
 ```text
-Q8_0 validado -> usar Q8_0
-Q8_0 falha/OOM -> usar Q6_K se validado
-nenhum validado -> recusar readyToRun
+F16 híbrido vence e tempo é aceitável -> F16 híbrido
+Q8+mmproj BF16 é equivalente e muito mais eficiente -> Q8+mmproj BF16
+Q8 perde para concorrente local -> concorrente vira padrão
+Q8 OOM -> testar Q6
+nenhum perfil validado -> readyToRun=false
 ```
 
-A escolha deve aparecer no status como informação pública:
+O status deve expor somente informação pública:
 
 ```text
 backend: llama_cpp
 model: datalab-to/chandra-ocr-2
-quantization: Q8_0
+weightsPrecision: Q8_0
+mmprojPrecision: BF16
 promptProfile: chandra-ocr-2/ocr-layout-v1
 hardwareValidation: pending | pass
 ```
 
-Sem imprimir path, token ou conteúdo privado.
+## 19. Benchmark obrigatório na RX 6600
 
-## 16. Benchmark obrigatório na RX 6600
-
-A validação deve usar páginas reais representativas do Fichário, mas nenhuma fixture privada deve ser commitada no repositório.
+Fixtures privadas não entram no Git.
 
 Corpus mínimo recomendado: **100 páginas**.
 
@@ -432,22 +472,28 @@ Corpus mínimo recomendado: **100 páginas**.
 | tabelas/múltiplas colunas | 10 | tabelas, boxes, leitura não linear |
 | matemática/texto pequeno | 10 | fórmulas, subscritos, fonte pequena |
 
-### Comparações
+### Matriz de comparação
 
-Rodar cada página, quando possível, com:
+Rodar cada página, quando tecnicamente possível, com:
 
-1. checkpoint Chandra 2 oficial — referência de qualidade;
-2. Chandra 2 Q8_0 Vulkan;
-3. Chandra 2 Q6_K Vulkan se necessário;
-4. Gemini atual do projeto como referência externa;
-5. OvisOCR2 em uma amostra se houver runtime comparável, para confirmar que a escolha não ficou obsoleta.
+```text
+A. Chandra F16/BF16 híbrido + mmproj BF16
+B. Chandra Q8_0 + mmproj BF16
+C. Chandra Q8_0 + mmproj Q8_0 (controle opcional do projetor)
+D. Chandra Q6_K + mmproj BF16, se necessário
+E. melhor concorrente local viável
+F. OvisOCR2, quando runtime comparável estiver disponível
+G. Gemini atual do projeto como referência externa
+```
 
-## 17. Métricas
+A comparação C existe para medir se gastar ~300 MB adicionais no projetor BF16 realmente traz benefício. Se não trouxer, mmproj Q8 pode ser preferido.
+
+## 20. Métricas
 
 Registrar por página:
 
-- CER — Character Error Rate;
-- WER — Word Error Rate, quando útil;
+- CER;
+- WER, quando útil;
 - omissões relevantes;
 - hallucinations/invenções;
 - ordem de leitura;
@@ -458,46 +504,89 @@ Registrar por página:
 - peak VRAM;
 - peak RAM;
 - falha/OOM;
-- temperatura máxima observada;
-- reinício/crash do runtime.
+- temperatura máxima;
+- crash/restart do runtime.
 
-Para páginas sem ground truth, usar revisão cega lado a lado. Não usar somente “parece bom”.
+Para páginas sem ground truth, usar revisão cega lado a lado. Não usar apenas “parece bom”.
 
-## 18. Gates para promover Q8_0
+Também registrar métricas agregadas **por grupo**, porque uma pequena melhora em livro impresso não deve esconder regressão grande em manuscrito.
 
-Q8_0 vira o perfil `quality=max` somente se:
+## 21. Gate de perda por quantização
+
+A promoção de Q8 depende primeiro da comparação com a referência de maior precisão.
+
+Se F16/BF16 híbrido puder ser executado:
+
+```text
+CER_Q8 - CER_F16 <= limite aprovado
+WER_Q8 - WER_F16 <= limite aprovado
+sem regressão crítica em handwriting
+sem regressão crítica em tabelas/layout
+sem aumento relevante de omissões/hallucinations
+```
+
+Como ponto inicial conservador, investigar qualquer aumento de CER maior que **0,5 ponto percentual absoluto** no agregado ou regressão evidente em uma categoria crítica.
+
+Esse número não é uma tolerância automática. Depois do primeiro corpus ele deve ser substituído por um critério baseado na variância e no impacto observado.
+
+Se F16/BF16 não couber, a ausência do controle deve ficar documentada; não fingir que Q8 foi comparado ao checkpoint original.
+
+## 22. Gate contra o melhor concorrente
+
+Mesmo que Q8 preserve bem o Chandra, ele só vira padrão se continuar sendo a melhor escolha local.
+
+Critérios mínimos:
+
+```text
+qualidade agregada >= melhor concorrente local testado
+handwriting >= melhor concorrente, salvo trade-off explicitamente aceito
+livros/scans >= melhor concorrente, salvo trade-off explicitamente aceito
+layout/tabelas sem regressão material
+nenhuma vantagem baseada apenas em velocidade
+```
+
+Uma diferença pequena deve ser avaliada por intervalo de confiança/bootstrap ou pelo menos por contagem de vitórias por página, não apenas média única.
+
+Se houver empate estatístico/prático, preferir nesta ordem:
+
+1. menor taxa de omissão/hallucination;
+2. melhor manuscrito;
+3. melhor preservação estrutural;
+4. maior estabilidade;
+5. menor consumo de memória;
+6. maior velocidade.
+
+## 23. Gate operacional do perfil vencedor
+
+O perfil escolhido precisa ainda passar:
 
 ```text
 100/100 páginas sem OOM: PASS
 nenhum crash de driver/runtime: PASS
 nenhuma troca silenciosa de modelo: PASS
 hash de pesos/projetor verificado: PASS
-Vulkan real confirmado: PASS
-qualidade manuscrita >= alternativa local testada: PASS
-qualidade livro/scan >= alternativa local testada: PASS
-regressão vs checkpoint oficial aceitável: PASS
+Vulkan real confirmado quando perfil usa GPU: PASS
 licença/proveniência: PASS
 logs sem conteúdo privado: PASS
 E2E staging: PASS
 ```
 
-A regressão aceitável versus checkpoint oficial deve ser definida após o primeiro corpus. Como ponto inicial conservador, investigar qualquer aumento de CER maior que **0,5 ponto percentual absoluto** no agregado ou regressão evidente em manuscrito/tabelas.
+Se Q8 falhar somente por memória, repetir protocolo com Q6_K. Não promover Q4 apenas porque roda.
 
-Se Q8_0 falhar somente por memória, repetir o mesmo protocolo com Q6_K. Não promover Q4 apenas porque “roda”.
-
-## 19. Testes automatizados a adicionar
+## 24. Testes automatizados a adicionar
 
 ### Unitários
 
-- URL `llama.cpp` aceita somente loopback;
-- redirects são rejeitados;
-- response body é limitado;
-- imagem alterada depois do download é rejeitada;
+- URL llama.cpp somente loopback;
+- redirects rejeitados;
+- response body limitado;
+- imagem alterada rejeitada;
 - hash de weights/mmproj divergente bloqueia start;
-- model lock v1 continua legível durante migração;
+- model lock v1 legível durante migração;
 - model lock v2 valida keys exatas;
-- backend `llama_cpp` chega corretamente ao completion contract;
-- abort encerra inferência/child process sem vazar temporário;
+- precisão de weights/mmproj registrada separadamente;
+- backend `llama_cpp` chega ao completion contract;
+- abort encerra inferência/child process;
 - saída vazia/repetitiva/truncada gera código seguro;
 - logs não contêm prompt, OCR, imagem, path privado ou URL assinada.
 
@@ -505,20 +594,21 @@ Se Q8_0 falhar somente por memória, repetir o mesmo protocolo com Q6_K. Não pr
 
 - fake `llama-server` loopback;
 - startup/readiness;
-- crash e restart;
+- crash/restart;
 - timeout;
 - modelo errado;
 - mmproj errado;
+- profile de precisão errado;
 - uma página válida -> spool -> complete.
 
 ### Banco/Edge Function
 
 - `llama_cpp` aceito somente no campo backend;
 - replay idempotente preserva backend/modelVersion;
-- resultado de outro backend não pode fingir replay idêntico;
-- metadata registra runtime/prompt profile sem segredo.
+- resultado de outro backend não finge replay idêntico;
+- metadata registra runtime/prompt profile/precision sem segredo.
 
-## 20. Segurança
+## 25. Segurança
 
 A adoção de Chandra não muda a fronteira de confiança:
 
@@ -534,78 +624,113 @@ Chandra OCR 2
 
 Proibido:
 
-- bind `0.0.0.0` para o servidor de inferência;
-- endpoint de inferência remoto configurável sem uma nova decisão de arquitetura;
-- enviar imagem para Hugging Face Inference, Ollama Cloud ou API da Datalab por acidente;
+- bind `0.0.0.0` para inferência;
+- endpoint remoto sem nova decisão de arquitetura;
+- enviar imagem para serviço externo por acidente;
 - armazenar imagem original no spool;
-- logar output do Chandra;
+- logar output Chandra;
 - carregar tag mutável sem digest;
-- aceitar modelo que mudou de bytes mantendo o mesmo nome.
+- aceitar modelo que mudou de bytes mantendo o nome;
+- trocar precisão/modelo silenciosamente após OOM.
 
-## 21. Sequência de implementação
+## 26. Sequência de implementação
 
-### Fase A — decisão e fixtures
+### Fase A — decisão e corpus
 
 - [x] selecionar Chandra OCR 2 como candidato principal;
-- [x] documentar riscos e estratégia;
-- [ ] preparar corpus privado de benchmark fora do Git;
-- [ ] registrar ground truth para subconjunto representativo.
+- [x] documentar risco de quantização;
+- [x] separar referência F16/BF16 de perfil de produção Q8;
+- [ ] preparar corpus privado fora do Git;
+- [ ] registrar ground truth representativo.
 
 ### Fase B — contrato/runtime
 
 - [ ] adicionar backend `llama_cpp` ponta a ponta;
 - [ ] criar model lock v2;
-- [ ] criar verificador de artefatos GGUF/mmproj;
+- [ ] criar verificador GGUF/mmproj;
 - [ ] implementar `LlamaCppChandraEngine`;
-- [ ] adicionar prompt profile Chandra versionado;
-- [ ] criar testes unitários e de integração fake-server.
+- [ ] adicionar prompt profile versionado;
+- [ ] criar testes unitários/fake-server.
 
-### Fase C — Vulkan RX 6600
+### Fase C — precisão e Vulkan RX 6600
 
-- [ ] buildar/instalar `llama.cpp` com Vulkan;
-- [ ] confirmar RX 6600 no backend, não CPU disfarçada;
-- [ ] testar Q8_0;
+- [ ] buildar/instalar llama.cpp com Vulkan;
+- [ ] confirmar RX 6600 realmente usada;
+- [ ] tentar F16/BF16 híbrido como controle;
+- [ ] testar Q8_0 + mmproj BF16;
+- [ ] testar Q8_0 + mmproj Q8 opcionalmente;
 - [ ] medir VRAM/RAM/latência/temperatura;
 - [ ] testar Q6_K somente se necessário;
-- [ ] comparar qualidade com checkpoint oficial/Gemini.
+- [ ] executar melhor concorrente local comparável.
 
-### Fase D — integração E2E
+### Fase D — qualidade
+
+- [ ] comparar CER/WER por grupo;
+- [ ] medir omissões e hallucinations;
+- [ ] revisar handwriting separadamente;
+- [ ] revisar layout/tabelas separadamente;
+- [ ] comparar quantização versus referência;
+- [ ] comparar perfil vencedor versus concorrente local;
+- [ ] registrar decisão reproduzível.
+
+### Fase E — integração E2E
 
 - [ ] executar job real contra staging;
 - [ ] validar lease renewal em inferência longa;
 - [ ] validar spool após queda de rede;
-- [ ] validar cleanup do temporário;
-- [ ] comparar resultado Gemini x Chandra na UI;
+- [ ] validar cleanup;
+- [ ] comparar resultado Gemini x local na UI;
 - [ ] registrar receipt/checkpoint.
 
-### Fase E — promoção
+### Fase F — promoção
 
 - [ ] licença aprovada;
-- [ ] quantização aprovada;
+- [ ] perfil de precisão aprovado;
 - [ ] hashes/revision fixados;
 - [ ] documentação de instalação atualizada;
-- [ ] `readyToRun` passa a incluir validação do runtime Chandra;
-- [ ] somente então declarar Chandra padrão do Desktop OCR Worker.
+- [ ] `readyToRun` passa a incluir validação do runtime;
+- [ ] somente então declarar o modelo/perfil padrão.
 
-## 22. O que não fazer
+## 27. O que não fazer
 
-- não trocar o Ollama atual por uma implementação improvisada sem testes;
-- não chamar uma quantização aleatória de “oficial”;
-- não assumir que Q8 cabe porque o arquivo tem menos de 8 GB;
+- não assumir que Q8 preserva a posição do BF16;
+- não assumir que Q8 vence porque Chandra BF16 vence;
+- não trocar Ollama por implementação improvisada;
+- não chamar quantização de terceiros de oficial;
+- não assumir que arquivo <8 GB significa que cabe em 8 GiB de VRAM;
 - não medir apenas velocidade;
-- não usar benchmark só de PDF digital para validar handwriting;
-- não transformar benchmark do fabricante em única fonte de verdade;
-- não perder Markdown/layout apenas para encaixar num prompt JSON genérico;
-- não marcar `RX 6600 / Vulkan = PASS` antes de execução real;
-- não apagar o resultado Gemini quando Chandra gerar outro resultado;
-- não promover um modelo porque ele é maior: promover por qualidade medida.
+- não validar handwriting com benchmark só de PDF digital;
+- não usar benchmark do fabricante como única fonte;
+- não perder Markdown/layout para encaixar em JSON genérico;
+- não marcar RX 6600/Vulkan como PASS antes da execução real;
+- não apagar resultado Gemini quando o local gerar outro;
+- não promover um modelo porque é maior;
+- não esconder que F16/BF16 não pôde ser executado se houver OOM.
 
-## 23. Critério final de escolha
+## 28. Critério final de escolha
 
-A decisão final não é “Chandra 2 porque tem 5B”. É:
+A decisão final passa a ser:
 
-> **Usar a maior configuração de Chandra OCR 2 que permaneça estável na RX 6600 e preserve a qualidade do checkpoint oficial no corpus real do Fichário, com prioridade explícita para escrita à mão contemporânea e livros digitalizados.**
+> **Escolher a configuração local que tiver a melhor qualidade medida no corpus real do Fichário, usando Chandra F16/BF16 híbrido como controle de qualidade quando possível e tratando Q8/Q6 como candidatos independentes que precisam provar que preservam a vantagem do modelo.**
 
-Hoje o perfil alvo é **Chandra OCR 2 Q8_0 via llama.cpp/Vulkan, concorrência 1**, com **Q6_K como fallback de memória**, sujeito aos gates acima.
+A hipótese principal de produção é hoje:
 
-Até que esses gates passem, a documentação deve dizer “candidato recomendado / validação pendente”, nunca “modelo local validado”.
+```text
+Chandra OCR 2 Q8_0
++ mmproj BF16
++ llama.cpp/Vulkan
++ concorrência 1
+```
+
+Mas o perfil de **qualidade máxima a tentar primeiro como referência** é:
+
+```text
+Chandra OCR 2 F16/BF16
++ mmproj BF16
++ offload híbrido GPU/CPU
++ concorrência 1
+```
+
+Se esse perfil for estável e o tempo por página for aceitável, ele próprio pode virar o perfil `quality=max`. Se Q8 produzir qualidade indistinguível com vantagem operacional grande, Q8 deve ser preferido. Se um concorrente local superar Q8/Q6 no corpus real, o concorrente deve ser promovido.
+
+Até os gates passarem, a documentação deve dizer **“candidato recomendado / validação pendente”**, nunca “modelo local validado”.
