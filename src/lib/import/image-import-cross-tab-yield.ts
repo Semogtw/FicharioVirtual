@@ -1,7 +1,4 @@
-import {
-	subscribeImportUpdates,
-	type ImportBroadcastUpdate
-} from '$lib/import/import-broadcast';
+import { subscribeImportUpdates, type ImportBroadcastUpdate } from '$lib/import/import-broadcast';
 import {
 	importQueue,
 	type ImportQueueItem,
