@@ -57,7 +57,11 @@ type LexicalRow = {
 
 type SemanticRow = Omit<LexicalRow, 'rank'> & { semantic_similarity: number };
 
-type TopicCandidates = { topic: string; candidates: EvidenceCandidate[]; semanticAvailable: boolean };
+type TopicCandidates = {
+	topic: string;
+	candidates: EvidenceCandidate[];
+	semanticAvailable: boolean;
+};
 
 function json(status: number, body: Record<string, unknown>, appOrigin: string | null) {
 	return new Response(JSON.stringify(body), {
@@ -86,13 +90,15 @@ function hasExactKeys(record: Record<string, unknown>, expected: readonly string
 function parseRequest(value: unknown): ParsedRequest | null {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
 	const record = value as Record<string, unknown>;
-	if (!hasExactKeys(record, ['topics']) && !hasExactKeys(record, ['notebookId', 'topics'])) return null;
+	if (!hasExactKeys(record, ['topics']) && !hasExactKeys(record, ['notebookId', 'topics']))
+		return null;
 	if (
 		!Array.isArray(record.topics) ||
 		record.topics.length < 1 ||
 		record.topics.length > MAX_TOPICS ||
 		record.topics.some(
-			(topic) => typeof topic !== 'string' || topic.trim().length < 1 || topic.length > MAX_TOPIC_CHARS
+			(topic) =>
+				typeof topic !== 'string' || topic.trim().length < 1 || topic.length > MAX_TOPIC_CHARS
 		) ||
 		(record.notebookId !== undefined &&
 			record.notebookId !== null &&
@@ -101,7 +107,9 @@ function parseRequest(value: unknown): ParsedRequest | null {
 		return null;
 	}
 	const normalized = (record.topics as string[]).map((topic) => topic.trim());
-	if (new Set(normalized.map((topic) => topic.toLocaleLowerCase('pt-BR'))).size !== normalized.length) {
+	if (
+		new Set(normalized.map((topic) => topic.toLocaleLowerCase('pt-BR'))).size !== normalized.length
+	) {
 		return null;
 	}
 	return Object.freeze({
@@ -126,7 +134,8 @@ function validEvidenceRow(value: unknown): value is LexicalRow {
 		UUID.test(row.document_id) &&
 		typeof row.document_title === 'string' &&
 		row.document_title.length > 0 &&
-		(row.notebook_id === null || (typeof row.notebook_id === 'string' && UUID.test(row.notebook_id))) &&
+		(row.notebook_id === null ||
+			(typeof row.notebook_id === 'string' && UUID.test(row.notebook_id))) &&
 		(row.notebook_name === null || typeof row.notebook_name === 'string') &&
 		Number.isInteger(row.page_number) &&
 		Number(row.page_number) >= 1 &&
@@ -312,7 +321,8 @@ async function verifyBestCandidates(input: {
 	input.topics.forEach((topic, topicIndex) => {
 		topic.candidates.slice(0, 2).forEach((candidate, candidateIndex) => {
 			const score = verificationPriority(candidate);
-			if (score >= 0.4 && candidate.excerpt.trim()) ranked.push({ topicIndex, candidateIndex, score });
+			if (score >= 0.4 && candidate.excerpt.trim())
+				ranked.push({ topicIndex, candidateIndex, score });
 		});
 	});
 	ranked.sort((left, right) => right.score - left.score);
@@ -368,7 +378,8 @@ Deno.serve(async (request) => {
 	if (request.method !== 'POST') return respond(405, { code: 'method_not_allowed' });
 
 	const authorization = request.headers.get('Authorization');
-	if (!authorization?.startsWith('Bearer ')) return respond(401, { code: 'authentication_required' });
+	if (!authorization?.startsWith('Bearer '))
+		return respond(401, { code: 'authentication_required' });
 
 	let raw: unknown;
 	try {
@@ -400,15 +411,22 @@ Deno.serve(async (request) => {
 	const startedAt = performance.now();
 
 	try {
-		const { data: consent, error: consentError } = await supabase.rpc('has_coverage_semantic_consent', {
-			consent_version: SEMANTIC_CONSENT_VERSION
-		});
+		const { data: consent, error: consentError } = await supabase.rpc(
+			'has_coverage_semantic_consent',
+			{
+				consent_version: SEMANTIC_CONSENT_VERSION
+			}
+		);
 		const apiKey = Deno.env.get('GEMINI_API_KEY');
-		const verifyModel = Deno.env.get('COVERAGE_VERIFY_MODEL') ?? Deno.env.get('OCR_MODEL_PRIMARY') ?? null;
+		const verifyModel =
+			Deno.env.get('COVERAGE_VERIFY_MODEL') ?? Deno.env.get('OCR_MODEL_PRIMARY') ?? null;
 
 		if (consentError || consent !== true || !apiKey) {
 			const topics = await lexicalTopics(supabase, parsed);
-			const reason = consentError || (consent === true && !apiKey) ? 'semantic_not_configured' : 'consent_required';
+			const reason =
+				consentError || (consent === true && !apiKey)
+					? 'semantic_not_configured'
+					: 'consent_required';
 			await recordSemanticRetrievalEvent(supabase, {
 				surface: 'topic_coverage',
 				mode: 'fallback',
@@ -427,7 +445,9 @@ Deno.serve(async (request) => {
 			});
 		}
 
-		const pageBudget = envInteger('SEMANTIC_INDEX_BATCH_PAGES', SEMANTIC_INDEX_BATCH_PAGES, 1, 24) ?? SEMANTIC_INDEX_BATCH_PAGES;
+		const pageBudget =
+			envInteger('SEMANTIC_INDEX_BATCH_PAGES', SEMANTIC_INDEX_BATCH_PAGES, 1, 24) ??
+			SEMANTIC_INDEX_BATCH_PAGES;
 		let indexedThisRun = 0;
 		try {
 			const batch = await indexNextSemanticBatch({
@@ -481,35 +501,43 @@ Deno.serve(async (request) => {
 			});
 		}
 
-		const topicCandidates: TopicCandidates[] = await mapWithConcurrency(parsed.topics, 4, async (topic, index) => {
-			const [lexicalResponse, semanticResponse] = await Promise.all([
-				supabase.rpc('search_pages', {
-					search_query: topic,
-					notebook_filter: parsed.notebookId,
-					result_limit: LEXICAL_RESULT_LIMIT,
-					result_offset: 0
-				}),
-				supabase.rpc('search_pages_semantic', {
-					query_embedding: queryEmbeddings[index]!.vectorText,
-					target_model: SEMANTIC_EMBEDDING_MODEL,
-					notebook_filter: parsed.notebookId,
-					result_limit: SEMANTIC_RESULT_LIMIT
-				})
-			]);
-			if (lexicalResponse.error) throw lexicalResponse.error;
-			const lexical = Array.isArray(lexicalResponse.data) ? lexicalResponse.data.filter(validEvidenceRow) : [];
-			const semantic =
-				!semanticResponse.error && Array.isArray(semanticResponse.data)
-					? semanticResponse.data.filter(validSemanticRow)
+		const topicCandidates: TopicCandidates[] = await mapWithConcurrency(
+			parsed.topics,
+			4,
+			async (topic, index) => {
+				const [lexicalResponse, semanticResponse] = await Promise.all([
+					supabase.rpc('search_pages', {
+						search_query: topic,
+						notebook_filter: parsed.notebookId,
+						result_limit: LEXICAL_RESULT_LIMIT,
+						result_offset: 0
+					}),
+					supabase.rpc('search_pages_semantic', {
+						query_embedding: queryEmbeddings[index]!.vectorText,
+						target_model: SEMANTIC_EMBEDDING_MODEL,
+						notebook_filter: parsed.notebookId,
+						result_limit: SEMANTIC_RESULT_LIMIT
+					})
+				]);
+				if (lexicalResponse.error) throw lexicalResponse.error;
+				const lexical = Array.isArray(lexicalResponse.data)
+					? lexicalResponse.data.filter(validEvidenceRow)
 					: [];
-			return {
-				topic,
-				candidates: mergeEvidence(lexical, semantic),
-				semanticAvailable: !semanticResponse.error
-			};
-		});
+				const semantic =
+					!semanticResponse.error && Array.isArray(semanticResponse.data)
+						? semanticResponse.data.filter(validSemanticRow)
+						: [];
+				return {
+					topic,
+					candidates: mergeEvidence(lexical, semantic),
+					semanticAvailable: !semanticResponse.error
+				};
+			}
+		);
 
-		const semanticAvailableCount = topicCandidates.filter((topic) => topic.semanticAvailable).length;
+		const semanticAvailableCount = topicCandidates.filter(
+			(topic) => topic.semanticAvailable
+		).length;
 		const topics = topicCandidates.map(({ topic, candidates }) => ({ topic, candidates }));
 		if (semanticAvailableCount === 0) {
 			const stats = await safeIndexStats(supabase, parsed.notebookId);
@@ -562,7 +590,8 @@ Deno.serve(async (request) => {
 			topics
 		});
 	} catch (error) {
-		if (error instanceof DOMException && error.name === 'AbortError') return respond(504, { code: 'coverage_timeout' });
+		if (error instanceof DOMException && error.name === 'AbortError')
+			return respond(504, { code: 'coverage_timeout' });
 		return respond(503, { code: 'coverage_unavailable' });
 	} finally {
 		clearTimeout(timeout);
