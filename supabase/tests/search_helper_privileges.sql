@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(4);
+select plan(6);
 
 select ok(
   has_function_privilege(
@@ -22,6 +22,15 @@ select ok(
 );
 
 select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.search_excerpt(text,text,integer)',
+    'execute'
+  ),
+  'authenticated can execute the pure excerpt helper used by search_pages'
+);
+
+select ok(
   not has_function_privilege('anon', 'public.normalize_search_text(text)', 'execute'),
   'anon cannot execute the search normalizer'
 );
@@ -29,6 +38,11 @@ select ok(
 select ok(
   not has_function_privilege('anon', 'public.page_effective_text(public.pages)', 'execute'),
   'anon cannot execute the effective-text helper'
+);
+
+select ok(
+  not has_function_privilege('anon', 'public.search_excerpt(text,text,integer)', 'execute'),
+  'anon cannot execute the excerpt helper'
 );
 
 select * from finish();
