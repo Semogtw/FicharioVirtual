@@ -11,10 +11,11 @@ Restart=on-failure
 RestartSec=15s
 UMask=0077
 
-# The worker needs only the user session bus (Secret Service) and outbound/loopback networking.
+# The worker needs only the user session bus (Secret Service), writable user state and outbound/loopback networking.
 NoNewPrivileges=true
 PrivateTmp=true
-ProtectSystem=strict
+ProtectSystem=full
+ProtectHome=false
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectKernelLogs=true

@@ -227,7 +227,16 @@ jobs:
           SUPABASE_OUTCOME: ${{ steps.supabase.outcome }}
           DATABASE_OUTCOME: ${{ steps.database.outcome }}
         run: |
-          failed=0
+          printf '%s\n' \
+            "frontend=$FRONTEND_OUTCOME" \
+            "source=$SOURCE_OUTCOME" \
+            "chromium=$CHROMIUM_OUTCOME" \
+            "browser=$BROWSER_OUTCOME" \
+            "deno=$DENO_OUTCOME" \
+            "edge=$EDGE_OUTCOME" \
+            "supabase=$SUPABASE_OUTCOME" \
+            "database=$DATABASE_OUTCOME"
+
           for outcome in \
             "$FRONTEND_OUTCOME" \
             "$SOURCE_OUTCOME" \
@@ -238,10 +247,12 @@ jobs:
             "$SUPABASE_OUTCOME" \
             "$DATABASE_OUTCOME"; do
             if [ "$outcome" != 'success' ]; then
-              failed=1
+              echo "Incomplete verification outcome: $outcome" >&2
+              exit 1
             fi
           done
-          exit "$failed"
+
+          echo 'All required verification gates succeeded.'
 
       - name: Publish final receipt
         if: always()
