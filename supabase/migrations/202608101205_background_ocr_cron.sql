@@ -4,8 +4,8 @@
 --
 -- Hosted environments must provision these Vault entries:
 --   project_url               -> https://<project-ref>.supabase.co
---   ocr_background_worker_key -> the same high-entropy value accepted by
---                                ocr-queue-worker (currently service-role key)
+--   ocr_background_worker_key -> the dedicated high-entropy value configured as
+--                                OCR_BACKGROUND_WORKER_KEY for Edge Functions
 -- Until both exist the cron job is intentionally a no-op.
 
 create extension if not exists pg_net with schema extensions;
@@ -13,7 +13,7 @@ create extension if not exists pg_cron;
 
 select cron.schedule(
   'fichario-background-ocr-wakeup',
-  '* * * * *',
+  '*/5 * * * *',
   $cron$
     with worker_secrets as (
       select
