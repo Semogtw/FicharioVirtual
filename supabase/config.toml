@@ -40,6 +40,14 @@ enable_confirmations = true
 [functions.process-ocr]
 verify_jwt = true
 
+[functions.ocr-queue-kick]
+verify_jwt = true
+
+# Server-to-server only. The function performs its own constant-time check of a
+# high-entropy service-role secret and never accepts browser credentials.
+[functions.ocr-queue-worker]
+verify_jwt = false
+
 [functions.delete-document]
 verify_jwt = true
 
