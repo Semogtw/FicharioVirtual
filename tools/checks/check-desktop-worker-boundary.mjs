@@ -12,6 +12,10 @@ const authMigrationPath = join(
 	root,
 	'supabase/migrations/202608081027_desktop_ocr_device_auth_boundary.sql'
 );
+const pairingCodeMigrationPath = join(
+	root,
+	'supabase/migrations/202608100440_desktop_ocr_pairing_codes.sql'
+);
 const sourceBindingMigrationPath = join(
 	root,
 	'supabase/migrations/202608081028_desktop_ocr_source_binding.sql'
@@ -28,6 +32,7 @@ const [
 	worker,
 	config,
 	authMigration,
+	pairingCodeMigration,
 	sourceBindingMigration,
 	completionMigration
 ] = await Promise.all(
@@ -38,6 +43,7 @@ const [
 		workerPath,
 		configPath,
 		authMigrationPath,
+		pairingCodeMigrationPath,
 		sourceBindingMigrationPath,
 		completionMigrationPath
 	].map((path) => readFile(path, 'utf8'))
@@ -139,18 +145,33 @@ for (const [name, source] of [
 
 requireSource(
 	pair,
+	/if \(input\.action === 'redeem'\)/,
+	'pairing endpoint must isolate the unauthenticated one-time redeem action'
+);
+requireSource(
+	pair,
+	/admin\.rpc\('redeem_ocr_worker_pairing_code'/,
+	'pairing-code redemption must cross the service-only database boundary'
+);
+requireSource(
+	pair,
+	/request\.headers\.get\('Authorization'\)/,
+	'legacy pairing and revoke paths must explicitly authenticate their browser bearer token'
+);
+requireSource(
+	pair,
 	/generateDesktopWorkerCredential\(\)/,
-	'pairing must generate the credential server-side'
+	'legacy pairing compatibility must still generate its credential server-side'
 );
 requireSource(
 	pair,
 	/register_ocr_worker_device/,
-	'pairing must persist only through the service registration RPC'
+	'legacy pairing must persist only through the service registration RPC'
 );
 requireSource(
 	pair,
 	/credential:\s*generated\.credential/,
-	'pairing must return the raw credential exactly once'
+	'legacy pairing must return its raw credential exactly once'
 );
 forbidSource(
 	pair,
@@ -229,8 +250,8 @@ forbidSource(
 
 requireSource(
 	config,
-	/\[functions\.desktop-ocr-pair\][\s\S]*?verify_jwt\s*=\s*true/,
-	'pairing endpoint must require a Supabase user JWT'
+	/\[functions\.desktop-ocr-pair\][\s\S]*?verify_jwt\s*=\s*false/,
+	'pairing endpoint gateway must permit the one-time code request so the function can enforce its split auth boundary'
 );
 requireSource(
 	config,
@@ -262,6 +283,42 @@ requireSource(
 	authMigration,
 	/grant execute on function public\.authenticate_ocr_worker_device\(text\) to service_role/,
 	'worker digest authentication must remain service-role only'
+);
+
+requireSource(
+	pairingCodeMigration,
+	/code_hash bytea not null unique/,
+	'pairing codes must be stored only by a unique digest'
+);
+requireSource(
+	pairingCodeMigration,
+	/expires_at timestamptz not null/,
+	'pairing codes must have a mandatory expiry'
+);
+requireSource(
+	pairingCodeMigration,
+	/consumed_at timestamptz/,
+	'pairing codes must record one-time consumption'
+);
+requireSource(
+	pairingCodeMigration,
+	/extensions\.gen_random_bytes\(8\)/,
+	'pairing codes must contain 64 bits of cryptographic randomness'
+);
+requireSource(
+	pairingCodeMigration,
+	/extensions\.digest\(convert_to\(raw_code, 'UTF8'\), 'sha256'\)/,
+	'raw pairing codes must never be persisted'
+);
+requireSource(
+	pairingCodeMigration,
+	/revoke execute on function public\.redeem_ocr_worker_pairing_code\(text, text, text, jsonb\) from authenticated/,
+	'browser role must not redeem a worker credential digest directly'
+);
+requireSource(
+	pairingCodeMigration,
+	/grant execute on function public\.redeem_ocr_worker_pairing_code\(text, text, text, jsonb\) to service_role/,
+	'pairing code redemption must remain service-role only'
 );
 
 requireSource(
