@@ -168,13 +168,17 @@ function parseIndex(value: unknown): CoverageAnalysisMetadata['index'] {
 	});
 }
 
-function parseResponse(value: unknown, requestedTopics: readonly string[]): SemanticCoverageResponse {
+function parseResponse(
+	value: unknown,
+	requestedTopics: readonly string[]
+): SemanticCoverageResponse {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) invalidResponse();
 	const record = value as Record<string, unknown>;
 	if (
 		!exactKeys(record, ['embeddingModel', 'index', 'mode', 'reason', 'topics', 'verification']) ||
 		(record.mode !== 'hybrid' && record.mode !== 'lexical') ||
-		(record.reason !== null && (typeof record.reason !== 'string' || !REASON.test(record.reason))) ||
+		(record.reason !== null &&
+			(typeof record.reason !== 'string' || !REASON.test(record.reason))) ||
 		(record.embeddingModel !== null &&
 			(typeof record.embeddingModel !== 'string' || !MODEL.test(record.embeddingModel))) ||
 		(record.verification !== 'used' &&
@@ -247,7 +251,8 @@ export async function requestSemanticCoverage(
 ): Promise<SemanticCoverageResponse> {
 	validateTopics(topics);
 	const notebookId = options.notebookId ?? null;
-	if (notebookId !== null && !UUID.test(notebookId)) throw new TypeError('Invalid semantic notebook');
+	if (notebookId !== null && !UUID.test(notebookId))
+		throw new TypeError('Invalid semantic notebook');
 	if (options.signal?.aborted) throw new DOMException('Coverage analysis cancelled', 'AbortError');
 
 	try {
@@ -256,7 +261,8 @@ export async function requestSemanticCoverage(
 			signal: options.signal
 		});
 		if (error) {
-			if (options.signal?.aborted) throw new DOMException('Coverage analysis cancelled', 'AbortError');
+			if (options.signal?.aborted)
+				throw new DOMException('Coverage analysis cancelled', 'AbortError');
 			throw new SemanticCoverageServiceError();
 		}
 		return parseResponse(data, topics);
