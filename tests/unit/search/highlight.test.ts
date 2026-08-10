@@ -12,11 +12,13 @@ describe('highlightSnippet', () => {
 	});
 
 	it('highlights a likely OCR typo when the exact term is absent', () => {
-		expect(highlightSnippet('A fotossintcse transforma energia luminosa.', 'fotossíntese')).toEqual([
-			{ text: 'A ', highlighted: false },
-			{ text: 'fotossintcse', highlighted: true },
-			{ text: ' transforma energia luminosa.', highlighted: false }
-		]);
+		expect(highlightSnippet('A fotossintcse transforma energia luminosa.', 'fotossíntese')).toEqual(
+			[
+				{ text: 'A ', highlighted: false },
+				{ text: 'fotossintcse', highlighted: true },
+				{ text: ' transforma energia luminosa.', highlighted: false }
+			]
+		);
 	});
 
 	it('does not fuzzy-highlight very short terms', () => {
