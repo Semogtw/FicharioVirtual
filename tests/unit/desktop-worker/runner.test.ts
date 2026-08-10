@@ -108,6 +108,7 @@ describe('runWorkerCycle', () => {
 		const spool = new MemorySpool();
 		const client = {
 			claim: vi.fn(async () => null),
+			renew: vi.fn(),
 			source: vi.fn(),
 			complete: vi.fn()
 		};
@@ -126,6 +127,7 @@ describe('runWorkerCycle', () => {
 		spool.enqueue({ jobId: JOB_ID });
 		const client = {
 			claim: vi.fn(),
+			renew: vi.fn(),
 			source: vi.fn(),
 			complete: vi.fn(async () => {
 				throw new DesktopWorkerApiError(409, 'desktop_ocr_completion_rejected');
@@ -139,10 +141,11 @@ describe('runWorkerCycle', () => {
 		expect(client.claim).not.toHaveBeenCalled();
 	});
 
-	it('runs claim, verified source, engine, durable spool and completion in order', async () => {
+	it('runs claim, verified source, lease-protected engine, durable spool and completion in order', async () => {
 		const spool = new MemorySpool();
 		const client = {
 			claim: vi.fn(async () => lease()),
+			renew: vi.fn(),
 			source: vi.fn(async () => source()),
 			complete: vi.fn(async () => receipt())
 		};
@@ -155,18 +158,29 @@ describe('runWorkerCycle', () => {
 			mimeType: 'image/webp'
 		}));
 		const removeFile = vi.fn(async () => undefined);
+		const renewLease = vi.fn(async (_leaseContext, operation) => ({
+			value: await operation(),
+			lease: lease(),
+			renewalFailure: null
+		}));
 
 		const result = await runWorkerCycle(
 			{ client, spool, engine, downloadsDir: '/tmp/test' },
-			{ downloadSource, removeFile }
+			{ downloadSource, renewLease, removeFile }
 		);
 
 		expect(result.status).toBe('completed');
+		expect(result.renewalFailure).toBeNull();
 		expect(client.source).toHaveBeenCalledWith(JOB_ID, LEASE_ID, { signal: undefined });
 		expect(downloadSource).toHaveBeenCalledWith(source(), {
 			downloadsDir: '/tmp/test',
 			signal: undefined
 		});
+		expect(renewLease).toHaveBeenCalledWith(
+			{ client, lease: lease() },
+			expect.any(Function),
+			{ signal: undefined, now: expect.any(Function) }
+		);
 		expect(engine.process).toHaveBeenCalledWith(
 			{
 				jobId: JOB_ID,
@@ -196,6 +210,7 @@ describe('runWorkerCycle', () => {
 		const spool = new MemorySpool();
 		const client = {
 			claim: vi.fn(async () => lease()),
+			renew: vi.fn(),
 			source: vi.fn(async () => source()),
 			complete: vi.fn(async () => {
 				throw new DesktopWorkerApiError(0, 'worker_network_failed');
@@ -203,6 +218,7 @@ describe('runWorkerCycle', () => {
 		};
 		const engine = { process: vi.fn(async () => engineOutput()) };
 		const removeFile = vi.fn(async () => undefined);
+		const renewalFailure = { code: 'desktop_ocr_lease_not_active', httpStatus: 409 };
 
 		const result = await runWorkerCycle(
 			{ client, spool, engine, downloadsDir: '/tmp/test' },
@@ -214,11 +230,17 @@ describe('runWorkerCycle', () => {
 					sha256: SOURCE_SHA,
 					mimeType: 'image/webp'
 				})),
+				renewLease: vi.fn(async (_leaseContext, operation) => ({
+					value: await operation(),
+					lease: lease(),
+					renewalFailure
+				})),
 				removeFile
 			}
 		);
 
 		expect(result.status).toBe('spooled');
+		expect(result.renewalFailure).toEqual(renewalFailure);
 		expect(spool.entries.get(JOB_ID)?.state).toBe('pending');
 		expect(spool.entries.get(JOB_ID)?.attemptCount).toBe(1);
 		expect(removeFile).toHaveBeenCalledOnce();
@@ -228,6 +250,7 @@ describe('runWorkerCycle', () => {
 		const spool = new MemorySpool();
 		const client = {
 			claim: vi.fn(async () => lease()),
+			renew: vi.fn(),
 			source: vi.fn(async () => source()),
 			complete: vi.fn()
 		};
@@ -243,6 +266,11 @@ describe('runWorkerCycle', () => {
 					bytes: 1024,
 					sha256: SOURCE_SHA,
 					mimeType: 'image/webp'
+				})),
+				renewLease: vi.fn(async (_leaseContext, operation) => ({
+					value: await operation(),
+					lease: lease(),
+					renewalFailure: null
 				})),
 				removeFile
 			}
