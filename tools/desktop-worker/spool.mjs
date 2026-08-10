@@ -88,21 +88,15 @@ export class ResultSpool {
 			);
 		}
 		this.#database
-			.prepare(`
+			.prepare(
+				`
 				INSERT INTO result_spool (
 					job_id, source_sha256, model_id, model_version, result_json,
 					state, attempt_count, created_at, updated_at, accepted_at
 				) VALUES (?, ?, ?, ?, ?, 'pending', 0, ?, ?, NULL)
-			`)
-			.run(
-				result.jobId,
-				result.sourceSha256,
-				modelId,
-				modelVersion,
-				json,
-				timestamp,
-				timestamp
-			);
+			`
+			)
+			.run(result.jobId, result.sourceSha256, modelId, modelVersion, json, timestamp, timestamp);
 		return this.get(result.jobId);
 	}
 
@@ -116,12 +110,14 @@ export class ResultSpool {
 			throw new TypeError('Invalid desktop worker spool limit');
 		}
 		return this.#database
-			.prepare(`
+			.prepare(
+				`
 				SELECT * FROM result_spool
 				WHERE state = 'pending'
 				ORDER BY created_at ASC, job_id ASC
 				LIMIT ?
-			`)
+			`
+			)
 			.all(limit)
 			.map(asRow);
 	}
@@ -129,11 +125,13 @@ export class ResultSpool {
 	markAttempt(jobId, now = new Date()) {
 		if (!UUID.test(jobId)) throw new TypeError('Invalid desktop worker jobId');
 		const result = this.#database
-			.prepare(`
+			.prepare(
+				`
 				UPDATE result_spool
 				SET attempt_count = attempt_count + 1, updated_at = ?
 				WHERE job_id = ? AND state = 'pending'
-			`)
+			`
+			)
 			.run(now.toISOString(), jobId);
 		return Number(result.changes) === 1;
 	}
@@ -142,11 +140,13 @@ export class ResultSpool {
 		if (!UUID.test(jobId)) throw new TypeError('Invalid desktop worker jobId');
 		const timestamp = now.toISOString();
 		const result = this.#database
-			.prepare(`
+			.prepare(
+				`
 				UPDATE result_spool
 				SET state = 'accepted', accepted_at = ?, updated_at = ?
 				WHERE job_id = ? AND state = 'pending'
-			`)
+			`
+			)
 			.run(timestamp, timestamp, jobId);
 		return Number(result.changes) === 1;
 	}
@@ -156,10 +156,12 @@ export class ResultSpool {
 		this.#database.exec('BEGIN IMMEDIATE');
 		try {
 			const result = this.#database
-				.prepare(`
+				.prepare(
+					`
 					DELETE FROM result_spool
 					WHERE state = 'accepted' AND accepted_at IS NOT NULL AND accepted_at < ?
-				`)
+				`
+				)
 				.run(timestamp);
 			this.#database.exec('COMMIT');
 			return Number(result.changes);
