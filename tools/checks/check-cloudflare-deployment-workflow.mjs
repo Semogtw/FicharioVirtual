@@ -52,6 +52,7 @@ requireText(
 );
 for (const validator of [
 	'checks/check-deployed-site.mjs',
+	'checks/check-deployment-artifact.mjs',
 	'checks/deployment-contract.mjs',
 	'checks/validate-pages-deploy-output.mjs'
 ]) {
@@ -60,6 +61,10 @@ for (const validator of [
 requireText('sha256sum -c SHA256SUMS', 'artifact checksums must be revalidated before deployment');
 requireText('find "$artifact_root" -type l', 'artifact symlinks must be rejected');
 requireText("[[ \"$(manifest_value target_environment)\" == 'staging' ]]", 'artifact manifest must target staging');
+requireText(
+	'node "$artifact_root/checks/check-deployment-artifact.mjs" "$artifact_root"',
+	'downloaded artifact must pass its bundled self-verifier after checksum validation'
+);
 requireText('wrangler pages deploy "$ARTIFACT_ROOT/site"', 'only the validated site directory may be deployed');
 requireText('--project-name=fichario-virtual', 'deployment must remain scoped to fichario-virtual');
 requireText('--branch=staging', 'deployment must remain a non-production Pages preview');
