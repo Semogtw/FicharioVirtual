@@ -32,6 +32,7 @@ type ClaimedCandidate = Readonly<{
 type WorkerConfig = Readonly<{
 	supabaseUrl: string;
 	serviceRoleKey: string;
+	workerKey: string;
 	apiKey: string;
 	model: string;
 	promptVersion: number;
@@ -59,6 +60,7 @@ function envInteger(name: string, fallback: number, minimum: number, maximum: nu
 function config(): WorkerConfig | null {
 	const supabaseUrl = Deno.env.get('SUPABASE_URL');
 	const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+	const workerKey = Deno.env.get('OCR_BACKGROUND_WORKER_KEY');
 	const apiKey = Deno.env.get('GEMINI_API_KEY');
 	const model = Deno.env.get('OCR_MODEL_PRIMARY');
 	const promptVersion = Number(Deno.env.get('OCR_PROMPT_VERSION') ?? '1');
@@ -73,6 +75,7 @@ function config(): WorkerConfig | null {
 	if (
 		!supabaseUrl ||
 		!serviceRoleKey ||
+		!workerKey ||
 		!apiKey ||
 		!model ||
 		!MODEL.test(model) ||
@@ -88,6 +91,7 @@ function config(): WorkerConfig | null {
 	return Object.freeze({
 		supabaseUrl,
 		serviceRoleKey,
+		workerKey,
 		apiKey,
 		model,
 		promptVersion,
@@ -479,7 +483,7 @@ async function runAndChain(settings: WorkerConfig) {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
-				'X-Fichario-Worker-Key': settings.serviceRoleKey
+				'X-Fichario-Worker-Key': settings.workerKey
 			},
 			body: JSON.stringify({ source: 'chain' })
 		});
@@ -492,9 +496,7 @@ Deno.serve(async (request) => {
 	if (request.method !== 'POST') return response(405, { code: 'method_not_allowed' });
 	const settings = config();
 	if (!settings) return response(503, { code: 'ocr_background_not_configured' });
-	if (
-		!(await secretMatches(request.headers.get('X-Fichario-Worker-Key'), settings.serviceRoleKey))
-	) {
+	if (!(await secretMatches(request.headers.get('X-Fichario-Worker-Key'), settings.workerKey))) {
 		return response(401, { code: 'worker_authentication_required' });
 	}
 
