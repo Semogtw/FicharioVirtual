@@ -272,7 +272,7 @@ Deno.serve(async (request) => {
 	}
 
 	if (input.action === 'complete') {
-		const { data, error } = await admin.rpc('complete_desktop_ocr_job', {
+		const { data, error } = await admin.rpc('complete_desktop_ocr_job_with_geometry', {
 			target_job_id: input.jobId,
 			target_device_id: device.deviceId,
 			target_lease_id: input.leaseId,
@@ -285,7 +285,8 @@ Deno.serve(async (request) => {
 			target_content_type: input.contentType,
 			extraction_warnings: input.warnings,
 			needs_review: input.needsReview,
-			timing_ms: input.timingMs
+			timing_ms: input.timingMs,
+			geometry_payload: input.wordGeometry
 		});
 		if (error) return respond(409, { code: 'desktop_ocr_completion_rejected' });
 		const completion = parseCompletion(data, input);
