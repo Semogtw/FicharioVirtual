@@ -121,7 +121,10 @@ export async function indexNextSemanticBatch(input: {
 	surface: 'coverage' | 'search' | 'indexer';
 	signal?: AbortSignal;
 }): Promise<SemanticIndexBatchResult> {
-	const batchPages = Math.max(1, Math.min(24, Math.round(input.batchPages ?? SEMANTIC_INDEX_BATCH_PAGES)));
+	const batchPages = Math.max(
+		1,
+		Math.min(24, Math.round(input.batchPages ?? SEMANTIC_INDEX_BATCH_PAGES))
+	);
 	const concurrency = Math.max(
 		1,
 		Math.min(4, Math.round(input.concurrency ?? SEMANTIC_INDEX_PAGE_CONCURRENCY))
@@ -134,7 +137,13 @@ export async function indexNextSemanticBatch(input: {
 	if (error) throw error;
 	const pages = asPendingPages(data).slice(0, batchPages);
 	if (pages.length === 0) {
-		return { attemptedPages: 0, indexedPages: 0, failedPages: 0, storedChunks: 0, rateLimited: false };
+		return {
+			attemptedPages: 0,
+			indexedPages: 0,
+			failedPages: 0,
+			storedChunks: 0,
+			rateLimited: false
+		};
 	}
 
 	let cursor = 0;
@@ -175,7 +184,10 @@ export async function indexNextSemanticBatch(input: {
 	};
 }
 
-export async function semanticIndexStats(supabase: SupabaseClient, notebookId: string | null = null) {
+export async function semanticIndexStats(
+	supabase: SupabaseClient,
+	notebookId: string | null = null
+) {
 	const { data, error } = await supabase.rpc('semantic_index_stats', {
 		target_model: SEMANTIC_EMBEDDING_MODEL,
 		notebook_filter: notebookId
