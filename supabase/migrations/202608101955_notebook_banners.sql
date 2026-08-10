@@ -14,7 +14,7 @@ alter table public.notebooks
     or (
       char_length(banner_path) between 3 and 1024
       and banner_path like user_id::text || '/notebook-banners/' || id::text || '/%'
-      and banner_path !~ '(^|/)\\.\\.(/|$)'
+      and position('/../' in '/' || banner_path || '/') = 0
     )
   ),
   add constraint notebooks_banner_position_x_check check (banner_position_x between 0 and 100),
