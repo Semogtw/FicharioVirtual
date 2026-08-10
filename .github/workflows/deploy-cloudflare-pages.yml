@@ -40,6 +40,7 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       WRANGLER_SEND_METRICS: 'false'
       WRANGLER_VERSION: '4.120.0'
+      WRANGLER_OUTPUT_FILE_PATH: /tmp/wrangler-pages-output.jsonl
 
     steps:
       - name: Validate immutable deployment inputs
@@ -79,7 +80,7 @@ jobs:
             artifact_root="$artifact_root/fichario-deploy"
           fi
 
-          for required in DEPLOYMENT-MANIFEST.txt SHA256SUMS source/package.json source/pnpm-lock.yaml site/_headers site/200.html site/manifest.webmanifest site/sw.js site/registerSW.js; do
+          for required in DEPLOYMENT-MANIFEST.txt SHA256SUMS source/package.json source/pnpm-lock.yaml checks/check-deployed-site.mjs checks/deployment-contract.mjs site/_headers site/200.html site/manifest.webmanifest site/sw.js site/registerSW.js; do
             if [[ ! -f "$artifact_root/$required" ]]; then
               echo "deployment artifact is missing $required" >&2
               exit 1
@@ -129,11 +130,13 @@ jobs:
           echo "root=$artifact_root" >> "$GITHUB_OUTPUT"
 
       - name: Deploy the exact artifact with pinned Wrangler
+        id: deploy
         shell: bash
         env:
           ARTIFACT_ROOT: ${{ steps.artifact.outputs.root }}
         run: |
           set -euo pipefail
+          rm -f "$WRANGLER_OUTPUT_FILE_PATH"
           if [[ "$TARGET_ENVIRONMENT" == 'production' ]]; then
             pages_branch='main'
           else
@@ -148,21 +151,73 @@ jobs:
               --commit-message="Deploy validated Fichário artifact ${EXPECTED_SOURCE_COMMIT} (${TARGET_ENVIRONMENT})" \
               --commit-dirty=false
 
-      - name: Record deterministic post-deploy target
+          node <<'NODE'
+          const { appendFileSync, readFileSync } = require('node:fs');
+          const path = process.env.WRANGLER_OUTPUT_FILE_PATH;
+          const entries = readFileSync(path, 'utf8')
+            .split(/\r?\n/)
+            .filter(Boolean)
+            .map((line) => JSON.parse(line));
+          const deployment = [...entries].reverse().find((entry) => entry.type === 'pages-deploy-detailed');
+          if (!deployment) throw new Error('Wrangler did not emit pages-deploy-detailed output');
+          if (deployment.pages_project !== 'fichario-virtual') throw new Error('Wrangler deployed an unexpected Pages project');
+          const expectedEnvironment = process.env.TARGET_ENVIRONMENT === 'production' ? 'production' : 'preview';
+          if (deployment.environment !== expectedEnvironment) throw new Error('Wrangler deployment environment does not match the requested environment');
+          if (deployment.production_branch !== 'main') throw new Error('Cloudflare production branch is not main');
+          if (deployment.deployment_trigger?.metadata?.commit_hash !== process.env.EXPECTED_SOURCE_COMMIT) {
+            throw new Error('Cloudflare deployment metadata does not preserve the validated source SHA');
+          }
+          if (typeof deployment.deployment_id !== 'string' || deployment.deployment_id.length < 8) {
+            throw new Error('Wrangler deployment ID is unavailable');
+          }
+          const url = new URL(deployment.url);
+          if (url.protocol !== 'https:' || url.pathname !== '/' || url.search || url.hash) {
+            throw new Error('Wrangler returned an invalid deployment URL');
+          }
+          const alias = deployment.alias ? new URL(deployment.alias) : null;
+          if (alias && alias.protocol !== 'https:') throw new Error('Wrangler returned an invalid deployment alias');
+          appendFileSync(
+            process.env.GITHUB_OUTPUT,
+            `url=${url.origin}\ndeployment_id=${deployment.deployment_id}\nalias=${alias?.origin ?? ''}\n`
+          );
+          NODE
+
+      - name: Verify the exact deployed URL with the artifact-pinned contract
         shell: bash
+        env:
+          ARTIFACT_ROOT: ${{ steps.artifact.outputs.root }}
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
         run: |
           set -euo pipefail
-          if [[ "$TARGET_ENVIRONMENT" == 'production' ]]; then
-            origin='https://fichario-virtual.pages.dev'
-          else
-            origin='https://staging.fichario-virtual.pages.dev'
-          fi
+          node "$ARTIFACT_ROOT/checks/check-deployed-site.mjs" "$DEPLOYMENT_URL"
+
+      - name: Verify production alias
+        if: inputs.target_environment == 'production'
+        shell: bash
+        env:
+          ARTIFACT_ROOT: ${{ steps.artifact.outputs.root }}
+        run: |
+          set -euo pipefail
+          node "$ARTIFACT_ROOT/checks/check-deployed-site.mjs" 'https://fichario-virtual.pages.dev'
+
+      - name: Record verified deployment target
+        shell: bash
+        env:
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
+          DEPLOYMENT_ALIAS: ${{ steps.deploy.outputs.alias }}
+          DEPLOYMENT_ID: ${{ steps.deploy.outputs.deployment_id }}
+        run: |
+          set -euo pipefail
           {
-            echo "### Cloudflare Pages deployment"
+            echo '### Cloudflare Pages deployment'
             echo
             echo "- Environment: \`$TARGET_ENVIRONMENT\`"
             echo "- Source SHA: \`$EXPECTED_SOURCE_COMMIT\`"
-            echo "- Gate target: \`$origin\`"
+            echo "- Deployment ID: \`$DEPLOYMENT_ID\`"
+            echo "- Exact verified URL: \`$DEPLOYMENT_URL\`"
+            if [[ -n "$DEPLOYMENT_ALIAS" ]]; then
+              echo "- Alias reported by Wrangler: \`$DEPLOYMENT_ALIAS\`"
+            fi
             echo
-            echo 'Run the repository post-deployment contract against this origin before promotion.'
+            echo 'Artifact checksum verification and the HTTP deployment contract both passed for the exact deployment URL.'
           } >> "$GITHUB_STEP_SUMMARY"
