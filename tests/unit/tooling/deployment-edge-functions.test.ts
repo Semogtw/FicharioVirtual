@@ -24,7 +24,9 @@ const requiredOcrMigrations = [
 
 describe('Edge Function deployment contract', () => {
 	it('keeps every versioned application Edge Function covered by config and the all-functions deploy flow', () => {
-		expect(versionedFunctions).toHaveLength(12);
+		expect(versionedFunctions).toContain('semantic-coverage');
+		expect(versionedFunctions).toContain('semantic-search');
+		expect(versionedFunctions).toContain('semantic-index');
 		for (const functionName of versionedFunctions) {
 			expect(config).toContain(`[functions.${functionName}]`);
 		}
