@@ -40,6 +40,10 @@ function createFixture() {
 		['source/package.json', packageSource],
 		['source/pnpm-lock.yaml', lockSource],
 		['checks/check-deployed-site.mjs', 'import "./deployment-contract.mjs";\n'],
+		[
+			'checks/check-deployment-artifact.mjs',
+			'export const verifyDeploymentArtifact = async () => ({ targetEnvironment: "staging" });\n'
+		],
 		['checks/deployment-contract.mjs', 'export const deploymentContract = true;\n'],
 		[
 			'checks/validate-pages-deploy-output.mjs',
@@ -93,29 +97,46 @@ function replaceSnapshot(
 }
 
 describe('deployable artifact verification', () => {
-	it('accepts a complete package with exact portable checksums', async () => {
+	it('accepts a complete staging package with exact portable checksums', async () => {
 		const result = await verifyDeploymentArtifact(createFixture());
 
 		expect(result).toEqual({
 			schemaVersion: 2,
 			sourceCommit: '0123456789abcdef0123456789abcdef01234567',
 			targetEnvironment: 'staging',
-			verifiedFiles: 11
+			verifiedFiles: 12
 		});
 	});
 
-	it('requires deployment verification code to travel with the immutable artifact', async () => {
-		const checkerRoot = createFixture();
-		rmSync(join(checkerRoot, 'checks', 'check-deployed-site.mjs'));
-		await expect(verifyDeploymentArtifact(checkerRoot)).rejects.toThrow(
-			/checks\/check-deployed-site/
-		);
+	it('requires every deployment verifier to travel with the immutable artifact', async () => {
+		for (const checker of [
+			'check-deployed-site.mjs',
+			'check-deployment-artifact.mjs',
+			'deployment-contract.mjs',
+			'validate-pages-deploy-output.mjs'
+		]) {
+			const root = createFixture();
+			rmSync(join(root, 'checks', checker));
+			await expect(verifyDeploymentArtifact(root)).rejects.toThrow(new RegExp(checker.replace('.', '\\.')));
+		}
+	});
 
-		const outputValidatorRoot = createFixture();
-		rmSync(join(outputValidatorRoot, 'checks', 'validate-pages-deploy-output.mjs'));
-		await expect(verifyDeploymentArtifact(outputValidatorRoot)).rejects.toThrow(
-			/checks\/validate-pages-deploy-output/
+	it('rejects a production manifest while production infrastructure is intentionally absent', async () => {
+		const root = createFixture();
+		const manifestPath = join(root, 'DEPLOYMENT-MANIFEST.txt');
+		const productionManifest = readFileSync(manifestPath, 'utf8').replace(
+			'target_environment=staging',
+			'target_environment=production'
 		);
+		writeFileSync(manifestPath, productionManifest);
+		const checksumPath = join(root, 'SHA256SUMS');
+		const checksums = readFileSync(checksumPath, 'utf8').replace(
+			/^[0-9a-f]{64} {2}\.\/DEPLOYMENT-MANIFEST\.txt$/m,
+			`${sha256(productionManifest)}  ./DEPLOYMENT-MANIFEST.txt`
+		);
+		writeFileSync(checksumPath, checksums);
+
+		await expect(verifyDeploymentArtifact(root)).rejects.toThrow(/must target staging/);
 	});
 
 	it('rejects an obsolete manifest schema after source snapshots became mandatory', async () => {
