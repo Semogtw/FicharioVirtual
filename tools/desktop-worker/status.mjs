@@ -65,9 +65,10 @@ async function inspectSpool(path, databaseFactory) {
 		for (const row of rejectedRows) {
 			const count = Number(row.count);
 			rejected += count;
-			const code = typeof row.reason_code === 'string' && SAFE_CODE.test(row.reason_code)
-				? row.reason_code
-				: 'invalid_reason_code';
+			const code =
+				typeof row.reason_code === 'string' && SAFE_CODE.test(row.reason_code)
+					? row.reason_code
+					: 'invalid_reason_code';
 			rejectionReasons[code] = (rejectionReasons[code] ?? 0) + count;
 		}
 		return Object.freeze({
@@ -85,10 +86,7 @@ async function inspectSpool(path, databaseFactory) {
 }
 
 export async function inspectWorkerStatus(
-	{
-		paths = resolveWorkerPaths(),
-		credentialStore = new SecretServiceCredentialStore()
-	} = {},
+	{ paths = resolveWorkerPaths(), credentialStore = new SecretServiceCredentialStore() } = {},
 	{
 		loadConfig = loadWorkerConfig,
 		loadDevice = loadDeviceMetadata,
