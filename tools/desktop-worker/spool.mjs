@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { requireCompletionRequest } from './contract.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const SAFE_CODE = /^[a-z0-9_]{3,96}$/;
 const MAX_RESULT_BYTES = 2 * 1024 * 1024;
 
 function validateResult(result) {
@@ -30,6 +31,21 @@ function asRow(record) {
 	});
 }
 
+function asRejectedRow(record) {
+	if (!record) return null;
+	return Object.freeze({
+		jobId: String(record.job_id),
+		sourceSha256: String(record.source_sha256),
+		modelId: String(record.model_id),
+		modelVersion: String(record.model_version),
+		attemptCount: Number(record.attempt_count),
+		createdAt: String(record.created_at),
+		rejectedAt: String(record.rejected_at),
+		reasonCode: String(record.reason_code),
+		result: requireCompletionRequest(JSON.parse(String(record.result_json)))
+	});
+}
+
 export class ResultSpool {
 	#database;
 
@@ -52,6 +68,19 @@ export class ResultSpool {
 			);
 			CREATE INDEX IF NOT EXISTS result_spool_state_updated_idx
 				ON result_spool (state, updated_at);
+			CREATE TABLE IF NOT EXISTS result_dead_letter (
+				job_id TEXT PRIMARY KEY,
+				source_sha256 TEXT NOT NULL,
+				model_id TEXT NOT NULL,
+				model_version TEXT NOT NULL,
+				result_json TEXT NOT NULL,
+				attempt_count INTEGER NOT NULL CHECK (attempt_count >= 1),
+				created_at TEXT NOT NULL,
+				rejected_at TEXT NOT NULL,
+				reason_code TEXT NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS result_dead_letter_rejected_idx
+				ON result_dead_letter (rejected_at, job_id);
 		`);
 		chmod(path, 0o600).catch(() => undefined);
 	}
@@ -63,6 +92,15 @@ export class ResultSpool {
 	enqueue(result, now = new Date()) {
 		const { parsed, json } = validateResult(result);
 		const timestamp = now.toISOString();
+		const rejected = this.#database
+			.prepare('SELECT source_sha256, result_json FROM result_dead_letter WHERE job_id = ?')
+			.get(parsed.jobId);
+		if (rejected) {
+			if (rejected.source_sha256 !== parsed.sourceSha256 || rejected.result_json !== json) {
+				throw new Error('Desktop worker spool idempotency conflict');
+			}
+			return this.getRejected(parsed.jobId);
+		}
 		const existing = this.#database
 			.prepare('SELECT source_sha256, result_json, state FROM result_spool WHERE job_id = ?')
 			.get(parsed.jobId);
@@ -100,6 +138,13 @@ export class ResultSpool {
 		return asRow(this.#database.prepare('SELECT * FROM result_spool WHERE job_id = ?').get(jobId));
 	}
 
+	getRejected(jobId) {
+		if (!UUID.test(jobId)) throw new TypeError('Invalid desktop worker jobId');
+		return asRejectedRow(
+			this.#database.prepare('SELECT * FROM result_dead_letter WHERE job_id = ?').get(jobId)
+		);
+	}
+
 	listPending(limit = 20) {
 		if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
 			throw new TypeError('Invalid desktop worker spool limit');
@@ -115,6 +160,22 @@ export class ResultSpool {
 			)
 			.all(limit)
 			.map(asRow);
+	}
+
+	listRejected(limit = 20) {
+		if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+			throw new TypeError('Invalid desktop worker dead-letter limit');
+		}
+		return this.#database
+			.prepare(
+				`
+				SELECT * FROM result_dead_letter
+				ORDER BY rejected_at DESC, job_id ASC
+				LIMIT ?
+			`
+			)
+			.all(limit)
+			.map(asRejectedRow);
 	}
 
 	markAttempt(jobId, now = new Date()) {
@@ -146,6 +207,53 @@ export class ResultSpool {
 		return Number(result.changes) === 1;
 	}
 
+	markRejected(jobId, reasonCode, now = new Date()) {
+		if (!UUID.test(jobId)) throw new TypeError('Invalid desktop worker jobId');
+		if (typeof reasonCode !== 'string' || !SAFE_CODE.test(reasonCode)) {
+			throw new TypeError('Invalid desktop worker rejection reason');
+		}
+		const timestamp = now.toISOString();
+		this.#database.exec('BEGIN IMMEDIATE');
+		try {
+			const pending = this.#database
+				.prepare("SELECT * FROM result_spool WHERE job_id = ? AND state = 'pending'")
+				.get(jobId);
+			if (!pending || Number(pending.attempt_count) < 1) {
+				this.#database.exec('ROLLBACK');
+				return false;
+			}
+			this.#database
+				.prepare(
+					`
+					INSERT INTO result_dead_letter (
+						job_id, source_sha256, model_id, model_version, result_json,
+						attempt_count, created_at, rejected_at, reason_code
+					) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+					`
+				)
+				.run(
+					pending.job_id,
+					pending.source_sha256,
+					pending.model_id,
+					pending.model_version,
+					pending.result_json,
+					pending.attempt_count,
+					pending.created_at,
+					timestamp,
+					reasonCode
+				);
+			const removed = this.#database
+				.prepare("DELETE FROM result_spool WHERE job_id = ? AND state = 'pending'")
+				.run(jobId);
+			if (Number(removed.changes) !== 1) throw new Error('Desktop worker dead-letter race');
+			this.#database.exec('COMMIT');
+			return true;
+		} catch (error) {
+			if (this.#database.isTransaction) this.#database.exec('ROLLBACK');
+			throw error;
+		}
+	}
+
 	purgeAcceptedBefore(cutoff) {
 		const timestamp = cutoff.toISOString();
 		this.#database.exec('BEGIN IMMEDIATE');
@@ -155,7 +263,7 @@ export class ResultSpool {
 					`
 					DELETE FROM result_spool
 					WHERE state = 'accepted' AND accepted_at IS NOT NULL AND accepted_at < ?
-				`
+					`
 				)
 				.run(timestamp);
 			this.#database.exec('COMMIT');
