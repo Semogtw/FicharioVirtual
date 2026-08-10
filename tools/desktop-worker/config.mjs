@@ -70,7 +70,12 @@ function parseBackends(value) {
 }
 
 export function parseWorkerConfig(value) {
-	if (!value || typeof value !== 'object' || Array.isArray(value) || !exactKeys(value, CONFIG_KEYS)) {
+	if (
+		!value ||
+		typeof value !== 'object' ||
+		Array.isArray(value) ||
+		!exactKeys(value, CONFIG_KEYS)
+	) {
 		throw new TypeError('Invalid desktop worker config shape');
 	}
 	if (value.schemaVersion !== WORKER_CONFIG_SCHEMA_VERSION) {
