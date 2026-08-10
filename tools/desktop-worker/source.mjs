@@ -64,7 +64,8 @@ export async function downloadDesktopSource(
 	if (typeof downloadsDir !== 'string' || downloadsDir.length === 0) {
 		throw new TypeError('Invalid desktop worker downloads directory');
 	}
-	if (typeof fetchImpl !== 'function') throw new TypeError('Invalid desktop worker fetch implementation');
+	if (typeof fetchImpl !== 'function')
+		throw new TypeError('Invalid desktop worker fetch implementation');
 	const sourceUrl = parseSourceUrl(source.sourceUrl);
 	if (!sourceUrl) throw new TypeError('Invalid desktop worker source URL');
 
@@ -73,7 +74,10 @@ export async function downloadDesktopSource(
 
 	const token = randomUUID();
 	const temporaryPath = join(downloadsDir, `.${source.jobId}.${token}.part`);
-	const finalPath = join(downloadsDir, `${source.jobId}.${token}${sourceExtension(source.mimeType)}`);
+	const finalPath = join(
+		downloadsDir,
+		`${source.jobId}.${token}${sourceExtension(source.mimeType)}`
+	);
 	let handle;
 	let promoted = false;
 	try {
