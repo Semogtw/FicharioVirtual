@@ -4,6 +4,7 @@ import { getSupabaseClient } from './supabase';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MODEL = /^[A-Za-z0-9._:/-]+$/;
+const PAIRING_CODE = /^[0-9A-F]{4}(-[0-9A-F]{4}){3}$/;
 
 export type DesktopOcrDeviceStatus = 'active' | 'revoked';
 
@@ -38,6 +39,12 @@ export type DesktopOcrRename = Readonly<{
 	updatedAt: string;
 }>;
 
+export type DesktopOcrPairingCode = Readonly<{
+	pairingId: string;
+	code: string;
+	expiresAt: string;
+}>;
+
 export class DesktopOcrDevicesError extends Error {
 	constructor(message = 'Não foi possível carregar os computadores de OCR.') {
 		super(message);
@@ -48,6 +55,10 @@ export class DesktopOcrDevicesError extends Error {
 type DevicesRpcClient = {
 	rpc(
 		name: 'list_ocr_worker_devices',
+		args?: Record<string, never>
+	): Promise<{ data: unknown; error: unknown }>;
+	rpc(
+		name: 'create_ocr_worker_pairing_code',
 		args?: Record<string, never>
 	): Promise<{ data: unknown; error: unknown }>;
 	rpc(
@@ -145,6 +156,26 @@ function parseDevices(value: unknown): readonly DesktopOcrDevice[] | null {
 	return Object.freeze(parsed);
 }
 
+function parsePairingCode(value: unknown): DesktopOcrPairingCode | null {
+	if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+	const record = value as Record<string, Json | undefined>;
+	const expiresAt = timestamp(record.expiresAt);
+	if (
+		typeof record.pairingId !== 'string' ||
+		!UUID.test(record.pairingId) ||
+		typeof record.code !== 'string' ||
+		!PAIRING_CODE.test(record.code) ||
+		expiresAt === null
+	) {
+		return null;
+	}
+	return Object.freeze({
+		pairingId: record.pairingId,
+		code: record.code,
+		expiresAt
+	});
+}
+
 function parseRevocation(value: unknown, expectedDeviceId: string): DesktopOcrRevocation | null {
 	if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
 	const record = value as Record<string, Json | undefined>;
@@ -206,6 +237,25 @@ export async function listDesktopOcrDevices(
 	if (!devices)
 		throw new DesktopOcrDevicesError('A lista de computadores retornou um formato inválido.');
 	return devices;
+}
+
+export async function createDesktopOcrPairingCode(
+	client?: SupabaseClient<Database>
+): Promise<DesktopOcrPairingCode> {
+	let result: { data: unknown; error: unknown };
+	try {
+		result = await gateway(client).rpc('create_ocr_worker_pairing_code');
+	} catch {
+		throw new DesktopOcrDevicesError('Não foi possível gerar um código de pareamento.');
+	}
+	if (result.error) {
+		throw new DesktopOcrDevicesError('Não foi possível gerar um código de pareamento.');
+	}
+	const pairing = parsePairingCode(result.data);
+	if (!pairing) {
+		throw new DesktopOcrDevicesError('O código de pareamento retornou um formato inválido.');
+	}
+	return pairing;
 }
 
 export async function revokeDesktopOcrDevice(
