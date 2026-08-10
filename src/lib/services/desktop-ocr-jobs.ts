@@ -25,12 +25,31 @@ export type DesktopOcrJobStatus =
 	| 'failed'
 	| 'waiting_desktop';
 
-export type DesktopOcrJobRouteChange = Readonly<{
-	jobId: string;
+export type DesktopOcrJobRouteChange =
+	| Readonly<{
+			jobId: string;
+			pageId: string;
+			route: 'gemini';
+			status: 'pending';
+			recoveredExpiredLease: boolean;
+	  }>
+	| Readonly<{
+			jobId: string;
+			pageId: string;
+			route: 'desktop';
+			status: 'waiting_desktop';
+			recoveredExpiredLease: false;
+	  }>;
+
+export type GeminiOcrCandidate = Readonly<{
+	id: string;
 	pageId: string;
-	route: 'gemini';
-	status: 'pending';
-	recoveredExpiredLease: boolean;
+	documentId: string;
+	documentTitle: string;
+	pageNumber: number;
+	attemptCount: number;
+	createdAt: string;
+	updatedAt: string;
 }>;
 
 export type DesktopOcrJob = Readonly<{
@@ -60,12 +79,12 @@ export class DesktopOcrJobsError extends Error {
 
 type QueueRpcClient = {
 	rpc(
-		name: 'list_desktop_ocr_jobs',
+		name: 'list_desktop_ocr_jobs' | 'list_gemini_ocr_candidates',
 		args?: Record<string, never>
 	): Promise<{ data: unknown; error: unknown }>;
 	rpc(
 		name: 'set_ocr_job_route',
-		args: { target_page_id: string; target_route: 'gemini' }
+		args: { target_page_id: string; target_route: 'gemini' | 'desktop' }
 	): Promise<{ data: unknown; error: unknown }>;
 };
 
@@ -77,6 +96,54 @@ function timestamp(value: unknown, nullable = false): string | null {
 
 function nullableUuid(value: unknown) {
 	return value === null || (typeof value === 'string' && UUID.test(value));
+}
+
+function parseCandidate(value: unknown): GeminiOcrCandidate | null {
+	if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+	const record = value as Record<string, unknown>;
+	const createdAt = timestamp(record.created_at);
+	const updatedAt = timestamp(record.updated_at);
+	if (
+		typeof record.job_id !== 'string' ||
+		!UUID.test(record.job_id) ||
+		typeof record.page_id !== 'string' ||
+		!UUID.test(record.page_id) ||
+		typeof record.document_id !== 'string' ||
+		!UUID.test(record.document_id) ||
+		typeof record.document_title !== 'string' ||
+		record.document_title.length < 1 ||
+		record.document_title.length > 240 ||
+		!Number.isSafeInteger(record.page_number) ||
+		Number(record.page_number) < 1 ||
+		!Number.isSafeInteger(record.attempt_count) ||
+		Number(record.attempt_count) < 0 ||
+		Number(record.attempt_count) > 20 ||
+		createdAt === null ||
+		updatedAt === null
+	) {
+		return null;
+	}
+	return Object.freeze({
+		id: record.job_id,
+		pageId: record.page_id,
+		documentId: record.document_id,
+		documentTitle: record.document_title,
+		pageNumber: Number(record.page_number),
+		attemptCount: Number(record.attempt_count),
+		createdAt: createdAt as string,
+		updatedAt: updatedAt as string
+	});
+}
+
+function parseCandidates(value: unknown): readonly GeminiOcrCandidate[] | null {
+	if (!Array.isArray(value) || value.length > 100) return null;
+	const candidates: GeminiOcrCandidate[] = [];
+	for (const item of value) {
+		const parsed = parseCandidate(item);
+		if (!parsed) return null;
+		candidates.push(parsed);
+	}
+	return Object.freeze(candidates);
 }
 
 function parseJob(value: unknown): DesktopOcrJob | null {
@@ -161,25 +228,40 @@ function parseJobs(value: unknown): readonly DesktopOcrJob[] | null {
 	return Object.freeze(jobs);
 }
 
-function parseRouteChange(value: unknown, expectedPageId: string): DesktopOcrJobRouteChange | null {
+function parseRouteChange(
+	value: unknown,
+	expectedPageId: string,
+	expectedRoute: 'gemini' | 'desktop'
+): DesktopOcrJobRouteChange | null {
 	if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
 	const record = value as Record<string, unknown>;
+	const expectedStatus = expectedRoute === 'gemini' ? 'pending' : 'waiting_desktop';
 	if (
 		typeof record.jobId !== 'string' ||
 		!UUID.test(record.jobId) ||
 		record.pageId !== expectedPageId ||
-		record.route !== 'gemini' ||
-		record.status !== 'pending' ||
-		typeof record.recoveredExpiredLease !== 'boolean'
+		record.route !== expectedRoute ||
+		record.status !== expectedStatus ||
+		typeof record.recoveredExpiredLease !== 'boolean' ||
+		(expectedRoute === 'desktop' && record.recoveredExpiredLease !== false)
 	) {
 		return null;
+	}
+	if (expectedRoute === 'gemini') {
+		return Object.freeze({
+			jobId: record.jobId,
+			pageId: expectedPageId,
+			route: 'gemini',
+			status: 'pending',
+			recoveredExpiredLease: record.recoveredExpiredLease
+		});
 	}
 	return Object.freeze({
 		jobId: record.jobId,
 		pageId: expectedPageId,
-		route: 'gemini',
-		status: 'pending',
-		recoveredExpiredLease: record.recoveredExpiredLease
+		route: 'desktop',
+		status: 'waiting_desktop',
+		recoveredExpiredLease: false
 	});
 }
 
@@ -202,26 +284,59 @@ export async function listDesktopOcrJobs(
 	return jobs;
 }
 
-export async function returnDesktopOcrJobToGemini(
-	pageId: string,
+export async function listGeminiOcrCandidates(
 	client?: SupabaseClient<Database>
+): Promise<readonly GeminiOcrCandidate[]> {
+	let result: { data: unknown; error: unknown };
+	try {
+		result = await gateway(client).rpc('list_gemini_ocr_candidates');
+	} catch {
+		throw new DesktopOcrJobsError('Não foi possível carregar os trabalhos disponíveis para OCR local.');
+	}
+	if (result.error) {
+		throw new DesktopOcrJobsError('Não foi possível carregar os trabalhos disponíveis para OCR local.');
+	}
+	const candidates = parseCandidates(result.data);
+	if (!candidates) {
+		throw new DesktopOcrJobsError('A lista de trabalhos disponíveis retornou um formato inválido.');
+	}
+	return candidates;
+}
+
+async function changeRoute(
+	pageId: string,
+	targetRoute: 'gemini' | 'desktop',
+	client: SupabaseClient<Database> | undefined,
+	failureMessage: string
 ): Promise<DesktopOcrJobRouteChange> {
 	if (!UUID.test(pageId)) throw new TypeError('Invalid desktop OCR page id');
 	let result: { data: unknown; error: unknown };
 	try {
 		result = await gateway(client).rpc('set_ocr_job_route', {
 			target_page_id: pageId,
-			target_route: 'gemini'
+			target_route: targetRoute
 		});
 	} catch {
-		throw new DesktopOcrJobsError('Não foi possível devolver este trabalho ao Gemini.');
+		throw new DesktopOcrJobsError(failureMessage);
 	}
-	if (result.error) {
-		throw new DesktopOcrJobsError('Não foi possível devolver este trabalho ao Gemini.');
-	}
-	const change = parseRouteChange(result.data, pageId);
+	if (result.error) throw new DesktopOcrJobsError(failureMessage);
+	const change = parseRouteChange(result.data, pageId, targetRoute);
 	if (!change) {
 		throw new DesktopOcrJobsError('A confirmação de troca de rota retornou um formato inválido.');
 	}
 	return change;
+}
+
+export function returnDesktopOcrJobToGemini(
+	pageId: string,
+	client?: SupabaseClient<Database>
+): Promise<DesktopOcrJobRouteChange> {
+	return changeRoute(pageId, 'gemini', client, 'Não foi possível devolver este trabalho ao Gemini.');
+}
+
+export function sendGeminiOcrJobToDesktop(
+	pageId: string,
+	client?: SupabaseClient<Database>
+): Promise<DesktopOcrJobRouteChange> {
+	return changeRoute(pageId, 'desktop', client, 'Não foi possível enviar este trabalho ao OCR local.');
 }
