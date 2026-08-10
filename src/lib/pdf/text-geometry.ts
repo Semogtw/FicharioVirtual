@@ -8,7 +8,7 @@ const MAX_WORDS = 20_000;
 type ViewportLike = Readonly<{
 	width: number;
 	height: number;
-	convertToViewportPoint(x: number, y: number): [number, number];
+	convertToViewportPoint(x: number, y: number): unknown;
 }>;
 
 type PdfTextItemLike = Readonly<{
@@ -45,6 +45,25 @@ function textItem(value: unknown): PdfTextItemLike | null {
 		height: item.height,
 		transform: item.transform as number[]
 	};
+}
+
+function viewportPoint(
+	viewport: ViewportLike,
+	x: number,
+	y: number
+): readonly [number, number] | null {
+	const point = viewport.convertToViewportPoint(x, y);
+	if (
+		!Array.isArray(point) ||
+		point.length < 2 ||
+		typeof point[0] !== 'number' ||
+		!Number.isFinite(point[0]) ||
+		typeof point[1] !== 'number' ||
+		!Number.isFinite(point[1])
+	) {
+		return null;
+	}
+	return [point[0], point[1]];
 }
 
 function normalizedBox(
@@ -104,12 +123,12 @@ export function pdfTextItemsToWordGeometry(
 			const topStartY = startY + normalY * height;
 			const topEndX = endX + normalX * height;
 			const topEndY = endY + normalY * height;
-			const box = normalizedBox(viewport, [
-				viewport.convertToViewportPoint(startX, startY),
-				viewport.convertToViewportPoint(endX, endY),
-				viewport.convertToViewportPoint(topStartX, topStartY),
-				viewport.convertToViewportPoint(topEndX, topEndY)
-			]);
+			const bottomStart = viewportPoint(viewport, startX, startY);
+			const bottomEnd = viewportPoint(viewport, endX, endY);
+			const topStart = viewportPoint(viewport, topStartX, topStartY);
+			const topEnd = viewportPoint(viewport, topEndX, topEndY);
+			if (!bottomStart || !bottomEnd || !topStart || !topEnd) continue;
+			const box = normalizedBox(viewport, [bottomStart, bottomEnd, topStart, topEnd]);
 			if (box) geometry.push(Object.freeze({ text, ...box }));
 		}
 	}
