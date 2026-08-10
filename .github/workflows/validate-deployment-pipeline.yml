@@ -74,10 +74,12 @@ jobs:
             tools/checks/check-deployment-artifact-workflow.mjs \
             tools/checks/deployment-contract.mjs \
             tools/checks/validate-pages-deploy-output.mjs \
-            tools/deploy/package-static-artifact.sh \
             tests/unit/tooling/deployment-artifact-contract.test.ts \
             tests/unit/tooling/deployment-contract.test.ts \
             tests/unit/tooling/pages-deploy-output.test.ts
+
+      - name: Check deployment shell syntax
+        run: bash -n tools/deploy/package-static-artifact.sh
 
       - name: Check deployment workflow boundaries
         run: |
@@ -95,8 +97,8 @@ jobs:
       - name: Build static site with non-deployable CI public config
         run: pnpm build
 
-      - name: Verify emitted PWA and security headers
-        run: pnpm test:pwa:build
+      - name: Verify emitted PWA and security headers again
+        run: node tools/checks/check-built-pwa.mjs
 
       - name: Confirm CI-only public config is frozen in the test build
         run: |
