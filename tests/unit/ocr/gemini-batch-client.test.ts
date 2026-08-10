@@ -16,10 +16,11 @@ const pages = [
 	}
 ] as const;
 
-function providerResponse(resultPages: unknown[]) {
+function providerResponse(resultPages: unknown[], extra: Record<string, unknown> = {}) {
 	return new Response(
 		JSON.stringify({
-			candidates: [{ content: { parts: [{ text: JSON.stringify({ pages: resultPages }) }] } }]
+			candidates: [{ content: { parts: [{ text: JSON.stringify({ pages: resultPages }) }] } }],
+			...extra
 		}),
 		{ status: 200, headers: { 'Content-Type': 'application/json' } }
 	);
@@ -107,6 +108,65 @@ describe('requestGeminiOcrBatch', () => {
 		});
 	});
 
+	it('returns sanitized provider usage metadata without retaining request or response content', async () => {
+		const outcome = await requestGeminiOcrBatch({
+			apiKey: 'test-key',
+			model: 'gemini-test',
+			pages: [pages[0]],
+			promptVersion: 1,
+			fetchImpl: async () =>
+				providerResponse(
+					[
+						{
+							pageId: pages[0].pageId,
+							pageNumber: pages[0].pageNumber,
+							text: 'Página',
+							warnings: []
+						}
+					],
+					{
+						usageMetadata: {
+							promptTokenCount: 1030,
+							cachedContentTokenCount: 0,
+							candidatesTokenCount: 212,
+							toolUsePromptTokenCount: 0,
+							thoughtsTokenCount: 44,
+							totalTokenCount: 1286,
+							promptTokensDetails: [
+								{ modality: 'TEXT', tokenCount: 130 },
+								{ modality: 'IMAGE', tokenCount: 900 },
+								{ modality: '../../invalid', tokenCount: 999 }
+							],
+							candidatesTokensDetails: [{ modality: 'TEXT', tokenCount: 212 }],
+							serviceTier: 'STANDARD'
+						},
+						modelVersion: 'gemini-test-2026-08',
+						responseId: 'response-123'
+					}
+				)
+		});
+
+		expect(outcome.usage).toEqual({
+			promptTokenCount: 1030,
+			cachedContentTokenCount: 0,
+			candidatesTokenCount: 212,
+			toolUsePromptTokenCount: 0,
+			thoughtsTokenCount: 44,
+			totalTokenCount: 1286,
+			promptTokensDetails: [
+				{ modality: 'TEXT', tokenCount: 130 },
+				{ modality: 'IMAGE', tokenCount: 900 }
+			],
+			cacheTokensDetails: [],
+			candidatesTokensDetails: [{ modality: 'TEXT', tokenCount: 212 }],
+			toolUsePromptTokensDetails: [],
+			serviceTier: 'STANDARD'
+		});
+		expect(outcome.modelVersion).toBe('gemini-test-2026-08');
+		expect(outcome.responseId).toBe('response-123');
+		expect(JSON.stringify(outcome.usage)).not.toContain('Página');
+	});
+
 	it('rejects aggregate raw bytes that cannot fit the documented inline request ceiling', async () => {
 		let called = false;
 		await expect(
@@ -160,24 +220,26 @@ describe('requestGeminiOcrBatch', () => {
 			})
 		).rejects.toBeInstanceOf(TypeError);
 
-		await expect(
-			requestGeminiOcrBatch({
-				apiKey: 'test-key',
-				model: 'gemini-test',
-				pages,
-				promptVersion: 1,
-				fetchImpl: async () =>
-					new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: '{' }] } }] }), {
-						status: 200,
-						headers: { 'Content-Type': 'application/json' }
-					})
-			})
-		).resolves.toEqual({
+		const malformed = await requestGeminiOcrBatch({
+			apiKey: 'test-key',
+			model: 'gemini-test',
+			pages,
+			promptVersion: 1,
+			fetchImpl: async () =>
+				new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: '{' }] } }] }), {
+					status: 200,
+					headers: { 'Content-Type': 'application/json' }
+				})
+		});
+		expect(malformed).toMatchObject({
 			valid: false,
 			pages: [],
 			missingPageIds: pages.map((page) => page.pageId),
 			duplicatePageIds: [],
-			unexpectedPageIds: []
+			unexpectedPageIds: [],
+			usage: null,
+			modelVersion: null,
+			responseId: null
 		});
 	});
 });
