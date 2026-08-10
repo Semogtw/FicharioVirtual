@@ -32,15 +32,18 @@ describe('staging artifact public configuration workflow', () => {
 		expect(source).not.toContain('CLOUDFLARE_ACCOUNT_ID');
 	});
 
-	it('fails closed on missing/invalid Supabase config and partial Google Picker config', () => {
+	it('fails closed when any core release public setting is missing or invalid', () => {
 		expect(source).toContain('PUBLIC_SUPABASE_URL is not configured in staging.');
 		expect(source).toContain('PUBLIC_SUPABASE_PUBLISHABLE_KEY is not configured in staging.');
+		expect(source).toContain('PUBLIC_GOOGLE_CLIENT_ID is not configured in staging.');
+		expect(source).toContain('PUBLIC_GOOGLE_PICKER_API_KEY is not configured in staging.');
+		expect(source).toContain('PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER is not configured in staging.');
 		expect(source).toContain('PUBLIC_SUPABASE_URL must be a credential-free HTTPS origin.');
 		expect(source).toContain('PUBLIC_SUPABASE_PUBLISHABLE_KEY is invalid.');
-		expect(source).toContain('Google Picker public settings must be configured together.');
 		expect(source).toContain('PUBLIC_GOOGLE_CLIENT_ID is invalid.');
 		expect(source).toContain('PUBLIC_GOOGLE_PICKER_API_KEY is invalid.');
 		expect(source).toContain('PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER is invalid.');
+		expect(source).toContain('Google Drive Picker: required for a release artifact');
 	});
 
 	it('keeps repository permissions read-only and never prints secret values', () => {
