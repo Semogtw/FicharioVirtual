@@ -1,7 +1,11 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, parseAppOrigin } from '../_shared/cors.ts';
 import { buildGoogleAuthorizationUrl } from '../_shared/google-oauth.ts';
-import { generateOAuthOpaqueValue, hashOAuthState } from '../_shared/google-oauth-http.ts';
+import {
+	createOAuthPkceChallenge,
+	generateOAuthOpaqueValue,
+	hashOAuthState
+} from '../_shared/google-oauth-http.ts';
 
 function json(status: number, body: Record<string, unknown>, appOrigin: string | null) {
 	return new Response(JSON.stringify(body), {
@@ -63,15 +67,20 @@ Deno.serve(async (request) => {
 
 	const state = generateOAuthOpaqueValue();
 	const nonce = generateOAuthOpaqueValue();
-	const stateHash = await hashOAuthState(state);
+	const codeVerifier = generateOAuthOpaqueValue();
+	const [stateHash, codeChallenge] = await Promise.all([
+		hashOAuthState(state),
+		createOAuthPkceChallenge(codeVerifier)
+	]);
 	const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 	const admin = createClient(supabaseUrl, serviceRoleKey, {
 		auth: { persistSession: false, autoRefreshToken: false }
 	});
-	const { data: stored, error: storeError } = await admin.rpc('store_drive_oauth_state', {
+	const { data: stored, error: storeError } = await admin.rpc('store_drive_oauth_state_pkce', {
 		target_user_id: user.id,
 		target_state_hash: stateHash,
 		target_nonce: nonce,
+		target_code_verifier: codeVerifier,
 		target_expires_at: expiresAt
 	});
 	if (storeError || stored !== true) {
@@ -80,7 +89,13 @@ Deno.serve(async (request) => {
 
 	let authorizationUrl: string;
 	try {
-		authorizationUrl = buildGoogleAuthorizationUrl({ clientId, redirectUri, state, nonce });
+		authorizationUrl = buildGoogleAuthorizationUrl({
+			clientId,
+			redirectUri,
+			state,
+			nonce,
+			codeChallenge
+		});
 	} catch {
 		return respond(503, { code: 'drive_oauth_not_configured' });
 	}

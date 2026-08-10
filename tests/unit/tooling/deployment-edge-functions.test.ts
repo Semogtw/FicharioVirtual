@@ -5,6 +5,10 @@ const config = readFileSync('supabase/config.toml', 'utf8');
 const staging = readFileSync('docs/SUPABASE_STAGING.md', 'utf8');
 const driveSetup = readFileSync('docs/GOOGLE_DRIVE_SETUP.md', 'utf8');
 const desktopWorker = readFileSync('docs/DESKTOP_OCR_WORKER.md', 'utf8');
+const desktopWorkerAuth = readFileSync(
+	'supabase/functions/_shared/desktop-worker-auth.ts',
+	'utf8'
+);
 const ocrRollout = readFileSync('docs/OCR_MIGRATION_ROLLOUT.md', 'utf8');
 
 const versionedFunctions = readdirSync('supabase/functions', { withFileTypes: true })
@@ -49,7 +53,7 @@ describe('Edge Function deployment contract', () => {
 		expect(driveSetup).toContain('state');
 		expect(driveSetup).toContain('PKCE');
 		expect(desktopWorker).toContain('`desktop-ocr-pair` usa `verify_jwt=false`');
-		expect(desktopWorker).toContain('FicharioWorker');
+		expect(desktopWorkerAuth).toContain("const AUTHORIZATION_PREFIX = 'FicharioWorker '");
 	});
 
 	it('distinguishes the local 20 MiB setting from the transitional 50 MiB migration', () => {

@@ -3,6 +3,7 @@ export const GOOGLE_DRIVE_FILE_SCOPE = 'https://www.googleapis.com/auth/drive.fi
 const REQUIRED_SCOPES = Object.freeze(['openid', 'email', GOOGLE_DRIVE_FILE_SCOPE] as const);
 const CLIENT_ID = /^\d+-[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$/;
 const OPAQUE = /^[A-Za-z0-9_-]{43,128}$/;
+const PKCE_CHALLENGE = /^[A-Za-z0-9_-]{43}$/;
 const SUBJECT = /^[A-Za-z0-9:_-]{6,255}$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -48,6 +49,11 @@ export function validateOAuthOpaqueValue(value: string): string {
 	return value;
 }
 
+function validatePkceChallenge(value: string): string {
+	if (!PKCE_CHALLENGE.test(value)) throw new TypeError('Invalid OAuth PKCE challenge');
+	return value;
+}
+
 function validateClientId(value: string): string {
 	if (!CLIENT_ID.test(value) || value.length > 512) {
 		throw new TypeError('Invalid Google OAuth configuration');
@@ -79,12 +85,14 @@ export function buildGoogleAuthorizationUrl({
 	clientId,
 	redirectUri,
 	state,
-	nonce
+	nonce,
+	codeChallenge
 }: {
 	clientId: string;
 	redirectUri: string;
 	state: string;
 	nonce: string;
+	codeChallenge: string;
 }): string {
 	const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
 	url.searchParams.set('client_id', validateClientId(clientId));
@@ -96,6 +104,8 @@ export function buildGoogleAuthorizationUrl({
 	url.searchParams.set('include_granted_scopes', 'false');
 	url.searchParams.set('state', validateOAuthOpaqueValue(state));
 	url.searchParams.set('nonce', validateOAuthOpaqueValue(nonce));
+	url.searchParams.set('code_challenge', validatePkceChallenge(codeChallenge));
+	url.searchParams.set('code_challenge_method', 'S256');
 	return url.toString();
 }
 

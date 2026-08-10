@@ -3,6 +3,7 @@ import { parseAppOrigin } from '../_shared/cors.ts';
 import { bootstrapDriveRoot } from '../_shared/google-drive-client.ts';
 import {
 	hashOAuthState,
+	isOAuthPkceVerifier,
 	requestInitialGoogleTokens,
 	verifyGoogleIdToken
 } from '../_shared/google-oauth-http.ts';
@@ -23,21 +24,28 @@ function redirect(appOrigin: string, result: 'authorized' | 'cancelled' | 'error
 	});
 }
 
-function consumedState(value: unknown): { userId: string; nonce: string } | null {
+function consumedState(
+	value: unknown
+): { userId: string; nonce: string; codeVerifier: string } | null {
 	if (!Array.isArray(value) || value.length !== 1) return null;
 	const row = value[0];
 	if (row === null || typeof row !== 'object' || Array.isArray(row)) return null;
 	const record = row as Record<string, unknown>;
 	if (
-		Object.keys(record).length !== 2 ||
+		Object.keys(record).length !== 3 ||
 		typeof record.user_id !== 'string' ||
 		!UUID.test(record.user_id) ||
 		typeof record.nonce !== 'string' ||
-		!OPAQUE.test(record.nonce)
+		!OPAQUE.test(record.nonce) ||
+		!isOAuthPkceVerifier(record.code_verifier)
 	) {
 		return null;
 	}
-	return { userId: record.user_id, nonce: record.nonce };
+	return {
+		userId: record.user_id,
+		nonce: record.nonce,
+		codeVerifier: record.code_verifier
+	};
 }
 
 Deno.serve(async (request) => {
@@ -71,10 +79,13 @@ Deno.serve(async (request) => {
 			auth: { persistSession: false, autoRefreshToken: false }
 		});
 		const stateHash = await hashOAuthState(state);
-		const { data: consumed, error: consumeError } = await admin.rpc('consume_drive_oauth_state', {
-			target_state_hash: stateHash,
-			consumed_at: new Date().toISOString()
-		});
+		const { data: consumed, error: consumeError } = await admin.rpc(
+			'consume_drive_oauth_state_pkce',
+			{
+				target_state_hash: stateHash,
+				consumed_at: new Date().toISOString()
+			}
+		);
 		const verifiedState = consumeError ? null : consumedState(consumed);
 		if (!verifiedState) return redirect(appOrigin, 'error');
 
@@ -86,7 +97,8 @@ Deno.serve(async (request) => {
 			clientId,
 			clientSecret,
 			redirectUri,
-			code
+			code,
+			codeVerifier: verifiedState.codeVerifier
 		});
 		if (!tokens.refreshToken || !tokens.idToken) return redirect(appOrigin, 'error');
 		const identity = await verifyGoogleIdToken({
