@@ -43,7 +43,10 @@ describe('current head validation workflow', () => {
 			expect(rejectBlock).toContain(`${name}: \${{ steps.${step}.outcome }}`);
 		}
 		expect(rejectBlock).toContain(`if [ "$outcome" != 'success' ]; then`);
-		expect(rejectBlock).toContain('exit "$failed"');
+		expect(rejectBlock).toContain('echo "Incomplete verification outcome: $outcome" >&2');
+		expect(rejectBlock).toContain('exit 1');
+		expect(rejectBlock).toContain("echo 'All required verification gates succeeded.'");
+		expect(rejectBlock).not.toContain('exit "$failed"');
 		expect(rejectBlock).not.toContain("steps.frontend.outcome != 'success'");
 	});
 });
