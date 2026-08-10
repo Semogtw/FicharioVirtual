@@ -1,6 +1,6 @@
 begin;
 
-select plan(14);
+select plan(15);
 
 select is(
   has_function_privilege('anon', 'public.recover_background_stale_ocr_jobs()', 'EXECUTE'),
@@ -70,6 +70,12 @@ select is(
   (select count(*)::integer from cron.job where jobname = 'fichario-background-ocr-wakeup'),
   1,
   'background OCR wake-up cron is installed exactly once'
+);
+
+select is(
+  (select schedule from cron.job where jobname = 'fichario-background-ocr-wakeup'),
+  '*/5 * * * *',
+  'background OCR idle wake-up runs every five minutes'
 );
 
 select ok(
