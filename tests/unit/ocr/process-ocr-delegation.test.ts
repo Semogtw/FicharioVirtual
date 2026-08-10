@@ -24,6 +24,12 @@ describe('process-ocr provider delegation', () => {
 		expect(source).toContain('new Set(record.pageIds).size !== record.pageIds.length');
 	});
 
+	it('returns the warning count required by the legacy one-page client contract', () => {
+		expect(source).toContain('const warningCounts = new Map<string, number>();');
+		expect(source).toContain('warningCounts.set(result.pageId, result.warnings.length);');
+		expect(source).toContain('warningCount: warningCounts.get(pageId) ?? 0');
+	});
+
 	it('does not duplicate provider transport, prompt schema or payload parsing', () => {
 		expect(source).not.toContain('generativelanguage.googleapis.com');
 		expect(source).not.toContain('const responseSchema');

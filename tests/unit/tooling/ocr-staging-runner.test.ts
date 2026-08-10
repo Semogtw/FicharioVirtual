@@ -50,4 +50,18 @@ describe('OCR staging runner evidence', () => {
 			expect(serialized).not.toContain(forbidden);
 		}
 	});
+
+	it('mirrors the browser queue finite retry window without accepting retry_later as success', () => {
+		const source = readFileSync(
+			new URL('tools/checks/check-ocr-staging.mjs', repositoryRoot),
+			'utf8'
+		);
+
+		expect(source).toContain(
+			'const OCR_RETRY_DELAYS_MS = Object.freeze([0, 5_000, 20_000, 60_000]);'
+		);
+		expect(source).toContain("record.state === 'retry_later'");
+		expect(source).toContain('const invocation = await invokeProbeOcr(client, probe.pageId);');
+		expect(source).toContain('assertOcrInvocation({ data: invocation?.data });');
+	});
 });

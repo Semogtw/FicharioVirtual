@@ -147,13 +147,107 @@ jobs:
   verify-supabase:
     needs: [resolve, deploy]
     if: needs.deploy.result == 'success'
-    uses: ./.github/workflows/verify-supabase-staging.yml
-    with:
-      target_sha: ${{ needs.resolve.outputs.target_sha }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: staging
+    concurrency:
+      group: staging-contract-verification
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout validated repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.resolve.outputs.target_sha }}
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22.16.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify Auth, RLS, and private Storage
+        env:
+          STAGING_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+          STAGING_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
+          STAGING_AUTHORIZED_EMAIL: ${{ secrets.STAGING_AUTHORIZED_EMAIL }}
+          STAGING_AUTHORIZED_PASSWORD: ${{ secrets.STAGING_AUTHORIZED_PASSWORD }}
+          STAGING_UNAUTHORIZED_EMAIL: ${{ secrets.STAGING_UNAUTHORIZED_EMAIL }}
+          STAGING_UNAUTHORIZED_PASSWORD: ${{ secrets.STAGING_UNAUTHORIZED_PASSWORD }}
+        run: pnpm test:staging:supabase
+
+      - name: Verify desktop OCR one-time pairing
+        env:
+          STAGING_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+          STAGING_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
+          STAGING_AUTHORIZED_EMAIL: ${{ secrets.STAGING_AUTHORIZED_EMAIL }}
+          STAGING_AUTHORIZED_PASSWORD: ${{ secrets.STAGING_AUTHORIZED_PASSWORD }}
+        run: pnpm test:staging:desktop-ocr-pairing
 
   verify-ocr:
     needs: [resolve, deploy, verify-supabase]
     if: needs.deploy.result == 'success' && needs.verify-supabase.result == 'success'
-    uses: ./.github/workflows/verify-ocr-staging.yml
-    with:
-      target_sha: ${{ needs.resolve.outputs.target_sha }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: staging
+    concurrency:
+      group: staging-contract-verification
+      cancel-in-progress: false
+    env:
+      OCR_STAGING_REPORT_PATH: /tmp/ocr-staging-report.json
+
+    steps:
+      - name: Checkout validated repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.resolve.outputs.target_sha }}
+          persist-credentials: false
+
+      - name: Initialize sanitized OCR report
+        run: |
+          cat > "$OCR_STAGING_REPORT_PATH" <<'JSON'
+          {"schemaVersion":2,"status":"not_run","failureStage":"configuration","stages":{"authenticated":false,"authorized":false,"consentRecorded":false,"importCreated":false,"functionCompleted":false,"persistenceVerified":false},"outcome":{"documentStatus":null,"pageStatus":null,"jobStatus":null,"needsReview":null,"warningCount":null,"attemptCount":null,"tokens":{"fichario":null,"ocr":null,"numericProbe":null}},"diagnostic":{"httpStatus":null,"errorKind":null,"providerStatus":null,"providerErrorKind":null,"providerErrorCode":null},"cleanup":{"document":"not_required","session":"not_required"}}
+          JSON
+          chmod 600 "$OCR_STAGING_REPORT_PATH"
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22.16.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify real OCR with a synthetic image
+        env:
+          STAGING_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+          STAGING_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
+          STAGING_AUTHORIZED_EMAIL: ${{ secrets.STAGING_AUTHORIZED_EMAIL }}
+          STAGING_AUTHORIZED_PASSWORD: ${{ secrets.STAGING_AUTHORIZED_PASSWORD }}
+        run: pnpm test:staging:ocr
+
+      - name: Upload sanitized OCR report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ocr-staging-report-${{ github.run_id }}
+          path: /tmp/ocr-staging-report.json
+          if-no-files-found: error
+          retention-days: 7

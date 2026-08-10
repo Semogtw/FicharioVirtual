@@ -48,6 +48,26 @@ describe('processPageOcr', () => {
 		).resolves.toEqual({ state: 'already_complete', needsReview: true });
 	});
 
+	it('converts an aggregate idempotent completion for the requested page into legacy already_complete', async () => {
+		await expect(
+			processPageOcr(
+				pageId,
+				client({
+					data: {
+						state: 'complete',
+						completedPageIds: [pageId],
+						reviewPageIds: [pageId],
+						pendingPageIds: [],
+						failedPageIds: [],
+						splitRequiredPageIds: [],
+						unexpectedResultPageIds: []
+					},
+					error: null
+				})
+			)
+		).resolves.toEqual({ state: 'already_complete', needsReview: true });
+	});
+
 	it('rejects an already-complete response without its review state', async () => {
 		await expect(
 			processPageOcr(pageId, client({ data: { state: 'already_complete' }, error: null }))
