@@ -3,6 +3,7 @@
 	import Button from '$lib/components/Button.svelte';
 	import {
 		listDesktopOcrDevices,
+		renameDesktopOcrDevice,
 		revokeDesktopOcrDevice,
 		type DesktopOcrDevice
 	} from '$lib/services/desktop-ocr-devices';
@@ -11,6 +12,9 @@
 	let devices = $state<readonly DesktopOcrDevice[]>([]);
 	let loading = $state(true);
 	let revokingId = $state<string | null>(null);
+	let savingLabelId = $state<string | null>(null);
+	let editingId = $state<string | null>(null);
+	let editingLabel = $state('');
 	let confirmingId = $state<string | null>(null);
 	let error = $state<string | null>(null);
 	let message = $state<string | null>(null);
@@ -53,9 +57,66 @@
 		}
 	}
 
+	function beginRename(device: DesktopOcrDevice) {
+		if (device.status !== 'active' || revokingId || savingLabelId) return;
+		confirmingId = null;
+		message = null;
+		error = null;
+		editingId = device.id;
+		editingLabel = device.label;
+	}
+
+	function cancelRename() {
+		editingId = null;
+		editingLabel = '';
+	}
+
+	async function saveRename(device: DesktopOcrDevice) {
+		if (
+			device.status !== 'active' ||
+			editingId !== device.id ||
+			revokingId ||
+			savingLabelId
+		) {
+			return;
+		}
+
+		const normalizedLabel = editingLabel.trim();
+		if (normalizedLabel.length < 1 || normalizedLabel.length > 80) {
+			error = 'Use um nome entre 1 e 80 caracteres.';
+			return;
+		}
+		if (normalizedLabel === device.label) {
+			cancelRename();
+			return;
+		}
+
+		const version = requests.next();
+		savingLabelId = device.id;
+		error = null;
+		message = null;
+		try {
+			const receipt = await renameDesktopOcrDevice(device.id, normalizedLabel);
+			if (!requests.isCurrent(version)) return;
+			devices = devices.map((item) =>
+				item.id === device.id
+					? { ...item, label: receipt.label, updatedAt: receipt.updatedAt }
+					: item
+			);
+			cancelRename();
+			message = `${receipt.label} foi renomeado.`;
+		} catch (caught) {
+			if (!requests.isCurrent(version)) return;
+			error = caught instanceof Error ? caught.message : 'Não foi possível renomear o computador.';
+		} finally {
+			if (requests.isCurrent(version)) savingLabelId = null;
+		}
+	}
+
 	async function revoke(device: DesktopOcrDevice) {
-		if (revokingId || device.status !== 'active') return;
+		if (revokingId || savingLabelId || device.status !== 'active') return;
 		if (confirmingId !== device.id) {
+			cancelRename();
 			confirmingId = device.id;
 			message = 'Confirme a revogação. Trabalhos em execução voltarão para a fila.';
 			return;
@@ -122,7 +183,7 @@
 			</div>
 			<Button
 				label={loading ? 'Atualizando…' : 'Atualizar'}
-				disabled={loading || !!revokingId}
+				disabled={loading || !!revokingId || !!savingLabelId}
 				onclick={() => void refreshDevices()}
 			/>
 		</div>
@@ -189,28 +250,72 @@
 
 						{#if device.status === 'active'}
 							<div class="device-actions">
-								{#if confirmingId === device.id}
+								{#if editingId === device.id}
+									<form
+										class="rename-form"
+										onsubmit={(event) => {
+											event.preventDefault();
+											void saveRename(device);
+										}}
+									>
+										<input
+											type="text"
+											bind:value={editingLabel}
+											maxlength="80"
+											autocomplete="off"
+											aria-label={`Novo nome de ${device.label}`}
+											disabled={savingLabelId === device.id}
+										/>
+										<button
+											type="submit"
+											class="secondary"
+											disabled={savingLabelId === device.id}
+										>
+											{savingLabelId === device.id ? 'Salvando…' : 'Salvar nome'}
+										</button>
+										<button
+											type="button"
+											class="secondary"
+											disabled={savingLabelId === device.id}
+											onclick={cancelRename}
+										>
+											Cancelar
+										</button>
+									</form>
+								{:else}
+									{#if confirmingId !== device.id}
+										<button
+											type="button"
+											class="secondary"
+											disabled={!!revokingId || !!savingLabelId}
+											onclick={() => beginRename(device)}
+										>
+											Renomear
+										</button>
+									{/if}
+									{#if confirmingId === device.id}
+										<button
+											type="button"
+											class="secondary"
+											disabled={!!revokingId}
+											onclick={cancelConfirmation}
+										>
+											Cancelar
+										</button>
+									{/if}
 									<button
 										type="button"
-										class="secondary"
-										disabled={!!revokingId}
-										onclick={cancelConfirmation}
+										class:confirming={confirmingId === device.id}
+										disabled={!!revokingId || !!savingLabelId}
+										onclick={() => void revoke(device)}
 									>
-										Cancelar
+										{revokingId === device.id
+											? 'Revogando…'
+											: confirmingId === device.id
+												? 'Confirmar revogação'
+												: 'Revogar'}
 									</button>
 								{/if}
-								<button
-									type="button"
-									class:confirming={confirmingId === device.id}
-									disabled={!!revokingId}
-									onclick={() => void revoke(device)}
-								>
-									{revokingId === device.id
-										? 'Revogando…'
-										: confirmingId === device.id
-											? 'Confirmar revogação'
-											: 'Revogar'}
-								</button>
 							</div>
 						{/if}
 					</article>
@@ -362,10 +467,32 @@
 		font-weight: 650;
 	}
 
-	.device-actions {
+	.device-actions,
+	.rename-form {
 		display: flex;
 		align-items: center;
 		gap: 0.45rem;
+	}
+
+	.rename-form {
+		flex-wrap: wrap;
+		justify-content: flex-end;
+	}
+
+	.rename-form input {
+		width: min(18rem, 100%);
+		min-height: 2.45rem;
+		padding: 0.5rem 0.65rem;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--radius-sm);
+		background: var(--surface);
+		color: var(--ink);
+		font: inherit;
+	}
+
+	.rename-form input:focus-visible {
+		outline: 3px solid var(--focus-ring);
+		outline-offset: 2px;
 	}
 
 	.device-actions button {
@@ -389,7 +516,8 @@
 		color: var(--muted-strong);
 	}
 
-	.device-actions button:disabled {
+	.device-actions button:disabled,
+	.rename-form input:disabled {
 		cursor: wait;
 		opacity: 0.6;
 	}
@@ -433,11 +561,19 @@
 			grid-template-columns: 1fr;
 		}
 
-		.device-actions {
+		.device-actions,
+		.rename-form {
 			justify-content: stretch;
 		}
 
-		.device-actions button {
+		.device-actions,
+		.rename-form,
+		.rename-form input {
+			width: 100%;
+		}
+
+		.device-actions button,
+		.rename-form button {
 			flex: 1;
 		}
 	}
