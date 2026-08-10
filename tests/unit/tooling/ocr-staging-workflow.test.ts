@@ -26,7 +26,9 @@ describe('OCR staging verification', () => {
 		const workflow = read('.github/workflows/verify-ocr-staging.yml');
 		const packageJson = read('package.json');
 
-		expect(workflow).toContain("ref: ${{ inputs.target_sha != '' && inputs.target_sha || github.sha }}");
+		expect(workflow).toContain(
+			"ref: ${{ inputs.target_sha != '' && inputs.target_sha || github.sha }}"
+		);
 		expect(workflow).toContain('contents: read');
 		expect(workflow).toContain('persist-credentials: false');
 		expect(workflow).toContain('version: 10');
