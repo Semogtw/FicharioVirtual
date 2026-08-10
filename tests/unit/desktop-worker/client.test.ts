@@ -51,7 +51,11 @@ function completionRequest() {
 describe('DesktopWorkerClient', () => {
 	it('validates the endpoint and credential before making requests', () => {
 		expect(
-			() => new DesktopWorkerClient({ endpoint: 'http://example.com/functions/v1/desktop-ocr-worker', credential: CREDENTIAL })
+			() =>
+				new DesktopWorkerClient({
+					endpoint: 'http://example.com/functions/v1/desktop-ocr-worker',
+					credential: CREDENTIAL
+				})
 		).toThrow('endpoint');
 		expect(() => new DesktopWorkerClient({ endpoint: ENDPOINT, credential: 'bad' })).toThrow(
 			'credential'
@@ -60,7 +64,11 @@ describe('DesktopWorkerClient', () => {
 
 	it('returns null when no desktop job is claimable', async () => {
 		const fetchImpl = vi.fn(async () => new Response(null, { status: 204 }));
-		const client = new DesktopWorkerClient({ endpoint: ENDPOINT, credential: CREDENTIAL, fetchImpl });
+		const client = new DesktopWorkerClient({
+			endpoint: ENDPOINT,
+			credential: CREDENTIAL,
+			fetchImpl
+		});
 		await expect(client.claim()).resolves.toBeNull();
 		expect(fetchImpl).toHaveBeenCalledOnce();
 		const [, init] = fetchImpl.mock.calls[0];
@@ -73,7 +81,11 @@ describe('DesktopWorkerClient', () => {
 			.fn()
 			.mockResolvedValueOnce(json(200, lease()))
 			.mockResolvedValueOnce(json(200, lease()));
-		const client = new DesktopWorkerClient({ endpoint: ENDPOINT, credential: CREDENTIAL, fetchImpl });
+		const client = new DesktopWorkerClient({
+			endpoint: ENDPOINT,
+			credential: CREDENTIAL,
+			fetchImpl
+		});
 		await expect(client.claim()).resolves.toEqual(lease());
 		await expect(client.renew(JOB_ID, LEASE_ID)).resolves.toEqual(lease());
 	});
@@ -110,7 +122,11 @@ describe('DesktopWorkerClient', () => {
 			cleanupPending: false
 		};
 		const fetchImpl = vi.fn(async () => json(200, receipt));
-		const client = new DesktopWorkerClient({ endpoint: ENDPOINT, credential: CREDENTIAL, fetchImpl });
+		const client = new DesktopWorkerClient({
+			endpoint: ENDPOINT,
+			credential: CREDENTIAL,
+			fetchImpl
+		});
 		await expect(client.complete(completionRequest())).resolves.toEqual(receipt);
 		const [, init] = fetchImpl.mock.calls[0];
 		expect(JSON.parse(String(init?.body))).toEqual(completionRequest());
@@ -124,7 +140,11 @@ describe('DesktopWorkerClient', () => {
 				details: { authorization: CREDENTIAL }
 			})
 		);
-		const client = new DesktopWorkerClient({ endpoint: ENDPOINT, credential: CREDENTIAL, fetchImpl });
+		const client = new DesktopWorkerClient({
+			endpoint: ENDPOINT,
+			credential: CREDENTIAL,
+			fetchImpl
+		});
 		const error = await client.renew(JOB_ID, LEASE_ID).catch((caught) => caught);
 		expect(error).toBeInstanceOf(DesktopWorkerApiError);
 		expect(error.code).toBe('desktop_ocr_lease_not_active');
