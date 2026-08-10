@@ -81,6 +81,8 @@ O ambiente hospedado precisa possuir:
 
 A service-role key continua sendo usada somente dentro do worker para o cliente administrativo do Supabase. Ela não é reutilizada como credencial HTTP do worker, não entra no cron e não deve ser registrada em logs.
 
+A rotação de `OCR_BACKGROUND_WORKER_KEY` deve atualizar o secret das Edge Functions e o valor `ocr_background_worker_key` no Vault como uma única operação administrativa, evitando deixar kick/cron temporariamente apontando para credenciais diferentes.
+
 ## Segurança
 
 Os RPCs de infraestrutura de background são `service_role` only:
