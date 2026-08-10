@@ -16,11 +16,18 @@ function abortableSleep(milliseconds, signal) {
 			reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
 			return;
 		}
-		const timeout = setTimeout(resolve, milliseconds);
+		let timeout;
+		const cleanup = () => signal?.removeEventListener('abort', abort);
+		const finish = () => {
+			cleanup();
+			resolve();
+		};
 		const abort = () => {
 			clearTimeout(timeout);
+			cleanup();
 			reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
 		};
+		timeout = setTimeout(finish, milliseconds);
 		signal?.addEventListener('abort', abort, { once: true });
 	});
 }
