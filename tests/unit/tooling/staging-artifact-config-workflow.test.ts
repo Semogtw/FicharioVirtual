@@ -15,9 +15,7 @@ describe('staging artifact public configuration workflow', () => {
 	});
 
 	it('checks out the exact repository checker with read-only credentials', () => {
-		expect(workflow).toContain(
-			'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6'
-		);
+		expect(workflow).toContain('actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6');
 		expect(workflow).toContain('persist-credentials: false');
 		expect(workflow).toContain('run: node tools/checks/check-staging-public-config.mjs');
 	});
