@@ -28,14 +28,14 @@ describe('staging artifact public configuration workflow', () => {
 		expect(workflow).toContain('PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}');
 		expect(workflow).toContain(
 			'PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_SUPABASE_PUBLISHABLE_KEY }}'
-	);
+		);
 		expect(workflow).toContain('PUBLIC_GOOGLE_CLIENT_ID: ${{ secrets.PUBLIC_GOOGLE_CLIENT_ID }}');
 		expect(workflow).toContain(
 			'PUBLIC_GOOGLE_PICKER_API_KEY: ${{ secrets.PUBLIC_GOOGLE_PICKER_API_KEY }}'
-	);
+		);
 		expect(workflow).toContain(
 			'PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER: ${{ secrets.PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER }}'
-	);
+		);
 		expect(workflow).not.toContain('STAGING_SERVICE_ROLE_KEY');
 		expect(workflow).not.toContain('GEMINI_API_KEY');
 		expect(workflow).not.toContain('CLOUDFLARE_API_TOKEN');
