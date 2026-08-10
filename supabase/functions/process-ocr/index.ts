@@ -501,23 +501,27 @@ Deno.serve(async (request) => {
 			signal: abortController.signal
 		});
 		const providerLatencyMs = performance.now() - providerStartedAt;
-		await supabase.rpc(
-			'record_ocr_provider_usage',
-			buildGeminiTelemetryRpcArgs({
-				eventId: telemetryEventId,
-				documentId,
-				batchId: parsedRequest.batchId,
-				model,
-				promptVersion,
-				documentKind: document.kind as 'image' | 'pdf',
-				pages: providerPages,
-				outcome,
-				status: 'success',
-				safeErrorCode: null,
-				latencyMs: providerLatencyMs,
-				recordedAt: new Date().toISOString()
-			})
-		);
+		try {
+			await supabase.rpc(
+				'record_ocr_provider_usage',
+				buildGeminiTelemetryRpcArgs({
+					eventId: telemetryEventId,
+					documentId,
+					batchId: parsedRequest.batchId,
+					model,
+					promptVersion,
+					documentKind: document.kind as 'image' | 'pdf',
+					pages: providerPages,
+					outcome,
+					status: 'success',
+					safeErrorCode: null,
+					latencyMs: providerLatencyMs,
+					recordedAt: new Date().toISOString()
+				})
+			);
+		} catch {
+			// Telemetry is intentionally best-effort and must never fail a valid OCR result.
+		}
 
 		const validIds = new Set<string>();
 		for (const result of outcome.pages) {
@@ -630,23 +634,27 @@ Deno.serve(async (request) => {
 			terminalMessage = decision.persistence.message;
 		}
 
-		await supabase.rpc(
-			'record_ocr_provider_usage',
-			buildGeminiTelemetryRpcArgs({
-				eventId: telemetryEventId,
-				documentId,
-				batchId: parsedRequest.batchId,
-				model,
-				promptVersion,
-				documentKind: document.kind as 'image' | 'pdf',
-				pages: providerPages,
-				outcome: null,
-				status: 'error',
-				safeErrorCode: terminalCode,
-				latencyMs: providerLatencyMs,
-				recordedAt: sharedFailedAt
-			})
-		);
+		try {
+			await supabase.rpc(
+				'record_ocr_provider_usage',
+				buildGeminiTelemetryRpcArgs({
+					eventId: telemetryEventId,
+					documentId,
+					batchId: parsedRequest.batchId,
+					model,
+					promptVersion,
+					documentKind: document.kind as 'image' | 'pdf',
+					pages: providerPages,
+					outcome: null,
+					status: 'error',
+					safeErrorCode: terminalCode,
+					latencyMs: providerLatencyMs,
+					recordedAt: sharedFailedAt
+				})
+			);
+		} catch {
+			// Failure telemetry is also best-effort; the original OCR error remains authoritative.
+		}
 
 		await finishBatch(
 			parsedRequest.batchId,
