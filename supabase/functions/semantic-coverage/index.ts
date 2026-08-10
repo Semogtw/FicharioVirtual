@@ -1,11 +1,8 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { RequestBodyTooLargeError, readBoundedJson } from '../_shared/bounded-json.ts';
 import { corsHeaders, parseAppOrigin } from '../_shared/cors.ts';
-import {
-	embeddingVectorText,
-	GeminiEmbeddingHttpError,
-	requestGeminiEmbeddings
-} from '../_shared/gemini-embedding-client.ts';
+import { embeddingVectorText, GeminiEmbeddingHttpError } from '../_shared/gemini-embedding-client.ts';
+import { requestGeminiEmbeddingsWithTelemetry } from '../_shared/semantic-provider-telemetry.ts';
 import {
 	requestGeminiCoverageVerification,
 	type CoverageVerificationVerdict
@@ -292,7 +289,8 @@ async function indexPages(input: {
 	}
 	if (flattened.length === 0) return 0;
 
-	const vectors = await requestGeminiEmbeddings({
+	const vectors = await requestGeminiEmbeddingsWithTelemetry({
+		supabase: input.supabase,
 		apiKey: input.apiKey,
 		model: input.model,
 		inputs: flattened.map((item) => ({
@@ -301,6 +299,8 @@ async function indexPages(input: {
 		})),
 		taskType: 'RETRIEVAL_DOCUMENT',
 		outputDimensionality: EMBEDDING_DIMENSIONS,
+		operation: 'document_embedding',
+		surface: 'coverage',
 		signal: input.signal
 	});
 
@@ -482,12 +482,15 @@ Deno.serve(async (request) => {
 
 		let queryVectors: readonly (readonly number[])[];
 		try {
-			queryVectors = await requestGeminiEmbeddings({
+			queryVectors = await requestGeminiEmbeddingsWithTelemetry({
+				supabase,
 				apiKey: apiKey!,
 				model: embeddingModel,
 				inputs: parsed.topics.map((topic) => ({ text: topic })),
 				taskType: 'RETRIEVAL_QUERY',
 				outputDimensionality: EMBEDDING_DIMENSIONS,
+				operation: 'query_embedding',
+				surface: 'coverage',
 				signal: abort.signal
 			});
 		} catch (error) {
