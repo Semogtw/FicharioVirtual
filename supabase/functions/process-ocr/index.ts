@@ -5,6 +5,7 @@ import { claimStateHttpStatus, parseOcrClaimResult } from '../_shared/ocr-contra
 import { planOcrFailure } from '../_shared/ocr-failure.ts';
 import { randomJitterMs } from '../_shared/random-jitter.ts';
 import { requestGeminiOcrBatch, type GeminiOcrBatchPage } from '../_shared/gemini-ocr-client.ts';
+import { buildGeminiTelemetryRpcArgs } from '../_shared/ocr-provider-telemetry.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MODEL = /^[A-Za-z0-9._-]{3,128}$/;
@@ -489,6 +490,8 @@ Deno.serve(async (request) => {
 
 	const abortController = new AbortController();
 	const timeout = setTimeout(() => abortController.abort(), requestTimeoutMs);
+	const telemetryEventId = crypto.randomUUID();
+	const providerStartedAt = performance.now();
 	try {
 		const outcome = await requestGeminiOcrBatch({
 			apiKey,
@@ -497,6 +500,25 @@ Deno.serve(async (request) => {
 			pages: providerPages,
 			signal: abortController.signal
 		});
+		const providerLatencyMs = performance.now() - providerStartedAt;
+		await supabase.rpc(
+			'record_ocr_provider_usage',
+			buildGeminiTelemetryRpcArgs({
+				eventId: telemetryEventId,
+				documentId,
+				batchId: parsedRequest.batchId,
+				model,
+				promptVersion,
+				documentKind: document.kind as 'image' | 'pdf',
+				pages: providerPages,
+				outcome,
+				status: 'success',
+				safeErrorCode: null,
+				latencyMs: providerLatencyMs,
+				recordedAt: new Date().toISOString()
+			})
+		);
+
 		const validIds = new Set<string>();
 		for (const result of outcome.pages) {
 			const claimed = providerClaims.get(result.pageId);
@@ -567,6 +589,7 @@ Deno.serve(async (request) => {
 		);
 		return respond(body.state === 'complete' ? 200 : 202, body);
 	} catch (error) {
+		const providerLatencyMs = performance.now() - providerStartedAt;
 		const sharedFailedAt = new Date().toISOString();
 		const decisions = providerPages.map((page) => {
 			const claimed = providerClaims.get(page.pageId)!;
@@ -606,6 +629,25 @@ Deno.serve(async (request) => {
 			terminalCode = decision.persistence.code;
 			terminalMessage = decision.persistence.message;
 		}
+
+		await supabase.rpc(
+			'record_ocr_provider_usage',
+			buildGeminiTelemetryRpcArgs({
+				eventId: telemetryEventId,
+				documentId,
+				batchId: parsedRequest.batchId,
+				model,
+				promptVersion,
+				documentKind: document.kind as 'image' | 'pdf',
+				pages: providerPages,
+				outcome: null,
+				status: 'error',
+				safeErrorCode: terminalCode,
+				latencyMs: providerLatencyMs,
+				recordedAt: sharedFailedAt
+			})
+		);
+
 		await finishBatch(
 			parsedRequest.batchId,
 			terminalStatus,
