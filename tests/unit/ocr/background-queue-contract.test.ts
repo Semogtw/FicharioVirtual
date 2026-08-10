@@ -66,7 +66,9 @@ describe('background OCR queue contract', () => {
 		expect(cronMigration).toContain("where name in ('project_url', 'ocr_background_worker_key')");
 		expect(candidateGuard).toContain("job.status = 'blocked_quota'::public.ocr_status");
 		expect(candidateGuard).toContain('and job.next_retry_at is not null');
-		expect(candidateGuard).toContain("grant execute on function public.list_background_gemini_ocr_candidates(integer) to service_role;");
+		expect(candidateGuard).toContain(
+			'grant execute on function public.list_background_gemini_ocr_candidates(integer) to service_role;'
+		);
 	});
 
 	it('defers normal browser OCR calls but preserves injected foreground clients for tests and probes', () => {
