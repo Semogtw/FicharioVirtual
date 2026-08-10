@@ -21,6 +21,7 @@ on:
       - tools/checks/validate-pages-deploy-output.mjs
       - tools/deploy/**
       - tests/unit/tooling/deployment-artifact-contract.test.ts
+      - tests/unit/tooling/deployment-artifact-workflow.test.ts
       - tests/unit/tooling/deployment-contract.test.ts
       - tests/unit/tooling/pages-deploy-output.test.ts
   workflow_dispatch:
@@ -77,6 +78,7 @@ jobs:
             tools/checks/deployment-contract.mjs \
             tools/checks/validate-pages-deploy-output.mjs \
             tests/unit/tooling/deployment-artifact-contract.test.ts \
+            tests/unit/tooling/deployment-artifact-workflow.test.ts \
             tests/unit/tooling/deployment-contract.test.ts \
             tests/unit/tooling/pages-deploy-output.test.ts
 
@@ -94,6 +96,7 @@ jobs:
         run: |
           pnpm exec vitest run \
             tests/unit/tooling/deployment-artifact-contract.test.ts \
+            tests/unit/tooling/deployment-artifact-workflow.test.ts \
             tests/unit/tooling/deployment-contract.test.ts \
             tests/unit/tooling/pages-deploy-output.test.ts
 
