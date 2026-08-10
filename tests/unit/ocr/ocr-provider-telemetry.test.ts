@@ -17,6 +17,7 @@ const parsedPage = {
 	pageId,
 	pageNumber: 7,
 	text: 'Texto extraído',
+	contentClass: 'handwriting',
 	warnings: [{ code: 'uncertain_text', message: 'Trecho incerto.' }],
 	needsReview: true
 } as const;
@@ -72,7 +73,7 @@ describe('buildGeminiTelemetryRpcArgs', () => {
 				outputCharacters: parsedPage.text.length,
 				warningCount: 1,
 				needsReview: true,
-				contentClass: 'unknown',
+				contentClass: 'handwriting',
 				routeReason: 'primary_gemini',
 				shadowSample: false
 			}
@@ -106,7 +107,8 @@ describe('buildGeminiTelemetryRpcArgs', () => {
 		expect(args.target_page_metrics[0]).toMatchObject({
 			outputCharacters: 0,
 			warningCount: 0,
-			needsReview: false
+			needsReview: false,
+			contentClass: 'unknown'
 		});
 	});
 
