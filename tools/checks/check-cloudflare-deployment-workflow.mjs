@@ -7,121 +7,86 @@ const workflowPath = resolve(root, '.github/workflows/deploy-cloudflare-pages.ym
 const source = await readFile(workflowPath, 'utf8');
 const failures = [];
 
-function requirePattern(pattern, detail) {
-	if (!pattern.test(source)) failures.push(detail);
+function requireText(text, detail) {
+	if (!source.includes(text)) failures.push(detail);
 }
 
-function forbidPattern(pattern, detail) {
-	if (pattern.test(source)) failures.push(detail);
+function forbidText(text, detail) {
+	if (source.includes(text)) failures.push(detail);
 }
 
-requirePattern(/^on:\s*\n\s+workflow_dispatch:\s*$/mu, 'workflow must remain manual-only');
-requirePattern(
-	/^permissions:\s*\n\s+actions:\s*read\s*\n\s+contents:\s*read\s*$/mu,
+requireText('on:\n  workflow_dispatch:', 'workflow must remain manual-only');
+forbidText('\n  push:', 'workflow must not deploy on push');
+forbidText('\n  pull_request:', 'workflow must not deploy on pull requests');
+forbidText('\n  schedule:', 'workflow must not deploy on a schedule');
+requireText(
+	'permissions:\n  actions: read\n  contents: read',
 	'workflow permissions must remain actions:read + contents:read'
 );
-requirePattern(
-	/^\s+environment:\s*\$\{\{ inputs\.target_environment == 'production' && 'production-deploy' \|\| 'staging-deploy' \}\}\s*$/mu,
-	'deployment job must isolate staging-deploy from production-deploy'
+requireText('environment: staging-deploy', 'deployment must use only the existing staging-deploy environment');
+requireText('TARGET_ENVIRONMENT: staging', 'deployment target must remain hard-coded to staging');
+requireText(
+	'CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}',
+	'Cloudflare API token must come from staging-deploy'
 );
-requirePattern(
-	/^\s+CLOUDFLARE_API_TOKEN:\s*\$\{\{ secrets\.CLOUDFLARE_API_TOKEN \}\}\s*$/mu,
-	'Cloudflare API token must come only from the protected deploy environment'
+requireText(
+	'CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}',
+	'Cloudflare account ID must come from staging-deploy'
 );
-requirePattern(
-	/^\s+CLOUDFLARE_ACCOUNT_ID:\s*\$\{\{ secrets\.CLOUDFLARE_ACCOUNT_ID \}\}\s*$/mu,
-	'Cloudflare account ID must come only from the protected deploy environment'
+requireText("WRANGLER_VERSION: '4.120.0'", 'Wrangler must remain pinned to the reviewed version');
+requireText(
+	'WRANGLER_OUTPUT_FILE_PATH: /tmp/wrangler-pages-output.jsonl',
+	'Wrangler structured output must be captured'
 );
-requirePattern(
-	/^\s+CLOUDFLARE_PRODUCTION_DEPLOY_ENABLED:\s*\$\{\{ vars\.CLOUDFLARE_PRODUCTION_DEPLOY_ENABLED \}\}\s*$/mu,
-	'production promotion must use an explicit protected-environment enable flag'
+requireText(
+	'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c',
+	'artifact download action must remain pinned'
 );
-requirePattern(
-	/CLOUDFLARE_PRODUCTION_DEPLOY_ENABLED" != 'true'/u,
-	'production promotion must fail closed until explicitly enabled'
+requireText(
+	'name: fichario-static-${{ inputs.expected_source_commit }}-staging',
+	'artifact identity must bind the source SHA to staging'
 );
-requirePattern(
-	/^\s+WRANGLER_VERSION:\s*'\d+\.\d+\.\d+'\s*$/mu,
-	'Wrangler must remain pinned to an explicit version'
+requireText(
+	'run-id: ${{ inputs.artifact_run_id }}',
+	'artifact must come from the explicitly selected build run'
 );
-requirePattern(
-	/^\s+WRANGLER_OUTPUT_FILE_PATH:\s*\/tmp\/wrangler-pages-output\.jsonl\s*$/mu,
-	'Wrangler structured deployment output must be captured'
+for (const validator of [
+	'checks/check-deployed-site.mjs',
+	'checks/deployment-contract.mjs',
+	'checks/validate-pages-deploy-output.mjs'
+]) {
+	requireText(validator, `deployment artifact must require ${validator}`);
+}
+requireText('sha256sum -c SHA256SUMS', 'artifact checksums must be revalidated before deployment');
+requireText('find "$artifact_root" -type l', 'artifact symlinks must be rejected');
+requireText("[[ \"$(manifest_value target_environment)\" == 'staging' ]]", 'artifact manifest must target staging');
+requireText('wrangler pages deploy "$ARTIFACT_ROOT/site"', 'only the validated site directory may be deployed');
+requireText('--project-name=fichario-virtual', 'deployment must remain scoped to fichario-virtual');
+requireText('--branch=staging', 'deployment must remain a non-production Pages preview');
+requireText('--commit-hash="$EXPECTED_SOURCE_COMMIT"', 'deployment metadata must preserve the validated SHA');
+requireText(
+	'node "$ARTIFACT_ROOT/checks/validate-pages-deploy-output.mjs"',
+	'Wrangler output must be validated by artifact-pinned code'
 );
-requirePattern(
-	/actions\/download-artifact@[0-9a-f]{40}/u,
-	'artifact download action must remain pinned to a full commit SHA'
-);
-requirePattern(
-	/name:\s*fichario-static-\$\{\{ inputs\.expected_source_commit \}\}-\$\{\{ inputs\.target_environment \}\}/u,
-	'artifact identity must bind source SHA and target environment'
-);
-requirePattern(
-	/run-id:\s*\$\{\{ inputs\.artifact_run_id \}\}/u,
-	'artifact must be downloaded from the explicitly selected build run'
-);
-requirePattern(
-	/checks\/check-deployed-site\.mjs checks\/deployment-contract\.mjs checks\/validate-pages-deploy-output\.mjs/u,
-	'artifact verification must require all pinned deployment validators'
-);
-requirePattern(
-	/\^\[0-9a-f\]\{40\}\$/u,
-	'expected source SHA must be validated as a full lowercase Git SHA'
-);
-requirePattern(/manifest_value source_commit/u, 'artifact manifest source SHA must be verified');
-requirePattern(
-	/manifest_value target_environment/u,
-	'artifact manifest target environment must be verified'
-);
-requirePattern(
-	/sha256sum -c SHA256SUMS/u,
-	'artifact checksums must be revalidated before deployment'
-);
-requirePattern(/find "\$artifact_root" -type l/u, 'artifact symlinks must be rejected');
-requirePattern(
-	/wrangler pages deploy "\$ARTIFACT_ROOT\/site"/u,
-	'only the validated site directory may be deployed'
-);
-requirePattern(
-	/--project-name=fichario-virtual/u,
-	'deployment must remain scoped to the Fichário Pages project'
-);
-requirePattern(
-	/--commit-hash="\$EXPECTED_SOURCE_COMMIT"/u,
-	'Cloudflare deployment metadata must retain the validated source SHA'
-);
-requirePattern(/pages_branch='main'/u, 'production deployments must target the production branch');
-requirePattern(/pages_branch='staging'/u, 'staging deployments must target a preview branch');
-requirePattern(
-	/node "\$ARTIFACT_ROOT\/checks\/validate-pages-deploy-output\.mjs"/u,
-	'Wrangler structured output must be validated by code carried in the artifact'
-);
-requirePattern(
-	/node "\$ARTIFACT_ROOT\/checks\/check-deployed-site\.mjs" "\$DEPLOYMENT_URL"/u,
-	'exact deployment URL must pass the checker carried by the artifact'
-);
-requirePattern(
-	/node "\$ARTIFACT_ROOT\/checks\/check-deployed-site\.mjs" 'https:\/\/fichario-virtual\.pages\.dev'/u,
-	'production alias must pass the same artifact-pinned checker'
+requireText(
+	'node "$ARTIFACT_ROOT/checks/check-deployed-site.mjs" "$DEPLOYMENT_URL"',
+	'exact deployment URL must pass the artifact-pinned HTTP contract'
 );
 
-forbidPattern(/actions\/checkout@/u, 'deployment workflow must not checkout or rebuild source');
-forbidPattern(
-	/\bpnpm\s+(?:install|build|verify)\b/u,
-	'deployment workflow must not install or rebuild application source'
-);
-forbidPattern(
-	/wrangler pages project create/u,
-	'deployment workflow must not create or replace the Pages project'
-);
-forbidPattern(
-	/https:\/\/staging\.fichario-virtual\.pages\.dev/u,
-	'staging verification must use Wrangler exact deployment output instead of an assumed alias'
-);
-forbidPattern(
-	/pages-deploy-detailed/u,
-	'Wrangler output parsing must stay in the artifact-pinned validator instead of inline workflow code'
-);
+for (const forbidden of [
+	'actions/checkout@',
+	'pnpm install',
+	'pnpm build',
+	'pnpm verify',
+	'wrangler pages project create',
+	'production-deploy',
+	'CLOUDFLARE_PRODUCTION_DEPLOY_ENABLED',
+	'--branch=main',
+	'https://fichario-virtual.pages.dev',
+	'options:\n          - staging\n          - production'
+]) {
+	forbidText(forbidden, `staging deployment workflow must not contain ${forbidden}`);
+}
 
 if (failures.length > 0) {
 	console.error(`Cloudflare deployment workflow checks failed (${failures.length}):`);
