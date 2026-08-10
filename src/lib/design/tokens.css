@@ -19,6 +19,10 @@
 	--archive-rgb: 83 106 91;
 	--archive-strong: #415447;
 	--archive-soft: #e3e9e3;
+	--success: var(--archive);
+	--success-rgb: var(--archive-rgb);
+	--warning: var(--accent);
+	--warning-rgb: var(--accent-rgb);
 	--danger: #9b3f36;
 	--danger-rgb: 155 63 54;
 	--focus: #2f6f9f;
