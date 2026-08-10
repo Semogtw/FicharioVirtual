@@ -21,6 +21,7 @@ describe('parseOcrBatchPayload', () => {
 			[second.pageId, 'Dois']
 		]);
 		expect(parsed.pages.every((page) => page.contentClass === 'unknown')).toBe(true);
+		expect(parsed.pages.every((page) => page.wordGeometry.length === 0)).toBe(true);
 		expect(parsed.missingPageIds).toEqual([]);
 	});
 
@@ -38,6 +39,30 @@ describe('parseOcrBatchPayload', () => {
 			text: 'Literal',
 			contentClass: 'handwriting'
 		});
+	});
+
+	it('parses compact normalized word geometry and ignores unsafe individual boxes', () => {
+		const parsed = parseOcrBatchPayload(
+			JSON.stringify({
+				pages: [
+					{
+						...result(first, 'A fotossintcse ocorre.'),
+						contentClass: 'scan_degraded',
+						wordGeometry: [
+							'1200,2400,3500,2900|fotossintcse',
+							'9000,100,10001,500|fora',
+							'não é uma caixa'
+						]
+					}
+				]
+			}),
+			[first]
+		);
+
+		expect(parsed.valid).toBe(true);
+		expect(parsed.pages[0]?.wordGeometry).toEqual([
+			['fotossintcse', 1200, 2400, 3500, 2900]
+		]);
 	});
 
 	it('keeps valid unique pages while reporting omissions for subset retry', () => {
@@ -126,6 +151,7 @@ describe('parseOcrBatchPayload', () => {
 				needsReview: true,
 				text: '',
 				contentClass: 'unknown',
+				wordGeometry: [],
 				warnings: expect.any(Array)
 			})
 		);
