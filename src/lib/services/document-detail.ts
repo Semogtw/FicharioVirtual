@@ -42,7 +42,7 @@ const pageRecordSchema = z
 		ocr_raw_text: z.string().max(MAX_CORRECTION_LENGTH).nullable(),
 		corrected_text: z.string().max(MAX_CORRECTION_LENGTH).nullable(),
 		extraction_source: z.enum(['native_pdf', 'ocr', 'manual']).nullable(),
-		ocr_word_geometry: wordGeometrySchema,
+		ocr_word_geometry: wordGeometrySchema.optional().default([]),
 		warnings: z.array(warningSchema).max(100),
 		status: z.enum([
 			'pending',
