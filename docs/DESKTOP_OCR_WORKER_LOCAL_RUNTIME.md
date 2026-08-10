@@ -1,6 +1,6 @@
 # Runtime local do Desktop OCR Worker
 
-> Estado em 2026-08-10: a implementação local existe e está integrada ao plano de controle remoto, inclusive com pareamento web por código de uso único. Ainda não é considerada validada em hardware real. Este documento descreve o fluxo atual de desenvolvimento/instalação sem promover CPU, Vulkan, ROCm ou um modelo específico como pronto antes de benchmark real.
+> Estado em 2026-08-10: a implementação local existe e está integrada ao plano de controle remoto, inclusive com pareamento web por código de uso único e limpeza local explícita depois de revogação web. Ainda não é considerada validada em hardware real. Este documento descreve o fluxo atual de desenvolvimento/instalação sem promover CPU, Vulkan, ROCm ou um modelo específico como pronto antes de benchmark real.
 
 ## O que já existe
 
@@ -118,13 +118,34 @@ Somente depois de `fichario-worker-status` indicar `readyToRun: true`:
 systemctl --user enable --now fichario-ocr-worker.service
 ```
 
-Para acompanhar o serviço use as ferramentas normais do systemd. O próprio worker limita seus eventos a status/códigos sanitizados; IDs de job, texto OCR, caminhos e segredos não fazem parte do callback normal de status.
+Para acompanhar o serviço:
 
-## 6. Revogar ou desparear
+```bash
+systemctl --user status fichario-ocr-worker.service
+journalctl --user -u fichario-ocr-worker.service
+```
 
-A tela **Configurações > Computadores** já permite revogar um dispositivo sem copiar token para o host. A revogação é user-scoped, invalida a credencial remota e reencaminha leases `processing` daquele dispositivo.
+O próprio worker limita seus eventos a status/códigos sanitizados; IDs completos de job, texto OCR, caminhos e segredos não fazem parte do callback normal de status.
 
-O comando legado abaixo ainda existe para o fluxo combinado remoto + limpeza local:
+## 6. Revogar, limpar ou desparear
+
+A tela **Configurações > Computadores** permite revogar um dispositivo sem copiar token para o host. A revogação é user-scoped, invalida a credencial remota e reencaminha leases `processing` daquele dispositivo.
+
+Depois de revogar no site, faça a limpeza local sem access token:
+
+```bash
+fichario-worker-forget --after-web-revoke
+```
+
+Esse comando é deliberadamente **local-only**. O flag confirma que a revogação remota já foi feita e então:
+
+1. remove a credencial do Secret Service;
+2. remove `device.json`;
+3. não chama o servidor nem finge ter revogado o dispositivo remotamente.
+
+A tela também permite **Remover da lista** um dispositivo já revogado. Essa remoção é server-side, owner-scoped e não substitui a limpeza local acima.
+
+O comando legado ainda existe para o fluxo combinado remoto + limpeza local:
 
 ```bash
 fichario-worker-unpair
@@ -137,7 +158,7 @@ Ele solicita um access token web efêmero e é deliberadamente ordenado:
 3. somente após o revoke remoto confirmado o cliente limpa a credencial no Secret Service;
 4. por último remove `device.json`.
 
-Uma próxima etapa de UX é oferecer limpeza local explícita após a revogação feita pelo site, eliminando a necessidade do token também nesse caminho. Até lá, revogar pelo site é suficiente para bloquear remotamente o worker; os metadados/segredo locais restantes ficam inutilizáveis pelo servidor.
+Para novas instalações, prefira pareamento por código + revogação no site + `fichario-worker-forget --after-web-revoke`.
 
 ## Fronteiras de segurança
 
@@ -156,7 +177,7 @@ O endpoint `desktop-ocr-worker` usa esquema de autorização próprio por dispos
 
 ## Estado de validação
 
-O código e os testes automatizados cobrem download verificado, spool/idempotência/dead letters, renovação de lease, polling/backoff/shutdown, Secret Service adapter, model lock, Ollama loopback, pareamento legado/rollback, pareamento por código com segredo gerado localmente, revoke, systemd packaging, gestão web de dispositivos e status agregado.
+O código e os testes automatizados cobrem download verificado, spool/idempotência/dead letters, renovação de lease, polling/backoff/shutdown, Secret Service adapter, model lock, Ollama loopback, pareamento legado/rollback, pareamento por código com segredo gerado localmente, revoke, limpeza local pós-revogação web, systemd packaging, gestão web de dispositivos e status agregado.
 
 Ainda faltam antes de chamar o worker de operacionalmente pronto:
 
@@ -165,7 +186,7 @@ Ainda faltam antes de chamar o worker de operacionalmente pronto:
 - benchmark CPU e, separadamente, qualquer caminho Vulkan/ROCm pretendido;
 - validação de memória, latência, estabilidade e temperatura no hardware alvo;
 - validação end-to-end do pareamento por código + processamento contra staging com documento privado real/controlado;
-- limpeza local pós-revogação web sem access token manual;
+- recibo verde do probe de staging automatizado para pareamento/replay/revoke/delete;
 - UI de fila/estado detalhado do processamento desktop;
 - decisão documentada de modelo padrão baseada em licença, proveniência, qualidade e benchmark.
 
