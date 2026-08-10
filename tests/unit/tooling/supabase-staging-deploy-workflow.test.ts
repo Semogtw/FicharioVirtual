@@ -25,7 +25,10 @@ describe('Supabase staging migration deploy workflow', () => {
 		expect(source).toContain('git merge-base --is-ancestor "$base_sha" "$TARGET_SHA"');
 		expect(source).toContain('git diff --quiet "$base_sha" "$TARGET_SHA" --');
 		expect(source).toContain('supabase');
+		expect(source).toContain('.github/workflows/verify-supabase-staging.yml');
 		expect(source).toContain('.github/workflows/verify-ocr-staging.yml');
+		expect(source).toContain('tools/checks/check-supabase-staging.mjs');
+		expect(source).toContain('tools/checks/check-ocr-staging.mjs');
 		expect(source).toContain('deploy_required: ${{ steps.changes.outputs.required }}');
 	});
 
@@ -51,7 +54,7 @@ describe('Supabase staging migration deploy workflow', () => {
 		expect(source).toContain('--linked --include-all');
 	});
 
-	it('deploys versioned Edge Functions and automatically follows with persisted OCR verification', () => {
+	it('deploys versioned Edge Functions and chains Auth/RLS/Storage before persisted OCR verification', () => {
 		const push = source.indexOf('run: supabase db push --linked --include-all');
 		const deployFunctions = source.indexOf(
 			'supabase functions deploy --project-ref "$STAGING_SUPABASE_PROJECT_REF"'
@@ -64,8 +67,14 @@ describe('Supabase staging migration deploy workflow', () => {
 		expect(listFunctions).toBeGreaterThan(deployFunctions);
 		expect(source).not.toContain('--no-verify-jwt');
 		expect(source).not.toContain('--prune');
+		expect(source).toContain('verify-supabase:');
+		expect(source).toContain('uses: ./.github/workflows/verify-supabase-staging.yml');
 		expect(source).toContain('uses: ./.github/workflows/verify-ocr-staging.yml');
 		expect(source).toContain("if: needs.deploy.result == 'success'");
+		expect(source).toContain(
+			"if: needs.deploy.result == 'success' && needs.verify-supabase.result == 'success'"
+		);
+		expect(source).toContain('needs: [resolve, deploy, verify-supabase]');
 	});
 
 	it('takes administrative connection material only from protected environment settings', () => {
