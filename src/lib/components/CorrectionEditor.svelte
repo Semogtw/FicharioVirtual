@@ -152,7 +152,7 @@
 
 	{#if highlightedQuery}
 		<SearchMatch
-			text={text}
+			{text}
 			query={highlightedQuery}
 			label="Trecho encontrado nesta página"
 			maximumLength={320}
