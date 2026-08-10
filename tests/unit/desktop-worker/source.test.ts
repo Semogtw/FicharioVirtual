@@ -86,11 +86,12 @@ describe('downloadDesktopSource', () => {
 		const expected = new TextEncoder().encode('small');
 		const oversized = new TextEncoder().encode('small-but-now-larger');
 		const downloadsDir = await temporaryDirectory();
-		const fetchImpl = vi.fn(async () =>
-			new Response(oversized, {
-				status: 200,
-				headers: { 'Content-Type': 'image/webp' }
-			})
+		const fetchImpl = vi.fn(
+			async () =>
+				new Response(oversized, {
+					status: 200,
+					headers: { 'Content-Type': 'image/webp' }
+				})
 		);
 
 		await expect(
