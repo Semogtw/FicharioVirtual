@@ -528,15 +528,15 @@ Deno.serve(async (request) => {
 			const claimed = providerClaims.get(result.pageId);
 			if (!claimed) continue;
 			validIds.add(result.pageId);
-			const { data: completed, error: completionError } = await supabase.rpc('complete_ocr_job', {
+			const { error: completionError } = await supabase.rpc('complete_ocr_job_with_geometry', {
 				target_page_id: result.pageId,
-				ocr_text: result.text,
-				review_required: result.needsReview,
-				provider_model: model,
-				processed_at: new Date().toISOString(),
-				warning_payload: result.warnings
+				extracted_text: result.text,
+				extraction_warnings: result.warnings,
+				terminal_status: result.needsReview ? 'needs_review' : 'ready',
+				completed_at: new Date().toISOString(),
+				geometry_payload: result.wordGeometry
 			});
-			if (completionError || completed !== true) {
+			if (completionError) {
 				await failJob(result.pageId, {
 					code: 'ocr_persistence_failed',
 					message: 'O resultado não pôde ser salvo com segurança.',
