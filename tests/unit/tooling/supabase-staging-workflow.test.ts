@@ -34,7 +34,7 @@ describe('Supabase staging verification workflow', () => {
 		expect(workflow.toLowerCase()).not.toContain('service_role');
 	});
 
-	it('installs from the lockfile and runs the dedicated verifier', () => {
+	it('installs from the lockfile and runs both public-credential verifiers', () => {
 		const workflow = read('.github/workflows/verify-supabase-staging.yml');
 
 		expect(workflow).toContain('contents: read');
@@ -45,6 +45,22 @@ describe('Supabase staging verification workflow', () => {
 		expect(workflow).toContain('pnpm install --frozen-lockfile');
 		expect(workflow).toContain('name: Verify Auth, RLS, and private Storage');
 		expect(workflow).toContain('pnpm test:staging:supabase');
+		expect(workflow).toContain('name: Verify desktop OCR one-time pairing');
+		expect(workflow).toContain('pnpm test:staging:desktop-ocr-pairing');
+	});
+
+	it('keeps the pairing probe on public credentials without service-role material', () => {
+		const script = read('tools/checks/check-desktop-ocr-pairing-staging.mjs');
+		const packageJson = read('package.json');
+
+		expect(script).toContain("apikey: publishableKey");
+		expect(script).toContain("'Content-Type': 'application/json'");
+		expect(script).not.toContain('Authorization');
+		expect(script.toLowerCase()).not.toContain('service_role');
+		expect(script).toContain("replayResponse.status !== 409");
+		expect(script).toContain("'credential' in redeemed");
+		expect(script).toContain("client.rpc('delete_ocr_worker_device'");
+		expect(packageJson).toContain('"test:staging:desktop-ocr-pairing"');
 	});
 
 	it('serializes the shared staging account with the OCR verifier', () => {
