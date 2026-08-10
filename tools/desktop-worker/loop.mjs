@@ -5,7 +5,8 @@ const RETRY_STATUSES = new Set([
 	'claim_deferred',
 	'source_deferred',
 	'processing_deferred',
-	'spooled'
+	'spooled',
+	'dead_lettered'
 ]);
 
 function abortableSleep(milliseconds, signal) {
