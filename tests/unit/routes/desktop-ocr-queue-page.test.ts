@@ -26,8 +26,17 @@ describe('desktop OCR queue page contract', () => {
 
 	it('surfaces expired lease recovery and links back to the owning document', () => {
 		expect(page).toContain('job.leaseExpired');
-		expect(page).toContain('próximo claim de um dispositivo ativo recuperará');
+		expect(page).toContain('aguardar outro dispositivo ativo recuperá-lo automaticamente');
 		expect(page).toContain('href={`/documents/${job.documentId}/`}');
+	});
+
+	it('lets the owner return only waiting or expired desktop work to Gemini', () => {
+		expect(page).toContain('returnDesktopOcrJobToGemini');
+		expect(page).toContain("job.status === 'waiting_desktop'");
+		expect(page).toContain("job.status === 'processing' && job.leaseExpired");
+		expect(page).toContain("'Usar Gemini'");
+		expect(page).toContain('movingPageId !== null');
+		expect(page).toContain('recoveredExpiredLease');
 	});
 
 	it('makes the queue a first-class settings destination without double-active tabs', () => {
