@@ -1,4 +1,9 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
+	import { publishImportUpdate } from '$lib/import/import-broadcast';
+	import { deleteStoredImageImport } from '$lib/import/resume-store';
+	import { updateImportSession } from '$lib/services/import-sessions';
+	import { getDocumentOcrSummary, type DocumentOcrSummary } from '$lib/services/ocr-summary';
 	import {
 		cancelImport,
 		importQueue,
@@ -16,16 +21,25 @@
 		| { kind: 'image'; item: ImportQueueItem }
 		| { kind: 'pdf'; item: PdfQueueItem };
 
+	const REFRESH_INTERVAL_MS = 10_000;
 	let open = $state(false);
+	let refreshing = false;
 	let entries = $derived<QueueEntry[]>([
 		...importQueue.items.map((item) => ({ kind: 'image' as const, item })),
 		...pdfImportQueue.items.map((item) => ({ kind: 'pdf' as const, item }))
 	]);
 	let activeCount = $derived(
 		entries.filter(({ item }) =>
-			['queued', 'preparing', 'uploading', 'inspecting', 'rendering', 'publishing', 'reading', 'waiting'].includes(
-				item.status
-			)
+			[
+				'queued',
+				'preparing',
+				'uploading',
+				'inspecting',
+				'rendering',
+				'publishing',
+				'reading',
+				'waiting'
+			].includes(item.status)
 		).length
 	);
 
@@ -56,11 +70,13 @@
 	function canCancel(entry: QueueEntry) {
 		return entry.kind === 'image'
 			? ['queued', 'preparing', 'uploading'].includes(entry.item.status)
-			: ['queued', 'inspecting', 'uploading', 'rendering', 'publishing'].includes(entry.item.status);
+			: ['queued', 'inspecting', 'uploading', 'rendering', 'publishing'].includes(
+					entry.item.status
+				);
 	}
 
 	function canRetry(entry: QueueEntry) {
-		return ['failed', 'cancelled', 'waiting'].includes(entry.item.status);
+		return ['failed', 'cancelled'].includes(entry.item.status);
 	}
 
 	function cancel(entry: QueueEntry) {
@@ -72,6 +88,103 @@
 		if (entry.kind === 'image') retryImport(entry.item.id);
 		else void retryPdfImport(entry.item.id);
 	}
+
+	async function finishImageImport(item: ImportQueueItem, summary: DocumentOcrSummary) {
+		if (summary.total !== 1 || summary.pending > 0) return;
+		if (summary.failed > 0) {
+			item.status = 'failed';
+			item.error = 'A leitura automática não pôde ser concluída.';
+			return;
+		}
+		item.status = summary.needsReview > 0 ? 'needs_review' : 'complete';
+		item.error = null;
+		await deleteStoredImageImport(item.id).catch(() => undefined);
+		if (item.sessionId) {
+			await updateImportSession(item.sessionId, {
+				status: 'completed',
+				totalItems: 1,
+				preparedItems: 1,
+				uploadedItems: 1,
+				completedItems: 1,
+				lastErrorCode: null,
+				finishedAt: new Date().toISOString()
+			}).catch(() => undefined);
+		}
+		publishImportUpdate({ type: 'image-import-updated', id: item.id, status: item.status });
+	}
+
+	function updatePdfImport(item: PdfQueueItem, summary: DocumentOcrSummary) {
+		const result = item.result;
+		if (!result || summary.total !== result.ocrPageCount) return;
+		item.result = Object.freeze({
+			...result,
+			ocrCompleted: summary.completed,
+			ocrNeedsReview: summary.needsReview,
+			ocrPending: summary.pending,
+			ocrFailed: summary.failed
+		});
+		if (summary.pending > 0) {
+			item.status = 'waiting';
+			item.error = null;
+		} else if (summary.failed > 0) {
+			item.status = 'failed';
+			item.error = `${summary.failed} página(s) não puderam ser lidas automaticamente.`;
+		} else if (summary.needsReview > 0) {
+			item.status = 'needs_review';
+			item.error = null;
+		} else {
+			item.status = 'complete';
+			item.error = null;
+		}
+	}
+
+	async function refreshBackgroundOcr() {
+		if (refreshing) return;
+		const waiting = entries.filter(
+			(entry) => entry.item.status === 'waiting' && entry.item.result !== null
+		);
+		if (waiting.length === 0) return;
+		refreshing = true;
+		try {
+			const documentIds = [...new Set(waiting.map((entry) => entry.item.result!.documentId))];
+			const summaries = new Map<string, DocumentOcrSummary>();
+			await Promise.all(
+				documentIds.map(async (id) => {
+					try {
+						summaries.set(id, await getDocumentOcrSummary(id));
+					} catch {
+						// The next poll or lifecycle signal retries without disturbing the import state.
+					}
+				})
+			);
+			for (const entry of waiting) {
+				const result = entry.item.result;
+				if (!result) continue;
+				const summary = summaries.get(result.documentId);
+				if (!summary) continue;
+				if (entry.kind === 'image') await finishImageImport(entry.item, summary);
+				else updatePdfImport(entry.item, summary);
+			}
+		} finally {
+			refreshing = false;
+		}
+	}
+
+	onMount(() => {
+		const poll = setInterval(() => void refreshBackgroundOcr(), REFRESH_INTERVAL_MS);
+		const refreshWhenVisible = () => {
+			if (document.visibilityState === 'visible') void refreshBackgroundOcr();
+		};
+		const refreshWhenOnline = () => void refreshBackgroundOcr();
+		document.addEventListener('visibilitychange', refreshWhenVisible);
+		window.addEventListener('online', refreshWhenOnline);
+		void refreshBackgroundOcr();
+		return () => {
+			clearInterval(poll);
+			document.removeEventListener('visibilitychange', refreshWhenVisible);
+			window.removeEventListener('online', refreshWhenOnline);
+		};
+	});
 </script>
 
 <div class="queue-tray">
@@ -110,7 +223,8 @@
 								<span>{label(entry)}</span>
 								{#if entry.kind === 'pdf' && entry.item.progress}
 									<small>
-										{entry.item.progress.completed}/{entry.item.progress.total}{#if entry.item.progress.pageNumber}
+										{entry.item.progress.completed}/{entry.item.progress
+											.total}{#if entry.item.progress.pageNumber}
 											· página {entry.item.progress.pageNumber}{/if}
 									</small>
 								{/if}
@@ -123,7 +237,9 @@
 									<button type="button" onclick={() => retry(entry)}>Retomar</button>
 								{/if}
 								{#if documentId(entry)}
-									<a href={`/documents/${documentId(entry)}/`} onclick={() => (open = false)}>Abrir</a>
+									<a href={`/documents/${documentId(entry)}/`} onclick={() => (open = false)}
+										>Abrir</a
+									>
 								{/if}
 							</div>
 						</li>
