@@ -13,23 +13,30 @@ describe('desktop worker user service installer', () => {
 		expect(installer).not.toMatch(/^\s*systemctl --user (?:enable|start|restart)\b/m);
 	});
 
-	it('installs executable shims for config, model setup, pairing, and service', async () => {
+	it('installs only the launch setup and lifecycle commands', async () => {
 		const installer = await readFile(INSTALLER_PATH, 'utf8');
-		for (const entrypoint of ['bin.mjs', 'config-bin.mjs', 'pair-bin.mjs', 'model-bin.mjs']) {
+		for (const entrypoint of [
+			'bin.mjs',
+			'config-bin.mjs',
+			'pair-code-bin.mjs',
+			'forget-bin.mjs',
+			'model-bin.mjs',
+			'status-bin.mjs'
+		]) {
 			expect(installer).toContain(`"$install_dir/${entrypoint}"`);
 		}
-		expect(installer).toContain(
-			'ln -sfn ../lib/fichario-worker/bin.mjs "$bin_dir/fichario-worker"'
-		);
-		expect(installer).toContain(
-			'ln -sfn ../lib/fichario-worker/config-bin.mjs "$bin_dir/fichario-worker-config"'
-		);
-		expect(installer).toContain(
-			'ln -sfn ../lib/fichario-worker/pair-bin.mjs "$bin_dir/fichario-worker-pair"'
-		);
-		expect(installer).toContain(
-			'ln -sfn ../lib/fichario-worker/model-bin.mjs "$bin_dir/fichario-worker-model"'
-		);
+		for (const command of [
+			'fichario-worker',
+			'fichario-worker-config',
+			'fichario-worker-pair-code',
+			'fichario-worker-forget',
+			'fichario-worker-model',
+			'fichario-worker-status'
+		]) {
+			expect(installer).toContain(`$bin_dir/${command}`);
+		}
+		expect(installer).not.toContain('fichario-worker-pair"');
+		expect(installer).not.toContain('fichario-worker-unpair');
 	});
 
 	it('requires Node 22+ and never elevates privileges or invokes a package manager', async () => {
@@ -37,5 +44,11 @@ describe('desktop worker user service installer', () => {
 		expect(installer).toContain('(( node_major >= 22 ))');
 		expect(installer).not.toMatch(/^\s*(?:sudo|doas)\b/m);
 		expect(installer).not.toMatch(/^\s*(?:pacman|apt|dnf|zypper)\b/m);
+	});
+
+	it('requires Secret Service instead of weakening credential storage', async () => {
+		const installer = await readFile(INSTALLER_PATH, 'utf8');
+		expect(installer).toContain('[[ ! -x /usr/bin/secret-tool ]]');
+		expect(installer).toContain('install libsecret before pairing');
 	});
 });
