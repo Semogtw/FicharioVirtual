@@ -340,7 +340,6 @@
 		color: var(--ink);
 	}
 
-
 	.semantic-status {
 		margin: 0;
 		padding: 0.65rem 0.8rem;
@@ -486,11 +485,6 @@
 	@media (max-width: 760px) {
 		.search-panel {
 			grid-template-columns: 1fr;
-		}
-
-		.semantic-consent {
-			align-items: stretch;
-			flex-direction: column;
 		}
 	}
 </style>
