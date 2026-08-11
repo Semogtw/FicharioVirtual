@@ -29,9 +29,6 @@
 	let loadingMore = $state(false);
 	let error = $state<string | null>(null);
 	let hasMore = $state(false);
-	let semanticConsentChecked = $state(false);
-	let semanticConsentSaving = $state(false);
-	let semanticConsentError = $state<string | null>(null);
 	let timer: ReturnType<typeof setTimeout> | null = null;
 	let controller: AbortController | null = null;
 
@@ -40,6 +37,22 @@
 		timer = null;
 		controller?.abort();
 		controller = null;
+	}
+
+	async function searchWithAutomaticSemanticActivation(
+		normalized: string,
+		options: NonNullable<Parameters<typeof searchPagesHybrid>[1]>
+	) {
+		let response = await searchPagesHybrid(normalized, options);
+		if (response.analysis.reason !== 'consent_required') return response;
+
+		try {
+			await recordSemanticSearchConsent();
+			response = await searchPagesHybrid(normalized, options);
+		} catch {
+			// A busca textual já veio na resposta e continua disponível sem interromper a pesquisa.
+		}
+		return response;
 	}
 
 	async function run(reset: boolean, version = reset ? requests.next() : requests.current()) {
@@ -64,7 +77,7 @@
 		else loadingMore = true;
 		error = null;
 		try {
-			const response = await searchPagesHybrid(normalized, {
+			const response = await searchWithAutomaticSemanticActivation(normalized, {
 				notebookId: notebookId || null,
 				limit: pageSize,
 				offset: reset ? 0 : results.length,
@@ -92,23 +105,10 @@
 		timer = setTimeout(() => void run(true, version), 650);
 	}
 
-	async function activateSemanticSearch() {
-		if (!semanticConsentChecked || semanticConsentSaving) return;
-		semanticConsentSaving = true;
-		semanticConsentError = null;
-		try {
-			await recordSemanticSearchConsent();
-			semanticConsentChecked = false;
-			await run(true);
-		} catch {
-			semanticConsentError = 'Não foi possível ativar a busca semântica agora.';
-		} finally {
-			semanticConsentSaving = false;
-		}
-	}
-
 	function semanticStatus() {
-		if (!analysis || analysis.reason === 'consent_required') return null;
+		if (!analysis) return null;
+		if (analysis.reason === 'consent_required')
+			return 'Busca textual ativa; a camada semântica não pôde ser iniciada automaticamente agora.';
 		if (analysis.mode === 'hybrid') {
 			const index = analysis.index;
 			if (!index) return 'Busca textual + semântica ativa.';
@@ -217,30 +217,7 @@
 		</div>
 	{/if}
 
-	{#if analysis?.reason === 'consent_required'}
-		<section class="semantic-consent" aria-labelledby="semantic-consent-title">
-			<div>
-				<strong id="semantic-consent-title">Ativar relações de significado</strong>
-				<p>
-					A pesquisa atual continua textual. Para usar embeddings, autorize o envio da consulta e de
-					pequenos trechos das páginas ao Gemini. O índice é privado por usuário e não substitui
-					seus documentos originais.
-				</p>
-				<label class="consent-check">
-					<input type="checkbox" bind:checked={semanticConsentChecked} />
-					<span>Concordo em usar meus textos para gerar embeddings de busca.</span>
-				</label>
-				{#if semanticConsentError}<p class="consent-error" role="alert">
-						{semanticConsentError}
-					</p>{/if}
-			</div>
-			<Button
-				label={semanticConsentSaving ? 'Ativando…' : 'Ativar busca semântica'}
-				disabled={!semanticConsentChecked || semanticConsentSaving}
-				onclick={() => void activateSemanticSearch()}
-			/>
-		</section>
-	{:else if semanticStatus()}
+	{#if semanticStatus()}
 		<p class:semantic-active={analysis?.mode === 'hybrid'} class="semantic-status" role="status">
 			{semanticStatus()}
 		</p>
@@ -363,45 +340,6 @@
 		color: var(--ink);
 	}
 
-	.semantic-consent {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1.2rem;
-		padding: 1rem;
-		border: 1px solid var(--line);
-		border-left: 0.3rem solid var(--archive);
-		border-radius: var(--radius-sm);
-		background: rgb(83 106 91 / 7%);
-	}
-
-	.semantic-consent strong {
-		font-family: var(--font-heading);
-		font-size: 1.15rem;
-	}
-
-	.semantic-consent p {
-		max-width: 52rem;
-		margin: 0.35rem 0 0;
-		color: var(--muted);
-		line-height: 1.5;
-	}
-
-	.consent-check {
-		display: flex;
-		align-items: flex-start;
-		gap: 0.55rem;
-		margin-top: 0.8rem;
-		font-size: 0.88rem;
-	}
-
-	.consent-check input {
-		margin-top: 0.15rem;
-	}
-
-	.semantic-consent .consent-error {
-		color: var(--danger);
-	}
 
 	.semantic-status {
 		margin: 0;
