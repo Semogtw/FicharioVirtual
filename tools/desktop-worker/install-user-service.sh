@@ -22,10 +22,9 @@ warn() {
 command -v node >/dev/null 2>&1 || fail 'node is required'
 command -v systemctl >/dev/null 2>&1 || fail 'systemctl is required'
 [[ -f "$unit_source" ]] || fail 'systemd unit template is missing'
-[[ -f "$source_dir/bin.mjs" ]] || fail 'worker entrypoint is missing'
-[[ -f "$source_dir/config-bin.mjs" ]] || fail 'config setup entrypoint is missing'
-[[ -f "$source_dir/pair-bin.mjs" ]] || fail 'pairing entrypoint is missing'
-[[ -f "$source_dir/model-bin.mjs" ]] || fail 'model setup entrypoint is missing'
+for entrypoint in bin.mjs config-bin.mjs pair-code-bin.mjs forget-bin.mjs model-bin.mjs status-bin.mjs; do
+  [[ -f "$source_dir/$entrypoint" ]] || fail "worker entrypoint is missing: $entrypoint"
+done
 
 node_major="$(node -p 'Number(process.versions.node.split(".")[0])')"
 [[ "$node_major" =~ ^[0-9]+$ ]] || fail 'unable to determine node version'
@@ -43,14 +42,18 @@ done < <(find "$source_dir" -maxdepth 1 -type f -name '*.mjs' -print0 | sort -z)
 chmod 0700 \
   "$install_dir/bin.mjs" \
   "$install_dir/config-bin.mjs" \
-  "$install_dir/pair-bin.mjs" \
-  "$install_dir/model-bin.mjs"
+  "$install_dir/pair-code-bin.mjs" \
+  "$install_dir/forget-bin.mjs" \
+  "$install_dir/model-bin.mjs" \
+  "$install_dir/status-bin.mjs"
 
 install -d -m 0700 "$bin_dir"
 ln -sfn ../lib/fichario-worker/bin.mjs "$bin_dir/fichario-worker"
 ln -sfn ../lib/fichario-worker/config-bin.mjs "$bin_dir/fichario-worker-config"
-ln -sfn ../lib/fichario-worker/pair-bin.mjs "$bin_dir/fichario-worker-pair"
+ln -sfn ../lib/fichario-worker/pair-code-bin.mjs "$bin_dir/fichario-worker-pair-code"
+ln -sfn ../lib/fichario-worker/forget-bin.mjs "$bin_dir/fichario-worker-forget"
 ln -sfn ../lib/fichario-worker/model-bin.mjs "$bin_dir/fichario-worker-model"
+ln -sfn ../lib/fichario-worker/status-bin.mjs "$bin_dir/fichario-worker-status"
 
 install -d -m 0700 "$unit_dir"
 install -m 0600 "$unit_source" "$unit_path"
@@ -58,7 +61,8 @@ systemctl --user daemon-reload
 
 printf '%s\n' \
   'Fichário OCR worker files installed for the current user.' \
-  'Commands installed in ~/.local/bin: fichario-worker-config, fichario-worker-model, fichario-worker-pair, fichario-worker.' \
+  'Commands installed in ~/.local/bin: fichario-worker-config, fichario-worker-model, fichario-worker-pair-code, fichario-worker-forget, fichario-worker-status, fichario-worker.' \
   'The service was NOT enabled or started.' \
-  'Create config, pin a local vision model, pair the device, then enable the service.' \
+  'Create config, pin a local vision model, pair the device with the one-time code, verify status, then enable the service.' \
+  'After revoking a device in the web app, use fichario-worker-forget --after-web-revoke to remove only its local credential and metadata.' \
   'Then run: systemctl --user enable --now fichario-ocr-worker.service'

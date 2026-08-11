@@ -7,7 +7,6 @@ import type { PreparedImage } from '$lib/import/image-types';
 import { DuplicateImageError, uploadPreparedImage, type UploadedPage } from '$lib/import/upload';
 import type { Database, ProcessingStatus } from '$lib/types/database';
 import { deleteDocument } from './documents';
-import { recordOcrConsent } from './ocr-consent';
 import { OcrProcessingError, processPageOcr, type OcrRunResult } from './ocr';
 import { getSupabaseClient } from './supabase';
 
@@ -72,7 +71,6 @@ export class CoveragePhotoImportError extends Error {
 }
 
 export interface CoveragePhotoImportDependencies {
-	recordConsent(): Promise<void>;
 	prepare(file: File, signal?: AbortSignal): Promise<PreparedImage>;
 	upload(prepared: PreparedImage, signal?: AbortSignal): Promise<UploadedPage>;
 	process(pageId: string, signal?: AbortSignal): Promise<OcrRunResult>;
@@ -149,7 +147,6 @@ class SupabaseCoveragePhotoSourceGateway {
 function defaultDependencies(): CoveragePhotoImportDependencies {
 	const sourceGateway = new SupabaseCoveragePhotoSourceGateway(getSupabaseClient());
 	return {
-		recordConsent: () => recordOcrConsent(),
 		prepare: (file, signal) => prepareImage(file, 'high-definition', { signal }),
 		upload: (prepared, signal) =>
 			uploadPreparedImage({
@@ -205,9 +202,6 @@ export async function extractTopicsFromPhotoWithDependencies(
 	let cleanupWarning = false;
 
 	try {
-		await dependencies.recordConsent();
-		if (options.signal?.aborted) throw abortError();
-
 		options.onStage?.('preparing');
 		const prepared = await dependencies.prepare(file, options.signal);
 		if (options.signal?.aborted) throw abortError();

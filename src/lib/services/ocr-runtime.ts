@@ -21,7 +21,7 @@ export type OcrBatchRunResult = {
 	unexpectedResultPageIds: readonly string[];
 };
 
-type OcrFunctionBody = { pageId: string } | { pageIds: readonly string[]; batchId?: string };
+type OcrFunctionBody = { pageIds: readonly string[]; batchId?: string };
 
 export type OcrFunctionClient = {
 	functions: {
@@ -61,7 +61,7 @@ const CLAIM_REJECTION_ERRORS = Object.freeze({
 	consent_required: Object.freeze({
 		status: 403,
 		code: 'ocr_consent_required',
-		message: 'É necessário confirmar o consentimento de leitura automática.'
+		message: 'É necessário confirmar a ativação da leitura automática.'
 	}),
 	not_authorized: Object.freeze({
 		status: 403,
@@ -138,41 +138,6 @@ async function mappedError(error: { context?: unknown; message?: string }) {
 
 function invalidResponse(): never {
 	throw new OcrProcessingError('ocr_response_invalid', true);
-}
-
-function parseLegacyResult(data: unknown): OcrRunResult | null {
-	if (data === null || typeof data !== 'object' || Array.isArray(data)) return null;
-	const value = data as Record<string, unknown>;
-	if (value.state === 'complete' && hasExactKeys(value, ['state', 'needsReview', 'warningCount'])) {
-		if (
-			typeof value.needsReview !== 'boolean' ||
-			!Number.isInteger(value.warningCount) ||
-			(value.warningCount as number) < 0 ||
-			(value.warningCount as number) > 100
-		) {
-			invalidResponse();
-		}
-		return Object.freeze({
-			state: 'complete',
-			needsReview: value.needsReview,
-			warningCount: value.warningCount as number
-		});
-	}
-	if (value.state === 'already_complete') {
-		if (!hasExactKeys(value, ['state', 'needsReview']) || typeof value.needsReview !== 'boolean') {
-			invalidResponse();
-		}
-		return Object.freeze({ state: 'already_complete', needsReview: value.needsReview });
-	}
-	if (
-		value.state === 'busy' ||
-		value.state === 'retry_later' ||
-		value.state === 'quota_exhausted'
-	) {
-		if (!hasExactKeys(value, ['state'])) invalidResponse();
-		return Object.freeze({ state: value.state });
-	}
-	return null;
 }
 
 function parseIdArray(value: unknown): readonly string[] {
@@ -289,17 +254,7 @@ export async function processPageOcr(
 	options: { signal?: AbortSignal } = {}
 ): Promise<OcrRunResult> {
 	if (!UUID.test(pageId)) throw new TypeError('Invalid page identifier');
-	if (options.signal?.aborted) throw abortError();
-	const gateway = client ?? defaultClient();
-	const { data, error } = await gateway.functions.invoke('process-ocr', {
-		body: { pageId },
-		signal: options.signal
-	});
-	if (options.signal?.aborted) throw abortError();
-	if (error) throw await mappedError(error);
-	const legacy = parseLegacyResult(data);
-	if (legacy) return legacy;
-	const batch = parseBatchResult(data, [pageId]);
+	const batch = await processOcrBatch([pageId], client, options);
 	if (batch.completedPageIds.includes(pageId)) {
 		return Object.freeze({
 			state: 'already_complete',

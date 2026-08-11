@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
 	discardCorrectionDraft,
 	listCorrectionDrafts,
-	purgeLegacyCorrectionDrafts,
 	readCorrectionDraft,
 	writeCorrectionDraft
 } from '../../../src/lib/review/draft-index';
@@ -63,7 +62,7 @@ describe('correction draft index', () => {
 				updatedAt: '2026-08-02T03:00:00.000Z'
 			})
 		);
-		storage.setItem(`fichario:correction-draft:v2:${userId}:bad`, '{');
+		storage.setItem(`fichario:correction-draft:v1:${userId}:bad`, '{');
 
 		expect(listCorrectionDrafts(userId, storage).map((draft) => draft.pageId)).toEqual([
 			second,
@@ -72,26 +71,6 @@ describe('correction draft index', () => {
 		expect(listCorrectionDrafts(userId, storage).map((draft) => draft.text)).not.toContain(
 			'Segredo de outra conta'
 		);
-	});
-
-	it('purges legacy unscoped records without touching current scoped drafts', () => {
-		const storage = new MemoryStorage();
-		storage.setItem(`fichario:correction-draft:v1:${first}`, 'legacy secret');
-		storage.setItem(
-			correctionDraftKey(userId, first),
-			serializeCorrectionDraft(userId, {
-				pageId: first,
-				text: 'Atual',
-				updatedAt: '2026-08-02T01:00:00.000Z'
-			})
-		);
-		storage.setItem('unrelated', 'value');
-
-		purgeLegacyCorrectionDrafts(storage);
-
-		expect(storage.getItem(`fichario:correction-draft:v1:${first}`)).toBeNull();
-		expect(storage.getItem(correctionDraftKey(userId, first))).not.toBeNull();
-		expect(storage.getItem('unrelated')).toBe('value');
 	});
 
 	it('discards only the requested user page draft', () => {
@@ -169,11 +148,6 @@ describe('correction draft index', () => {
 			throw new DOMException('storage removal denied', 'SecurityError');
 		};
 		expect(() => discardCorrectionDraft(userId, first, removalFailure)).toThrow(
-			'Não foi possível acessar os rascunhos locais.'
-		);
-		expect(() => purgeLegacyCorrectionDrafts(removalFailure)).not.toThrow();
-		removalFailure.setItem(`fichario:correction-draft:v1:${first}`, 'legacy');
-		expect(() => purgeLegacyCorrectionDrafts(removalFailure)).toThrow(
 			'Não foi possível acessar os rascunhos locais.'
 		);
 	});

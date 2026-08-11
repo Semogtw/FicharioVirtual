@@ -6,25 +6,10 @@ import {
 	type CorrectionDraft
 } from './drafts';
 
-const LEGACY_PREFIX = 'fichario:correction-draft:v1:';
-
 export class CorrectionDraftStorageError extends Error {
 	constructor() {
 		super('Não foi possível acessar os rascunhos locais.');
 		this.name = 'CorrectionDraftStorageError';
-	}
-}
-
-export function purgeLegacyCorrectionDrafts(storage: Storage = localStorage) {
-	try {
-		const legacyKeys: string[] = [];
-		for (let index = 0; index < storage.length; index += 1) {
-			const key = storage.key(index);
-			if (key?.startsWith(LEGACY_PREFIX)) legacyKeys.push(key);
-		}
-		for (const key of legacyKeys) storage.removeItem(key);
-	} catch {
-		throw new CorrectionDraftStorageError();
 	}
 }
 
