@@ -9,11 +9,11 @@ A busca global do Fichário Virtual precisa recuperar conteúdo em dois cenário
 
 Por isso a busca global combina **recuperação textual/fuzzy** e **recuperação semântica por embeddings**. O Gemini não é usado para decidir sozinho quais páginas aparecem: ele gera embeddings; PostgreSQL/pgvector faz a recuperação vetorial; os sinais lexical e semântico são então combinados de forma determinística.
 
-A camada semântica é opcional e degradável. Sem ativação semântica, configuração, cota ou provedor, `search_pages` continua pesquisando o corpus inteiro.
+A camada semântica é opcional e degradável. Sem configuração, cota ou provedor disponível, `search_pages` continua pesquisando o corpus inteiro.
 
 ## Recuperação textual no PostgreSQL
 
-A função pública `search_pages` mantém o contrato existente e combina sinais diferentes:
+A função pública `search_pages` combina sinais diferentes:
 
 - igualdade e substring sobre texto normalizado;
 - Full Text Search com `tsvector`;
@@ -54,13 +54,9 @@ A Edge Function consulta em paralelo:
 - `search_pages`, para o sinal lexical/fuzzy;
 - `search_pages_semantic`, para similaridade vetorial.
 
-Os resultados são deduplicados por página. O score final normaliza os sinais separadamente e privilegia correspondências lexicais fortes, sem impedir resultados puramente semânticos:
+Os resultados são deduplicados por página. O score final normaliza os sinais separadamente e privilegia correspondências lexicais fortes, sem impedir resultados puramente semânticos.
 
-- sinal lexical: `clamp(rank / 0.9)`;
-- sinal semântico: `clamp((similaridade - 0.45) / 0.35)`;
-- score: máximo entre o lexical, o semântico ponderado e a concordância dos dois sinais.
-
-Resultados semânticos isolados precisam de similaridade mínima de `0.48` para entrar no conjunto. Esses valores são heurísticos e devem ser calibrados com consultas reais; não representam probabilidade estatística.
+Resultados semânticos isolados precisam atingir o limiar configurado para entrar no conjunto. Esses valores são heurísticos e devem ser calibrados com consultas reais; não representam probabilidade estatística.
 
 A interface identifica a origem do match:
 
@@ -72,28 +68,29 @@ A busca global **não usa o verificador generativo da cobertura**. Esse verifica
 
 ## Paginação e custo
 
-A busca digitada usa debounce mais conservador (`650 ms`) para não gerar um embedding a cada tecla. Consultas com menos de três caracteres permanecem textuais.
+A busca digitada usa debounce mais conservador para não gerar um embedding a cada tecla. Consultas muito curtas permanecem textuais.
 
-A janela híbrida inicial é limitada aos 100 melhores candidatos combinados. Resultados mais profundos continuam disponíveis pela paginação textual. Isso mantém custo e latência previsíveis sem transformar a camada semântica em requisito para navegar por resultados antigos.
+A janela híbrida inicial é limitada aos melhores candidatos combinados. Resultados mais profundos continuam disponíveis pela paginação textual. Isso mantém custo e latência previsíveis sem transformar a camada semântica em requisito para navegar por resultados antigos.
 
-A indexação oportunista padrão trabalha com até quatro páginas por pesquisa e no máximo 48 chunks por execução. O índice pode, portanto, ficar temporariamente incompleto; o status é mostrado na tela, enquanto a busca textual continua cobrindo todas as páginas pesquisáveis.
+A indexação oportunista trabalha em lotes pequenos e o índice pode, portanto, ficar temporariamente incompleto; o status é mostrado na tela, enquanto a busca textual continua cobrindo todas as páginas pesquisáveis.
 
-## Ativação e privacidade
+## Privacidade e envio ao provedor
 
-A busca global mantém um marcador interno próprio, criado historicamente pela migration `202608101501_global_semantic_search_consent.sql`. No fluxo privado atual, esse marcador é uma compatibilidade técnica: a interface não mostra checkbox nem pede autorização repetida.
+O sistema privado atual não mantém telas, flags ou RPCs de consentimento pré-lançamento para busca semântica. A chamada segue diretamente o fluxo normal da funcionalidade e degrada para busca textual quando o provedor não está disponível.
 
-A primeira tentativa continua segura: se a Edge Function informar `consent_required`, o cliente registra automaticamente o marcador dedicado e repete a busca uma vez. Se esse registro falhar, a resposta lexical já obtida é preservada e nenhum bloqueio é apresentado ao usuário. Com a camada semântica ativa:
+Quando a camada semântica é usada:
 
 - a consulta pode ser enviada ao Gemini para gerar o embedding de pesquisa;
 - pequenos chunks de páginas ainda não indexadas podem ser enviados para gerar embeddings de documento;
 - a chave `GEMINI_API_KEY` permanece exclusivamente na Edge Function;
 - telemetria registra operação, modelo, volume, latência e status, mas não persiste consulta, texto de página, prompt completo ou vetor.
 
+As migrations históricas que introduziram consentimentos permanecem no repositório para preservar a sequência de schema; a migration de limpeza pré-lançamento remove essas superfícies do schema resultante.
+
 ## Fallback
 
 A pesquisa continua textual quando ocorrer qualquer uma destas condições:
 
-- ativação semântica não pôde ser registrada;
 - consulta curta demais;
 - Edge Function ainda não implantada no ambiente;
 - chave/modelo semântico ausente;
@@ -101,7 +98,7 @@ A pesquisa continua textual quando ocorrer qualquer uma destas condições:
 - indisponibilidade do provedor;
 - paginação além da janela híbrida inicial.
 
-O navegador também faz fallback para `searchPages()` se a chamada à Edge Function falhar, preservando o comportamento anterior.
+O navegador também faz fallback para `searchPages()` se a chamada à Edge Function falhar.
 
 ## Trechos de resultado
 
@@ -130,11 +127,11 @@ Ao abrir um resultado com `?highlight=...`, a correspondência literal aparece q
 
 Isso funciona para imagens, PDFs e referências externas porque usa o texto efetivo da página (`corrected_text`, `native_text` ou `ocr_raw_text`). Para resultados puramente semânticos, a página correta ainda é aberta mesmo que não haja palavra equivalente para destacar.
 
-### Limite geométrico atual
+### Geometria OCR
 
-A marcação sobre a mídia é um overlay textual associado à página, não um retângulo posicionado sobre os pixels da palavra. O contrato OCR atual persiste somente `text` e `warnings`; não existem bounding boxes por palavra. Inventar coordenadas a partir da ordem do texto produziria marcações visualmente erradas.
+O contrato OCR de lançamento inclui `wordGeometry` opcional por palavra em coordenadas normalizadas, além de `text`, `warnings` e `contentClass`. O backend filtra caixas inválidas ou palavras que não aparecem na transcrição antes de persistir os dados.
 
-O Gemini oferece suporte a bounding boxes normalizadas para tarefas visuais, portanto uma evolução futura pode adicionar regiões de texto opcionais ao contrato OCR. Essa mudança deve ser feita de ponta a ponta e precisa controlar aumento de tokens e armazenamento.
+Quando existe geometria confiável, a interface pode posicionar a marcação sobre a mídia original. Quando uma palavra não possui caixa válida, o sistema preserva a marcação textual e não inventa coordenadas.
 
 ## Cobertura de testes
 
@@ -146,7 +143,8 @@ A implementação inclui ou deve manter testes para:
 - recorte centrado no termo aproximado;
 - contrato estrito do cliente `semantic-search`;
 - recuperação `semantic` e `hybrid` sem exigir overlap literal;
-- ativação dedicada da busca sem confirmação recorrente;
+- ausência das superfícies de consentimento pré-lançamento;
 - reuso de `page_semantic_chunks` e `search_pages_semantic`;
 - fallback lexical para cota, provider e função indisponível;
+- geometria OCR validada e fallback textual sem coordenadas inventadas;
 - configuração JWT e inclusão da Edge Function nos gates de deploy/Deno.
