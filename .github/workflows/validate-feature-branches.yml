@@ -121,10 +121,10 @@ jobs:
         continue-on-error: true
         run: pnpm test:db:local
 
-      - name: Install Chromium
+      - name: Install Chromium and WebKit
         id: chromium
         continue-on-error: true
-        run: pnpm exec playwright install --with-deps chromium
+        run: pnpm exec playwright install --with-deps chromium webkit
 
       - name: Run browser tests
         id: browser
