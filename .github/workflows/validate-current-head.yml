@@ -96,7 +96,7 @@ jobs:
           pnpm verify 2>&1 | tee /tmp/frontend-verification.log
 
       - name: Upload frontend failure log
-        if: steps.frontend.outcome == 'failure'
+        if: ${{ always() && steps.frontend.outcome == 'failure' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: frontend-failure-${{ github.sha }}
@@ -106,7 +106,7 @@ jobs:
 
       - name: Prepare Prettier repair patch
         id: formatting
-        if: steps.frontend.outcome == 'failure'
+        if: ${{ always() && steps.frontend.outcome == 'failure' }}
         continue-on-error: true
         run: |
           pnpm exec prettier --write .
@@ -114,7 +114,7 @@ jobs:
           test -s /tmp/prettier-repair.patch
 
       - name: Upload Prettier repair patch
-        if: steps.formatting.outcome == 'success'
+        if: ${{ always() && steps.formatting.outcome == 'success' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: prettier-repair-${{ github.sha }}
@@ -129,13 +129,13 @@ jobs:
 
       - name: Install Chromium
         id: chromium
-        if: steps.frontend.outcome == 'success'
+        if: ${{ always() && steps.frontend.outcome == 'success' }}
         continue-on-error: true
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Run browser tests
         id: browser
-        if: steps.chromium.outcome == 'success'
+        if: ${{ always() && steps.chromium.outcome == 'success' }}
         continue-on-error: true
         run: pnpm test:e2e
 
@@ -160,7 +160,7 @@ jobs:
 
       - name: Check Edge Functions
         id: edge
-        if: steps.deno.outcome == 'success'
+        if: ${{ always() && steps.deno.outcome == 'success' }}
         continue-on-error: true
         run: pnpm test:functions:check
 
@@ -173,14 +173,14 @@ jobs:
 
       - name: Run local database gates
         id: database
-        if: steps.supabase.outcome == 'success'
+        if: ${{ always() && steps.supabase.outcome == 'success' }}
         continue-on-error: true
         run: |
           set -o pipefail
           pnpm test:db:local 2>&1 | tee /tmp/database-verification.log
 
       - name: Upload database failure log
-        if: steps.database.outcome == 'failure'
+        if: ${{ always() && steps.database.outcome == 'failure' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: database-failure-${{ github.sha }}
