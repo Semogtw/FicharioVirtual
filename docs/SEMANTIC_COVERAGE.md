@@ -1,6 +1,6 @@
 # Busca e cobertura semântica
 
-Este documento é o contrato operacional da camada semântica do Fichário Virtual antes do primeiro deploy. A semântica melhora recuperação e cobertura, mas **não é requisito para o produto funcionar**: busca textual/fuzzy permanece como fallback completo quando consentimento, cota, índice ou Gemini estiverem indisponíveis.
+Este documento é o contrato operacional da camada semântica do Fichário Virtual antes do primeiro deploy. A semântica melhora recuperação e cobertura, mas **não é requisito para o produto funcionar**: busca textual/fuzzy permanece como fallback completo quando a ativação semântica, cota, índice ou Gemini estiverem indisponíveis.
 
 ## Contrato de primeira produção
 
@@ -14,7 +14,7 @@ Como ainda não houve deploy, existe um único contrato canônico, sem compatibi
 - similaridade mínima da busca global: `0.46`;
 - similaridade mínima da cobertura: `0.50`;
 - fusão lexical + vetorial: Reciprocal Rank Fusion (RRF), sem somar diretamente rank FTS e cosine;
-- consentimento semântico: versão `1`.
+- marcador interno de compatibilidade da ativação semântica: versão `1`.
 
 Os valores compartilhados ficam em `supabase/functions/_shared/semantic-config.ts`. Trocar modelo ou dimensionalidade exige migração e reindexação deliberadas; não existe override de `SEMANTIC_EMBEDDING_MODEL` em runtime.
 
@@ -191,13 +191,15 @@ Migrações relevantes:
 
 Tabelas operacionais privadas não concedem leitura direta a `authenticated`.
 
-## Consentimento e fallback
+## Ativação privada e fallback
 
-OCR e semântica têm consentimentos separados. A opção semântica começa desativada na cobertura porque embeddings de documentos podem enviar trechos já armazenados ao Gemini.
+No uso privado do Fichário, OCR e semântica são ativados automaticamente somente quando a operação precisa deles. A interface não exige confirmação recorrente por arquivo, pesquisa ou análise. Os nomes históricos de RPCs, colunas e migrations que contêm `consent` permanecem como marcadores internos de compatibilidade do backend; eles não representam um checkbox manual no fluxo atual.
+
+A cobertura tenta registrar esse marcador interno antes da primeira execução semântica. Se a ativação automática não puder ser concluída, nenhum trecho precisa ser enviado ao Gemini para aquela tentativa e o modo textual/fuzzy continua disponível. OCR só é acionado para imagens ou páginas visuais que realmente precisem de leitura automática.
 
 Fallbacks esperados:
 
-- sem consentimento → lexical;
+- ativação semântica indisponível → lexical;
 - sem chave/configuração → lexical;
 - quota/rate limit → lexical;
 - Gemini indisponível → lexical;
