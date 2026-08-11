@@ -6,7 +6,6 @@
 
 <nav class="drive-tabs" aria-label="Ferramentas do Google Drive">
 	<a href="/drive/">Recuperação</a>
-	<a href="/drive/migrate/">Migrar legados</a>
 	<a href="/import/drive/">Importar do Drive</a>
 </nav>
 
