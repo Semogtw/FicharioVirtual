@@ -5,7 +5,6 @@ import { getSupabaseClient } from './supabase';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MODEL = /^[A-Za-z0-9._-]{3,128}$/;
 const REASON = /^[a-z][a-z0-9_]{1,63}$/;
-const CONSENT_VERSION = 1;
 
 const resultSchema = z
 	.object({
@@ -84,13 +83,6 @@ type SemanticSearchFunctionClient = {
 	};
 };
 
-type SemanticSearchConsentClient = {
-	rpc(
-		name: 'record_search_semantic_consent',
-		args: { consent_version: number }
-	): PromiseLike<{ data: unknown; error: unknown }>;
-};
-
 export class SemanticSearchServiceError extends Error {
 	constructor(message = 'A busca semântica não está disponível agora.') {
 		super(message);
@@ -100,10 +92,6 @@ export class SemanticSearchServiceError extends Error {
 
 function defaultFunctionClient(): SemanticSearchFunctionClient {
 	return getSupabaseClient() as unknown as SemanticSearchFunctionClient;
-}
-
-function defaultConsentClient(): SemanticSearchConsentClient {
-	return getSupabaseClient() as unknown as SemanticSearchConsentClient;
 }
 
 function lexicalResult(result: SearchResult): SemanticSearchResult {
@@ -164,22 +152,6 @@ async function lexicalFallback(
 		hasMore: results.length === (options.limit ?? 30),
 		analysis: Object.freeze({ mode: 'lexical', reason, embeddingModel: null, index: null })
 	});
-}
-
-export async function recordSemanticSearchConsent(
-	client: SemanticSearchConsentClient = defaultConsentClient()
-): Promise<void> {
-	try {
-		const { data, error } = await client.rpc('record_search_semantic_consent', {
-			consent_version: CONSENT_VERSION
-		});
-		if (error || data !== true) throw new SemanticSearchServiceError();
-	} catch (error) {
-		if (error instanceof SemanticSearchServiceError) throw error;
-		throw new SemanticSearchServiceError(
-			'Não foi possível registrar o consentimento da busca semântica.'
-		);
-	}
 }
 
 export async function searchPagesHybrid(
