@@ -133,7 +133,9 @@ try {
 	const reloadStarted = performance.now();
 	await page.reload({ waitUntil: 'domcontentloaded', timeout: REQUEST_TIMEOUT_MS });
 	const reloadVisibleMs = await assertLoginVisible('login-after-sw-reload', reloadStarted);
-	const serviceWorkerControlsPage = await page.evaluate(() => Boolean(navigator.serviceWorker.controller));
+	const serviceWorkerControlsPage = await page.evaluate(() =>
+		Boolean(navigator.serviceWorker.controller)
+	);
 	if (!serviceWorkerControlsPage) {
 		throw new Error('Reloaded login page is not controlled by the active service worker');
 	}
