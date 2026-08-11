@@ -11,6 +11,11 @@ on:
         description: Full 40-character source SHA expected in the artifact manifest
         required: true
         type: string
+  workflow_run:
+    workflows:
+      - Build deployable Fichário staging artifact
+    types:
+      - completed
 
 permissions:
   actions: read
@@ -22,12 +27,22 @@ concurrency:
 
 jobs:
   deploy:
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event_name == 'workflow_run' &&
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.head_branch == 'main'
+        )
+      }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: staging-deploy
     env:
       TARGET_ENVIRONMENT: staging
-      EXPECTED_SOURCE_COMMIT: ${{ inputs.expected_source_commit }}
+      EXPECTED_SOURCE_COMMIT: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.expected_source_commit }}
+      ARTIFACT_RUN_ID: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.artifact_run_id }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       WRANGLER_SEND_METRICS: 'false'
@@ -47,7 +62,7 @@ jobs:
             echo 'expected_source_commit must be a full lowercase Git SHA' >&2
             exit 1
           fi
-          if [[ ! "${{ inputs.artifact_run_id }}" =~ ^[1-9][0-9]*$ ]]; then
+          if [[ ! "$ARTIFACT_RUN_ID" =~ ^[1-9][0-9]*$ ]]; then
             echo 'artifact_run_id must be a positive numeric workflow run ID' >&2
             exit 1
           fi
@@ -59,11 +74,11 @@ jobs:
       - name: Download the validated deployment artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: fichario-static-${{ inputs.expected_source_commit }}-staging
+          name: fichario-static-${{ env.EXPECTED_SOURCE_COMMIT }}-staging
           path: deployment-artifact
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
-          run-id: ${{ inputs.artifact_run_id }}
+          run-id: ${{ env.ARTIFACT_RUN_ID }}
           digest-mismatch: error
 
       - name: Verify artifact identity and checksums
@@ -174,5 +189,5 @@ jobs:
               echo "- Alias reported by Wrangler: \`$DEPLOYMENT_ALIAS\`"
             fi
             echo
-            echo 'Artifact checksum verification and the HTTP deployment contract both passed for the exact staging deployment URL.'
+            echo 'Artifact checksum verification and the HTTP/CSP deployment contract both passed for the exact staging deployment URL.'
           } >> "$GITHUB_STEP_SUMMARY"
