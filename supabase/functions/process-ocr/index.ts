@@ -27,7 +27,6 @@ const MAX_REQUEST_BODY_BYTES = 16 * 1024;
 type ParsedRequest = {
 	pageIds: readonly string[];
 	batchId: string | null;
-	legacy: boolean;
 };
 
 type PageRow = {
@@ -72,11 +71,6 @@ function hasExactKeys(record: Record<string, unknown>, expected: readonly string
 function parseRequestBody(body: unknown): ParsedRequest | null {
 	if (body === null || typeof body !== 'object' || Array.isArray(body)) return null;
 	const record = body as Record<string, unknown>;
-	if (hasExactKeys(record, ['pageId'])) {
-		return typeof record.pageId === 'string' && UUID.test(record.pageId)
-			? Object.freeze({ pageIds: Object.freeze([record.pageId]), batchId: null, legacy: true })
-			: null;
-	}
 	if (!hasExactKeys(record, ['pageIds']) && !hasExactKeys(record, ['batchId', 'pageIds'])) {
 		return null;
 	}
@@ -93,8 +87,7 @@ function parseRequestBody(body: unknown): ParsedRequest | null {
 	}
 	return Object.freeze({
 		pageIds: Object.freeze([...(record.pageIds as string[])]),
-		batchId: typeof record.batchId === 'string' ? record.batchId : null,
-		legacy: false
+		batchId: typeof record.batchId === 'string' ? record.batchId : null
 	});
 }
 
@@ -334,7 +327,6 @@ Deno.serve(async (request) => {
 	const pendingPageIds: string[] = [];
 	const failedPageIds: string[] = [];
 	const splitRequiredPageIds: string[] = [];
-	const warningCounts = new Map<string, number>();
 	const claimedPages: ClaimedPage[] = [];
 	const claimedAt = new Date().toISOString();
 
@@ -397,16 +389,10 @@ Deno.serve(async (request) => {
 			claimResult.state === 'quota_exhausted'
 		) {
 			pendingPageIds.push(page.id);
-			if (parsedRequest.legacy) {
-				return respond(claimStateHttpStatus(claimResult.state), { state: claimResult.state });
-			}
 			continue;
 		}
 		if (claimResult.state === 'not_retryable') {
 			failedPageIds.push(page.id);
-			if (parsedRequest.legacy) {
-				return respond(claimStateHttpStatus(claimResult.state), { state: claimResult.state });
-			}
 			continue;
 		}
 
@@ -660,7 +646,6 @@ Deno.serve(async (request) => {
 				pendingPageIds.push(result.pageId);
 				continue;
 			}
-			warningCounts.set(result.pageId, result.warnings.length);
 			completedPageIds.push(result.pageId);
 			if (result.needsReview) reviewPageIds.push(result.pageId);
 			await cleanupTemporaryImage(result.pageId, claimed.page.temporary_image_path);
@@ -695,14 +680,6 @@ Deno.serve(async (request) => {
 			splitRequiredPageIds,
 			unexpectedResultPageIds: outcome.unexpectedPageIds
 		});
-		if (parsedRequest.legacy && completedPageIds.includes(parsedRequest.pageIds[0]!)) {
-			const pageId = parsedRequest.pageIds[0]!;
-			return respond(200, {
-				state: 'complete',
-				needsReview: reviewPageIds.length > 0,
-				warningCount: warningCounts.get(pageId) ?? 0
-			});
-		}
 		await finishBatch(
 			parsedRequest.batchId,
 			body.state === 'complete' ? 'ready' : 'retryable',
@@ -734,7 +711,6 @@ Deno.serve(async (request) => {
 				pendingPageIds.push(page.pageId);
 			}
 			await finishBatch(parsedRequest.batchId, 'retryable', code, message, nextRetryAt);
-			if (parsedRequest.legacy) return respond(202, { state: 'retry_later' });
 			return respond(
 				202,
 				aggregateBody({
@@ -817,10 +793,6 @@ Deno.serve(async (request) => {
 			terminalMessage,
 			batchRetryAt
 		);
-		if (parsedRequest.legacy) {
-			const firstDecision = decisions[0]!.decision;
-			return respond(firstDecision.response.status, firstDecision.response.body);
-		}
 		const body = aggregateBody({
 			completedPageIds,
 			reviewPageIds,
