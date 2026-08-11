@@ -59,7 +59,7 @@ O E2E multitab trava que uma restauração concorrente produz uma única criaç�
 2. seleciona um conjunto limitado de candidatos elegíveis;
 3. reutiliza os RPCs existentes de claim, falha, quota e conclusão por meio de um dispatcher restrito a `service_role`;
 4. baixa somente os derivados privados necessários;
-5. chama o cliente Gemini compartilhado;
+5. respeita o rate limiter compartilhado e tenta o modelo fallback somente quando o primário recebe `429` do provedor;
 6. persiste resultado, geometria e telemetria;
 7. limpa derivados temporários concluídos;
 8. reconcilia o estado do lote;
@@ -77,7 +77,7 @@ Esses limites mantêm cada execução curta em vez de transformar um PDF grande 
 
 `ocr-queue-kick` é o endpoint autenticado usado pelo aplicativo para acordar o worker. Ele valida a sessão e a allowlist antes de fazer a chamada server-to-server.
 
-Além disso, a migration `202608101205_background_ocr_cron.sql` agenda um wake-up a cada cinco minutos com Supabase Cron + `pg_net`. Trabalho ativo não espera o cron: o worker encadeia outra execução curta quando ainda existem candidatos imediatamente elegíveis. O cron existe para recuperar trabalho diferido, rate limits e filas que ficaram sem um navegador aberto.
+Além disso, a migration `202608111705_background_ocr_cron.sql` agenda um wake-up a cada cinco minutos com Supabase Cron + `pg_net`. Trabalho ativo não espera o cron: o worker encadeia outra execução curta quando ainda existem candidatos imediatamente elegíveis. O cron existe para recuperar trabalho diferido, rate limits e filas que ficaram sem um navegador aberto.
 
 O cron lê as credenciais do Vault em runtime e é deliberadamente no-op quando elas ainda não foram provisionadas.
 
@@ -87,7 +87,7 @@ O ambiente hospedado usa três nomes de configuração:
 - Vault `project_url` — URL HTTPS do projeto Supabase;
 - Vault `ocr_background_worker_key` — cópia do mesmo segredo interno.
 
-Isso **não exige uma key nova criada manualmente pelo usuário**. O deploy de staging é responsável por garantir `project_url`, gerar `ocr_background_worker_key` no próprio Vault caso ainda não exista, mascarar o valor no runner e sincronizá-lo para `OCR_BACKGROUND_WORKER_KEY` com `supabase secrets set` antes de publicar as Edge Functions. O valor não é salvo no GitHub e não aparece na documentação ou nos logs.
+Isso **não exige uma key nova criada manualmente pelo usuário**. O deploy deve garantir `project_url`, gerar `ocr_background_worker_key` caso ainda não exista, mascarar o valor no runner e sincronizá-lo para `OCR_BACKGROUND_WORKER_KEY` antes de publicar as Edge Functions. O valor não deve ser salvo no repositório ou aparecer em logs.
 
 A service-role key continua sendo usada somente dentro do worker para o cliente administrativo do Supabase. Ela não é reutilizada como credencial HTTP do worker, não entra no cron e não deve ser registrada em logs.
 
@@ -126,4 +126,4 @@ pnpm test:db:local
 pnpm test:e2e
 ```
 
-A branch também possui `Validate feature branches`, sem permissão de escrita, para executar esses gates antes da integração na `main`.
+Antes da integração no `main`, o SHA exato da branch combinada é validado pelo checkout privado no `Offline-Toolchains`; após o merge, o `Validate current head` confirma novamente o SHA público final.
