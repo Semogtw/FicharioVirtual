@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest';
-import { processPageOcr, type OcrFunctionClient } from '../../../src/lib/services/ocr';
+import { describe, expect, it, vi } from 'vitest';
+import {
+	processPageOcr,
+	type OcrFunctionClient
+} from '../../../src/lib/services/ocr';
 
 const pageId = '11111111-1111-4111-8111-111111111111';
 
@@ -15,6 +18,19 @@ function client(
 	};
 }
 
+function aggregate(overrides: Partial<Record<string, unknown>> = {}) {
+	return {
+		state: 'complete',
+		completedPageIds: [pageId],
+		reviewPageIds: [],
+		pendingPageIds: [],
+		failedPageIds: [],
+		splitRequiredPageIds: [],
+		unexpectedResultPageIds: [],
+		...overrides
+	};
+}
+
 function errorResponse(status: number, body: Record<string, unknown>) {
 	return new Response(JSON.stringify(body), {
 		status,
@@ -23,99 +39,66 @@ function errorResponse(status: number, body: Record<string, unknown>) {
 }
 
 describe('processPageOcr', () => {
-	it('returns the strict completion result from the Edge Function', async () => {
+	it('derives the page completion result from the aggregate launch contract', async () => {
+		await expect(
+			processPageOcr(pageId, client({ data: aggregate({ reviewPageIds: [pageId] }), error: null }))
+		).resolves.toEqual({ state: 'complete', needsReview: true });
+	});
+
+	it('derives a deferred page result from the aggregate launch contract', async () => {
 		await expect(
 			processPageOcr(
 				pageId,
 				client({
-					data: { state: 'complete', needsReview: true, warningCount: 2 },
+					data: aggregate({
+						state: 'partial',
+						completedPageIds: [],
+						pendingPageIds: [pageId]
+					}),
 					error: null
 				})
 			)
-		).resolves.toEqual({
-			state: 'complete',
-			needsReview: true,
-			warningCount: 2
-		});
-	});
-
-	it('preserves the review state of an already-complete page', async () => {
-		await expect(
-			processPageOcr(
-				pageId,
-				client({ data: { state: 'already_complete', needsReview: true }, error: null })
-			)
-		).resolves.toEqual({ state: 'already_complete', needsReview: true });
-	});
-
-	it('converts an aggregate idempotent completion for the requested page into legacy already_complete', async () => {
-		await expect(
-			processPageOcr(
-				pageId,
-				client({
-					data: {
-						state: 'complete',
-						completedPageIds: [pageId],
-						reviewPageIds: [pageId],
-						pendingPageIds: [],
-						failedPageIds: [],
-						splitRequiredPageIds: [],
-						unexpectedResultPageIds: []
-					},
-					error: null
-				})
-			)
-		).resolves.toEqual({ state: 'already_complete', needsReview: true });
-	});
-
-	it('rejects an already-complete response without its review state', async () => {
-		await expect(
-			processPageOcr(pageId, client({ data: { state: 'already_complete' }, error: null }))
-		).rejects.toEqual(expect.objectContaining({ code: 'ocr_response_invalid', retryable: true }));
-	});
-
-	it('returns deferred retry and quota states without treating them as failures', async () => {
-		await expect(
-			processPageOcr(pageId, client({ data: { state: 'retry_later' }, error: null }))
 		).resolves.toEqual({ state: 'retry_later' });
-		await expect(
-			processPageOcr(pageId, client({ data: { state: 'quota_exhausted' }, error: null }))
-		).resolves.toEqual({ state: 'quota_exhausted' });
 	});
 
-	it('rejects completion responses with undeclared fields', async () => {
+	it('treats an aggregate terminal page as non-retryable', async () => {
 		await expect(
 			processPageOcr(
 				pageId,
 				client({
-					data: {
-						state: 'complete',
-						needsReview: false,
-						warningCount: 0,
-						jobId: pageId
-					},
+					data: aggregate({
+						state: 'partial',
+						completedPageIds: [],
+						failedPageIds: [pageId]
+					}),
 					error: null
 				})
 			)
-		).rejects.toEqual(expect.objectContaining({ code: 'ocr_response_invalid', retryable: true }));
+		).rejects.toEqual(expect.objectContaining({ code: 'ocr_not_retryable', retryable: false }));
 	});
 
-	it('rejects deferred states with undeclared fields', async () => {
-		await expect(
-			processPageOcr(pageId, client({ data: { state: 'busy', jobId: pageId }, error: null }))
-		).rejects.toEqual(expect.objectContaining({ code: 'ocr_response_invalid', retryable: true }));
+	it.each([
+		{ state: 'complete', needsReview: true, warningCount: 2 },
+		{ state: 'already_complete', needsReview: true },
+		{ state: 'busy' },
+		{ state: 'retry_later' },
+		{ state: 'quota_exhausted' }
+	])('rejects pre-launch single-page response envelope %#', async (data) => {
+		await expect(processPageOcr(pageId, client({ data, error: null }))).rejects.toEqual(
+			expect.objectContaining({ code: 'ocr_response_invalid', retryable: true })
+		);
 	});
 
-	it('rejects warning counts beyond the provider response contract', async () => {
-		await expect(
-			processPageOcr(
-				pageId,
-				client({
-					data: { state: 'complete', needsReview: true, warningCount: 101 },
-					error: null
-				})
-			)
-		).rejects.toEqual(expect.objectContaining({ code: 'ocr_response_invalid', retryable: true }));
+	it('invokes the Edge Function with the launch pageIds body even for one page', async () => {
+		const invoke = vi.fn(async () => ({ data: aggregate(), error: null }));
+		const gateway: OcrFunctionClient = { functions: { invoke } };
+
+		await processPageOcr(pageId, gateway);
+
+		expect(invoke).toHaveBeenCalledWith('process-ocr', {
+			body: { pageIds: [pageId] },
+			signal: undefined
+		});
 	});
 
 	it('treats transport failures without an HTTP response as retryable', async () => {
@@ -125,7 +108,6 @@ describe('processPageOcr', () => {
 	});
 
 	it.each([
-		[403, 'consent_required', 'ocr_consent_required'],
 		[403, 'not_authorized', 'ocr_not_authorized'],
 		[404, 'not_found', 'ocr_page_not_found'],
 		[409, 'invalid_configuration', 'ocr_not_configured'],
@@ -139,6 +121,18 @@ describe('processPageOcr', () => {
 		).rejects.toEqual(expect.objectContaining({ code, retryable: false }));
 	});
 
+	it('does not recognize removed consent claim states', async () => {
+		await expect(
+			processPageOcr(
+				pageId,
+				client({
+					data: null,
+					error: { context: errorResponse(403, { state: 'consent_required' }) }
+				})
+			)
+		).rejects.toEqual(expect.objectContaining({ code: 'ocr_http_403', retryable: false }));
+	});
+
 	it('does not trust a claim state response with undeclared fields', async () => {
 		await expect(
 			processPageOcr(
@@ -147,7 +141,7 @@ describe('processPageOcr', () => {
 					data: null,
 					error: {
 						context: errorResponse(403, {
-							state: 'consent_required',
+							state: 'not_authorized',
 							retryable: true
 						})
 					}
