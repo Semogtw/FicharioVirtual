@@ -286,16 +286,13 @@ async function processOcr(item: ImportQueueItem, signal?: AbortSignal) {
 		if (signal?.aborted) throw abortError();
 		const result = await processPageOcr(item.result.pageId, undefined, { signal });
 		if (signal?.aborted) throw abortError();
-		if (result.state === 'complete' || result.state === 'already_complete') {
+		if (result.state === 'complete') {
 			item.status = result.needsReview ? 'needs_review' : 'complete';
 			void persistItem(item);
 			return;
 		}
 		item.status = 'waiting';
-		item.error =
-			result.state === 'quota_exhausted'
-				? 'A cota diária foi atingida; o arquivo permanece salvo para continuar depois.'
-				: 'A leitura ficou pendente e poderá ser retomada sem reenviar o arquivo.';
+		item.error = 'A leitura ficou pendente e poderá ser retomada sem reenviar o arquivo.';
 		void persistItem(item);
 	} catch (error) {
 		if (error instanceof DOMException && error.name === 'AbortError') throw error;
