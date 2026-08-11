@@ -3,6 +3,7 @@
 import {
 	assertAppShell,
 	assertHttpRedirect,
+	assertInlineScriptsAllowedByCsp,
 	assertManifest,
 	assertSecurityHeaders,
 	assertServiceWorker,
@@ -99,7 +100,9 @@ async function verifyShell(baseUrl, pathname, label) {
 	assertContentType(response, 'text/html', label);
 	assertSecurityHeaders(response.headers);
 	assertNoLongLivedCache(response, label);
-	assertAppShell(await response.text());
+	const html = await response.text();
+	assertAppShell(html);
+	assertInlineScriptsAllowedByCsp(response.headers, html);
 	console.log(`PASS ${label}`);
 }
 
