@@ -29,7 +29,11 @@ page.on('pageerror', (error) => {
 page.on('console', (message) => {
 	if (message.type() !== 'error') return;
 	const text = message.text();
-	if (/content security policy|refused to execute inline|refused to load|failed to load module script/i.test(text)) {
+	if (
+		/content security policy|refused to execute inline|refused to load|failed to load module script/i.test(
+			text
+		)
+	) {
 		policyErrors.push(text);
 	}
 });
@@ -38,7 +42,9 @@ page.on('requestfailed', (request) => {
 	if (!['document', 'script', 'stylesheet'].includes(type)) return;
 	const url = new URL(request.url());
 	if (url.origin !== baseUrl.origin) return;
-	failedCriticalRequests.push(`${type} ${url.pathname}: ${request.failure()?.errorText ?? 'failed'}`);
+	failedCriticalRequests.push(
+		`${type} ${url.pathname}: ${request.failure()?.errorText ?? 'failed'}`
+	);
 });
 
 try {
