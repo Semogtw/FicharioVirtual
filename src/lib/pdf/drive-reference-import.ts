@@ -10,7 +10,6 @@ import {
 	type DrivePdfReferenceDescriptorLease
 } from './drive-reference-descriptor-attempt';
 import {
-	isDrivePdfReferenceStillFinalizable,
 	recoverDrivePdfReferencePublication,
 	type DrivePdfReferenceRecoveryClient
 } from './drive-reference-publication-recovery';
@@ -68,7 +67,7 @@ export interface DrivePdfReferenceImportDependencies {
 		document: PDFDocumentProxy,
 		options?: DrivePdfRangeInspectionOptions
 	): Promise<DrivePdfRangeInspection>;
-	acquireDescriptorLease?(input: {
+	acquireDescriptorLease(input: {
 		documentId: string;
 		expectedPageCount: number;
 		client: ReferenceImportClient;
@@ -80,16 +79,10 @@ export interface DrivePdfReferenceImportDependencies {
 	): Promise<Blob>;
 	upload(path: string, blob: Blob): Promise<void>;
 	remove(paths: readonly string[]): Promise<void>;
-	finalize(input: {
-		documentId: string;
-		pages: readonly PdfImportPagePlan[];
-		promptVersion: number;
-	}): Promise<unknown>;
 	recoverPublication(input: {
 		documentId: string;
 		pages: readonly PdfImportPagePlan[];
 	}): Promise<PdfImportPublication | null>;
-	referencePending(documentId: string): Promise<boolean>;
 	processBatch(
 		pageIds: readonly string[],
 		options?: { signal?: AbortSignal }
@@ -183,34 +176,11 @@ function createDefaultDependencies(
 			if (paths.length === 0) return;
 			await client.storage.from('documents').remove([...paths]);
 		},
-		async finalize(input) {
-			type RpcClient = {
-				rpc(
-					name: 'finalize_drive_pdf_reference_import',
-					args: Record<string, unknown>
-				): Promise<{ data: unknown; error: unknown }>;
-			};
-			const { data, error } = await (client as unknown as RpcClient).rpc(
-				'finalize_drive_pdf_reference_import',
-				{
-					target_document_id: input.documentId,
-					page_descriptors: input.pages,
-					prompt_version: input.promptVersion
-				}
-			);
-			if (error) throw error;
-			return data;
-		},
 		recoverPublication: ({ documentId, pages }) =>
 			recoverDrivePdfReferencePublication({
 				client: client as unknown as DrivePdfReferenceRecoveryClient,
 				documentId,
 				pages
-			}),
-		referencePending: (documentId) =>
-			isDrivePdfReferenceStillFinalizable({
-				client: client as unknown as DrivePdfReferenceRecoveryClient,
-				documentId
 			}),
 		processBatch: (pageIds, options) => runOcrBatch(pageIds, undefined, options)
 	};
@@ -303,13 +273,11 @@ export async function importStagedDrivePdfReference({
 		const renderedSizes = new Map<string, number>();
 		const ocrPages = pages.filter((page) => page.needsOcr);
 
-		if (runtime.acquireDescriptorLease) {
-			descriptorLease = await runtime.acquireDescriptorLease({
-				documentId: staged.documentId,
-				expectedPageCount: pages.length,
-				client
-			});
-		}
+		descriptorLease = await runtime.acquireDescriptorLease({
+			documentId: staged.documentId,
+			expectedPageCount: pages.length,
+			client
+		});
 
 		for (let index = 0; index < ocrPages.length; index += 1) {
 			const page = ocrPages[index];
@@ -357,17 +325,11 @@ export async function importStagedDrivePdfReference({
 		const immutablePages = Object.freeze(pages.map((page) => Object.freeze(page)));
 		let publication: PdfImportPublication;
 		try {
-			const finalized = descriptorLease
-				? await descriptorLease.stageAndFinalize({
-						pages: immutablePages,
-						promptVersion,
-						signal
-					})
-				: await runtime.finalize({
-						documentId: staged.documentId,
-						pages: immutablePages,
-						promptVersion
-					});
+			const finalized = await descriptorLease.stageAndFinalize({
+				pages: immutablePages,
+				promptVersion,
+				signal
+			});
 			publication = parsePdfImportPublication(finalized, staged.documentId);
 		} catch (finalizeError) {
 			const recovered = await runtime
@@ -394,9 +356,6 @@ export async function importStagedDrivePdfReference({
 			if (abandoned && uploadedPaths.length > 0) {
 				await runtime.remove(uploadedPaths).catch(() => undefined);
 			}
-		} else if (!metadataPublished && uploadedPaths.length > 0) {
-			const referencePending = await runtime.referencePending(staged.documentId).catch(() => false);
-			if (referencePending) await runtime.remove(uploadedPaths).catch(() => undefined);
 		}
 		if (error instanceof DrivePdfReferenceChangedError) throw error;
 		if (error instanceof DOMException && error.name === 'AbortError') throw error;
