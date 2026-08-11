@@ -34,7 +34,7 @@ export interface OcrQueueChannel {
 	close(): void;
 }
 
-type ProcessingOutcome = 'complete' | 'retry' | 'quota' | 'terminal' | 'aborted';
+type ProcessingOutcome = 'complete' | 'retry' | 'terminal' | 'aborted';
 
 export type BrowserOcrQueueCoordinatorOptions = BrowserExclusiveCoordinatorOptions & {
 	channel?: OcrQueueChannel | null;
@@ -100,9 +100,7 @@ function isAbortError(error: unknown) {
 }
 
 function outcomeForResult(result: OcrRunResult): ProcessingOutcome {
-	if (result.state === 'complete' || result.state === 'already_complete') return 'complete';
-	if (result.state === 'quota_exhausted') return 'quota';
-	return 'retry';
+	return result.state === 'complete' ? 'complete' : 'retry';
 }
 
 export class OcrJobRunner {
