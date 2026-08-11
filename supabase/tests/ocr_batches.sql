@@ -34,24 +34,9 @@ values
   ('11111111-1111-4111-8111-111111111111', 'batch-owner@example.test'),
   ('22222222-2222-4222-8222-222222222222', 'batch-other@example.test');
 
-insert into public.app_users (
-  user_id,
-  is_active,
-  ocr_consent_at,
-  ocr_consent_version
-) values
-  (
-    '11111111-1111-4111-8111-111111111111',
-    true,
-    '2026-08-06T00:00:00Z',
-    1
-  ),
-  (
-    '22222222-2222-4222-8222-222222222222',
-    true,
-    '2026-08-06T00:00:00Z',
-    1
-  );
+insert into public.app_users (user_id, is_active) values
+  ('11111111-1111-4111-8111-111111111111', true),
+  ('22222222-2222-4222-8222-222222222222', true);
 
 insert into public.documents (
   id, user_id, title, kind, original_filename, storage_path, page_count, status
