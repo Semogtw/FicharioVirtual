@@ -53,19 +53,18 @@ async function signIn(client, email, password) {
 	return result.data.user;
 }
 
-/** @param {ReturnType<typeof createStagingClient>} client */
-async function recordConsent(client) {
-	const result = await client.rpc('record_ocr_consent', { consent_version: 1 });
-	if (result.error || result.data !== true) {
-		throw new Error(`OCR consent failed: ${result.error?.message ?? 'unexpected response'}`);
-	}
-}
-
-/** @param {unknown} data */
-function isRetryLater(data) {
+/** @param {unknown} data @param {string} pageId */
+function isRetryLater(data, pageId) {
 	if (data === null || typeof data !== 'object' || Array.isArray(data)) return false;
 	const record = /** @type {Record<string, unknown>} */ (data);
-	return Object.keys(record).length === 1 && record.state === 'retry_later';
+	return (
+		record.state === 'partial' &&
+		Array.isArray(record.pendingPageIds) &&
+		record.pendingPageIds.length === 1 &&
+		record.pendingPageIds[0] === pageId &&
+		Array.isArray(record.failedPageIds) &&
+		record.failedPageIds.length === 0
+	);
 }
 
 /** @param {number} milliseconds */
@@ -74,9 +73,9 @@ function wait(milliseconds) {
 }
 
 /**
- * Mirrors the browser OCR queue's finite retry rounds. A retry_later response is
- * never considered success: the probe must still reach a terminal successful
- * response within the same bounded 0/5s/20s/60s recovery window used by the app.
+ * Mirrors the browser OCR queue's finite retry rounds. A partial response with
+ * this probe still pending is never considered success: the probe must reach a
+ * terminal aggregate response in the bounded 0/5s/20s/60s recovery window.
  * @param {ReturnType<typeof createStagingClient>} client
  * @param {string} pageId
  */
@@ -84,8 +83,8 @@ async function invokeProbeOcr(client, pageId) {
 	let invocation = null;
 	for (const [round, delayMs] of OCR_RETRY_DELAYS_MS.entries()) {
 		if (delayMs > 0) await wait(delayMs);
-		invocation = await client.functions.invoke('process-ocr', { body: { pageId } });
-		if (invocation.error || !isRetryLater(invocation.data)) return invocation;
+		invocation = await client.functions.invoke('process-ocr', { body: { pageIds: [pageId] } });
+		if (invocation.error || !isRetryLater(invocation.data, pageId)) return invocation;
 		if (round < OCR_RETRY_DELAYS_MS.length - 1) {
 			console.log(`INFO process-ocr requested bounded retry round ${round + 1}`);
 		}
@@ -104,40 +103,23 @@ async function createProbeImport(client, userId) {
 	const nonce = `probe-${randomUUID()}`;
 	const bytes = createOcrProbePng(nonce);
 	const sha256 = createHash('sha256').update(bytes).digest('hex');
-	const root = `${userId}/${documentId}`;
-	const originalPath = `${root}/ocr-staging-original.png`;
-	const thumbnailPath = `${root}/ocr-staging-thumbnail.png`;
+	const imagePath = `${userId}/staging-probes/${documentId}.png`;
 	const bucket = client.storage.from(STORAGE_BUCKET);
-	const [original, thumbnail] = await Promise.all([
-		bucket.upload(originalPath, bytes, {
-			cacheControl: '0',
-			contentType: 'image/png',
-			upsert: false
-		}),
-		bucket.upload(thumbnailPath, bytes, {
-			cacheControl: '0',
-			contentType: 'image/png',
-			upsert: false
-		})
-	]);
-	if (original.error || thumbnail.error) {
-		await bucket.remove([originalPath, thumbnailPath]);
-		throw new Error(
-			`OCR probe upload failed: ${original.error?.message ?? thumbnail.error?.message ?? 'unknown error'}`
-		);
+	const upload = await bucket.upload(imagePath, bytes, {
+		cacheControl: '0',
+		contentType: 'image/png',
+		upsert: false
+	});
+	if (upload.error) {
+		throw new Error(`OCR probe upload failed: ${upload.error.message}`);
 	}
 
-	const metadata = await client.rpc('create_image_import', {
+	const metadata = await client.rpc('create_ocr_staging_probe', {
 		target_document_id: documentId,
 		target_page_id: pageId,
 		target_job_id: jobId,
-		target_notebook_id: null,
-		document_title: '__staging_ocr_probe__',
-		original_filename: 'ocr-staging-probe.png',
-		original_storage_path: originalPath,
-		thumbnail_storage_path: thumbnailPath,
+		image_storage_path: imagePath,
 		prepared_sha256: sha256,
-		source_created_at: null,
 		prompt_version: 1
 	});
 	const row = Array.isArray(metadata.data) ? metadata.data[0] : null;
@@ -147,13 +129,13 @@ async function createProbeImport(client, userId) {
 		row?.page_id !== pageId ||
 		row?.ocr_job_id !== jobId
 	) {
-		await bucket.remove([originalPath, thumbnailPath]);
+		await bucket.remove([imagePath]);
 		throw new Error(
 			`OCR probe metadata failed: ${metadata.error?.message ?? 'unexpected response'}`
 		);
 	}
 
-	return { documentId, pageId, jobId, originalPath, thumbnailPath };
+	return { documentId, pageId, jobId, imagePath };
 }
 
 /**
@@ -193,9 +175,7 @@ async function deleteProbeDocument(client, documentId) {
 	if (result.error) throw new Error(`OCR probe cleanup failed: ${result.error.message}`);
 }
 
-/**
- * @param {ReturnType<typeof createStagingClient>} client
- */
+/** @param {ReturnType<typeof createStagingClient>} client */
 async function signOut(client) {
 	const result = await client.auth.signOut();
 	assertSuccessfulSignOut({ label: 'OCR staging account', error: result.error });
@@ -206,8 +186,7 @@ async function main() {
 	const stages = {
 		authenticated: false,
 		authorized: false,
-		consentRecorded: false,
-		importCreated: false,
+		probeCreated: false,
 		functionCompleted: false,
 		persistenceVerified: false
 	};
@@ -251,14 +230,10 @@ async function main() {
 		}
 		stages.authorized = true;
 
-		currentStage = 'consent';
-		await recordConsent(client);
-		stages.consentRecorded = true;
-
-		currentStage = 'import';
+		currentStage = 'probe';
 		probe = await createProbeImport(client, user.id);
-		stages.importCreated = true;
-		console.log('PASS synthetic OCR document was created with public credentials');
+		stages.probeCreated = true;
+		console.log('PASS synthetic OCR probe was created with public credentials');
 
 		currentStage = 'invocation';
 		const invocation = await invokeProbeOcr(client, probe.pageId);
@@ -269,11 +244,10 @@ async function main() {
 			});
 			throw new Error(formatOcrInvocationFailure(diagnostic));
 		}
-		assertOcrInvocation({ data: invocation?.data });
+		const invocationResult = assertOcrInvocation({ data: invocation?.data, pageId: probe.pageId });
 		stages.functionCompleted = true;
-		outcome.needsReview = invocation.data.needsReview;
-		outcome.warningCount = invocation.data.warningCount;
-		console.log('PASS process-ocr completed the synthetic image');
+		outcome.needsReview = invocationResult.needsReview;
+		console.log('PASS process-ocr completed the synthetic image through the launch batch contract');
 
 		currentStage = 'persistence';
 		const persisted = await readProbePersistence(client, probe);
@@ -282,6 +256,9 @@ async function main() {
 		outcome.documentStatus = persisted.document.status;
 		outcome.pageStatus = persisted.page.status;
 		outcome.jobStatus = persisted.job.status;
+		outcome.warningCount = Array.isArray(persisted.page.warnings)
+			? persisted.page.warnings.length
+			: null;
 		outcome.attemptCount = persisted.job.attempt_count;
 		const transcriptTokens = normalizeOcrProbeText(persisted.page.ocr_raw_text).split(' ');
 		outcome.tokens = {
