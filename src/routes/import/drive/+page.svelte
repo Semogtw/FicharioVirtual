@@ -302,7 +302,6 @@
 				{/each}
 			</NativeSelect>
 		</label>
-
 	</section>
 
 	<section class="picker-card" aria-labelledby="picker-title">
