@@ -17,5 +17,3 @@ export const SEMANTIC_RRF_K = 28;
 export const SEMANTIC_RRF_LEXICAL_WEIGHT = 0.48;
 export const SEMANTIC_RRF_VECTOR_WEIGHT = 0.52;
 export const SEMANTIC_RRF_BOTH_BONUS = 0.012;
-
-export const SEMANTIC_CONSENT_VERSION = 1;
