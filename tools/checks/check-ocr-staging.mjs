@@ -175,7 +175,9 @@ async function waitForProbePersistence(client, probe, rekick) {
 		}
 		await sleep(PERSISTENCE_POLL_MS);
 	}
-	throw new Error('Background OCR did not reach a terminal persisted state before the smoke timeout');
+	throw new Error(
+		'Background OCR did not reach a terminal persisted state before the smoke timeout'
+	);
 }
 
 /**
