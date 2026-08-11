@@ -147,7 +147,7 @@ select results_eq(
       physical_state::text,
       drive_sync_status::text
     from public.documents
-    where id = 'bbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbbb'
+    where id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
   $$,
   $$
     values (
@@ -164,7 +164,7 @@ select results_eq(
 );
 
 select is(
-  (select count(*) from public.pages where document_id = 'bbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbbb'),
+  (select count(*) from public.pages where document_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'),
   1::bigint,
   'existing pages survive reconnection'
 );
