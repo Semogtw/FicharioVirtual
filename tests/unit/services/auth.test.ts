@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { loadAuthorizedSession, signIn, type AuthClientLike } from '../../../src/lib/services/auth';
+import {
+	loadAuthorizedSession,
+	signIn,
+	signOut,
+	type AuthClientLike
+} from '../../../src/lib/services/auth';
 
 function clientFixture({ active = true, sessionPresent = true } = {}) {
 	let signedOut = 0;
+	let lastSignOutScope: string | null = null;
 	let credentials: { email: string; password: string } | null = null;
 	const session = sessionPresent
 		? ({ user: { id: '11111111-1111-4111-8111-111111111111' } } as never)
@@ -29,8 +35,9 @@ function clientFixture({ active = true, sessionPresent = true } = {}) {
 				credentials = input;
 				return { data: { session }, error: null };
 			},
-			async signOut() {
+			async signOut(options) {
 				signedOut += 1;
+				lastSignOutScope = options?.scope ?? null;
 				return { error: null };
 			}
 		},
@@ -43,6 +50,9 @@ function clientFixture({ active = true, sessionPresent = true } = {}) {
 		client,
 		get signedOut() {
 			return signedOut;
+		},
+		get lastSignOutScope() {
+			return lastSignOutScope;
 		},
 		get credentials() {
 			return credentials;
@@ -59,11 +69,12 @@ describe('authorized session loading', () => {
 		expect(fixture.signedOut).toBe(0);
 	});
 
-	it('signs out a session that is missing from the active allowlist', async () => {
+	it('globally signs out a session that is confirmed missing from the active allowlist', async () => {
 		const fixture = clientFixture({ active: false });
 
 		await expect(loadAuthorizedSession(fixture.client)).resolves.toBeNull();
 		expect(fixture.signedOut).toBe(1);
+		expect(fixture.lastSignOutScope).toBe('global');
 	});
 });
 
@@ -93,5 +104,16 @@ describe('password sign in', () => {
 		await expect(signIn('owner@example.test', '')).rejects.toEqual(
 			expect.objectContaining({ code: 'invalid_input' })
 		);
+	});
+});
+
+describe('explicit sign out', () => {
+	it('only closes the current browser session', async () => {
+		const fixture = clientFixture();
+
+		await signOut(fixture.client);
+
+		expect(fixture.signedOut).toBe(1);
+		expect(fixture.lastSignOutScope).toBe('local');
 	});
 });
