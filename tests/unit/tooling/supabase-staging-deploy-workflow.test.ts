@@ -28,6 +28,7 @@ describe('Supabase staging migration deploy workflow', () => {
 		expect(source).toContain('.github/workflows/verify-supabase-staging.yml');
 		expect(source).toContain('.github/workflows/verify-ocr-staging.yml');
 		expect(source).toContain('tools/checks/check-supabase-staging.mjs');
+		expect(source).toContain('tools/checks/check-drive-oauth-staging.mjs');
 		expect(source).toContain('tools/checks/check-ocr-staging.mjs');
 		expect(source).toContain('tools/checks/check-desktop-ocr-pairing-staging.mjs');
 		expect(source).toContain('deploy_required: ${{ steps.changes.outputs.required }}');
@@ -39,6 +40,19 @@ describe('Supabase staging migration deploy workflow', () => {
 		expect(currentHeadSource).toContain(`uses: supabase/setup-cli@${action} # v2`);
 		expect(source).toContain('version: 2.111.0');
 		expect(currentHeadSource).toContain('version: 2.111.0');
+	});
+
+	it('pins the canonical staging origin and derived Drive callback before deploying functions', () => {
+		expect(source).toContain('STAGING_APP_ORIGIN: https://staging.fichario-virtual.pages.dev');
+		expect(source).toContain('Align canonical staging Edge Function configuration');
+		expect(source).toContain('"APP_ORIGIN=$STAGING_APP_ORIGIN"');
+		expect(source).toContain(
+			'"GOOGLE_DRIVE_REDIRECT_URI=https://$STAGING_SUPABASE_PROJECT_REF.supabase.co/functions/v1/drive-oauth-callback"'
+		);
+		expect(source).toContain(
+			'"GOOGLE_DRIVE_SCOPE=https://www.googleapis.com/auth/drive.file"'
+		);
+		expect(source).toContain('"GOOGLE_DRIVE_ROOT_FOLDER_NAME=Fichário Digital"');
 	});
 
 	it('previews pending migrations before applying the linked history in order', () => {
@@ -83,6 +97,7 @@ describe('Supabase staging migration deploy workflow', () => {
 		expect(protectedVerificationJobs).toHaveLength(2);
 		expect(source).toContain('group: staging-contract-verification');
 		expect(source).toContain('run: pnpm test:staging:supabase');
+		expect(source).toContain('run: node tools/checks/check-drive-oauth-staging.mjs');
 		expect(source).toContain('run: pnpm test:staging:desktop-ocr-pairing');
 		expect(source).toContain('run: pnpm test:staging:ocr');
 		expect(source).toContain('STAGING_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}');
