@@ -122,13 +122,13 @@ select is(
 );
 
 update public.notebooks
-set parent_notebook_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbbb'
+set parent_notebook_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
 where id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
 select is(
   (select count(*) from public.drive_sync_jobs where operation = 'move_folder'),
   1::bigint,
- 'moving a notebook enqueues one folder move'
+  'moving a notebook enqueues one folder move'
 );
 select results_eq(
   $$
@@ -186,13 +186,13 @@ select is(
 );
 
 update public.documents
-set notebook_id = 'bbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbbb'
+set notebook_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
 where id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 
 select is(
   (select count(*) from public.drive_sync_jobs where operation = 'update_file'),
   1::bigint,
- 'moving a local document enqueues one Drive file update'
+  'moving a local document enqueues one Drive file update'
 );
 select results_eq(
   $$
@@ -249,7 +249,7 @@ select is(
 select is(
   (select payload ->> 'targetKind' from public.drive_sync_jobs where operation = 'delete_permanently' and drive_file_id = '1DriveDocumentFileId_123456789'),
   'file',
- 'file deletion job identifies its physical target kind'
+  'file deletion job identifies its physical target kind'
 );
 
 insert into public.notebooks (
@@ -261,7 +261,7 @@ insert into public.notebooks (
   drive_version,
   drive_sync_status
 ) values (
-  'ffffffff-ffff-4fff-8fff-fffffffffff',
+  'ffffffff-ffff-4fff-8fff-ffffffffffff',
   '11111111-1111-4111-8111-111111111111',
   'Descartável',
   '0ADeleteFolderId_123456789',
