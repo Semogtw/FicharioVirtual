@@ -58,11 +58,6 @@ function hasExactKeys(record: Record<string, unknown>, expected: readonly string
 }
 
 const CLAIM_REJECTION_ERRORS = Object.freeze({
-	consent_required: Object.freeze({
-		status: 403,
-		code: 'ocr_consent_required',
-		message: 'É necessário confirmar a ativação da leitura automática.'
-	}),
 	not_authorized: Object.freeze({
 		status: 403,
 		code: 'ocr_not_authorized',
