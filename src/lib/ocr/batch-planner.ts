@@ -13,6 +13,7 @@ export type OcrBatchPlannerLimits = {
 	maxPages?: number;
 	denseMaxPages?: number;
 	maxDerivedBytes?: number;
+	maxEstimatedOutputTokens?: number;
 };
 
 export type PlannedOcrBatch = {
@@ -21,26 +22,30 @@ export type PlannedOcrBatch = {
 	route: OcrRoute;
 	pages: readonly Readonly<Required<OcrBatchPageCandidate>>[];
 	derivedBytes: number;
+	estimatedOutputTokens: number;
 	splitDepth: number;
 	oversizedSinglePage: boolean;
 };
 
-export type OcrBatchResultIntegrity = {
-	valid: boolean;
-	missingPageIds: readonly string[];
-	duplicatePageIds: readonly string[];
-	unexpectedPageIds: readonly string[];
-};
-
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const DEFAULT_MAX_PAGES = 40;
-const DEFAULT_DENSE_MAX_PAGES = 20;
+const DEFAULT_MAX_PAGES = 28;
+const DEFAULT_DENSE_MAX_PAGES = 14;
 const DEFAULT_MAX_DERIVED_BYTES = 12 * 1024 * 1024;
+// Flash-Lite can return 65,536 tokens. Leave substantial headroom for pages
+// whose actual text/geometry is denser than the preflight classification.
+const DEFAULT_MAX_ESTIMATED_OUTPUT_TOKENS = 48_000;
+const ESTIMATED_OUTPUT_TOKENS: Readonly<Record<OcrPageDensity, number>> = Object.freeze({
+	sparse: 900,
+	normal: 1_700,
+	dense: 3_000
+});
 
 function normalizedLimits(limits: OcrBatchPlannerLimits) {
 	const maxPages = limits.maxPages ?? DEFAULT_MAX_PAGES;
 	const denseMaxPages = limits.denseMaxPages ?? DEFAULT_DENSE_MAX_PAGES;
 	const maxDerivedBytes = limits.maxDerivedBytes ?? DEFAULT_MAX_DERIVED_BYTES;
+	const maxEstimatedOutputTokens =
+		limits.maxEstimatedOutputTokens ?? DEFAULT_MAX_ESTIMATED_OUTPUT_TOKENS;
 	if (
 		!Number.isInteger(maxPages) ||
 		maxPages < 1 ||
@@ -50,11 +55,19 @@ function normalizedLimits(limits: OcrBatchPlannerLimits) {
 		denseMaxPages > maxPages ||
 		!Number.isInteger(maxDerivedBytes) ||
 		maxDerivedBytes < 1 ||
-		maxDerivedBytes > 50 * 1024 * 1024
+		maxDerivedBytes > 50 * 1024 * 1024 ||
+		!Number.isInteger(maxEstimatedOutputTokens) ||
+		maxEstimatedOutputTokens < 1_000 ||
+		maxEstimatedOutputTokens > 65_536
 	) {
 		throw new TypeError('Invalid OCR batch limits');
 	}
-	return Object.freeze({ maxPages, denseMaxPages, maxDerivedBytes });
+	return Object.freeze({
+		maxPages,
+		denseMaxPages,
+		maxDerivedBytes,
+		maxEstimatedOutputTokens
+	});
 }
 
 function normalizePage(page: OcrBatchPageCandidate) {
@@ -74,6 +87,10 @@ function normalizePage(page: OcrBatchPageCandidate) {
 		throw new TypeError('Invalid OCR batch page');
 	}
 	return Object.freeze({ ...page, density, route });
+}
+
+function estimatedOutputTokens(page: Readonly<Required<OcrBatchPageCandidate>>) {
+	return ESTIMATED_OUTPUT_TOKENS[page.density];
 }
 
 function keyFor(
@@ -96,12 +113,14 @@ function createBatch(
 ): PlannedOcrBatch {
 	if (pages.length < 1) throw new TypeError('OCR batch cannot be empty');
 	const derivedBytes = pages.reduce((total, page) => total + page.derivedBytes, 0);
+	const outputTokens = pages.reduce((total, page) => total + estimatedOutputTokens(page), 0);
 	return Object.freeze({
 		key: keyFor(route, pages, splitDepth),
 		parentKey,
 		route,
 		pages: Object.freeze([...pages]),
 		derivedBytes,
+		estimatedOutputTokens: outputTokens,
 		splitDepth,
 		oversizedSinglePage: pages.length === 1 && derivedBytes > maxDerivedBytes
 	});
@@ -127,6 +146,7 @@ export function planOcrBatches(
 	const batches: PlannedOcrBatch[] = [];
 	let current: Readonly<Required<OcrBatchPageCandidate>>[] = [];
 	let currentBytes = 0;
+	let currentOutputTokens = 0;
 	let currentRoute: OcrRoute | null = null;
 	let currentContainsDense = false;
 
@@ -135,6 +155,7 @@ export function planOcrBatches(
 		batches.push(createBatch(current, currentRoute, resolved.maxDerivedBytes));
 		current = [];
 		currentBytes = 0;
+		currentOutputTokens = 0;
 		currentRoute = null;
 		currentContainsDense = false;
 	};
@@ -146,11 +167,15 @@ export function planOcrBatches(
 		const pageLimitReached = current.length > 0 && current.length + 1 > candidatePageLimit;
 		const byteLimitReached =
 			current.length > 0 && currentBytes + page.derivedBytes > resolved.maxDerivedBytes;
-		if (routeChanged || pageLimitReached || byteLimitReached) flush();
+		const outputLimitReached =
+			current.length > 0 &&
+			currentOutputTokens + estimatedOutputTokens(page) > resolved.maxEstimatedOutputTokens;
+		if (routeChanged || pageLimitReached || byteLimitReached || outputLimitReached) flush();
 
 		currentRoute = page.route;
 		current.push(page);
 		currentBytes += page.derivedBytes;
+		currentOutputTokens += estimatedOutputTokens(page);
 		currentContainsDense ||= page.density === 'dense';
 	}
 	flush();
