@@ -17,17 +17,19 @@ describe('process-ocr provider delegation', () => {
 		expect(source).toMatch(rpc('finish_ocr_batch'));
 	});
 
-	it('keeps both the legacy one-page body and the new exact batch body', () => {
-		expect(source).toContain("hasExactKeys(record, ['pageId'])");
+	it('accepts only the launch batch request bodies', () => {
+		expect(source).not.toContain("hasExactKeys(record, ['pageId'])");
 		expect(source).toContain("hasExactKeys(record, ['pageIds'])");
 		expect(source).toContain("hasExactKeys(record, ['batchId', 'pageIds'])");
 		expect(source).toContain('new Set(record.pageIds).size !== record.pageIds.length');
+		expect(source).not.toContain('parsedRequest.legacy');
 	});
 
-	it('returns the warning count required by the legacy one-page client contract', () => {
-		expect(source).toContain('const warningCounts = new Map<string, number>();');
-		expect(source).toContain('warningCounts.set(result.pageId, result.warnings.length);');
-		expect(source).toContain('warningCount: warningCounts.get(pageId) ?? 0');
+	it('returns only the aggregate launch response contract', () => {
+		expect(source).toContain('aggregateBody({');
+		expect(source).not.toContain('const warningCounts = new Map<string, number>();');
+		expect(source).not.toContain('warningCounts.set(');
+		expect(source).not.toContain('warningCount:');
 	});
 
 	it('does not duplicate provider transport, prompt schema or payload parsing', () => {
