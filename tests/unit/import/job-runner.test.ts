@@ -4,6 +4,7 @@ import {
 	type OcrQueueCoordinator,
 	type OcrQueueGateway
 } from '../../../src/lib/import/job-runner';
+import { OcrProcessingError } from '../../../src/lib/services/ocr';
 
 function deferred() {
 	let resolve!: () => void;
@@ -41,7 +42,7 @@ describe('OcrJobRunner', () => {
 				maximum = Math.max(maximum, active);
 				await Promise.resolve();
 				active -= 1;
-				return { state: 'complete' as const, needsReview: false, warningCount: 0 };
+				return { state: 'complete' as const, needsReview: false };
 			})
 		};
 		const runner = new OcrJobRunner(gateway, coordinator(), {
@@ -80,7 +81,7 @@ describe('OcrJobRunner', () => {
 					signal.addEventListener('abort', abort, { once: true });
 					void release?.promise.then(resolve);
 				});
-				return { state: 'complete' as const, needsReview: false, warningCount: 0 };
+				return { state: 'complete' as const, needsReview: false };
 			})
 		};
 		const runner = new OcrJobRunner(gateway, coordinator());
@@ -109,7 +110,7 @@ describe('OcrJobRunner', () => {
 			processJob: vi
 				.fn()
 				.mockResolvedValueOnce({ state: 'retry_later' as const })
-				.mockResolvedValueOnce({ state: 'complete' as const, needsReview: false, warningCount: 0 })
+				.mockResolvedValueOnce({ state: 'complete' as const, needsReview: false })
 		};
 		const runner = new OcrJobRunner(gateway, coordinator(), { wait });
 
@@ -122,11 +123,13 @@ describe('OcrJobRunner', () => {
 		expect(gateway.processJob).toHaveBeenNthCalledWith(2, jobs[0].pageId, expect.any(AbortSignal));
 	});
 
-	it('does not loop automatically after a daily quota result', async () => {
+	it('does not loop automatically after a terminal OCR error', async () => {
 		const wait = vi.fn(async () => undefined);
 		const gateway: OcrQueueGateway = {
 			listRunnableJobs: vi.fn().mockResolvedValueOnce([jobs[0]]),
-			processJob: vi.fn(async () => ({ state: 'quota_exhausted' as const }))
+			processJob: vi.fn(async () => {
+				throw new OcrProcessingError('ocr_not_retryable', false);
+			})
 		};
 		const runner = new OcrJobRunner(gateway, coordinator(), { wait });
 
