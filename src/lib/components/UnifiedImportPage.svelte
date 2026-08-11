@@ -166,6 +166,8 @@
 	{/if}
 
 	<section
+		role="group"
+		aria-label="Área de importação de arquivos"
 		class:dragging
 		class="drop-zone"
 		ondragover={dragged}

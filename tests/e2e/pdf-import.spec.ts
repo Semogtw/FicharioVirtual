@@ -39,7 +39,9 @@ test('uses the unified import surface for PDFs with automatic background OCR', a
 	await expect(page.getByRole('heading', { name: 'Adicionar ao fichário' })).toBeVisible();
 	await expect(page.getByText('Fotos e PDFs entram na mesma fila')).toBeVisible();
 	await expect(page.getByText('Não precisa ficar nesta tela')).toBeVisible();
-	await expect(page.getByText(/OCR continua no servidor mesmo se você fechar o Fichário/)).toBeVisible();
+	await expect(
+		page.getByText(/OCR continua no servidor mesmo se você fechar o Fichário/)
+	).toBeVisible();
 	await expect(
 		page.getByRole('checkbox', { name: /Permitir OCR quando uma página não possuir texto/ })
 	).toHaveCount(0);
