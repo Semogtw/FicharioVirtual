@@ -30,13 +30,17 @@ test.beforeEach(async ({ page }) => {
 	);
 });
 
-test('offers a separate PDF import flow with selective OCR disclosure', async ({ page }) => {
+test('offers a separate PDF import flow with automatic selective OCR disclosure', async ({
+	page
+}) => {
 	await page.goto('/import/pdf/');
 
 	await expect(page.getByRole('heading', { name: 'Importar PDFs' })).toBeVisible();
+	await expect(page.getByText(/somente páginas visuais/)).toBeVisible();
 	await expect(
 		page.getByRole('checkbox', { name: /Permitir OCR quando uma página não possuir texto/ })
-	).toBeVisible();
+	).toHaveCount(0);
+	await expect(page.getByText('Processamento privado, sem confirmações repetidas')).toBeVisible();
 	await expect(page.locator('input[type="file"][accept="application/pdf"]')).toBeAttached();
 	await expect(page.getByRole('link', { name: 'Imagens' })).toBeVisible();
 	await expect(page.getByRole('link', { name: 'PDFs' })).toBeVisible();

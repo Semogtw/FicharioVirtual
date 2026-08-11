@@ -7,6 +7,7 @@ const sourceRoot = join(root, 'src');
 const extensions = new Set(['.ts', '.js', '.svelte']);
 const failures = [];
 const allowedLocalStorage = new Set([
+	'src/lib/components/DataProcessingNotice.svelte',
 	'src/lib/import/browser-exclusive.ts',
 	'src/lib/review/draft-index.ts',
 	'src/lib/theme/theme.ts'

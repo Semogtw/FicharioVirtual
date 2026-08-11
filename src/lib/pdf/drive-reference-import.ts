@@ -34,11 +34,7 @@ import { openDrivePdfRangeDocument, type DrivePdfRangeDocument } from './drive-r
 import { buildPdfImportPlan, type PdfImportPagePlan } from './import-plan';
 import { runPdfOcrBatches } from './ocr-batching';
 import { renderPdfDocumentPage } from './renderer';
-import {
-	PdfConsentRequiredError,
-	parsePdfImportPublication,
-	type PdfImportPublication
-} from './upload';
+import { parsePdfImportPublication, type PdfImportPublication } from './upload';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DRIVE_ID = /^[A-Za-z0-9_-]{10,256}$/;
@@ -296,7 +292,6 @@ async function processPublishedOcrPages(
 
 export async function importStagedDrivePdfReference({
 	staged,
-	consentGranted,
 	promptVersion: requestedPromptVersion,
 	signal,
 	onProgress,
@@ -304,7 +299,7 @@ export async function importStagedDrivePdfReference({
 	dependencies
 }: {
 	staged: StagedDrivePdfReference;
-	consentGranted: boolean;
+	consentGranted?: boolean;
 	promptVersion?: number;
 	signal?: AbortSignal;
 	onProgress?: (progress: DrivePdfReferenceImportProgress) => void;
@@ -348,7 +343,6 @@ export async function importStagedDrivePdfReference({
 				safelyReportProgress(onProgress, { phase: 'inspecting', pageNumber, pageCount })
 		});
 		if (inspection.pagesNeedingOcr.length > 0) {
-			if (!consentGranted) throw new PdfConsentRequiredError();
 			await runtime.recordOcrConsent();
 		}
 		if (signal?.aborted) throw abortError();
@@ -453,7 +447,6 @@ export async function importStagedDrivePdfReference({
 			const referencePending = await runtime.referencePending(staged.documentId).catch(() => false);
 			if (referencePending) await runtime.remove(uploadedPaths).catch(() => undefined);
 		}
-		if (error instanceof PdfConsentRequiredError) throw error;
 		if (error instanceof DrivePdfReferenceChangedError) throw error;
 		if (error instanceof DOMException && error.name === 'AbortError') throw error;
 		throw new DrivePdfReferenceImportError();

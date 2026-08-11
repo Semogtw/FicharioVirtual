@@ -67,7 +67,7 @@ export type PdfUploadDependencies = {
 export type PdfUploadOptions = {
 	title?: string;
 	notebookId?: string | null;
-	consentGranted: boolean;
+	consentGranted?: boolean;
 	promptVersion?: number;
 	signal?: AbortSignal;
 	onProgress?: (progress: PdfUploadProgress) => void;
@@ -337,7 +337,6 @@ export async function uploadPdfWithGateway(
 	options.onProgress?.({ phase: 'inspecting', completed: 1, total: 1 });
 
 	if (inspection.pagesNeedingOcr.length > 0) {
-		if (!options.consentGranted) throw new PdfConsentRequiredError();
 		await dependencies.recordOcrConsent();
 	}
 	if (options.signal?.aborted) throw abortError();
