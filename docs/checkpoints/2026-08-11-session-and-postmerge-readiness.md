@@ -32,6 +32,8 @@ Foram alinhados ao runtime atual:
 
 Os testes legados que ainda descreviam `recordOcrConsent`, `processPage`, finalização sem lease ou rotas antigas de importação foram migrados para os contratos atuais em vez de restaurar APIs pré-lançamento.
 
+O patch de formatação produzido pelo gate para `drive-reference-progress.test.ts` também foi absorvido pelo Prettier do próprio repositório. O HEAD que segue deste checkpoint é o candidato formatado a ser usado nos recibos finais; não há workflow temporário de reparo restante no `main`.
+
 ## Próxima validação
 
 O próximo recibo de release deve corresponder ao HEAD atual de `main` e passar:
