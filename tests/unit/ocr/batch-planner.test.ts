@@ -24,18 +24,14 @@ function page(
 }
 
 describe('planOcrBatches', () => {
-	it('sorts pages and groups a normal document in conservative 40-page batches', () => {
+	it('sorts pages and groups normal documents below the Flash-Lite response budget', () => {
 		const pages = Array.from({ length: 85 }, (_, index) => page(85 - index));
+		const batches = planOcrBatches(pages, { maxDerivedBytes: 50 * MIB });
 
-		const batches = planOcrBatches(pages, {
-			maxPages: 40,
-			denseMaxPages: 20,
-			maxDerivedBytes: 50 * MIB
-		});
-
-		expect(batches.map((batch) => batch.pages.length)).toEqual([40, 40, 5]);
+		expect(batches.map((batch) => batch.pages.length)).toEqual([28, 28, 28, 1]);
 		expect(batches[0]?.pages[0]?.pageNumber).toBe(1);
-		expect(batches[2]?.pages.at(-1)?.pageNumber).toBe(85);
+		expect(batches[3]?.pages.at(-1)?.pageNumber).toBe(85);
+		expect(batches.every((batch) => batch.estimatedOutputTokens <= 48_000)).toBe(true);
 		expect(batches.every((batch) => batch.route === 'gemini')).toBe(true);
 	});
 
@@ -48,10 +44,25 @@ describe('planOcrBatches', () => {
 		]);
 
 		expect(batches.map((batch) => [batch.route, batch.pages.length])).toEqual([
-			['gemini', 20],
-			['gemini', 5],
+			['gemini', 14],
+			['gemini', 11],
 			['desktop', 2]
 		]);
+	});
+
+	it('cuts batches before estimated output would exhaust the provider response ceiling', () => {
+		const batches = planOcrBatches(
+			Array.from({ length: 12 }, (_, index) => page(index + 1)),
+			{
+				maxPages: 40,
+				denseMaxPages: 40,
+				maxDerivedBytes: 50 * MIB,
+				maxEstimatedOutputTokens: 10_000
+			}
+		);
+
+		expect(batches.map((batch) => batch.pages.length)).toEqual([5, 5, 2]);
+		expect(batches.map((batch) => batch.estimatedOutputTokens)).toEqual([8_500, 8_500, 3_400]);
 	});
 
 	it('respects the aggregate derived-byte ceiling without dropping an oversized single page', () => {
@@ -82,6 +93,9 @@ describe('planOcrBatches', () => {
 			'Duplicate OCR page number'
 		);
 		expect(() => planOcrBatches([page(1)], { maxPages: 0 })).toThrow('Invalid OCR batch limits');
+		expect(() => planOcrBatches([page(1)], { maxEstimatedOutputTokens: 65_537 })).toThrow(
+			'Invalid OCR batch limits'
+		);
 	});
 });
 

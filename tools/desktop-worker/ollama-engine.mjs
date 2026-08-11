@@ -212,7 +212,10 @@ function parseOcrContent(value) {
 	}
 	const keys = Object.keys(value).sort();
 	const expectedKeys = ['contentType', 'needsReview', 'rawText', 'warnings', 'wordGeometry'].sort();
-	if (keys.length !== expectedKeys.length || !keys.every((key, index) => key === expectedKeys[index])) {
+	if (
+		keys.length !== expectedKeys.length ||
+		!keys.every((key, index) => key === expectedKeys[index])
+	) {
 		throw new OllamaEngineError('ollama_ocr_invalid');
 	}
 	if (typeof value.rawText !== 'string' || value.rawText.length > MAX_TEXT_LENGTH) {

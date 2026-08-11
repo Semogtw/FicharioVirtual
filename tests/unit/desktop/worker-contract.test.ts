@@ -49,7 +49,9 @@ describe('desktop worker request contract', () => {
 	});
 
 	it('rejects completion payloads that omit launch geometry', () => {
-		const { wordGeometry: _wordGeometry, ...withoutGeometry } = completion;
+		const withoutGeometry = Object.fromEntries(
+			Object.entries(completion).filter(([key]) => key !== 'wordGeometry')
+		);
 		expect(parseDesktopWorkerRequest(withoutGeometry)).toBeNull();
 	});
 

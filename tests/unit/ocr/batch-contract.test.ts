@@ -4,12 +4,19 @@ import { parseOcrBatchPayload } from '../../../supabase/functions/_shared/ocr-ba
 const first = { pageId: '11111111-1111-4111-8111-111111111111', pageNumber: 1 };
 const second = { pageId: '22222222-2222-4222-8222-222222222222', pageNumber: 2 };
 
-function result(page = first, text = 'Texto') {
-	return { ...page, text, warnings: [], contentClass: 'unknown', wordGeometry: [] };
+function result(page = first, text = 'Texto', overrides: Record<string, unknown> = {}) {
+	return {
+		...page,
+		text,
+		contentClass: 'unknown',
+		lineGeometry: text.trim() ? ['100,100,900,200'] : [],
+		warnings: [],
+		...overrides
+	};
 }
 
 describe('parseOcrBatchPayload', () => {
-	it('accepts the exact launch contract and restores request order', () => {
+	it('accepts the exact requested set and restores request order', () => {
 		const parsed = parseOcrBatchPayload(
 			JSON.stringify({ pages: [result(second, 'Dois'), result(first, 'Um')] }),
 			[first, second]
@@ -21,15 +28,12 @@ describe('parseOcrBatchPayload', () => {
 			[second.pageId, 'Dois']
 		]);
 		expect(parsed.pages.every((page) => page.contentClass === 'unknown')).toBe(true);
-		expect(parsed.pages.every((page) => page.wordGeometry.length === 0)).toBe(true);
 		expect(parsed.missingPageIds).toEqual([]);
 	});
 
-	it('accepts and preserves a closed telemetry content class without changing OCR text', () => {
+	it('preserves a closed telemetry content class without changing OCR text', () => {
 		const parsed = parseOcrBatchPayload(
-			JSON.stringify({
-				pages: [{ ...result(first, 'Literal'), contentClass: 'handwriting' }]
-			}),
+			JSON.stringify({ pages: [result(first, 'Literal', { contentClass: 'handwriting' })] }),
 			[first]
 		);
 
@@ -41,44 +45,49 @@ describe('parseOcrBatchPayload', () => {
 		});
 	});
 
-	it('parses compact normalized word geometry and ignores unsafe individual boxes', () => {
+	it('derives word boxes locally from one compact provider box per non-empty line', () => {
 		const parsed = parseOcrBatchPayload(
 			JSON.stringify({
 				pages: [
-					{
-						...result(first, 'A fotossintcse ocorre.'),
+					result(first, 'A fotossintese ocorre.\nSegunda linha', {
 						contentClass: 'scan_degraded',
-						wordGeometry: [
-							'1200,2400,3500,2900|fotossintcse',
-							'9000,100,10001,500|fora',
-							'não é uma caixa'
-						]
-					}
+						lineGeometry: ['100,200,600,260', '120,300,520,360']
+					})
 				]
 			}),
 			[first]
 		);
 
 		expect(parsed.valid).toBe(true);
-		expect(parsed.pages[0]?.wordGeometry).toEqual([['fotossintcse', 1200, 2400, 3500, 2900]]);
+		expect(parsed.pages[0]?.wordGeometry.map((box) => box[0])).toEqual([
+			'A',
+			'fotossintese',
+			'ocorre.',
+			'Segunda',
+			'linha'
+		]);
+		expect(parsed.pages[0]?.wordGeometry[0]).toEqual(expect.arrayContaining(['A', 2000, 2600]));
+		expect(parsed.pages[0]?.wordGeometry[3]).toEqual(
+			expect.arrayContaining(['Segunda', 3000, 3600])
+		);
 	});
 
-	it('drops a geometrically valid provider box when its word is absent from the OCR transcription', () => {
-		const parsed = parseOcrBatchPayload(
-			JSON.stringify({
-				pages: [
-					{
-						...result(first, 'A fotossintcse ocorre.'),
-						contentClass: 'scan_degraded',
-						wordGeometry: ['1200,2400,3500,2900|fotossintcse', '4000,2400,5200,2900|inventada']
-					}
-				]
-			}),
-			[first]
-		);
-
-		expect(parsed.valid).toBe(true);
-		expect(parsed.pages[0]?.wordGeometry).toEqual([['fotossintcse', 1200, 2400, 3500, 2900]]);
+	it('keeps OCR text valid but drops geometry when line boxes are malformed or misaligned', () => {
+		for (const lineGeometry of [
+			['100,100,900,200'],
+			['100,100,1001,200', '100,300,900,400'],
+			['não-é-caixa', '100,300,900,400']
+		]) {
+			const parsed = parseOcrBatchPayload(
+				JSON.stringify({
+					pages: [result(first, 'Primeira linha\nSegunda linha', { lineGeometry })]
+				}),
+				[first]
+			);
+			expect(parsed.valid).toBe(true);
+			expect(parsed.pages[0]?.text).toBe('Primeira linha\nSegunda linha');
+			expect(parsed.pages[0]?.wordGeometry).toEqual([]);
+		}
 	});
 
 	it('keeps valid unique pages while reporting omissions for subset retry', () => {
@@ -108,18 +117,11 @@ describe('parseOcrBatchPayload', () => {
 		expect(parsed.missingPageIds).toEqual([second.pageId]);
 	});
 
-	it('rejects malformed, mismatched, pre-launch, invalid-class or extended provider output', () => {
+	it('turns malformed, mismatched, invalid-class or extended provider output into retry data', () => {
 		for (const payload of [
 			'{',
 			JSON.stringify({ pages: [{ ...result(first), pageNumber: 9 }] }),
-			JSON.stringify({ pages: [{ ...first, text: 'Texto', warnings: [] }] }),
-			JSON.stringify({
-				pages: [{ ...first, text: 'Texto', warnings: [], contentClass: 'unknown' }]
-			}),
-			JSON.stringify({
-				pages: [{ ...first, text: 'Texto', warnings: [], wordGeometry: [] }]
-			}),
-			JSON.stringify({ pages: [{ ...result(first), contentClass: 'not_a_class' }] }),
+			JSON.stringify({ pages: [result(first, 'Texto', { contentClass: 'not_a_class' })] }),
 			JSON.stringify({ pages: [{ ...result(first), commentary: 'extra' }] })
 		]) {
 			expect(parseOcrBatchPayload(payload, [first])).toEqual({
@@ -159,10 +161,10 @@ describe('parseOcrBatchPayload', () => {
 		const parsed = parseOcrBatchPayload(
 			JSON.stringify({
 				pages: [
-					{
-						...result(first, ''),
+					result(first, '', {
+						lineGeometry: [],
 						warnings: [{ code: 'empty_page', message: 'Não há texto legível.' }]
-					}
+					})
 				]
 			}),
 			[first]

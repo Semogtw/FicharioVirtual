@@ -56,6 +56,7 @@ describe('requestGeminiOcr', () => {
 			generationConfig: {
 				maxOutputTokens: number;
 				responseMimeType: string;
+				thinkingConfig?: { thinkingLevel?: string };
 				[key: string]: unknown;
 			};
 		};
@@ -70,8 +71,9 @@ describe('requestGeminiOcr', () => {
 		expect(body.generationConfig).not.toHaveProperty('topP');
 		expect(body.generationConfig).not.toHaveProperty('topK');
 		expect(body.generationConfig).toEqual({
-			maxOutputTokens: 8192,
-			responseMimeType: 'application/json'
+			maxOutputTokens: 16_384,
+			responseMimeType: 'application/json',
+			thinkingConfig: { thinkingLevel: 'minimal' }
 		});
 		expect(body.generationConfig).not.toHaveProperty('responseFormat');
 		expect(body.generationConfig).not.toHaveProperty('responseJsonSchema');
