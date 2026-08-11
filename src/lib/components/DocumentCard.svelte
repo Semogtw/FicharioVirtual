@@ -60,10 +60,11 @@
 		border: 1px solid var(--line);
 		border-radius: var(--radius-md);
 		background: var(--surface);
+		transform: translateY(0);
 		transition:
-			border-color 120ms ease,
-			box-shadow 120ms ease,
-			transform 120ms ease;
+			border-color var(--motion-fast) var(--ease-standard),
+			box-shadow var(--motion-base) var(--ease-standard),
+			transform var(--motion-base) var(--ease-emphasized);
 	}
 
 	.document-card:focus-within {
@@ -74,6 +75,13 @@
 
 	a {
 		display: block;
+		transform: scale(1);
+		transition: transform var(--motion-fast) var(--ease-emphasized);
+	}
+
+	a:active {
+		transform: scale(0.987);
+		transition-duration: var(--motion-instant);
 	}
 
 	.preview {
@@ -91,6 +99,8 @@
 		width: 100%;
 		height: 100%;
 		object-fit: cover;
+		transform: scale(1);
+		transition: transform var(--motion-base) var(--ease-emphasized);
 	}
 
 	.folio {
@@ -104,6 +114,8 @@
 		border-radius: 0.25rem 0.6rem 0.6rem 0.25rem;
 		background: var(--surface-strong);
 		box-shadow: var(--shadow-raised);
+		transform: translateY(0);
+		transition: transform var(--motion-base) var(--ease-emphasized);
 	}
 
 	.folio span {
@@ -164,6 +176,14 @@
 			border-color: var(--line-strong);
 			box-shadow: var(--shadow-soft);
 			transform: translateY(-0.125rem);
+		}
+
+		.document-card:hover img {
+			transform: scale(1.025);
+		}
+
+		.document-card:hover .folio {
+			transform: translateY(-0.1rem);
 		}
 	}
 </style>
