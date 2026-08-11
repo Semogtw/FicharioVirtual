@@ -133,6 +133,7 @@ async function main() {
 
 	const client = createStagingClient(supabaseUrl, publishableKey);
 	let signedIn = false;
+	let operationError = null;
 	try {
 		const { data, error } = await client.auth.signInWithPassword({ email, password });
 		if (error) throw new Error(`Drive OAuth staging sign-in failed: ${error.message}`);
@@ -160,12 +161,17 @@ async function main() {
 
 		assertAuthorizationUrl(body?.authorizationUrl, supabaseUrl);
 		console.log('Google Drive OAuth staging bootstrap: PASS');
-	} finally {
-		if (signedIn) {
-			const { error } = await client.auth.signOut();
-			if (error) throw new Error(`Drive OAuth staging sign-out failed: ${error.message}`);
+	} catch (error) {
+		operationError = error;
+	}
+
+	if (signedIn) {
+		const { error } = await client.auth.signOut();
+		if (error && operationError === null) {
+			operationError = new Error(`Drive OAuth staging sign-out failed: ${error.message}`);
 		}
 	}
+	if (operationError) throw operationError;
 }
 
 main().catch((error) => {
