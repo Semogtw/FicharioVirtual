@@ -6,7 +6,6 @@ describe('OCR claim result parser', () => {
 
 	it.each([
 		{ state: 'not_authorized' },
-		{ state: 'consent_required' },
 		{ state: 'invalid_configuration' },
 		{ state: 'not_found' },
 		{ state: 'already_complete', jobId },
@@ -23,6 +22,7 @@ describe('OCR claim result parser', () => {
 		null,
 		[],
 		{ state: 'unknown' },
+		{ state: 'consent_required' },
 		{ state: 'not_found', extra: true },
 		{ state: 'busy' },
 		{ state: 'busy', jobId: 'not-a-uuid' },
