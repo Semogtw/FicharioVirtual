@@ -1,0 +1,155 @@
+name: Align final E2E with background import architecture once
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Align background queue E2E and drop-zone semantics
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          page = Path('src/lib/components/UnifiedImportPage.svelte')
+          text = page.read_text()
+          old = '''\t<section
+\t\tclass:dragging
+\t\tclass="drop-zone"'''
+          new = '''\t<section
+\t\trole="group"
+\t\taria-label="Área de importação de arquivos"
+\t\tclass:dragging
+\t\tclass="drop-zone"'''
+          if old not in text:
+              raise SystemExit('unified drop-zone insertion point missing')
+          page.write_text(text.replace(old, new, 1))
+
+          path = Path('tests/e2e/import-multitab.spec.ts')
+          text = path.read_text()
+          text = text.replace('ocrRuns: number;', 'ocrKicks: number;')
+          old_block = '''\t\tif (path === '/functions/v1/process-ocr') {
+\t\t\tcounters.ocrRuns += 1;
+\t\t\tconst body = request.postDataJSON() as { pageIds?: unknown };
+\t\t\tconst pageIds = Array.isArray(body.pageIds) ? body.pageIds : [];
+\t\t\treturn json(route, {
+\t\t\t\tstate: 'complete',
+\t\t\t\tcompletedPageIds: pageIds,
+\t\t\t\treviewPageIds: [],
+\t\t\t\tpendingPageIds: [],
+\t\t\t\tfailedPageIds: [],
+\t\t\t\tsplitRequiredPageIds: [],
+\t\t\t\tunexpectedResultPageIds: []
+\t\t\t});
+\t\t}
+'''
+          new_block = '''\t\tif (path === '/functions/v1/ocr-queue-kick') {
+\t\t\tcounters.ocrKicks += 1;
+\t\t\treturn json(route, { accepted: true });
+\t\t}
+'''
+          if old_block not in text:
+              raise SystemExit('old foreground OCR mock missing')
+          text = text.replace(old_block, new_block, 1)
+          text = text.replace(
+              "test('two tabs resume one persisted image import without duplicate upload or OCR'",
+              "test('two tabs resume one persisted image import without duplicate upload while OCR stays in background'"
+          )
+          text = text.replace('\t\tocrRuns: 0,', '\t\tocrKicks: 0,')
+          old_expect = '''\tawait expect.poll(() => counters.ocrRuns, { timeout: 20_000 }).toBe(1);
+\tawait expect
+\t\t.poll(
+\t\t\tasync () => {
+\t\t\t\treturn (
+\t\t\t\t\t(await first.getByText('Pronto', { exact: true }).count()) +
+\t\t\t\t\t(await second.getByText('Pronto', { exact: true }).count())
+\t\t\t\t);
+\t\t\t},
+\t\t\t{ timeout: 15_000 }
+\t\t)
+\t\t.toBe(1);'''
+          new_expect = '''\tawait expect.poll(() => counters.ocrKicks, { timeout: 20_000 }).toBeGreaterThanOrEqual(1);
+\tawait expect
+\t\t.poll(async () => {
+\t\t\treturn first.evaluate(async (id) => {
+\t\t\t\tconst database = await new Promise<IDBDatabase>((resolve, reject) => {
+\t\t\t\t\tconst request = indexedDB.open('fichario-resume', 2);
+\t\t\t\t\trequest.onsuccess = () => resolve(request.result);
+\t\t\t\t\trequest.onerror = () => reject(request.error ?? new Error('IndexedDB open failed'));
+\t\t\t\t});
+\t\t\t\tconst record = await new Promise<any>((resolve, reject) => {
+\t\t\t\t\tconst request = database.transaction('image-imports', 'readonly').objectStore('image-imports').get(id);
+\t\t\t\t\trequest.onsuccess = () => resolve(request.result);
+\t\t\t\t\trequest.onerror = () => reject(request.error ?? new Error('IndexedDB read failed'));
+\t\t\t\t});
+\t\t\t\tdatabase.close();
+\t\t\t\treturn record?.status === 'waiting' && record?.result?.documentId;
+\t\t\t}, importId);
+\t\t}, { timeout: 15_000 })
+\t\t.toBeTruthy();'''
+          if old_expect not in text:
+              raise SystemExit('old foreground OCR E2E expectation missing')
+          text = text.replace(old_expect, new_expect, 1)
+          old_delete_assert = '''\tawait expect
+\t\t.poll(async () => {
+\t\t\treturn first.evaluate(async (id) => {
+\t\t\t\tconst database = await new Promise<IDBDatabase>((resolve, reject) => {
+\t\t\t\t\tconst request = indexedDB.open('fichario-resume', 2);
+\t\t\t\t\trequest.onsuccess = () => resolve(request.result);
+\t\t\t\t\trequest.onerror = () => reject(request.error ?? new Error('IndexedDB open failed'));
+\t\t\t\t});
+\t\t\t\tconst record = await new Promise<unknown>((resolve, reject) => {
+\t\t\t\t\tconst request = database
+\t\t\t\t\t\t.transaction('image-imports', 'readonly')
+\t\t\t\t\t\t.objectStore('image-imports')
+\t\t\t\t\t\t.get(id);
+\t\t\t\t\trequest.onsuccess = () => resolve(request.result);
+\t\t\t\t\trequest.onerror = () => reject(request.error ?? new Error('IndexedDB read failed'));
+\t\t\t\t});
+\t\t\t\tdatabase.close();
+\t\t\t\treturn record === undefined;
+\t\t\t}, importId);
+\t\t})
+\t\t.toBe(true);'''
+          if old_delete_assert not in text:
+              raise SystemExit('old completed-record deletion expectation missing')
+          text = text.replace(old_delete_assert, '', 1)
+          path.write_text(text)
+          PY
+          pnpm exec prettier --write src/lib/components/UnifiedImportPage.svelte tests/e2e/import-multitab.spec.ts tests/e2e/pdf-import.spec.ts
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Validate corrected E2E
+        run: pnpm exec playwright test tests/e2e/import-multitab.spec.ts tests/e2e/pdf-import.spec.ts --project=chromium-tablet
+      - name: Commit validated E2E
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/fix-final-e2e-once.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'test: align final E2E with background OCR flow'
+          git push origin HEAD:main
