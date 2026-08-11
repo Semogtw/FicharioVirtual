@@ -1,4 +1,4 @@
-import { createClient } from 'npm:@supabase/supabase-js@2';
+import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { RequestBodyTooLargeError, readBoundedJson } from '../_shared/bounded-json.ts';
 import { corsHeaders, parseAppOrigin } from '../_shared/cors.ts';
 import { GeminiEmbeddingHttpError } from '../_shared/gemini-embedding-client.ts';
@@ -141,11 +141,11 @@ function validSemanticRow(value: unknown): value is SemanticRow {
 }
 
 async function lexicalRows(
-	supabase: ReturnType<typeof createClient>,
+	supabase: SupabaseClient,
 	input: ParsedRequest,
 	limit: number,
 	offset: number
-) {
+): Promise<LexicalRow[]> {
 	const { data, error } = await supabase.rpc('search_pages', {
 		search_query: input.query,
 		notebook_filter: input.notebookId,
@@ -262,7 +262,7 @@ function mergeCandidates(lexical: readonly LexicalRow[], semantic: readonly Sema
 }
 
 async function fallbackResponse(input: {
-	supabase: ReturnType<typeof createClient>;
+	supabase: SupabaseClient;
 	parsed: ParsedRequest;
 	reason: string;
 	startedAt: number;
