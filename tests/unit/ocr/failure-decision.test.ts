@@ -37,8 +37,7 @@ describe('planOcrFailure', () => {
 				kind: 'block_quota',
 				code: 'gemini_daily_quota',
 				failedAt: failedAt.toISOString()
-			},
-			response: { status: 202, body: { state: 'quota_exhausted' } }
+			}
 		});
 
 		expect(
@@ -55,12 +54,11 @@ describe('planOcrFailure', () => {
 				retryable: true,
 				failedAt: failedAt.toISOString(),
 				nextRetryAt: '2026-08-03T00:01:00.000Z'
-			},
-			response: { status: 202, body: { state: 'retry_later' } }
+			}
 		});
 	});
 
-	it('keeps an API key rejection carried by HTTP 400 terminal and non-sensitive', () => {
+	it('keeps an API key rejection terminal and non-sensitive', () => {
 		const decision = planOcrFailure(
 			new GeminiHttpError(
 				400,
@@ -83,10 +81,6 @@ describe('planOcrFailure', () => {
 				retryable: false,
 				failedAt: failedAt.toISOString(),
 				nextRetryAt: null
-			},
-			response: {
-				status: 400,
-				body: { code: 'gemini_authentication_failed', retryable: false }
 			}
 		});
 		expect(JSON.stringify(decision)).not.toMatch(/private provider|metadata|private.*value/i);
@@ -107,7 +101,6 @@ describe('planOcrFailure', () => {
 				nextRetryAt: '2026-08-03T00:01:00.000Z'
 			})
 		);
-		expect(decision.response).toEqual({ status: 202, body: { state: 'retry_later' } });
 	});
 
 	it('stops retrying invalid responses after the third attempt', () => {
@@ -129,7 +122,6 @@ describe('planOcrFailure', () => {
 				nextRetryAt: '2026-08-03T00:00:45.000Z'
 			})
 		);
-		expect(first.response).toEqual({ status: 202, body: { state: 'retry_later' } });
 		expect(third.persistence).toEqual(
 			expect.objectContaining({
 				code: 'ocr_response_invalid',
@@ -137,10 +129,6 @@ describe('planOcrFailure', () => {
 				nextRetryAt: null
 			})
 		);
-		expect(third.response).toEqual({
-			status: 422,
-			body: { code: 'ocr_response_invalid', retryable: false }
-		});
 	});
 
 	it('stops retrying interrupted requests after the third attempt', () => {
@@ -163,10 +151,13 @@ describe('planOcrFailure', () => {
 				nextRetryAt: '2026-08-03T00:00:45.000Z'
 			})
 		);
-		expect(third.response).toEqual({
-			status: 503,
-			body: { code: 'ocr_request_failed', retryable: false }
-		});
+		expect(third.persistence).toEqual(
+			expect.objectContaining({
+				code: 'ocr_request_failed',
+				retryable: false,
+				nextRetryAt: null
+			})
+		);
 	});
 
 	it('rejects invalid planning inputs', () => {
