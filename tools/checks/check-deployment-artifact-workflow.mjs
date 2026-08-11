@@ -19,7 +19,11 @@ function forbidText(haystack, text, detail) {
 	if (haystack.includes(text)) failures.push(detail);
 }
 
-requireText(source, 'on:\n  workflow_dispatch:', 'artifact build workflow must retain manual recovery');
+requireText(
+	source,
+	'on:\n  workflow_dispatch:',
+	'artifact build workflow must retain manual recovery'
+);
 requireText(
 	source,
 	'  push:\n    branches:\n      - main',
