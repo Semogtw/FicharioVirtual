@@ -10,6 +10,21 @@ import {
 	normalizeOcrProbeText
 } from '../../../tools/checks/ocr-staging-contract.mjs';
 
+const pageId = '11111111-1111-4111-8111-111111111111';
+
+function aggregate(overrides: Partial<Record<string, unknown>> = {}) {
+	return {
+		state: 'complete',
+		completedPageIds: [pageId],
+		reviewPageIds: [],
+		pendingPageIds: [],
+		failedPageIds: [],
+		splitRequiredPageIds: [],
+		unexpectedResultPageIds: [],
+		...overrides
+	};
+}
+
 describe('OCR staging contract', () => {
 	it('generates deterministic readable PNG bytes with nonce-specific identity', () => {
 		const first = createOcrProbePng('probe-aaaaaaaa');
@@ -23,15 +38,14 @@ describe('OCR staging contract', () => {
 		expect(digest(first)).not.toBe(digest(second));
 	});
 
-	it('creates a machine-readable report from allowlisted fields only', () => {
+	it('creates a machine-readable report from allowlisted launch fields only', () => {
 		const report = createOcrStagingReport({
 			status: 'pass',
 			failureStage: null,
 			stages: {
 				authenticated: true,
 				authorized: true,
-				consentRecorded: true,
-				importCreated: true,
+				probeCreated: true,
 				functionCompleted: true,
 				persistenceVerified: true
 			},
@@ -55,14 +69,13 @@ describe('OCR staging contract', () => {
 		});
 
 		expect(report).toEqual({
-			schemaVersion: 2,
+			schemaVersion: 3,
 			status: 'pass',
 			failureStage: null,
 			stages: {
 				authenticated: true,
 				authorized: true,
-				consentRecorded: true,
-				importCreated: true,
+				probeCreated: true,
 				functionCompleted: true,
 				persistenceVerified: true
 			},
@@ -94,7 +107,8 @@ describe('OCR staging contract', () => {
 			'url',
 			'path',
 			'transcript',
-			'errorMessage'
+			'errorMessage',
+			'consent'
 		]) {
 			expect(serialized).not.toContain(forbidden);
 		}
@@ -107,8 +121,7 @@ describe('OCR staging contract', () => {
 			stages: {
 				authenticated: false,
 				authorized: false,
-				consentRecorded: false,
-				importCreated: false,
+				probeCreated: false,
 				functionCompleted: false,
 				persistenceVerified: false
 			},
@@ -177,12 +190,29 @@ describe('OCR staging contract', () => {
 		expect(normalizeOcrProbeText(null)).toBe('');
 	});
 
-	it('requires a completed Edge Function response', () => {
+	it('requires the aggregate launch Edge Function response', () => {
+		expect(assertOcrInvocation({ data: aggregate(), pageId })).toEqual({ needsReview: false });
+		expect(
+			assertOcrInvocation({ data: aggregate({ reviewPageIds: [pageId] }), pageId })
+		).toEqual({ needsReview: true });
 		expect(() =>
-			assertOcrInvocation({ data: { state: 'complete', needsReview: false, warningCount: 0 } })
-		).not.toThrow();
+			assertOcrInvocation({
+				data: aggregate({
+					state: 'partial',
+					completedPageIds: [],
+					pendingPageIds: [pageId]
+				}),
+				pageId
+			})
+		).toThrow(/unexpected function state/);
+	});
+
+	it('rejects the removed single-page response envelope', () => {
 		expect(() =>
-			assertOcrInvocation({ data: { state: 'retry_later', needsReview: false, warningCount: 0 } })
+			assertOcrInvocation({
+				data: { state: 'complete', needsReview: false, warningCount: 0 },
+				pageId
+			})
 		).toThrow(/unexpected function state/);
 	});
 
