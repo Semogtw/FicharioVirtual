@@ -9,7 +9,7 @@ A busca global do Fichário Virtual precisa recuperar conteúdo em dois cenário
 
 Por isso a busca global combina **recuperação textual/fuzzy** e **recuperação semântica por embeddings**. O Gemini não é usado para decidir sozinho quais páginas aparecem: ele gera embeddings; PostgreSQL/pgvector faz a recuperação vetorial; os sinais lexical e semântico são então combinados de forma determinística.
 
-A camada semântica é opcional e degradável. Sem consentimento, configuração, cota ou provedor, `search_pages` continua pesquisando o corpus inteiro.
+A camada semântica é opcional e degradável. Sem ativação semântica, configuração, cota ou provedor, `search_pages` continua pesquisando o corpus inteiro.
 
 ## Recuperação textual no PostgreSQL
 
@@ -78,11 +78,11 @@ A janela híbrida inicial é limitada aos 100 melhores candidatos combinados. Re
 
 A indexação oportunista padrão trabalha com até quatro páginas por pesquisa e no máximo 48 chunks por execução. O índice pode, portanto, ficar temporariamente incompleto; o status é mostrado na tela, enquanto a busca textual continua cobrindo todas as páginas pesquisáveis.
 
-## Consentimento e privacidade
+## Ativação e privacidade
 
-O consentimento da cobertura semântica não é reutilizado silenciosamente para a busca global. A migration `202608101501_global_semantic_search_consent.sql` cria consentimento específico para esta superfície.
+A busca global mantém um marcador interno próprio, criado historicamente pela migration `202608101501_global_semantic_search_consent.sql`. No fluxo privado atual, esse marcador é uma compatibilidade técnica: a interface não mostra checkbox nem pede autorização repetida.
 
-Antes desse consentimento, a Edge Function não envia consulta nem texto de páginas ao Gemini. Depois da ativação:
+A primeira tentativa continua segura: se a Edge Function informar `consent_required`, o cliente registra automaticamente o marcador dedicado e repete a busca uma vez. Se esse registro falhar, a resposta lexical já obtida é preservada e nenhum bloqueio é apresentado ao usuário. Com a camada semântica ativa:
 
 - a consulta pode ser enviada ao Gemini para gerar o embedding de pesquisa;
 - pequenos chunks de páginas ainda não indexadas podem ser enviados para gerar embeddings de documento;
@@ -93,7 +93,7 @@ Antes desse consentimento, a Edge Function não envia consulta nem texto de pág
 
 A pesquisa continua textual quando ocorrer qualquer uma destas condições:
 
-- consentimento ainda não concedido;
+- ativação semântica não pôde ser registrada;
 - consulta curta demais;
 - Edge Function ainda não implantada no ambiente;
 - chave/modelo semântico ausente;
@@ -146,7 +146,7 @@ A implementação inclui ou deve manter testes para:
 - recorte centrado no termo aproximado;
 - contrato estrito do cliente `semantic-search`;
 - recuperação `semantic` e `hybrid` sem exigir overlap literal;
-- consentimento dedicado da busca;
+- ativação dedicada da busca sem confirmação recorrente;
 - reuso de `page_semantic_chunks` e `search_pages_semantic`;
 - fallback lexical para cota, provider e função indisponível;
 - configuração JWT e inclusão da Edge Function nos gates de deploy/Deno.
