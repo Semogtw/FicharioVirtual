@@ -271,7 +271,7 @@ jobs:
 
       - name: Upload sanitized OCR report
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b5e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ocr-staging-report-${{ github.run_id }}
           path: /tmp/ocr-staging-report.json
