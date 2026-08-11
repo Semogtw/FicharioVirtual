@@ -92,7 +92,7 @@ A aplicação tenta aproveitar primeiro o texto que já existe no arquivo e usa 
 
 Os documentos originais permanecem no **Google Drive**. O Fichário usa os serviços de backend para manter a organização, os índices de pesquisa e os resultados de processamento necessários para a experiência do aplicativo.
 
-Recursos que enviam conteúdo para processamento externo, como a camada semântica, possuem consentimento próprio e podem ser desativados sem impedir o funcionamento da busca textual.
+Recursos que precisam de processamento externo, como OCR e busca semântica, são acionados somente quando necessários. No uso privado atual, a interface não exige confirmações repetidas por arquivo ou pesquisa; os detalhes sobre o que pode ser processado permanecem disponíveis em **Configurações → Privacidade e dados**. Se a camada semântica estiver indisponível, a busca textual/fuzzy continua funcionando normalmente.
 
 A ideia é que o fichário complemente seus arquivos — não que se torne um lugar do qual seja difícil retirá-los depois.
 
