@@ -23,9 +23,7 @@ describe('correction drafts', () => {
 			updatedAt: '2026-08-02T03:00:00.000Z'
 		});
 
-		expect(JSON.parse(serialized)).toEqual(
-			expect.objectContaining({ version: 2, userId, pageId })
-		);
+		expect(JSON.parse(serialized)).toEqual(expect.objectContaining({ version: 2, userId, pageId }));
 		expect(parseCorrectionDraft(serialized, userId, pageId)).toEqual({
 			pageId,
 			text: 'Texto corrigido\ncom duas linhas.',
