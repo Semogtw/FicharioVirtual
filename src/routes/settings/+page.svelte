@@ -96,6 +96,23 @@
 		<ThemePicker />
 		<DriveConnectionCard />
 
+		<section class="settings-card" id="privacy" aria-labelledby="privacy-title">
+			<div>
+				<h2 id="privacy-title">Privacidade e dados</h2>
+				<p>
+					Este Fichário é configurado para uso privado. OCR, busca por significado e análise de cobertura
+					podem enviar somente o conteúdo necessário aos provedores configurados quando você usa uma
+					função que precisa deles. Não há confirmações repetidas a cada arquivo ou pesquisa.
+				</p>
+				<p>
+					PDFs com texto aproveitam o conteúdo nativo; páginas visuais e imagens usam OCR quando
+					necessário. Recursos semânticos podem processar consultas e pequenos trechos. A telemetria
+					técnica acompanha funcionamento, cota e qualidade do processamento.
+				</p>
+			</div>
+			<a class="secondary-link" href="/library/">Gerenciar arquivos</a>
+		</section>
+
 		<section class="settings-card" aria-labelledby="export-title">
 			<div>
 				<h2 id="export-title">Exportação portátil</h2>
@@ -133,7 +150,7 @@
 				<li>Nenhuma cobrança é ativada automaticamente.</li>
 				<li>O Drive usa somente o escopo <code>drive.file</code> no MVP.</li>
 				<li>Refresh token fica apenas no backend; o navegador recebe acesso efêmero.</li>
-				<li>A leitura externa exige consentimento e usa limite diário configurado no backend.</li>
+				<li>A leitura externa ocorre somente ao usar recursos que precisam dela e respeita o limite diário configurado no backend.</li>
 				<li>
 					Quando a cota termina, páginas ficam pendentes em vez de trocar silenciosamente de modelo.
 				</li>
