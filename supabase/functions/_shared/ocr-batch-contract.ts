@@ -1,8 +1,5 @@
 import { parseOcrPayload, type OcrPayload } from './ocr-contract.ts';
-import {
-	deriveWordGeometryFromLines,
-	type OcrWordGeometry
-} from './ocr-word-geometry.ts';
+import { deriveWordGeometryFromLines, type OcrWordGeometry } from './ocr-word-geometry.ts';
 
 export type OcrContentClass =
 	| 'unknown'

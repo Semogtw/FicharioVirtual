@@ -51,12 +51,15 @@ describe('planOcrBatches', () => {
 	});
 
 	it('cuts batches before estimated output would exhaust the provider response ceiling', () => {
-		const batches = planOcrBatches(Array.from({ length: 12 }, (_, index) => page(index + 1)), {
-			maxPages: 40,
-			denseMaxPages: 40,
-			maxDerivedBytes: 50 * MIB,
-			maxEstimatedOutputTokens: 10_000
-		});
+		const batches = planOcrBatches(
+			Array.from({ length: 12 }, (_, index) => page(index + 1)),
+			{
+				maxPages: 40,
+				denseMaxPages: 40,
+				maxDerivedBytes: 50 * MIB,
+				maxEstimatedOutputTokens: 10_000
+			}
+		);
 
 		expect(batches.map((batch) => batch.pages.length)).toEqual([5, 5, 2]);
 		expect(batches.map((batch) => batch.estimatedOutputTokens)).toEqual([8_500, 8_500, 3_400]);
