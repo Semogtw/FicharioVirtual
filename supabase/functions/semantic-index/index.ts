@@ -2,7 +2,6 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { RequestBodyTooLargeError, readBoundedJson } from '../_shared/bounded-json.ts';
 import { corsHeaders, parseAppOrigin } from '../_shared/cors.ts';
 import {
-	SEMANTIC_CONSENT_VERSION,
 	SEMANTIC_EMBEDDING_MODEL,
 	SEMANTIC_INDEX_BATCH_PAGES,
 	SEMANTIC_INDEX_MAX_BATCHES,
@@ -99,14 +98,6 @@ Deno.serve(async (request) => {
 		error: userError
 	} = await supabase.auth.getUser();
 	if (userError || !user) return respond(401, { code: 'authentication_required' });
-
-	const [searchConsent, coverageConsent] = await Promise.all([
-		supabase.rpc('has_search_semantic_consent', { consent_version: SEMANTIC_CONSENT_VERSION }),
-		supabase.rpc('has_coverage_semantic_consent', { consent_version: SEMANTIC_CONSENT_VERSION })
-	]);
-	if (searchConsent.data !== true && coverageConsent.data !== true) {
-		return respond(403, { code: 'semantic_consent_required' });
-	}
 
 	const startedAt = performance.now();
 	const abort = new AbortController();
