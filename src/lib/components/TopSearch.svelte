@@ -47,6 +47,16 @@
 		border-radius: var(--radius-md);
 		background: var(--surface-strong);
 		box-shadow: 0 0.25rem 1rem rgb(var(--ink-rgb) / 5%);
+		transition:
+			border-color var(--motion-fast) var(--ease-standard),
+			box-shadow var(--motion-base) var(--ease-standard),
+			transform var(--motion-base) var(--ease-emphasized);
+	}
+
+	form:focus-within {
+		border-color: var(--line-strong);
+		box-shadow: 0 0.45rem 1.35rem rgb(var(--ink-rgb) / 8%);
+		transform: translateY(-1px);
 	}
 
 	svg {
@@ -60,6 +70,14 @@
 		width: 1.15rem;
 		height: 1.15rem;
 		stroke: var(--muted);
+		transition:
+			stroke var(--motion-fast) var(--ease-standard),
+			transform var(--motion-base) var(--ease-emphasized);
+	}
+
+	form:focus-within .search-icon {
+		stroke: var(--archive);
+		transform: scale(1.06);
 	}
 
 	input {
@@ -86,6 +104,17 @@
 		color: white;
 		font-weight: 720;
 		cursor: pointer;
+		transform: translateY(0) scale(1);
+		transition:
+			background-color var(--motion-fast) var(--ease-standard),
+			box-shadow var(--motion-base) var(--ease-standard),
+			transform var(--motion-fast) var(--ease-emphasized);
+	}
+
+	button:active {
+		box-shadow: none;
+		transform: translateY(1px) scale(0.96);
+		transition-duration: var(--motion-instant);
 	}
 
 	.submit-icon {
@@ -93,6 +122,19 @@
 		width: 1.1rem;
 		height: 1.1rem;
 		stroke: currentColor;
+	}
+
+	@media (hover: hover) and (pointer: fine) {
+		button:hover {
+			background: var(--archive-strong);
+			box-shadow: 0 0.35rem 0.9rem rgb(var(--ink-rgb) / 10%);
+			transform: translateY(-1px);
+		}
+
+		button:active {
+			box-shadow: none;
+			transform: translateY(1px) scale(0.96);
+		}
 	}
 
 	@media (max-width: 520px) {
