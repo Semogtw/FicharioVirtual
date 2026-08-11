@@ -25,12 +25,14 @@ Foram alinhados ao runtime atual:
 - importação unificada de imagens e PDFs;
 - fila global e OCR em segundo plano;
 - retry de OCR no worker/backend, sem loop de retry no navegador;
-- contratos de acessibilidade da fila e do seletor de arquivos;
+- contratos de acessibilidade da fila, seletor de arquivos e drop-zone;
 - geometria OCR obrigatória nos fixtures do worker local;
 - armazenamento de rascunhos account-scoped `v2`;
 - testes de PDF grande por referência no Drive usando descriptor lease, abandono seguro, recuperação de publicação e `processBatch`.
 
 Os testes legados que ainda descreviam `recordOcrConsent`, `processPage`, finalização sem lease ou rotas antigas de importação foram migrados para os contratos atuais em vez de restaurar APIs pré-lançamento.
+
+Os dois últimos E2E pré-merge também foram migrados e passaram isoladamente em Chromium: `/import/pdf/` agora valida o importador unificado sem consentimento, e a retomada multitab comprova uma única publicação/upload enquanto o OCR permanece no worker em segundo plano via `ocr-queue-kick`.
 
 O patch de formatação produzido pelo gate para `drive-reference-progress.test.ts` também foi absorvido pelo Prettier do próprio repositório. O HEAD que segue deste checkpoint é o candidato formatado a ser usado nos recibos finais; não há workflow temporário de reparo restante no `main`.
 
