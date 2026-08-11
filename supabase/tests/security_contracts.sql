@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(57);
+select plan(61);
 
 select has_table('public', 'app_users', 'allowlist table exists');
 select has_table('public', 'notebooks', 'notebooks table exists');
@@ -66,9 +66,16 @@ select is(
 select has_function('public', 'is_authorized_user', array[]::text[], 'authorization function exists');
 select has_function('public', 'search_pages', array['text','uuid','integer','integer'], 'search function exists');
 select has_function('public', 'claim_ocr_job', array['uuid','text','timestamp with time zone'], 'OCR claim function exists without an application quota argument');
-select has_function('public', 'complete_ocr_job', array['uuid','text','jsonb','public.page_status','timestamp with time zone'], 'OCR completion function exists');
+select has_function('public', 'complete_ocr_job', array['uuid','text','jsonb','public.page_status','timestamp with time zone'], 'OCR completion dependency exists');
 select has_function('public', 'fail_ocr_job', array['uuid','text','text','boolean','timestamp with time zone','timestamp with time zone'], 'OCR failure function exists');
-select has_function('public', 'create_pdf_import', array['uuid','uuid','text','text','text','text','timestamp with time zone','jsonb','integer'], 'PDF import function exists');
+select ok(
+  not exists (
+    select 1 from pg_proc as procedure
+    join pg_namespace as namespace on namespace.oid = procedure.pronamespace
+    where namespace.nspname = 'public' and procedure.proname = 'create_pdf_import'
+  ),
+  'pre-launch Supabase PDF import RPC is absent'
+);
 select has_function('public', 'export_portable_manifest', array[]::text[], 'portable export function exists');
 select has_function('public', 'get_usage_overview', array[]::text[], 'usage overview function exists');
 select has_function('public', 'set_tag_membership', array['uuid','uuid','boolean'], 'tag membership function exists');
@@ -91,11 +98,47 @@ select has_function(
   array['uuid','text','text','jsonb'],
   'semantic chunk replacement exists'
 );
-select has_function(
-  'public',
-  'record_coverage_semantic_consent',
-  array['integer'],
-  'semantic coverage consent exists'
+select ok(
+  not exists (
+    select 1 from pg_proc as procedure
+    join pg_namespace as namespace on namespace.oid = procedure.pronamespace
+    where namespace.nspname = 'public' and procedure.proname = 'record_coverage_semantic_consent'
+  ),
+  'pre-launch coverage semantic consent RPC is absent'
+);
+select ok(
+  not exists (
+    select 1 from pg_proc as procedure
+    join pg_namespace as namespace on namespace.oid = procedure.pronamespace
+    where namespace.nspname = 'public' and procedure.proname = 'create_image_import'
+  ),
+  'pre-launch Supabase image import RPC is absent'
+);
+select ok(
+  not exists (
+    select 1 from pg_proc as procedure
+    join pg_namespace as namespace on namespace.oid = procedure.pronamespace
+    where namespace.nspname = 'public' and procedure.proname = 'create_image_import_v2'
+  ),
+  'pre-launch Supabase image v2 import RPC is absent'
+);
+select ok(
+  not exists (
+    select 1 from pg_proc as procedure
+    join pg_namespace as namespace on namespace.oid = procedure.pronamespace
+    where namespace.nspname = 'public' and procedure.proname = 'create_drive_image_import'
+  ),
+  'pre-launch Drive image v1 import RPC is absent'
+);
+select ok(
+  not exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'app_users'
+      and column_name in ('ocr_consent_at', 'ocr_consent_version')
+  ),
+  'pre-launch OCR consent columns are absent'
 );
 
 select ok(
@@ -141,7 +184,7 @@ select ok(
     from pg_proc
     where oid = 'public.complete_ocr_job(uuid,text,jsonb,public.page_status,timestamp with time zone)'::regprocedure
   ),
-  'OCR completion runs through an explicit security-definer boundary'
+  'OCR completion dependency runs through an explicit security-definer boundary'
 );
 select ok(
   not (
@@ -166,12 +209,20 @@ select ok(
   'privileged quota blocking checks the active-user allowlist'
 );
 select ok(
-  (select prosecdef from pg_proc where oid = 'public.record_ocr_consent(integer)'::regprocedure),
-  'OCR consent remains an explicit privileged allowlist capability'
+  not exists (
+    select 1 from pg_proc as procedure
+    join pg_namespace as namespace on namespace.oid = procedure.pronamespace
+    where namespace.nspname = 'public' and procedure.proname = 'record_ocr_consent'
+  ),
+  'pre-launch OCR consent function is absent'
 );
 select ok(
-  (select prosecdef from pg_proc where oid = 'public.record_coverage_semantic_consent(integer)'::regprocedure),
-  'semantic consent remains an explicit privileged allowlist capability'
+  not exists (
+    select 1 from pg_proc as procedure
+    join pg_namespace as namespace on namespace.oid = procedure.pronamespace
+    where namespace.nspname = 'public' and procedure.proname = 'record_search_semantic_consent'
+  ),
+  'pre-launch search semantic consent function is absent'
 );
 select ok(
   (select prosecdef from pg_proc where oid = 'public.replace_page_semantic_chunks(uuid,text,text,jsonb)'::regprocedure),
