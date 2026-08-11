@@ -46,6 +46,18 @@ function gateway(): PdfImportGateway {
 	};
 }
 
+function complete(pageIds: readonly string[]) {
+	return {
+		state: 'complete' as const,
+		completedPageIds: pageIds,
+		reviewPageIds: [],
+		pendingPageIds: [],
+		failedPageIds: [],
+		splitRequiredPageIds: [],
+		unexpectedResultPageIds: []
+	};
+}
+
 describe('large PDF OCR import', () => {
 	it('accepts an original larger than the old 20 MiB ceiling and batches rendered pages', async () => {
 		const calls: string[][] = [];
@@ -60,21 +72,9 @@ describe('large PDF OCR import', () => {
 			async calculateSha256() {
 				return 'a'.repeat(64);
 			},
-			async recordOcrConsent() {},
-			async processPageOcr() {
-				throw new Error('single-page fallback must not run');
-			},
 			async processOcrBatch(pageIds) {
 				calls.push([...pageIds]);
-				return {
-					state: 'complete',
-					completedPageIds: pageIds,
-					reviewPageIds: [],
-					pendingPageIds: [],
-					failedPageIds: [],
-					splitRequiredPageIds: [],
-					unexpectedResultPageIds: []
-				};
+				return complete(pageIds);
 			}
 		};
 		const largePdf = new File([new Uint8Array(21 * 1024 * 1024)], 'grande.pdf', {
@@ -83,7 +83,7 @@ describe('large PDF OCR import', () => {
 
 		const result = await uploadPdfWithGateway(largePdf, {}, gateway(), dependencies);
 
-		expect(calls.map((call) => call.length)).toEqual([40, 5]);
+		expect(calls.map((call) => call.length)).toEqual([28, 17]);
 		expect(result.ocrCompleted).toBe(45);
 		expect(result.ocrPending).toBe(0);
 	});
@@ -103,9 +103,8 @@ describe('large PDF OCR import', () => {
 			async calculateSha256() {
 				return 'b'.repeat(64);
 			},
-			async recordOcrConsent() {},
-			async processPageOcr() {
-				return { state: 'complete', needsReview: false, warningCount: 0 };
+			async processOcrBatch(pageIds) {
+				return complete(pageIds);
 			}
 		};
 
