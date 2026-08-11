@@ -42,12 +42,14 @@ describe('OCR staging verification', () => {
 		expect(packageJson).toContain('"test:staging:ocr": "node tools/checks/check-ocr-staging.mjs"');
 	});
 
-	it('creates, invokes, verifies, and deletes only the synthetic OCR document', () => {
+	it('creates, invokes, verifies, and deletes only the synthetic OCR probe', () => {
 		const runner = read('tools/checks/check-ocr-staging.mjs');
 
-		expect(runner).toContain("rpc('record_ocr_consent'");
-		expect(runner).toContain("rpc('create_image_import'");
+		expect(runner).not.toContain("rpc('record_ocr_consent'");
+		expect(runner).not.toContain("rpc('create_image_import'");
+		expect(runner).toContain("rpc('create_ocr_staging_probe'");
 		expect(runner).toContain("functions.invoke('process-ocr'");
+		expect(runner).toContain('body: { pageIds: [pageId] }');
 		expect(runner).toContain('invocation.response');
 		expect(runner).toContain('createOcrInvocationDiagnostic');
 		expect(runner).toContain('formatOcrInvocationFailure');
