@@ -366,10 +366,7 @@ export async function uploadPdfWithGateway(
 	}
 }
 
-export async function uploadPdf(
-	file: File,
-	options: PdfUploadOptions
-): Promise<UploadedPdf> {
+export async function uploadPdf(file: File, options: PdfUploadOptions): Promise<UploadedPdf> {
 	const { uploadPdfToDrive } = await import('./drive-upload');
 	return uploadPdfToDrive(file, options);
 }
