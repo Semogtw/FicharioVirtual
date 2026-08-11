@@ -125,11 +125,5 @@
 			box-shadow: var(--shadow-raised);
 			transform: translateY(-0.15rem);
 		}
-
-		.notebook-card:hover .cover {
-			background:
-				linear-gradient(90deg, rgb(255 255 255 / 6%) 1px, transparent 1px) 0 0 / 1.5rem 1.5rem,
-				linear-gradient(rgb(255 255 255 / 6%), rgb(0 0 0 / 5%));
-		}
 	}
 </style>
