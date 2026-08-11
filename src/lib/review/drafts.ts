@@ -2,7 +2,7 @@ import { isIsoTimestamp } from '$lib/validation/iso-timestamp';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_TEXT_LENGTH = 1_000_000;
-const PREFIX = 'fichario:correction-draft:v1:';
+const PREFIX = 'fichario:correction-draft:v2:';
 
 export type CorrectionDraft = {
 	pageId: string;
@@ -10,7 +10,7 @@ export type CorrectionDraft = {
 	updatedAt: string;
 };
 
-type StoredCorrectionDraft = CorrectionDraft & { version: 1; userId: string };
+type StoredCorrectionDraft = CorrectionDraft & { version: 2; userId: string };
 
 function validUuid(value: string, label: string) {
 	if (!UUID.test(value)) throw new TypeError(`Invalid ${label}`);
@@ -39,7 +39,7 @@ export function serializeCorrectionDraft(userId: string, draft: CorrectionDraft)
 	const ownerUserId = validUuid(userId, 'correction draft user identifier');
 	if (!validDraft(draft)) throw new TypeError('Invalid correction draft');
 	return JSON.stringify({
-		version: 1,
+		version: 2,
 		userId: ownerUserId,
 		...draft
 	} satisfies StoredCorrectionDraft);
@@ -65,7 +65,7 @@ export function parseCorrectionDraft(
 		updatedAt: record.updatedAt ?? ''
 	};
 	if (
-		record.version !== 1 ||
+		record.version !== 2 ||
 		record.userId !== expectedUserId ||
 		draft.pageId !== expectedPageId ||
 		!validDraft(draft)
