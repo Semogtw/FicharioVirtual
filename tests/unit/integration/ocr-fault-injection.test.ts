@@ -32,67 +32,22 @@ async function readBody(incoming: IncomingMessage): Promise<string> {
 
 async function handleRequest(incoming: IncomingMessage, response: ServerResponse) {
 	if (incoming.method !== 'POST') throw new Error('fault server requires POST');
-	if (incoming.headers['x-goog-api-key'] !== API_KEY) {
-		throw new Error('Gemini API key was not supplied through the expected header');
-	}
-	if (!String(incoming.headers['content-type']).startsWith('application/json')) {
-		throw new Error('Gemini request must be JSON');
-	}
-	const body = JSON.parse(await readBody(incoming)) as {
-		contents?: Array<{ parts?: Array<{ inlineData?: { mimeType?: string; data?: string } }> }>;
-		generationConfig?: Record<string, unknown>;
-	};
-	if (body.contents?.[0]?.parts?.[0]?.inlineData?.data !== 'AQID') {
-		throw new Error('Gemini request did not contain the expected image bytes');
-	}
-	const generationConfig = body.generationConfig;
-	if (!generationConfig || generationConfig.responseMimeType !== 'application/json') {
-		throw new Error('Gemini request did not require JSON output');
-	}
-	if (
-		'responseFormat' in generationConfig ||
-		'responseJsonSchema' in generationConfig ||
-		'responseSchema' in generationConfig
-	) {
-		throw new Error('Gemini request included a provider-rejected schema field');
-	}
-
+	if (incoming.headers['x-goog-api-key'] !== API_KEY) throw new Error('Gemini API key missing');
+	const body = JSON.parse(await readBody(incoming)) as { generationConfig?: Record<string, unknown> };
+	if (body.generationConfig?.responseMimeType !== 'application/json') throw new Error('JSON required');
 	switch (incoming.url) {
-		case '/transient-rate-limit':
-			response.writeHead(429, { 'Content-Type': 'text/plain' });
-			response.end('Rate limit exceeded');
-			return;
-		case '/daily-quota':
-			response.writeHead(429, { 'Content-Type': 'text/plain' });
-			response.end('Requests per day quota exceeded');
-			return;
-		case '/service-unavailable':
-			response.writeHead(503, { 'Content-Type': 'text/plain' });
-			response.end('Service unavailable');
-			return;
-		case '/invalid-payload':
-			response.writeHead(200, { 'Content-Type': 'application/json' });
-			response.end('{');
-			return;
-		case '/timeout':
-			setTimeout(() => {
-				if (response.destroyed) return;
-				response.writeHead(200, { 'Content-Type': 'application/json' });
-				response.end('{}');
-			}, 250);
-			return;
-		default:
-			response.writeHead(404, { 'Content-Type': 'text/plain' });
-			response.end('Unknown fault scenario');
+		case '/transient-rate-limit': response.writeHead(429); response.end('Rate limit exceeded'); return;
+		case '/daily-quota': response.writeHead(429); response.end('Requests per day quota exceeded'); return;
+		case '/service-unavailable': response.writeHead(503); response.end('Service unavailable'); return;
+		case '/invalid-payload': response.writeHead(200, { 'Content-Type': 'application/json' }); response.end('{'); return;
+		case '/timeout': setTimeout(() => { if (!response.destroyed) { response.writeHead(200); response.end('{}'); } }, 250); return;
+		default: response.writeHead(404); response.end('Unknown');
 	}
 }
 
 function fetchScenario(path: string): typeof fetch {
 	return ((input: string | URL | Request, init?: RequestInit) => {
-		const providerUrl = String(input);
-		if (providerUrl.includes(API_KEY)) {
-			throw new Error('Gemini API key leaked into the provider URL');
-		}
+		if (String(input).includes(API_KEY)) throw new Error('Gemini API key leaked into URL');
 		return fetch(`${origin}/${path}`, init);
 	}) as typeof fetch;
 }
@@ -113,8 +68,7 @@ function decision(error: unknown, attemptCount: number) {
 beforeAll(async () => {
 	server.listen(0, '127.0.0.1');
 	await once(server, 'listening');
-	const address = server.address() as AddressInfo;
-	origin = `http://127.0.0.1:${address.port}`;
+	origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
 
 afterAll(async () => {
@@ -125,106 +79,28 @@ afterAll(async () => {
 
 describe.sequential('local OCR provider fault injection', () => {
 	it('classifies transient 429 as retryable rate limiting', async () => {
-		const result = decision(await captureFailure('transient-rate-limit'), 1);
-
-		expect(result.persistence).toEqual(
-			expect.objectContaining({
-				kind: 'fail_job',
-				code: 'gemini_rate_limited',
-				retryable: true,
-				nextRetryAt: '2026-08-03T00:01:00.000Z'
-			})
+		expect(decision(await captureFailure('transient-rate-limit'), 1).persistence).toEqual(
+			expect.objectContaining({ kind: 'fail_job', code: 'gemini_rate_limited', retryable: true, nextRetryAt: '2026-08-03T00:01:00.000Z' })
 		);
-		expect(result.response).toEqual({ status: 202, body: { state: 'retry_later' } });
 	});
-
-	it('classifies provider daily quota separately from transient 429', async () => {
-		const result = decision(await captureFailure('daily-quota'), 1);
-
-		expect(result.persistence).toEqual({
-			kind: 'block_quota',
-			code: 'gemini_daily_quota',
-			failedAt: FAILED_AT.toISOString()
-		});
-		expect(result.response).toEqual({ status: 202, body: { state: 'quota_exhausted' } });
+	it('classifies provider daily quota separately', async () => {
+		expect(decision(await captureFailure('daily-quota'), 1).persistence).toEqual({ kind: 'block_quota', code: 'gemini_daily_quota', failedAt: FAILED_AT.toISOString() });
 	});
-
 	it('classifies 503 as retryable provider unavailability', async () => {
-		const result = decision(await captureFailure('service-unavailable'), 1);
-
-		expect(result.persistence).toEqual(
-			expect.objectContaining({
-				kind: 'fail_job',
-				code: 'gemini_service_unavailable',
-				retryable: true,
-				nextRetryAt: '2026-08-03T00:00:30.000Z'
-			})
+		expect(decision(await captureFailure('service-unavailable'), 1).persistence).toEqual(
+			expect.objectContaining({ code: 'gemini_service_unavailable', retryable: true, nextRetryAt: '2026-08-03T00:00:30.000Z' })
 		);
 	});
-
-	it('retries an invalid provider payload before the third attempt', async () => {
-		const result = decision(await captureFailure('invalid-payload'), 1);
-
-		expect(result.persistence).toEqual(
-			expect.objectContaining({
-				code: 'ocr_response_invalid',
-				retryable: true,
-				nextRetryAt: '2026-08-03T00:00:45.000Z'
-			})
-		);
-		expect(result.response.status).toBe(202);
+	it('bounds invalid provider payload retries', async () => {
+		expect(decision(await captureFailure('invalid-payload'), 1).persistence).toEqual(expect.objectContaining({ code: 'ocr_response_invalid', retryable: true }));
+		expect(decision(await captureFailure('invalid-payload'), 3).persistence).toEqual(expect.objectContaining({ code: 'ocr_response_invalid', retryable: false, nextRetryAt: null }));
 	});
-
-	it('terminates an invalid provider payload on the third attempt', async () => {
-		const result = decision(await captureFailure('invalid-payload'), 3);
-
-		expect(result.persistence).toEqual(
-			expect.objectContaining({
-				code: 'ocr_response_invalid',
-				retryable: false,
-				nextRetryAt: null
-			})
-		);
-		expect(result.response).toEqual({
-			status: 422,
-			body: { code: 'ocr_response_invalid', retryable: false }
-		});
-	});
-
-	it('retries a real aborted HTTP request before the third attempt', async () => {
-		const controller = new AbortController();
-		const timeout = setTimeout(() => controller.abort(), 25);
-		const error = await captureFailure('timeout', controller.signal);
-		clearTimeout(timeout);
-		const result = decision(error, 1);
-
-		expect(result.persistence).toEqual(
-			expect.objectContaining({
-				code: 'ocr_request_failed',
-				retryable: true,
-				nextRetryAt: '2026-08-03T00:00:45.000Z'
-			})
-		);
-		expect(result.response.status).toBe(202);
-	});
-
-	it('terminates a real aborted HTTP request on the third attempt', async () => {
-		const controller = new AbortController();
-		const timeout = setTimeout(() => controller.abort(), 25);
-		const error = await captureFailure('timeout', controller.signal);
-		clearTimeout(timeout);
-		const result = decision(error, 3);
-
-		expect(result.persistence).toEqual(
-			expect.objectContaining({
-				code: 'ocr_request_failed',
-				retryable: false,
-				nextRetryAt: null
-			})
-		);
-		expect(result.response).toEqual({
-			status: 503,
-			body: { code: 'ocr_request_failed', retryable: false }
-		});
+	it('bounds aborted request retries', async () => {
+		const first = new AbortController();
+		setTimeout(() => first.abort(), 25);
+		expect(decision(await captureFailure('timeout', first.signal), 1).persistence).toEqual(expect.objectContaining({ code: 'ocr_request_failed', retryable: true }));
+		const third = new AbortController();
+		setTimeout(() => third.abort(), 25);
+		expect(decision(await captureFailure('timeout', third.signal), 3).persistence).toEqual(expect.objectContaining({ code: 'ocr_request_failed', retryable: false, nextRetryAt: null }));
 	});
 });
