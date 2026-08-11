@@ -191,7 +191,9 @@
 		class="queue-trigger"
 		class:active={open}
 		onclick={() => (open = !open)}
-		aria-label={activeCount > 0 ? `Fila de importações, ${activeCount} em andamento` : 'Fila de importações'}
+		aria-label={activeCount > 0
+			? `Fila de importações, ${activeCount} em andamento`
+			: 'Fila de importações'}
 		aria-expanded={open}
 		aria-controls="global-import-queue"
 	>
