@@ -2,6 +2,9 @@ name: Build deployable Fichário staging artifact
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 permissions:
   actions: read
@@ -31,20 +34,40 @@ jobs:
         run: |
           set -euo pipefail
 
-          main_sha="$(gh api "/repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
-          if [[ "$main_sha" != "$GITHUB_SHA" ]]; then
-            echo "Refusing to build a stale/non-main artifact: workflow SHA=$GITHUB_SHA main SHA=$main_sha" >&2
-            exit 1
-          fi
+          validation_run_id=''
+          for attempt in $(seq 1 120); do
+            main_sha="$(gh api "/repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
+            if [[ "$main_sha" != "$GITHUB_SHA" ]]; then
+              echo "Refusing to build a stale/non-main artifact: workflow SHA=$GITHUB_SHA main SHA=$main_sha" >&2
+              exit 1
+            fi
 
-          validation_run_id="$(
-            gh api --paginate \
-              "/repos/${GITHUB_REPOSITORY}/actions/workflows/validate-current-head.yml/runs?head_sha=${GITHUB_SHA}&status=completed&per_page=100" \
-              --jq ".workflow_runs[] | select(.head_sha == \"${GITHUB_SHA}\" and .head_branch == \"main\" and .event == \"push\" and .conclusion == \"success\") | .id" \
-              | head -n 1
-          )"
+            validation_run_id="$(
+              gh api --paginate \
+                "/repos/${GITHUB_REPOSITORY}/actions/workflows/validate-current-head.yml/runs?head_sha=${GITHUB_SHA}&per_page=100" \
+                --jq ".workflow_runs[] | select(.head_sha == \"${GITHUB_SHA}\" and .head_branch == \"main\" and .event == \"push\" and .status == \"completed\" and .conclusion == \"success\") | .id" \
+                | head -n 1
+            )"
+            if [[ -n "$validation_run_id" ]]; then
+              break
+            fi
+
+            failed_run="$(
+              gh api --paginate \
+                "/repos/${GITHUB_REPOSITORY}/actions/workflows/validate-current-head.yml/runs?head_sha=${GITHUB_SHA}&per_page=100" \
+                --jq ".workflow_runs[] | select(.head_sha == \"${GITHUB_SHA}\" and .head_branch == \"main\" and .event == \"push\" and .status == \"completed\" and .conclusion != \"success\") | [.id, .conclusion] | @tsv" \
+                | head -n 1
+            )"
+            if [[ -n "$failed_run" ]]; then
+              echo "Validate current head completed without success for $GITHUB_SHA: $failed_run" >&2
+              exit 1
+            fi
+
+            sleep 5
+          done
+
           if [[ -z "$validation_run_id" ]]; then
-            echo "No successful Validate current head push run exists for main SHA $GITHUB_SHA." >&2
+            echo "No successful Validate current head push run became available for main SHA $GITHUB_SHA." >&2
             exit 1
           fi
 
