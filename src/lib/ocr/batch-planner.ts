@@ -31,6 +31,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const DEFAULT_MAX_PAGES = 28;
 const DEFAULT_DENSE_MAX_PAGES = 14;
 const DEFAULT_MAX_DERIVED_BYTES = 12 * 1024 * 1024;
+const UNKNOWN_DERIVED_BYTES = 1024 * 1024;
 // Flash-Lite can return 65,536 tokens. Leave substantial headroom for pages
 // whose actual text/geometry is denser than the preflight classification.
 const DEFAULT_MAX_ESTIMATED_OUTPUT_TOKENS = 48_000;
@@ -71,7 +72,9 @@ function normalizedLimits(limits: OcrBatchPlannerLimits) {
 }
 
 function normalizePage(page: OcrBatchPageCandidate) {
-	const density = page.density ?? 'normal';
+	const unknownDerivedSize = page.derivedBytes === 1;
+	const requestedDensity = page.density ?? 'normal';
+	const density = unknownDerivedSize && requestedDensity === 'normal' ? 'dense' : requestedDensity;
 	const route = page.route ?? 'gemini';
 	if (
 		!UUID.test(page.pageId) ||
@@ -81,12 +84,17 @@ function normalizePage(page: OcrBatchPageCandidate) {
 		!Number.isInteger(page.derivedBytes) ||
 		page.derivedBytes < 1 ||
 		page.derivedBytes > 50 * 1024 * 1024 ||
-		!['sparse', 'normal', 'dense'].includes(density) ||
+		!['sparse', 'normal', 'dense'].includes(requestedDensity) ||
 		!['gemini', 'desktop'].includes(route)
 	) {
 		throw new TypeError('Invalid OCR batch page');
 	}
-	return Object.freeze({ ...page, density, route });
+	return Object.freeze({
+		...page,
+		derivedBytes: unknownDerivedSize ? UNKNOWN_DERIVED_BYTES : page.derivedBytes,
+		density,
+		route
+	});
 }
 
 function estimatedOutputTokens(page: Readonly<Required<OcrBatchPageCandidate>>) {
