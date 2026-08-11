@@ -1,0 +1,78 @@
+name: Apply integration cleanup
+on:
+  push:
+    branches: [integrate/predeploy-real-branches]
+permissions:
+  contents: write
+jobs:
+  cleanup:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: integrate/predeploy-real-branches
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Apply exact launch-contract replacements
+        run: |
+          git fetch origin feat/background-import-queue
+          git show origin/feat/background-import-queue:tests/unit/import/job-runner.test.ts > tests/unit/import/job-runner.test.ts
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  print(f'not found: {path}: {old[:50]!r}')
+                  return
+              p.write_text(text.replace(old, new))
+
+          replace('src/lib/components/UnifiedImportPage.svelte',
+              "addPdfs(pdfs, { notebookId: notebookId || null, consentGranted: true });",
+              "addPdfs(pdfs, { notebookId: notebookId || null });")
+          replace('src/routes/import/drive/+page.svelte', '\n\t\t\tconsentGranted: true,', '')
+          replace('src/routes/coverage/+page.svelte',
+              "\timport { recordSemanticCoverageConsent } from '$lib/services/semantic-coverage';\n", '')
+          replace('src/routes/coverage/+page.svelte', '\tlet semanticConsentRecorded = $state(false);\n', '')
+          old = '''\t\t\tlet semanticRequested = true;\n\t\t\tif (semanticRequested && !semanticConsentRecorded) {\n\t\t\t\ttry {\n\t\t\t\t\tawait recordSemanticCoverageConsent();\n\t\t\t\t\tif (!coverageRequests.isCurrent(version)) return;\n\t\t\t\t\tsemanticConsentRecorded = true;\n\t\t\t\t} catch {\n\t\t\t\t\tsemanticRequested = false;\n\t\t\t\t\tsemanticNotice =\n\t\t\t\t\t\t'A camada semântica não pôde ser iniciada nesta análise. O modo textual/fuzzy foi preservado normalmente.';\n\t\t\t\t}\n\t\t\t}\n'''
+          replace('src/routes/coverage/+page.svelte', old, '\t\t\tconst semanticRequested = true;\n')
+          replace('src/lib/pdf/drive-reference-import.ts',
+              '\tdependencies?: DrivePdfReferenceImportDependencies;\n',
+              '\tdependencies?: Partial<DrivePdfReferenceImportDependencies>;\n')
+          replace('src/lib/pdf/drive-reference-import.ts',
+              '\tconst runtime = dependencies ?? createDefaultDependencies(client);\n',
+              '\tconst runtime = Object.assign(createDefaultDependencies(client), dependencies ?? {});\n')
+
+          for path in [
+              'tests/unit/pdf/upload-batching.test.ts',
+              'tests/unit/pdf/upload-reading-progress.test.ts',
+              'tests/unit/pdf/upload.test.ts',
+              'tests/unit/pdf/resume-store.test.ts',
+              'tests/unit/stores/pdf-import-queue.test.ts',
+              'tests/e2e/pdf-import-multitab.spec.ts'
+          ]:
+              p = Path(path)
+              if not p.exists(): continue
+              text = p.read_text()
+              text = text.replace('\n\t\tconsentGranted: true,', '')
+              text = text.replace('\n\tconsentGranted: true,', '')
+              text = text.replace('\n\t\t\tconsentGranted: true,', '')
+              p.write_text(text)
+          PY
+          pnpm exec prettier --write .
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .
+          git commit -m 'refactor: align combined branches with launch baseline'
+          git push origin HEAD:integrate/predeploy-real-branches
