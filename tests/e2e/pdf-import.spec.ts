@@ -28,20 +28,24 @@ test.beforeEach(async ({ page }) => {
 	await page.route('http://127.0.0.1:54321/rest/v1/app_users**', (route) =>
 		route.fulfill({ status: 200, contentType: 'application/json', body: '{"is_active":true}' })
 	);
+	await page.route('http://127.0.0.1:54321/rest/v1/rpc/list_notebooks**', (route) =>
+		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+	);
 });
 
-test('offers a separate PDF import flow with automatic selective OCR disclosure', async ({
-	page
-}) => {
+test('uses the unified import surface for PDFs with automatic background OCR', async ({ page }) => {
 	await page.goto('/import/pdf/');
 
-	await expect(page.getByRole('heading', { name: 'Importar PDFs' })).toBeVisible();
-	await expect(page.getByText(/somente páginas visuais/)).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Adicionar ao fichário' })).toBeVisible();
+	await expect(page.getByText('Fotos e PDFs entram na mesma fila')).toBeVisible();
+	await expect(page.getByText('Não precisa ficar nesta tela')).toBeVisible();
+	await expect(page.getByText(/OCR continua no servidor mesmo se você fechar o Fichário/)).toBeVisible();
 	await expect(
 		page.getByRole('checkbox', { name: /Permitir OCR quando uma página não possuir texto/ })
 	).toHaveCount(0);
-	await expect(page.getByText('Processamento privado, sem confirmações repetidas')).toBeVisible();
-	await expect(page.locator('input[type="file"][accept="application/pdf"]')).toBeAttached();
+	await expect(
+		page.locator('input[type="file"][accept="application/pdf,image/jpeg,image/png,image/webp"]')
+	).toBeAttached();
 	await expect(page.getByRole('link', { name: 'Imagens' })).toBeVisible();
 	await expect(page.getByRole('link', { name: 'PDFs' })).toBeVisible();
 });
