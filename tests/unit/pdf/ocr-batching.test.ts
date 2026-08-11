@@ -34,7 +34,7 @@ describe('runPdfOcrBatches', () => {
 			}
 		});
 
-		expect(calls.map((call) => call.length)).toEqual([40, 5]);
+		expect(calls.map((call) => call.length)).toEqual([28, 17]);
 		expect(result.complete).toBe(43);
 		expect(result.needsReview).toBe(2);
 		expect(result.pending).toBe(0);
@@ -110,7 +110,7 @@ describe('runPdfOcrBatches', () => {
 		});
 
 		expect(calls).toBe(1);
-		expect(result.complete).toBe(40);
-		expect(result.pending).toBe(5);
+		expect(result.complete).toBe(28);
+		expect(result.pending).toBe(17);
 	});
 });

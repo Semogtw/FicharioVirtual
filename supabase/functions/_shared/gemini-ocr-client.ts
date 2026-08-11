@@ -93,13 +93,14 @@ const MAX_BATCH_BYTES = 14 * 1024 * 1024;
 const MAX_PROVIDER_ERROR_BYTES = 64 * 1024;
 const MAX_PROVIDER_RESPONSE_BYTES = 4 * 1024 * 1024;
 const MAX_TOKEN_COUNT = Number.MAX_SAFE_INTEGER;
+const MAX_OUTPUT_TOKENS = 65_536;
 
-const prompt = `Você é um transcritor literal de anotações acadêmicas.
-Transcreva todo texto visível da imagem em português, preservando ordem de leitura, títulos, listas, quebras relevantes, símbolos e fórmulas em texto quando possível.
+const prompt = `Você é um transcritor literal de material acadêmico.
+Transcreva todo texto visível em português, preservando ordem de leitura, títulos, listas, símbolos, fórmulas e quebras de linha visualmente relevantes.
 Não resuma, não explique, não complete lacunas e não adivinhe palavras ilegíveis.
-Quando algo não puder ser lido com segurança, mantenha o trecho mais conservador possível e adicione um aviso curto.
-Quando o contrato pedir wordGeometry, localize cada palavra visível usando a mesma grafia retornada na transcrição. Cada caixa usa coordenadas inteiras normalizadas de 0 a 10000, origem no canto superior esquerdo, no formato compacto esquerda,topo,direita,base|palavra. Não invente caixas para texto não visível e não inclua comentários na geometria.
-Retorne exclusivamente JSON válido e cumpra exatamente o contrato JSON descrito na instrução da requisição.`;
+Quando algo não puder ser lido com segurança, mantenha a leitura mais conservadora possível e adicione um aviso curto.
+Para economizar saída, a geometria é por LINHA, nunca por palavra: lineGeometry deve conter exatamente uma caixa para cada linha NÃO VAZIA de text, na mesma ordem. Cada caixa é uma string "esquerda,topo,direita,base" com inteiros de 0 a 1000 e origem no canto superior esquerdo. Não repita o texto da linha dentro da geometria. O servidor deriva as caixas de palavras localmente.
+Retorne exclusivamente JSON válido e cumpra exatamente o contrato descrito na requisição.`;
 
 const warningSchema = {
 	type: 'array',
@@ -119,8 +120,6 @@ const warningSchema = {
 					'empty_page'
 				]
 			},
-			// Gemini's structured-output schema does not support maxLength; the
-			// response parser enforces the 300-character safety limit instead.
 			message: { type: 'string' }
 		},
 		required: ['code', 'message']
@@ -131,22 +130,18 @@ const responseSchema = {
 	type: 'object',
 	additionalProperties: false,
 	properties: {
-		text: {
-			type: 'string',
-			description: 'Transcrição literal completa, sem comentários externos.'
-		},
+		text: { type: 'string', description: 'Transcrição literal completa.' },
 		warnings: warningSchema
 	},
 	required: ['text', 'warnings']
 } as const;
 
-const wordGeometrySchema = {
+const lineGeometrySchema = {
 	type: 'array',
-	maxItems: 20_000,
+	maxItems: 2_000,
 	items: {
 		type: 'string',
-		description:
-			'Uma palavra visível no formato esquerda,topo,direita,base|palavra; coordenadas inteiras entre 0 e 10000, origem superior esquerda.'
+		description: 'Caixa da linha correspondente no formato esquerda,topo,direita,base; 0..1000.'
 	}
 } as const;
 
@@ -161,12 +156,9 @@ const batchResponseSchema = {
 				type: 'object',
 				additionalProperties: false,
 				properties: {
-					pageId: { type: 'string', description: 'Identificador UUID fornecido para a página.' },
+					pageId: { type: 'string' },
 					pageNumber: { type: 'integer', minimum: 1 },
-					text: {
-						type: 'string',
-						description: 'Transcrição literal completa desta página.'
-					},
+					text: { type: 'string', description: 'Transcrição literal completa desta página.' },
 					contentClass: {
 						type: 'string',
 						enum: [
@@ -178,14 +170,12 @@ const batchResponseSchema = {
 							'table_layout',
 							'math',
 							'sparse'
-						],
-						description:
-							'Classificação visual conservadora para telemetria. Use unknown quando não houver uma classe dominante segura.'
+						]
 					},
-					wordGeometry: wordGeometrySchema,
+					lineGeometry: lineGeometrySchema,
 					warnings: warningSchema
 				},
-				required: ['pageId', 'pageNumber', 'text', 'contentClass', 'wordGeometry', 'warnings']
+				required: ['pageId', 'pageNumber', 'text', 'contentClass', 'lineGeometry', 'warnings']
 			}
 		}
 	},
@@ -193,7 +183,7 @@ const batchResponseSchema = {
 } as const;
 
 function outputContract(schema: unknown) {
-	return `Contrato JSON obrigatório (não repita o schema; devolva apenas o objeto final): ${JSON.stringify(schema)}. Não inclua propriedades extras.`;
+	return `Contrato JSON obrigatório (devolva somente o objeto final, sem propriedades extras): ${JSON.stringify(schema)}.`;
 }
 
 function base64(bytes: Uint8Array) {
@@ -355,7 +345,7 @@ export async function requestGeminiOcrBatch(
 	validateBatchPages(request.pages);
 	const parts: Array<Record<string, unknown>> = [
 		{
-			text: `${prompt}\nCada imagem é precedida por seu pageId e número original. Não omita, duplique, reordene a identidade nem combine páginas. Classifique visualmente cada página em contentClass usando somente a enumeração fornecida; a classe é telemetria e nunca deve alterar, resumir ou normalizar a transcrição. Em wordGeometry, inclua uma entrada compacta para cada palavra que puder ser localizada visualmente com segurança. Retorne um item para cada imagem.\n${outputContract(batchResponseSchema)}\nVersão do prompt: ${request.promptVersion}.`
+			text: `${prompt}\nCada imagem é precedida por seu pageId e número original. Não omita, duplique, reordene a identidade nem combine páginas. Classifique cada página em contentClass apenas para telemetria. Retorne um item para cada imagem.\n${outputContract(batchResponseSchema)}\nVersão do prompt: ${request.promptVersion}.`
 		}
 	];
 	for (const page of request.pages) {
@@ -373,8 +363,9 @@ export async function requestGeminiOcrBatch(
 	const payload = await execute(request, {
 		contents: [{ role: 'user', parts }],
 		generationConfig: {
-			maxOutputTokens: Math.min(65_536, Math.max(8_192, request.pages.length * 4_096)),
-			responseMimeType: 'application/json'
+			maxOutputTokens: MAX_OUTPUT_TOKENS,
+			responseMimeType: 'application/json',
+			thinkingConfig: { thinkingLevel: 'minimal' }
 		}
 	});
 	const text = candidateText(payload);
@@ -414,8 +405,9 @@ export async function requestGeminiOcr(request: GeminiOcrRequest): Promise<OcrPa
 			}
 		],
 		generationConfig: {
-			maxOutputTokens: 8192,
-			responseMimeType: 'application/json'
+			maxOutputTokens: 16_384,
+			responseMimeType: 'application/json',
+			thinkingConfig: { thinkingLevel: 'minimal' }
 		}
 	});
 	const text = candidateText(payload);

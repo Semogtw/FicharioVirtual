@@ -1,87 +1,86 @@
-# Geometria de palavras do OCR
+# Geometria espacial do OCR
 
 ## Objetivo
 
-A busca do Fichário consegue localizar texto mesmo quando o OCR erra a grafia. A geometria por palavra liga essa correspondência textual à posição física da palavra na página, permitindo destacar o resultado diretamente sobre imagem ou PDF.
+A busca do Fichário precisa destacar na mídia a palavra encontrada, inclusive quando a correspondência foi fuzzy. O formato persistido continua oferecendo caixas por palavra ao visualizador, mas o Gemini não precisa mais repetir cada palavra e quatro coordenadas na resposta.
 
-## Contrato espacial
+## Contrato persistido
 
-Cada palavra persistida usa a forma compacta:
+Cada palavra aceita pelo backend é persistida como:
 
 ```text
 [text, left, top, right, bottom]
 ```
 
-As quatro coordenadas são inteiros no intervalo `0..10000`, com origem no canto superior esquerdo. O sistema não grava pixels absolutos. Isso torna a geometria independente da resolução da imagem, do DPI e do nível de zoom do visualizador.
+As coordenadas são inteiros normalizados em `0..10000`, com origem no canto superior esquerdo. O formato é independente de resolução, DPI e zoom.
 
-Exemplo:
+## Gemini: geometria compacta por linha
 
-```json
-["fotossintcse", 1200, 2400, 3500, 2900]
-```
+O contrato do Gemini em lote usa `lineGeometry`, não `wordGeometry`.
 
-O banco limita uma página a 20.000 caixas e 4 MiB de geometria. Caixas fora da página, vazias, invertidas ou com texto inválido são recusadas pelo `CHECK` da tabela.
-
-## Persistência e consistência
-
-A geometria é armazenada em dois lugares:
-
-- `ocr_results.word_geometry`: cópia pertencente ao resultado OCR imutável;
-- `pages.ocr_word_geometry`: projeção do resultado atualmente aceito, otimizada para leitura do visualizador.
-
-Os RPCs `complete_ocr_job_with_geometry` e `complete_desktop_ocr_job_with_geometry` concluem o OCR e vinculam a geometria ao mesmo resultado aceito na mesma transação. Um replay idêntico é permitido. Um replay com o mesmo resultado textual mas caixas diferentes é rejeitado para impedir que uma versão antiga da geometria seja colocada sobre uma versão nova do texto.
-
-## Gemini
-
-O contrato estruturado em lote pede `wordGeometry` junto com `text`, `warnings` e `contentClass`. Para reduzir tokens de saída, o provedor envia cada caixa como uma string compacta:
+Para cada linha não vazia de `text`, na mesma ordem, o modelo devolve somente:
 
 ```text
-left,top,right,bottom|palavra
+left,top,right,bottom
 ```
 
-O parser converte apenas caixas válidas para a forma persistida. Uma caixa individual defeituosa é descartada sem perder a transcrição da página. Respostas antigas do provedor sem geometria continuam aceitas e resultam em uma lista vazia.
+As coordenadas do provedor usam `0..1000`. O texto da linha **não é repetido** dentro da geometria. Isso elimina a parte mais redundante da resposta: antes cada palavra repetia a própria grafia mais quatro coordenadas.
+
+O backend valida as caixas, converte `0..1000` para `0..10000` e deriva localmente as caixas por palavra usando os offsets das palavras dentro da linha. O resultado derivado mantém o contrato consumido pela busca e pelo overlay.
+
+Uma geometria de linha malformada, incompleta ou desalinhada não invalida uma transcrição boa. Nesse caso a página preserva o OCR e fica sem overlay espacial para aquele resultado; não se desperdiça outra chamada Gemini apenas para recuperar coordenadas.
+
+## Orçamento de saída
+
+O planner de OCR considera quatro limites independentes antes de montar uma chamada:
+
+- quantidade de páginas;
+- presença de páginas densas;
+- bytes das imagens derivadas;
+- orçamento estimado de tokens de saída.
+
+Os defaults atuais são:
+
+```text
+páginas normais: até 28
+lote que contém página densa: até 14
+imagens derivadas: até 12 MiB
+saída estimada: até 48.000 tokens
+resposta Gemini permitida: até 65.536 tokens
+```
+
+A estimativa inicial reserva aproximadamente 900 tokens para página esparsa, 1.700 para página normal e 3.000 para página densa. O teto de 48 mil deixa folga para documentos cuja densidade real seja maior do que a inspeção prévia estimou.
+
+Quando o tamanho de uma página é desconhecido durante retomada, o planner não usa mais um byte fictício como custo real: assume 1 MiB e densidade conservadora. Isso evita a primeira tentativa excessivamente grande.
+
+## Falhas parciais
+
+O contrato continua identificado por `pageId` e `pageNumber`. Se uma resposta omitir ou duplicar uma página, páginas válidas são preservadas e somente o subconjunto afetado é dividido e reenviado. Uma página isolada que continua impossível de processar permanece pendente em vez de entrar em loop.
 
 ## Worker desktop
 
-O contrato do worker aceita `wordGeometry` no payload de conclusão. Workers antigos que não enviam esse campo continuam compatíveis e são tratados como geometria vazia.
-
-O backend Ollama atualizado solicita as mesmas coordenadas normalizadas e as entrega junto com a transcrição. O endpoint `desktop-ocr-worker` usa o RPC atômico de conclusão com geometria.
-
-Backends que ainda não produzem posição espacial podem continuar entregando texto normalmente; nesses casos a interface usa o marcador textual como fallback.
+O worker desktop pode continuar produzindo geometria por palavra no contrato interno dele. Essa rota não consome tokens do Gemini e, portanto, não precisa adotar o formato comprimido do provedor.
 
 ## Visualizador
 
-`DocumentMediaViewer.svelte` controla a renderização da página para que a imagem apresentada e o overlay compartilhem o mesmo retângulo:
+`DocumentMediaViewer.svelte` e `WordGeometryOverlay.svelte` recebem a geometria normalizada por palavra já derivada. O overlay converte `0..10000` em porcentagens CSS e reutiliza o mesmo matching fuzzy da busca textual.
 
-- imagem Supabase: usa o original assinado;
-- PDF Supabase: renderiza a página selecionada com PDF.js;
-- imagem Google Drive: baixa o original com autenticação do usuário;
-- PDF Google Drive: usa leitura por faixas para referências grandes quando o tamanho original está registrado; documentos menores podem ser baixados e renderizados localmente.
+A derivação horizontal por palavra é propositalmente aproximada: a caixa da linha vem do modelo e o backend reparte seu eixo horizontal pelos offsets dos termos na transcrição. Para destaque de busca isso evita milhares de tokens de coordenadas sem exigir uma segunda chamada.
 
-`WordGeometryOverlay.svelte` converte `0..10000` para porcentagens CSS e desenha os retângulos sobre a mídia. O matching reutiliza a mesma lógica fuzzy usada pelo marcador textual; por isso uma busca por `fotossíntese` pode marcar fisicamente uma caixa cujo OCR contém `fotossintcse`.
+## Segurança e limites
 
-O overlay não recebe eventos de ponteiro e não interfere em zoom, rolagem ou ações da página.
-
-## Compatibilidade com documentos existentes
-
-A migração inicializa páginas antigas com `ocr_word_geometry = []`, portanto nenhuma importação existente deixa de abrir.
-
-Uma página OCR antiga só ganha posição espacial depois de ser reprocessada por um backend que produza geometria. Até isso acontecer, a busca continua localizando a página e mostrando o trecho textual correspondente, mas não inventa uma posição física.
-
-## Segurança
-
-- O cliente autenticado não pode reescrever `ocr_results.word_geometry` diretamente.
-- O validador puro `is_valid_ocr_word_geometry` é executável por `authenticated` porque o `CHECK` da coluna precisa ser reavaliado também em edições normais da página.
-- O RPC de conclusão Gemini mantém a fronteira de autorização do usuário.
-- O RPC de conclusão do worker desktop permanece exclusivo de `service_role`.
-- URLs assinadas e downloads do Drive continuam efêmeros e não são persistidos na geometria.
+- geometria inválida nunca pode substituir texto OCR válido;
+- coordenadas fora da página ou invertidas são descartadas;
+- o cliente autenticado não reescreve diretamente resultados OCR imutáveis;
+- URLs assinadas, bytes de imagem e conteúdo do prompt não são persistidos na telemetria;
+- páginas já concluídas não são repetidas só porque outra página do lote falhou.
 
 ## Testes relevantes
 
-- `supabase/tests/ocr_word_geometry.sql`
-- `tests/unit/ocr/word-geometry.test.ts`
 - `tests/unit/ocr/batch-contract.test.ts`
-- `tests/unit/desktop/worker-contract.test.ts`
-- `tests/unit/desktop-worker/ollama-engine.test.ts`
-
-Os testes cobrem validação de coordenadas, persistência atômica, replay, conflito, fuzzy match espacial e compatibilidade com payloads antigos.
+- `tests/unit/ocr/batch-planner.test.ts`
+- `tests/unit/ocr/gemini-batch-client.test.ts`
+- `tests/unit/pdf/ocr-batching.test.ts`
+- `tests/unit/services/ocr-resume-batch.test.ts`
+- `tests/unit/ocr/word-geometry.test.ts`
+- `supabase/tests/ocr_word_geometry.sql`

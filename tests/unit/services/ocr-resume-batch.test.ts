@@ -23,7 +23,7 @@ function gateway(items: ReturnType<typeof pages>): OcrResumeGateway {
 }
 
 describe('batched OCR resume', () => {
-	it('groups resumable pages into serial 40-page calls', async () => {
+	it('uses conservative unknown-size batches instead of pretending resumed pages cost one byte', async () => {
 		const items = pages(85);
 		const calls: string[][] = [];
 		const result = await resumeDocumentOcrWithGateway(
@@ -46,7 +46,7 @@ describe('batched OCR resume', () => {
 			}
 		);
 
-		expect(calls.map((call) => call.length)).toEqual([40, 40, 5]);
+		expect(calls.map((call) => call.length)).toEqual([12, 12, 12, 12, 12, 12, 12, 1]);
 		expect(result).toEqual({ completed: 85, needsReview: 0, pending: 0, failed: 0 });
 	});
 
@@ -120,6 +120,6 @@ describe('batched OCR resume', () => {
 		);
 
 		expect(calls).toBe(1);
-		expect(result).toEqual({ completed: 40, needsReview: 0, pending: 5, failed: 0 });
+		expect(result).toEqual({ completed: 12, needsReview: 0, pending: 33, failed: 0 });
 	});
 });

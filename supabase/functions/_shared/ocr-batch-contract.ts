@@ -1,9 +1,5 @@
 import { parseOcrPayload, type OcrPayload } from './ocr-contract.ts';
-import {
-	filterWordGeometryByTranscription,
-	parseCompactWordGeometry,
-	type OcrWordGeometry
-} from './ocr-word-geometry.ts';
+import { deriveWordGeometryFromLines, type OcrWordGeometry } from './ocr-word-geometry.ts';
 
 export type OcrContentClass =
 	| 'unknown'
@@ -129,12 +125,8 @@ export function parseOcrBatchPayload(
 				'text',
 				'warnings',
 				'contentClass',
-				'wordGeometry'
-			])
-		) {
-			return invalidProviderResponse(requestedPages);
-		}
-		if (
+				'lineGeometry'
+			]) ||
 			typeof page.pageId !== 'string' ||
 			!UUID.test(page.pageId) ||
 			typeof page.pageNumber !== 'number' ||
@@ -161,10 +153,7 @@ export function parseOcrBatchPayload(
 		} catch {
 			return invalidProviderResponse(requestedPages);
 		}
-		const wordGeometry = filterWordGeometryByTranscription(
-			parseCompactWordGeometry(page.wordGeometry),
-			payload.text
-		);
+		const wordGeometry = deriveWordGeometryFromLines(page.lineGeometry, payload.text);
 		parsedById.set(
 			page.pageId,
 			Object.freeze({
