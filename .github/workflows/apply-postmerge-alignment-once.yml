@@ -77,23 +77,39 @@ jobs:
               raise SystemExit(f'unexpected generated test set: {written}')
 
           path = Path('tests/unit/services/ocr-cancellation.test.ts')
-          text = path.read_text().replace(
-              "toHaveBeenCalledWith('process-ocr', {",
-              "toHaveBeenCalledWith('process-ocr-batch', {"
+          text = path.read_text()
+          text, count = re.subn(
+              r"toHaveBeenCalledWith\(\s*'process-ocr'\s*,\s*\{",
+              "toHaveBeenCalledWith('process-ocr-batch', {",
+              text,
+              count=1
           )
+          if count != 1:
+              raise SystemExit('OCR cancellation invocation expectation was not updated exactly once')
           path.write_text(text)
 
           path = Path('tests/unit/tooling/ocr-staging-runner.test.ts')
-          path.write_text(path.read_text().replace(
-              'isRetryLater(invocation.data, pageId)',
-              'isRetryLater(invocation?.data, pageId)'
-          ))
+          text = path.read_text()
+          text, count = re.subn(
+              r'isRetryLater\(invocation\.data,\s*pageId\)',
+              'isRetryLater(invocation?.data, pageId)',
+              text,
+              count=1
+          )
+          if count != 1:
+              raise SystemExit('OCR staging optional-chaining expectation was not updated exactly once')
+          path.write_text(text)
 
           path = Path('tests/unit/tooling/supabase-config.test.ts')
-          text = path.read_text().replace(
-              "expect(entries).toEqual(['ocr-queue-worker','drive-oauth-callback','desktop-ocr-pair','desktop-ocr-worker']);",
-              "expect([...entries].sort()).toEqual(['ocr-queue-worker','drive-oauth-callback','desktop-ocr-pair','desktop-ocr-worker'].sort());"
+          text = path.read_text()
+          pattern = re.compile(
+              r"expect\(entries\)\.toEqual\(\[\s*'ocr-queue-worker',\s*'drive-oauth-callback',\s*'desktop-ocr-pair',\s*'desktop-ocr-worker'\s*\]\);",
+              re.MULTILINE
           )
+          replacement = "expect([...entries].sort()).toEqual(\n\t\t['ocr-queue-worker', 'drive-oauth-callback', 'desktop-ocr-pair', 'desktop-ocr-worker'].sort()\n\t);"
+          text, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit('Supabase non-JWT endpoint expectation was not updated exactly once')
           path.write_text(text)
           PY
           pnpm exec prettier --write tests/unit/components/native-select-adoption.test.ts tests/unit/hooks/client-ocr-queue.test.ts tests/unit/import/duplicate-consumers.test.ts tests/unit/ocr/desktop-worker-pair-revoke.test.ts tests/unit/routes/image-cancellation-affordance.test.ts tests/unit/routes/pdf-cancellation-affordance.test.ts tests/unit/routes/pdf-file-picker-focus.test.ts tests/unit/routes/import-notebook-selection.test.ts tests/unit/routes/import-progress-announcements.test.ts tests/unit/routes/local-draft-account-isolation.test.ts tests/unit/services/ocr-cancellation.test.ts tests/unit/tooling/ocr-staging-runner.test.ts tests/unit/tooling/supabase-config.test.ts
