@@ -133,9 +133,13 @@ jobs:
             "APP_ORIGIN=$STAGING_APP_ORIGIN" \
             "OCR_MODEL_PRIMARY=gemini-3.1-flash-lite" \
             "OCR_MODEL_FALLBACK=gemini-3.5-flash-lite" \
+            "OCR_PROMPT_VERSION=2" \
             "OCR_MODEL_PRIMARY_RPM=12" \
             "OCR_MODEL_FALLBACK_RPM=12" \
             "OCR_PROVIDER_MAX_QUEUE_WAIT_MS=20000" \
+            "OCR_BATCH_MAX_PAGES=28" \
+            "OCR_BATCH_MAX_BYTES=12582912" \
+            "OCR_REQUEST_TIMEOUT_MS=120000" \
             "GOOGLE_DRIVE_REDIRECT_URI=https://$STAGING_SUPABASE_PROJECT_REF.supabase.co/functions/v1/drive-oauth-callback" \
             "GOOGLE_DRIVE_SCOPE=https://www.googleapis.com/auth/drive.file" \
             "GOOGLE_DRIVE_ROOT_FOLDER_NAME=Fichário Digital"
