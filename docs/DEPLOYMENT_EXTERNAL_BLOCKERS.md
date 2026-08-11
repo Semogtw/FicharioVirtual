@@ -20,13 +20,13 @@ CLOUDFLARE_ACCOUNT_ID
 
 Destino correto:
 
-| Nome | Origem | Destino | Impacto enquanto ausente |
-| --- | --- | --- | --- |
-| `PUBLIC_GOOGLE_CLIENT_ID` | Google Auth Platform | GitHub Environment `staging` → Environment secret | OAuth/Picker do Drive não pode ser habilitado no artifact |
-| `PUBLIC_GOOGLE_PICKER_API_KEY` | Google Cloud Credentials | GitHub Environment `staging` → Environment secret | Google Picker não pode funcionar no frontend |
-| `PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER` | Google Cloud Project settings | GitHub Environment `staging` → Environment secret | Picker não pode inicializar com o App ID esperado |
-| `CLOUDFLARE_API_TOKEN` | Cloudflare API Tokens | GitHub Environment `staging-deploy` → Environment secret | Direct Upload no Cloudflare Pages fica bloqueado |
-| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare Account details | GitHub Environment `staging-deploy` → Environment secret | Wrangler não consegue publicar no projeto Pages correto |
+| Nome                                 | Origem                        | Destino                                                  | Impacto enquanto ausente                                  |
+| ------------------------------------ | ----------------------------- | -------------------------------------------------------- | --------------------------------------------------------- |
+| `PUBLIC_GOOGLE_CLIENT_ID`            | Google Auth Platform          | GitHub Environment `staging` → Environment secret        | OAuth/Picker do Drive não pode ser habilitado no artifact |
+| `PUBLIC_GOOGLE_PICKER_API_KEY`       | Google Cloud Credentials      | GitHub Environment `staging` → Environment secret        | Google Picker não pode funcionar no frontend              |
+| `PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER` | Google Cloud Project settings | GitHub Environment `staging` → Environment secret        | Picker não pode inicializar com o App ID esperado         |
+| `CLOUDFLARE_API_TOKEN`               | Cloudflare API Tokens         | GitHub Environment `staging-deploy` → Environment secret | Direct Upload no Cloudflare Pages fica bloqueado          |
+| `CLOUDFLARE_ACCOUNT_ID`              | Cloudflare Account details    | GitHub Environment `staging-deploy` → Environment secret | Wrangler não consegue publicar no projeto Pages correto   |
 
 Além desses cinco valores públicos/operacionais, o fluxo Google Drive completo também usa `GOOGLE_CLIENT_SECRET` no backend. Esse valor **não** deve ir para o frontend nem para os GitHub secrets públicos do artifact; ele pertence aos secrets das Edge Functions no projeto Supabase de staging.
 
