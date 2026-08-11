@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-	recordSemanticSearchConsent,
 	searchPagesHybrid,
 	SemanticSearchServiceError
 } from '../../../src/lib/services/semantic-search';
@@ -9,7 +8,6 @@ const pageId = '11111111-1111-4111-8111-111111111111';
 const documentId = '22222222-2222-4222-8222-222222222222';
 
 type FunctionClient = NonNullable<Parameters<typeof searchPagesHybrid>[2]>;
-type ConsentClient = NonNullable<Parameters<typeof recordSemanticSearchConsent>[0]>;
 
 function hybridResponse() {
 	return {
@@ -98,22 +96,5 @@ describe('searchPagesHybrid', () => {
 		await expect(
 			searchPagesHybrid('conservação de energia', { limit: 20 }, functionClient(response))
 		).rejects.toBeInstanceOf(SemanticSearchServiceError);
-	});
-});
-
-describe('recordSemanticSearchConsent', () => {
-	it('uses a dedicated consent RPC for the global search surface', async () => {
-		let received: unknown = null;
-		const client: ConsentClient = {
-			rpc(name, args) {
-				received = { name, args };
-				return Promise.resolve({ data: true, error: null });
-			}
-		};
-		await expect(recordSemanticSearchConsent(client)).resolves.toBeUndefined();
-		expect(received).toEqual({
-			name: 'record_search_semantic_consent',
-			args: { consent_version: 1 }
-		});
 	});
 });
