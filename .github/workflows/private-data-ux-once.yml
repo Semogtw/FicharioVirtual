@@ -1,4 +1,4 @@
-name: Apply private data UX patch once
+name: Finish private data UX patch once
 
 on:
   push:
@@ -11,333 +11,36 @@ permissions:
   contents: write
 
 jobs:
-  patch:
+  patch-shell:
     runs-on: ubuntu-latest
     steps:
-      - name: Apply source changes through GitHub API
+      - name: Mount one-time privacy notice in app shell
         uses: actions/github-script@v7
         with:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const branch = 'feat/private-data-ux';
-
-            function replaceOnce(text, from, to, label) {
-              const first = text.indexOf(from);
-              if (first < 0) throw new Error(`Missing patch target: ${label}`);
-              if (text.indexOf(from, first + from.length) >= 0) {
-                throw new Error(`Ambiguous patch target: ${label}`);
-              }
-              return text.slice(0, first) + to + text.slice(first + from.length);
+            const path = 'src/lib/components/AppShell.svelte';
+            const response = await github.rest.repos.getContent({ owner, repo, path, ref: branch });
+            if (Array.isArray(response.data) || response.data.type !== 'file' || !response.data.content) {
+              throw new Error('Could not load AppShell.svelte');
             }
-
-            function replaceRegexOnce(text, regex, to, label) {
-              const matches = [...text.matchAll(new RegExp(regex.source, regex.flags.includes('g') ? regex.flags : `${regex.flags}g`))];
-              if (matches.length !== 1) {
-                throw new Error(`Expected one patch target for ${label}, found ${matches.length}`);
-              }
-              return text.replace(regex, to);
-            }
-
-            function replaceRegexCount(text, regex, to, expected, label) {
-              const global = new RegExp(regex.source, regex.flags.includes('g') ? regex.flags : `${regex.flags}g`);
-              const matches = [...text.matchAll(global)];
-              if (matches.length !== expected) {
-                throw new Error(`Expected ${expected} patch targets for ${label}, found ${matches.length}`);
-              }
-              return text.replace(global, to);
-            }
-
-            async function mutate(path, message, transform) {
-              const response = await github.rest.repos.getContent({ owner, repo, path, ref: branch });
-              if (Array.isArray(response.data) || response.data.type !== 'file' || !response.data.content) {
-                throw new Error(`Could not load ${path}`);
-              }
-              const current = Buffer.from(response.data.content, 'base64').toString('utf8');
-              const next = transform(current);
-              if (next === current) throw new Error(`Patch made no changes to ${path}`);
-              await github.rest.repos.createOrUpdateFileContents({
-                owner,
-                repo,
-                path,
-                branch,
-                sha: response.data.sha,
-                message,
-                content: Buffer.from(next, 'utf8').toString('base64')
-              });
-              core.info(`Updated ${path}`);
-            }
-
-            await mutate('src/routes/import/+page.svelte', 'fix: remove repeated image OCR confirmation', (source) => {
-              let text = source;
-              text = replaceOnce(text, "\tlet consent = $state(false);\n", '', 'image consent state');
-              text = replaceOnce(
-                text,
-                "\t\tif (!consent) {\n\t\t\tselectionError = 'Confirme o aviso de privacidade antes de enviar imagens para leitura.';\n\t\t\treturn;\n\t\t}\n",
-                '',
-                'image consent gate'
-              );
-              text = replaceRegexOnce(
-                text,
-                /\n\t<label class="consent">[\s\S]*?\n\t<\/label>\n\n(?=\t<section\n\t\taria-label="Área para importar imagens")/,
-                '\n',
-                'image consent UI'
-              );
-              text = replaceOnce(text, "\t.choice,\n\t.consent {\n", "\t.choice {\n", 'image shared choice selector');
-              text = replaceOnce(text, "\t.choice span,\n\t.consent span {\n", "\t.choice span {\n", 'image shared span selector');
-              text = replaceOnce(text, "\t.choice small,\n\t.consent small {\n", "\t.choice small {\n", 'image shared small selector');
-              text = replaceRegexOnce(
-                text,
-                /\n\t\.consent \{\n\t\tpadding: 1rem;[\s\S]*?\n\t\}\n\n\t\.consent input \{[\s\S]*?\n\t\}\n\n\t\.consent small \{[\s\S]*?\n\t\}\n/,
-                '\n',
-                'image consent styles'
-              );
-              return text;
-            });
-
-            await mutate('src/routes/import/pdf/+page.svelte', 'fix: make PDF OCR automatic when needed', (source) => {
-              let text = source;
-              text = replaceOnce(text, "\tlet consent = $state(false);\n", '', 'PDF consent state');
-              text = replaceOnce(text, 'consentGranted: consent', 'consentGranted: true', 'PDF queue consent compatibility');
-              text = replaceRegexOnce(
-                text,
-                /\n\t\t<label class="consent">[\s\S]*?\n\t\t<\/label>(?=\n\t<\/section>)/,
-                '',
-                'PDF consent UI'
-              );
-              text = replaceOnce(
-                text,
-                "\t\tgrid-template-columns: minmax(12rem, 0.4fr) minmax(22rem, 1fr);\n",
-                "\t\tgrid-template-columns: minmax(12rem, 24rem);\n",
-                'PDF options grid'
-              );
-              text = replaceRegexOnce(text, /\n\t\.consent \{[\s\S]*?\n\t\}\n\t\.consent input \{[\s\S]*?\n\t\}\n/, '\n', 'PDF consent styles');
-              text = replaceOnce(text, "\t.consent span,\n\t.item-copy {\n", "\t.item-copy {\n", 'PDF item-copy selector');
-              text = replaceOnce(
-                text,
-                "\t.consent small,\n\t.queue-heading > span,\n",
-                "\t.queue-heading > span,\n",
-                'PDF muted selector'
-              );
-              return text;
-            });
-
-            await mutate('src/routes/import/drive/+page.svelte', 'fix: remove repeated Drive OCR confirmation', (source) => {
-              let text = source;
-              text = replaceOnce(text, "\tlet consent = $state(false);\n", '', 'Drive consent state');
-              text = replaceRegexCount(
-                text,
-                /\n\t\tif \(!consent\) \{\n\t\t\terror = 'Confirme a autorização de OCR antes de (?:retomar o PDF|selecionar o arquivo)\.';\n\t\t\treturn;\n\t\t\}\n/g,
-                '\n',
-                2,
-                'Drive consent gates'
-              );
-              text = replaceRegexOnce(
-                text,
-                /\n\t\t<label class="consent">[\s\S]*?\n\t\t<\/label>(?=\n\t<\/section>)/,
-                '',
-                'Drive consent UI'
-              );
-              text = replaceOnce(
-                text,
-                "\t\tgrid-template-columns: minmax(12rem, 0.4fr) minmax(20rem, 1fr);\n",
-                "\t\tgrid-template-columns: minmax(12rem, 24rem);\n",
-                'Drive options grid'
-              );
-              text = replaceRegexOnce(
-                text,
-                /\n\t\.consent \{[\s\S]*?\n\t\}\n\t\.consent input \{[\s\S]*?\n\t\}\n\t\.consent span \{[\s\S]*?\n\t\}\n/,
-                '\n',
-                'Drive consent styles'
-              );
-              text = replaceOnce(text, "\t.consent small,\n\t.queues span,\n", "\t.queues span,\n", 'Drive muted selector');
-              return text;
-            });
-
-            await mutate('src/lib/pdf/upload.ts', 'fix: stop blocking PDF OCR on per-upload consent', (source) => {
-              let text = source;
-              text = replaceOnce(text, '\tconsentGranted: boolean;\n', '\tconsentGranted?: boolean;\n', 'PDF upload option');
-              text = replaceOnce(
-                text,
-                "\tif (inspection.pagesNeedingOcr.length > 0) {\n\t\tif (!options.consentGranted) throw new PdfConsentRequiredError();\n\t\tawait dependencies.recordOcrConsent();\n\t}\n",
-                "\tif (inspection.pagesNeedingOcr.length > 0) {\n\t\tawait dependencies.recordOcrConsent();\n\t}\n",
-                'PDF upload consent gate'
-              );
-              return text;
-            });
-
-            await mutate('src/lib/pdf/drive-reference-import.ts', 'fix: stop blocking Drive PDF OCR on per-import consent', (source) => {
-              let text = source;
-              text = replaceOnce(
-                text,
-                "import {\n\tPdfConsentRequiredError,\n\tparsePdfImportPublication,\n\ttype PdfImportPublication\n} from './upload';\n",
-                "import { parsePdfImportPublication, type PdfImportPublication } from './upload';\n",
-                'Drive PDF upload import'
-              );
-              text = replaceOnce(text, '\tconsentGranted,\n', '\tconsentGranted: _consentGranted,\n', 'Drive PDF ignored consent binding');
-              text = replaceOnce(text, '\tconsentGranted: boolean;\n', '\tconsentGranted?: boolean;\n', 'Drive PDF consent option');
-              text = replaceOnce(
-                text,
-                "\t\tif (inspection.pagesNeedingOcr.length > 0) {\n\t\t\tif (!consentGranted) throw new PdfConsentRequiredError();\n\t\t\tawait runtime.recordOcrConsent();\n\t\t}\n",
-                "\t\tif (inspection.pagesNeedingOcr.length > 0) {\n\t\t\tawait runtime.recordOcrConsent();\n\t\t}\n",
-                'Drive PDF consent gate'
-              );
-              return text;
-            });
-
-            await mutate('tests/unit/pdf/drive-reference-import.test.ts', 'test: cover automatic Drive OCR activation', (source) => {
-              return replaceRegexOnce(
-                source,
-                /\n\tit\('keeps the staged reference resumable when OCR consent is missing',[\s\S]*?\n\t\}\);\n\n(?=\tit\('removes uploaded derivatives)/,
-                `\n\tit('processes required OCR without a per-import confirmation', async () => {\n\t\tconst deps = dependencies();\n\n\t\tconst result = await importStagedDrivePdfReference({\n\t\t\tstaged,\n\t\t\tclient: {} as never,\n\t\t\tdependencies: deps\n\t\t});\n\n\t\texpect(deps.verifyIdentity).toHaveBeenCalledOnce();\n\t\texpect(deps.recordOcrConsent).toHaveBeenCalledOnce();\n\t\texpect(deps.renderPage).toHaveBeenCalledOnce();\n\t\texpect(deps.upload).toHaveBeenCalledOnce();\n\t\texpect(deps.finalize).toHaveBeenCalledOnce();\n\t\texpect(deps.destroy).toHaveBeenCalledOnce();\n\t\texpect(result.ocrCompleted).toBe(1);\n\t});\n\n`,
-                'Drive PDF consent regression test'
-              );
-            });
-
-            await mutate('src/routes/search/+page.svelte', 'fix: activate semantic search without repeated consent UI', (source) => {
-              let text = source;
-              text = replaceOnce(
-                text,
-                "\tlet semanticConsentChecked = $state(false);\n\tlet semanticConsentSaving = $state(false);\n\tlet semanticConsentError = $state<string | null>(null);\n",
-                '',
-                'semantic consent state'
-              );
-              const helper = `\n\tasync function searchWithAutomaticSemanticActivation(\n\t\tnormalized: string,\n\t\toptions: NonNullable<Parameters<typeof searchPagesHybrid>[1]>\n\t) {\n\t\tlet response = await searchPagesHybrid(normalized, options);\n\t\tif (response.analysis.reason !== 'consent_required') return response;\n\n\t\ttry {\n\t\t\tawait recordSemanticSearchConsent();\n\t\t\tresponse = await searchPagesHybrid(normalized, options);\n\t\t} catch {\n\t\t\t// A busca textual já veio na resposta e continua disponível sem interromper a pesquisa.\n\t\t}\n\t\treturn response;\n\t}\n`;
-              text = replaceOnce(
-                text,
-                "\tfunction cancelPending() {\n\t\tif (timer) clearTimeout(timer);\n\t\ttimer = null;\n\t\tcontroller?.abort();\n\t\tcontroller = null;\n\t}\n",
-                "\tfunction cancelPending() {\n\t\tif (timer) clearTimeout(timer);\n\t\ttimer = null;\n\t\tcontroller?.abort();\n\t\tcontroller = null;\n\t}\n" + helper,
-                'semantic automatic activation helper'
-              );
-              text = replaceOnce(text, 'const response = await searchPagesHybrid(normalized, {', 'const response = await searchWithAutomaticSemanticActivation(normalized, {', 'semantic search call');
-              text = replaceRegexOnce(
-                text,
-                /\n\tasync function activateSemanticSearch\(\) \{[\s\S]*?\n\t\}\n\n(?=\tfunction semanticStatus\(\))/, 
-                '\n',
-                'semantic activation button handler'
-              );
-              text = replaceOnce(
-                text,
-                "\t\tif (!analysis || analysis.reason === 'consent_required') return null;\n",
-                "\t\tif (!analysis) return null;\n\t\tif (analysis.reason === 'consent_required')\n\t\t\treturn 'Busca textual ativa; a camada semântica não pôde ser iniciada automaticamente agora.';\n",
-                'semantic consent fallback status'
-              );
-              text = replaceRegexOnce(
-                text,
-                /\n\t\{#if analysis\?\.reason === 'consent_required'\}[\s\S]*?\n\t\{:else if semanticStatus\(\)\}/,
-                '\n\t{#if semanticStatus()}',
-                'semantic consent UI'
-              );
-              text = replaceRegexOnce(
-                text,
-                /\n\t\.semantic-consent \{[\s\S]*?\n\t\.semantic-consent \.consent-error \{[\s\S]*?\n\t\}\n(?=\n\t\.semantic-status \{)/,
-                '\n',
-                'semantic consent styles'
-              );
-              return text;
-            });
-
-            await mutate('src/routes/coverage/+page.svelte', 'fix: make coverage OCR and semantics non-blocking', (source) => {
-              let text = source;
-              text = replaceOnce(text, "\tlet photoConsent = $state(false);\n", '', 'coverage photo consent state');
-              text = replaceOnce(text, "\tlet semanticEnabled = $state(false);\n", '', 'coverage semantic toggle state');
-              text = replaceRegexOnce(
-                text,
-                /\n\tfunction toggleSemantic\(\) \{[\s\S]*?\n\t\}\n(?=\n\tfunction semanticResultNotice)/,
-                '\n',
-                'coverage semantic toggle handler'
-              );
-              text = replaceOnce(
-                text,
-                "\t\tif (!photoConsent) {\n\t\t\tphotoError = 'Confirme o aviso de privacidade antes de enviar a foto para leitura.';\n\t\t\treturn;\n\t\t}\n",
-                '',
-                'coverage photo consent gate'
-              );
-              text = replaceOnce(text, '\t\t\tlet semanticRequested = semanticEnabled;\n', '\t\t\tlet semanticRequested = true;\n', 'coverage semantic default');
-              text = replaceOnce(
-                text,
-                "\t\t\t\t\tsemanticNotice =\n\t\t\t\t\t\t'Não foi possível registrar o consentimento para enviar trechos ao Gemini. A análise textual/fuzzy será usada desta vez.';\n",
-                "\t\t\t\t\tsemanticNotice =\n\t\t\t\t\t\t'A camada semântica não pôde ser iniciada nesta análise. O modo textual/fuzzy foi preservado normalmente.';\n",
-                'coverage semantic fallback copy'
-              );
-              text = replaceRegexOnce(
-                text,
-                /\n\t\t\t\t<label class="consent">[\s\S]*?\n\t\t\t\t<\/label>(?=\n\t\t\t\t<div class="photo-actions">)/,
-                '\n',
-                'coverage photo consent UI'
-              );
-              text = replaceRegexCount(text, /class:disabled=\{!photoConsent \|\| photoImporting\}/g, 'class:disabled={photoImporting}', 2, 'coverage photo disabled classes');
-              text = replaceRegexCount(text, /disabled=\{!photoConsent \|\| photoImporting\}/g, 'disabled={photoImporting}', 2, 'coverage photo disabled inputs');
-              text = replaceRegexOnce(
-                text,
-                /\n\t\t<label class="consent">\n\t\t\t<input[\s\S]*?\n\t\t<\/label>(?=\n\t\t\{#if semanticNotice\})/,
-                `\n\t\t<div class="processing-note">\n\t\t\t<strong>Comparação por significado incluída automaticamente.</strong>\n\t\t\t<span>Quando necessário, pequenos trechos podem ser processados pelo Gemini. A busca textual/fuzzy continua como fallback.</span>\n\t\t</div>`,
-                'coverage semantic consent UI'
-              );
-              text = replaceOnce(
-                text,
-                "\t\t\t{semanticEnabled\n\t\t\t\t? 'Comparando os assuntos por texto e significado…'\n\t\t\t\t: 'Comparando os assuntos com as páginas pesquisáveis…'}\n",
-                "\t\t\tComparando os assuntos por texto e significado…\n",
-                'coverage loading copy'
-              );
-              text = replaceRegexOnce(
-                text,
-                /\n\t\.consent \{[\s\S]*?\n\t\.consent small \{[\s\S]*?\n\t\}\n(?=\n\t\.file-button \{)/,
-                `\n\t.processing-note {\n\t\tdisplay: grid;\n\t\tgap: 0.25rem;\n\t\tpadding: 0.85rem;\n\t\tborder-left: 0.3rem solid var(--archive);\n\t\tbackground: var(--archive-soft);\n\t}\n\n\t.processing-note span {\n\t\tcolor: var(--muted);\n\t\tfont-size: 0.86rem;\n\t\tline-height: 1.45;\n\t}\n`,
-                'coverage consent styles'
-              );
-              return text;
-            });
-
-            await mutate('src/routes/settings/+page.svelte', 'feat: centralize privacy information in settings', (source) => {
-              let text = source;
-              const privacyCard = `\n\t\t<section class="settings-card" id="privacy" aria-labelledby="privacy-title">\n\t\t\t<div>\n\t\t\t\t<h2 id="privacy-title">Privacidade e dados</h2>\n\t\t\t\t<p>\n\t\t\t\t\tEste Fichário é configurado para uso privado. OCR, busca por significado e análise de cobertura\n\t\t\t\t\tpodem enviar somente o conteúdo necessário aos provedores configurados quando você usa uma\n\t\t\t\t\tfunção que precisa deles. Não há confirmações repetidas a cada arquivo ou pesquisa.\n\t\t\t\t</p>\n\t\t\t\t<p>\n\t\t\t\t\tPDFs com texto aproveitam o conteúdo nativo; páginas visuais e imagens usam OCR quando\n\t\t\t\t\tnecessário. Recursos semânticos podem processar consultas e pequenos trechos. A telemetria\n\t\t\t\t\ttécnica acompanha funcionamento, cota e qualidade do processamento.\n\t\t\t\t</p>\n\t\t\t</div>\n\t\t\t<a class="secondary-link" href="/library/">Gerenciar arquivos</a>\n\t\t</section>\n`;
-              text = replaceOnce(text, "\n\t\t<DriveConnectionCard />\n", "\n\t\t<DriveConnectionCard />\n" + privacyCard, 'privacy settings card');
-              text = replaceOnce(
-                text,
-                '\t\t\t\t<li>A leitura externa exige consentimento e usa limite diário configurado no backend.</li>\n',
-                '\t\t\t\t<li>A leitura externa ocorre somente ao usar recursos que precisam dela e respeita o limite diário configurado no backend.</li>\n',
-                'privacy operational policy'
-              );
-              return text;
-            });
-
-            const noticePath = 'src/lib/components/DataProcessingNotice.svelte';
-            const notice = `<script lang="ts">\n\timport { onMount } from 'svelte';\n\n\tconst storageKey = 'fichario:data-processing-notice:v1';\n\tlet visible = $state(false);\n\n\tonMount(() => {\n\t\ttry {\n\t\t\tif (globalThis.localStorage.getItem(storageKey) === 'seen') return;\n\t\t\tglobalThis.localStorage.setItem(storageKey, 'seen');\n\t\t} catch {\n\t\t\t// O aviso continua informativo mesmo quando o armazenamento local está indisponível.\n\t\t}\n\t\tvisible = true;\n\t});\n</script>\n\n{#if visible}\n\t<section class="notice" aria-label="Privacidade e processamento de dados">\n\t\t<div>\n\t\t\t<strong>Processamento privado, sem confirmações repetidas</strong>\n\t\t\t<p>\n\t\t\t\tOCR e recursos de IA podem processar somente o conteúdo necessário quando você os usa. Esta\n\t\t\t\tmensagem aparece uma vez neste navegador; os detalhes ficam sempre em\n\t\t\t\t<a href="/settings/#privacy">Configurações → Privacidade e dados</a>.\n\t\t\t</p>\n\t\t</div>\n\t\t<button type="button" aria-label="Fechar aviso" onclick={() => (visible = false)}>×</button>\n\t</section>\n{/if}\n\n<style>\n\t.notice {\n\t\tdisplay: flex;\n\t\talign-items: flex-start;\n\t\tjustify-content: space-between;\n\t\tgap: 1rem;\n\t\tmargin: 0.9rem 1rem 0;\n\t\tpadding: 0.8rem 0.9rem;\n\t\tborder: 1px solid var(--line);\n\t\tborder-left: 0.25rem solid var(--archive);\n\t\tborder-radius: var(--radius-sm);\n\t\tbackground: var(--archive-soft);\n\t}\n\n\t.notice > div {\n\t\tdisplay: grid;\n\t\tgap: 0.2rem;\n\t}\n\n\t.notice strong {\n\t\tfont-size: 0.88rem;\n\t}\n\n\t.notice p {\n\t\tmax-width: 60rem;\n\t\tmargin: 0;\n\t\tcolor: var(--muted);\n\t\tfont-size: 0.8rem;\n\t\tline-height: 1.45;\n\t}\n\n\t.notice a {\n\t\tcolor: var(--archive);\n\t\tfont-weight: 700;\n\t\ttext-decoration: underline;\n\t\ttext-underline-offset: 0.15em;\n\t}\n\n\t.notice button {\n\t\twidth: 2rem;\n\t\theight: 2rem;\n\t\tdisplay: grid;\n\t\tplace-items: center;\n\t\tflex: 0 0 auto;\n\t\tborder: 0;\n\t\tborder-radius: 50%;\n\t\tbackground: transparent;\n\t\tcolor: var(--muted);\n\t\tfont: inherit;\n\t\tfont-size: 1.25rem;\n\t\tcursor: pointer;\n\t}\n\n\t.notice button:hover {\n\t\tbackground: rgb(var(--line-rgb) / 42%);\n\t\tcolor: var(--ink);\n\t}\n\n\t@media (min-width: 768px) {\n\t\t.notice {\n\t\t\tmargin-inline: clamp(1.25rem, 3vw, 2.5rem);\n\t\t}\n\t}\n</style>\n`;
-
-            const existingNotice = await github.rest.repos.getContent({ owner, repo, path: noticePath, ref: branch }).catch((error) => {
-              if (error.status === 404) return null;
-              throw error;
-            });
-            if (existingNotice !== null) throw new Error(`${noticePath} already exists`);
+            let text = Buffer.from(response.data.content, 'base64').toString('utf8');
+            const importNeedle = "\timport type { Snippet } from 'svelte';\n";
+            const importReplacement = "\timport type { Snippet } from 'svelte';\n\timport DataProcessingNotice from './DataProcessingNotice.svelte';\n";
+            if (!text.includes(importNeedle)) throw new Error('Missing AppShell import target');
+            text = text.replace(importNeedle, importReplacement);
+            const mountNeedle = "\t\t</header>\n\n\t\t<main id=\"main-content\">\n";
+            const mountReplacement = "\t\t</header>\n\n\t\t<DataProcessingNotice />\n\n\t\t<main id=\"main-content\">\n";
+            if (!text.includes(mountNeedle)) throw new Error('Missing AppShell mount target');
+            text = text.replace(mountNeedle, mountReplacement);
             await github.rest.repos.createOrUpdateFileContents({
               owner,
               repo,
-              path: noticePath,
+              path,
               branch,
-              message: 'feat: add one-time data processing notice',
-              content: Buffer.from(notice, 'utf8').toString('base64')
-            });
-
-            await mutate('src/lib/components/AppShell.svelte', 'feat: show one-time privacy notice in app shell', (source) => {
-              let text = source;
-              text = replaceOnce(
-                text,
-                "\timport type { Snippet } from 'svelte';\n",
-                "\timport type { Snippet } from 'svelte';\n\timport DataProcessingNotice from './DataProcessingNotice.svelte';\n",
-                'AppShell notice import'
-              );
-              text = replaceOnce(
-                text,
-                "\t\t<header class=\"topbar\">[\s\S]*?",
-                "\t\t<header class=\"topbar\">[\s\S]*?",
-                'noop'
-              );
-              text = replaceOnce(
-                text,
-                "\t\t</header>\n\n\t\t<main id=\"main-content\">\n",
-                "\t\t</header>\n\n\t\t<DataProcessingNotice />\n\n\t\t<main id=\"main-content\">\n",
-                'AppShell notice placement'
-              );
-              return text;
+              sha: response.data.sha,
+              message: 'feat: show one-time privacy notice in app shell',
+              content: Buffer.from(text, 'utf8').toString('base64')
             });
