@@ -1,0 +1,445 @@
+name: Migrate Drive PDF tests to current contracts once
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Write current Drive PDF contract tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > tests/unit/pdf/drive-reference-derived-limit.test.ts <<'EOF'
+          import { describe, expect, it, vi } from 'vitest';
+          import { importStagedDrivePdfReference } from '../../../src/lib/pdf/drive-reference-import';
+
+          const staged = {
+            documentId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+            driveFileId: '2AbCdEfGhIjKlMnOpQrStUvWxYz_123456',
+            sourceSizeBytes: 120 * 1024 * 1024,
+            status: 'pending_inspection' as const
+          };
+
+          function dependencies() {
+            const document = { numPages: 1 };
+            const destroy = vi.fn().mockResolvedValue(undefined);
+            const lease = {
+              attemptId: '11111111-2222-4333-8444-555555555555',
+              renew: vi.fn().mockResolvedValue(undefined),
+              renewIfNeeded: vi.fn().mockResolvedValue(undefined),
+              abandon: vi.fn().mockResolvedValue(true),
+              stageAndFinalize: vi.fn()
+            };
+            return {
+              lease,
+              destroy,
+              currentUserId: vi.fn().mockResolvedValue('11111111-1111-4111-8111-111111111111'),
+              verifyIdentity: vi.fn().mockResolvedValue({ driveVersion: '4', sourceSizeBytes: staged.sourceSizeBytes }),
+              openDocument: vi.fn().mockResolvedValue({ document, destroy }),
+              inspectDocument: vi.fn().mockResolvedValue({
+                pageCount: 1,
+                nativePages: [],
+                pagesNeedingOcr: [1],
+                ocrReasonsByPage: [{ pageNumber: 1, reasons: ['no_extractable_text'] }]
+              }),
+              acquireDescriptorLease: vi.fn().mockResolvedValue(lease),
+              renderPage: vi.fn(),
+              upload: vi.fn(),
+              remove: vi.fn(),
+              recoverPublication: vi.fn().mockResolvedValue(null),
+              processBatch: vi.fn()
+            };
+          }
+
+          describe('Drive PDF derived page ceiling', () => {
+            it('rejects a page when the reduced rerender is still above 12 MiB', async () => {
+              const deps = dependencies();
+              deps.renderPage
+                .mockResolvedValueOnce(new Blob([new Uint8Array(13 * 1024 * 1024)], { type: 'image/webp' }))
+                .mockResolvedValueOnce(new Blob([new Uint8Array(12 * 1024 * 1024 + 1)], { type: 'image/jpeg' }));
+
+              await expect(importStagedDrivePdfReference({ staged, client: {} as never, dependencies: deps as never }))
+                .rejects.toThrow('Não foi possível concluir a importação do PDF grande.');
+
+              expect(deps.renderPage).toHaveBeenCalledTimes(2);
+              expect(deps.renderPage.mock.calls[0]?.[2]).toMatchObject({ maxDimension: 2400, quality: 0.88 });
+              expect(deps.renderPage.mock.calls[1]?.[2]).toMatchObject({ maxDimension: 1800, quality: 0.78 });
+              expect(deps.upload).not.toHaveBeenCalled();
+              expect(deps.lease.stageAndFinalize).not.toHaveBeenCalled();
+              expect(deps.lease.abandon).toHaveBeenCalledOnce();
+              expect(deps.remove).not.toHaveBeenCalled();
+              expect(deps.processBatch).not.toHaveBeenCalled();
+            });
+          });
+          EOF
+
+          cat > tests/unit/pdf/drive-reference-finalization-recovery.test.ts <<'EOF'
+          import { describe, expect, it, vi } from 'vitest';
+          import { importStagedDrivePdfReference } from '../../../src/lib/pdf/drive-reference-import';
+
+          const userId = '11111111-1111-4111-8111-111111111111';
+          const documentId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+          const staged = {
+            documentId,
+            driveFileId: '2AbCdEfGhIjKlMnOpQrStUvWxYz_123456',
+            sourceSizeBytes: 120 * 1024 * 1024,
+            status: 'pending_inspection' as const
+          };
+
+          function complete(pageIds: readonly string[]) {
+            return {
+              state: 'complete' as const,
+              completedPageIds: [...pageIds], reviewPageIds: [], pendingPageIds: [], failedPageIds: [],
+              splitRequiredPageIds: [], unexpectedResultPageIds: []
+            };
+          }
+
+          function dependencies() {
+            const document = { numPages: 1 };
+            const destroy = vi.fn().mockResolvedValue(undefined);
+            const lease = {
+              attemptId: '11111111-2222-4333-8444-555555555555',
+              renew: vi.fn().mockResolvedValue(undefined),
+              renewIfNeeded: vi.fn().mockResolvedValue(undefined),
+              abandon: vi.fn().mockResolvedValue(true),
+              stageAndFinalize: vi.fn().mockRejectedValue(new Error('response lost after commit'))
+            };
+            return {
+              lease,
+              destroy,
+              currentUserId: vi.fn().mockResolvedValue(userId),
+              verifyIdentity: vi.fn().mockResolvedValue({ driveVersion: '4', sourceSizeBytes: staged.sourceSizeBytes }),
+              openDocument: vi.fn().mockResolvedValue({ document, destroy }),
+              inspectDocument: vi.fn().mockResolvedValue({
+                pageCount: 1, nativePages: [], pagesNeedingOcr: [1],
+                ocrReasonsByPage: [{ pageNumber: 1, reasons: ['no_extractable_text'] }]
+              }),
+              acquireDescriptorLease: vi.fn().mockResolvedValue(lease),
+              renderPage: vi.fn().mockResolvedValue(new Blob([new Uint8Array(64)], { type: 'image/webp' })),
+              upload: vi.fn().mockResolvedValue(undefined),
+              remove: vi.fn().mockResolvedValue(undefined),
+              recoverPublication: vi.fn().mockResolvedValue(null),
+              processBatch: vi.fn(async (pageIds: readonly string[]) => complete(pageIds))
+            };
+          }
+
+          describe('Drive PDF finalization recovery', () => {
+            it('continues OCR without deleting derivatives when a committed publication is recovered', async () => {
+              const deps = dependencies();
+              deps.recoverPublication.mockResolvedValue({
+                documentId, pageCount: 1, ocrPageCount: 1, reviewPageCount: 0, status: 'processing'
+              });
+
+              await expect(importStagedDrivePdfReference({ staged, client: {} as never, dependencies: deps as never }))
+                .resolves.toMatchObject({ documentId, pageCount: 1, ocrCompleted: 1 });
+
+              expect(deps.recoverPublication).toHaveBeenCalledOnce();
+              expect(deps.lease.abandon).not.toHaveBeenCalled();
+              expect(deps.remove).not.toHaveBeenCalled();
+              expect(deps.processBatch).toHaveBeenCalledOnce();
+              expect(deps.destroy).toHaveBeenCalledOnce();
+            });
+
+            it('abandons the descriptor and cleans derivatives when publication cannot be recovered', async () => {
+              const deps = dependencies();
+
+              await expect(importStagedDrivePdfReference({ staged, client: {} as never, dependencies: deps as never }))
+                .rejects.toThrow('Não foi possível concluir a importação do PDF grande.');
+
+              expect(deps.recoverPublication).toHaveBeenCalledOnce();
+              expect(deps.lease.abandon).toHaveBeenCalledOnce();
+              expect(deps.remove).toHaveBeenCalledWith([`${userId}/${documentId}/pages/1.webp`]);
+              expect(deps.processBatch).not.toHaveBeenCalled();
+            });
+
+            it('uses the same safe cleanup path when recovery itself is unavailable', async () => {
+              const deps = dependencies();
+              deps.recoverPublication.mockRejectedValue(new Error('recovery unavailable'));
+
+              await expect(importStagedDrivePdfReference({ staged, client: {} as never, dependencies: deps as never }))
+                .rejects.toThrow('Não foi possível concluir a importação do PDF grande.');
+
+              expect(deps.lease.abandon).toHaveBeenCalledOnce();
+              expect(deps.remove).toHaveBeenCalledWith([`${userId}/${documentId}/pages/1.webp`]);
+            });
+          });
+          EOF
+
+          cat > tests/unit/pdf/drive-reference-import.test.ts <<'EOF'
+          import { describe, expect, it, vi } from 'vitest';
+          import { importStagedDrivePdfReference } from '../../../src/lib/pdf/drive-reference-import';
+          import type { StagedDrivePdfReference } from '../../../src/lib/pdf/drive-reference';
+
+          const userId = '11111111-1111-4111-8111-111111111111';
+          const documentId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+          const driveFileId = '2AbCdEfGhIjKlMnOpQrStUvWxYz_123456';
+          const staged: StagedDrivePdfReference = { documentId, driveFileId, sourceSizeBytes: 120 * 1024 * 1024, status: 'pending_inspection' };
+
+          function inspection() {
+            return {
+              pageCount: 3,
+              nativePages: [{ pageNumber: 1, text: 'Texto nativo' }, { pageNumber: 3, text: 'Outro texto' }],
+              pagesNeedingOcr: [2],
+              ocrReasonsByPage: [{ pageNumber: 2, reasons: ['no_extractable_text'] }]
+            };
+          }
+
+          function complete(pageIds: readonly string[]) {
+            return {
+              state: 'complete' as const,
+              completedPageIds: [...pageIds], reviewPageIds: [], pendingPageIds: [], failedPageIds: [],
+              splitRequiredPageIds: [], unexpectedResultPageIds: []
+            };
+          }
+
+          function dependencies() {
+            const document = { numPages: 3 };
+            const destroy = vi.fn().mockResolvedValue(undefined);
+            const lease = {
+              attemptId: '11111111-2222-4333-8444-555555555555',
+              renew: vi.fn().mockResolvedValue(undefined),
+              renewIfNeeded: vi.fn().mockResolvedValue(undefined),
+              abandon: vi.fn().mockResolvedValue(true),
+              stageAndFinalize: vi.fn().mockImplementation(async ({ pages }) => ({
+                documentId, pageCount: pages.length,
+                ocrPageCount: pages.filter((page: { needsOcr: boolean }) => page.needsOcr).length,
+                reviewPageCount: 0, status: 'partially_ready'
+              }))
+            };
+            return {
+              document, destroy, lease,
+              currentUserId: vi.fn().mockResolvedValue(userId),
+              verifyIdentity: vi.fn().mockResolvedValue({ driveVersion: '4', sourceSizeBytes: staged.sourceSizeBytes }),
+              openDocument: vi.fn().mockResolvedValue({ document, destroy }),
+              inspectDocument: vi.fn().mockResolvedValue(inspection()),
+              acquireDescriptorLease: vi.fn().mockResolvedValue(lease),
+              renderPage: vi.fn().mockResolvedValue(new Blob([new Uint8Array(1024)], { type: 'image/webp' })),
+              upload: vi.fn().mockResolvedValue(undefined),
+              remove: vi.fn().mockResolvedValue(undefined),
+              recoverPublication: vi.fn().mockResolvedValue(null),
+              processBatch: vi.fn(async (pageIds: readonly string[]) => complete(pageIds))
+            };
+          }
+
+          describe('importStagedDrivePdfReference', () => {
+            it('renders only OCR pages, publishes atomically, then runs batch OCR', async () => {
+              const deps = dependencies();
+              const result = await importStagedDrivePdfReference({ staged, client: {} as never, dependencies: deps as never });
+
+              expect(deps.verifyIdentity).toHaveBeenCalledOnce();
+              expect(deps.openDocument).toHaveBeenCalledWith(expect.objectContaining({ client: expect.anything(), fileId: driveFileId, totalBytes: staged.sourceSizeBytes }));
+              expect(deps.renderPage).toHaveBeenCalledTimes(1);
+              expect(deps.renderPage).toHaveBeenCalledWith(deps.document, 2, expect.objectContaining({ maxDimension: 2400, quality: 0.88 }));
+              expect(deps.upload).toHaveBeenCalledWith(`${userId}/${documentId}/pages/2.webp`, expect.any(Blob));
+              expect(deps.lease.stageAndFinalize).toHaveBeenCalledOnce();
+              const finalized = deps.lease.stageAndFinalize.mock.calls[0]?.[0];
+              expect(finalized.promptVersion).toBe(1);
+              expect(finalized.pages).toHaveLength(3);
+              expect(finalized.pages[0]).toMatchObject({ pageNumber: 1, nativeText: 'Texto nativo', needsOcr: false, temporaryImagePath: null, jobId: null });
+              expect(finalized.pages[1]).toMatchObject({ pageNumber: 2, nativeText: null, needsOcr: true, temporaryImagePath: `${userId}/${documentId}/pages/2.webp` });
+              expect(deps.processBatch).toHaveBeenCalledOnce();
+              expect(deps.processBatch.mock.invocationCallOrder[0]).toBeGreaterThan(deps.lease.stageAndFinalize.mock.invocationCallOrder[0] ?? 0);
+              expect(deps.remove).not.toHaveBeenCalled();
+              expect(deps.lease.abandon).not.toHaveBeenCalled();
+              expect(deps.destroy).toHaveBeenCalledOnce();
+              expect(result).toMatchObject({ documentId, pageCount: 3, ocrPageCount: 1, ocrCompleted: 1, ocrPending: 0, ocrFailed: 0 });
+            });
+
+            it('processes required OCR without a per-import consent dependency', async () => {
+              const deps = dependencies();
+              const result = await importStagedDrivePdfReference({ staged, client: {} as never, dependencies: deps as never });
+              expect('recordOcrConsent' in deps).toBe(false);
+              expect(deps.renderPage).toHaveBeenCalledOnce();
+              expect(deps.lease.stageAndFinalize).toHaveBeenCalledOnce();
+              expect(deps.processBatch).toHaveBeenCalledOnce();
+              expect(result.ocrCompleted).toBe(1);
+            });
+
+            it('cleans derivatives when descriptor finalization fails and recovery is unavailable', async () => {
+              const deps = dependencies();
+              deps.lease.stageAndFinalize.mockRejectedValue(new Error('rpc failed'));
+              await expect(importStagedDrivePdfReference({ staged, client: {} as never, dependencies: deps as never }))
+                .rejects.toThrow('Não foi possível concluir a importação do PDF grande.');
+              expect(deps.remove).toHaveBeenCalledWith([`${userId}/${documentId}/pages/2.webp`]);
+              expect(deps.lease.abandon).toHaveBeenCalledOnce();
+              expect(deps.processBatch).not.toHaveBeenCalled();
+            });
+
+            it('keeps published derivatives when provider processing remains retryable', async () => {
+              const deps = dependencies();
+              deps.processBatch.mockRejectedValue(new Error('provider unavailable'));
+              const result = await importStagedDrivePdfReference({ staged, client: {} as never, dependencies: deps as never });
+              expect(deps.remove).not.toHaveBeenCalled();
+              expect(deps.lease.abandon).not.toHaveBeenCalled();
+              expect(result).toMatchObject({ ocrCompleted: 0, ocrPending: 1, ocrFailed: 0 });
+            });
+          });
+          EOF
+
+          cat > tests/unit/pdf/drive-reference-ocr-batching.test.ts <<'EOF'
+          import { describe, expect, it, vi } from 'vitest';
+          import { importStagedDrivePdfReference } from '../../../src/lib/pdf/drive-reference-import';
+
+          const userId = '11111111-1111-4111-8111-111111111111';
+          const documentId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+          const staged = { documentId, driveFileId: '2AbCdEfGhIjKlMnOpQrStUvWxYz_123456', sourceSizeBytes: 120 * 1024 * 1024, status: 'pending_inspection' as const };
+
+          function dependencies() {
+            const document = { numPages: 4 };
+            const destroy = vi.fn().mockResolvedValue(undefined);
+            const processBatch = vi.fn().mockImplementation(async (pageIds: readonly string[]) => ({
+              state: 'complete' as const, completedPageIds: [...pageIds], reviewPageIds: pageIds[1] ? [pageIds[1]] : [],
+              pendingPageIds: [], failedPageIds: [], splitRequiredPageIds: [], unexpectedResultPageIds: []
+            }));
+            const lease = {
+              attemptId: '11111111-2222-4333-8444-555555555555',
+              renew: vi.fn().mockResolvedValue(undefined), renewIfNeeded: vi.fn().mockResolvedValue(undefined),
+              abandon: vi.fn().mockResolvedValue(true),
+              stageAndFinalize: vi.fn().mockImplementation(async ({ pages }) => ({
+                documentId, pageCount: pages.length, ocrPageCount: pages.length, reviewPageCount: 0, status: 'processing'
+              }))
+            };
+            return {
+              destroy, processBatch, lease,
+              currentUserId: vi.fn().mockResolvedValue(userId),
+              verifyIdentity: vi.fn().mockResolvedValue({ driveVersion: '4', sourceSizeBytes: staged.sourceSizeBytes }),
+              openDocument: vi.fn().mockResolvedValue({ document, destroy }),
+              inspectDocument: vi.fn().mockResolvedValue({
+                pageCount: 4, nativePages: [], pagesNeedingOcr: [1, 2, 3, 4],
+                ocrReasonsByPage: [1, 2, 3, 4].map((pageNumber) => ({ pageNumber, reasons: ['no_extractable_text'] }))
+              }),
+              acquireDescriptorLease: vi.fn().mockResolvedValue(lease),
+              renderPage: vi.fn().mockResolvedValue(new Blob([new Uint8Array(256 * 1024)], { type: 'image/webp' })),
+              upload: vi.fn().mockResolvedValue(undefined), remove: vi.fn().mockResolvedValue(undefined),
+              recoverPublication: vi.fn().mockResolvedValue(null)
+            };
+          }
+
+          describe('oversized Drive PDF OCR batching', () => {
+            it('sends compatible rendered pages through the shared adaptive batch runner', async () => {
+              const deps = dependencies();
+              const progress: Array<{ phase: string; pageNumber?: number; current?: number; total?: number }> = [];
+              const result = await importStagedDrivePdfReference({ staged, client: {} as never, dependencies: deps as never, onProgress: (event) => progress.push(event) });
+              expect(deps.processBatch).toHaveBeenCalledTimes(1);
+              const requestedIds = deps.processBatch.mock.calls[0]?.[0] as readonly string[];
+              expect(requestedIds).toHaveLength(4);
+              expect(new Set(requestedIds).size).toBe(4);
+              expect(result).toMatchObject({ documentId, pageCount: 4, ocrCompleted: 3, ocrNeedsReview: 1, ocrPending: 0, ocrFailed: 0 });
+              expect(progress.filter((event) => event.phase === 'ocr')).toEqual([
+                expect.objectContaining({ pageNumber: 1, current: 1, total: 4 }),
+                expect.objectContaining({ pageNumber: 2, current: 2, total: 4 }),
+                expect.objectContaining({ pageNumber: 3, current: 3, total: 4 }),
+                expect.objectContaining({ pageNumber: 4, current: 4, total: 4 })
+              ]);
+              expect(deps.lease.stageAndFinalize).toHaveBeenCalledOnce();
+              expect(deps.destroy).toHaveBeenCalledOnce();
+            });
+          });
+          EOF
+
+          cat > tests/unit/pdf/drive-reference-progress.test.ts <<'EOF'
+          import { describe, expect, it, vi } from 'vitest';
+          import { importStagedDrivePdfReference } from '../../../src/lib/pdf/drive-reference-import';
+
+          const staged = {
+            documentId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+            driveFileId: '2AbCdEfGhIjKlMnOpQrStUvWxYz_123456',
+            sourceSizeBytes: 120 * 1024 * 1024,
+            status: 'pending_inspection' as const
+          };
+
+          function dependencies() {
+            const document = { numPages: 1 };
+            const destroy = vi.fn().mockResolvedValue(undefined);
+            const lease = {
+              attemptId: '11111111-2222-4333-8444-555555555555',
+              renew: vi.fn().mockResolvedValue(undefined), renewIfNeeded: vi.fn().mockResolvedValue(undefined),
+              abandon: vi.fn().mockResolvedValue(true),
+              stageAndFinalize: vi.fn().mockResolvedValue({ documentId: staged.documentId, pageCount: 1, ocrPageCount: 1, reviewPageCount: 0, status: 'processing' })
+            };
+            return {
+              lease,
+              currentUserId: vi.fn().mockResolvedValue('11111111-1111-4111-8111-111111111111'),
+              verifyIdentity: vi.fn().mockResolvedValue({ driveVersion: '4', sourceSizeBytes: staged.sourceSizeBytes }),
+              openDocument: vi.fn().mockResolvedValue({ document, destroy }),
+              inspectDocument: vi.fn(async (_document, options) => {
+                options?.onPage?.(1, 1);
+                return { pageCount: 1, nativePages: [], pagesNeedingOcr: [1], ocrReasonsByPage: [{ pageNumber: 1, reasons: ['no_extractable_text'] }] };
+              }),
+              acquireDescriptorLease: vi.fn().mockResolvedValue(lease),
+              renderPage: vi.fn().mockResolvedValue(new Blob([new Uint8Array(128)], { type: 'image/webp' })),
+              upload: vi.fn().mockResolvedValue(undefined), remove: vi.fn().mockResolvedValue(undefined),
+              recoverPublication: vi.fn().mockResolvedValue(null),
+              processBatch: vi.fn(async (pageIds: readonly string[]) => ({
+                state: 'complete' as const, completedPageIds: [...pageIds], reviewPageIds: [], pendingPageIds: [], failedPageIds: [],
+                splitRequiredPageIds: [], unexpectedResultPageIds: []
+              }))
+            };
+          }
+
+          describe('oversized Drive PDF progress', () => {
+            it('reports durable phases in order and ignores UI observer exceptions', async () => {
+              const deps = dependencies();
+              const events: string[] = [];
+              const onProgress = vi.fn((progress: { phase: string }) => {
+                events.push(progress.phase);
+                if (progress.phase === 'inspecting') throw new Error('UI observer failed');
+              });
+              await expect(importStagedDrivePdfReference({ staged, client: {} as never, dependencies: deps as never, onProgress }))
+                .resolves.toMatchObject({ ocrCompleted: 1, ocrPending: 0 });
+              expect(events).toEqual(['verifying', 'opening', 'inspecting', 'rendering_ocr', 'publishing', 'ocr', 'complete']);
+              expect(onProgress.mock.calls.find(([value]) => value.phase === 'inspecting')?.[0]).toMatchObject({ pageNumber: 1, pageCount: 1 });
+              expect(onProgress.mock.calls.find(([value]) => value.phase === 'rendering_ocr')?.[0]).toMatchObject({ pageNumber: 1, current: 1, total: 1 });
+              expect(deps.lease.stageAndFinalize).toHaveBeenCalledOnce();
+            });
+          });
+          EOF
+
+          pnpm exec prettier --write tests/unit/pdf/drive-reference-derived-limit.test.ts tests/unit/pdf/drive-reference-finalization-recovery.test.ts tests/unit/pdf/drive-reference-import.test.ts tests/unit/pdf/drive-reference-ocr-batching.test.ts tests/unit/pdf/drive-reference-progress.test.ts
+      - name: Validate migrated Drive PDF tests
+        id: tests
+        shell: bash
+        run: |
+          set -uo pipefail
+          pnpm exec vitest run tests/unit/pdf/drive-reference-derived-limit.test.ts tests/unit/pdf/drive-reference-finalization-recovery.test.ts tests/unit/pdf/drive-reference-import.test.ts tests/unit/pdf/drive-reference-ocr-batching.test.ts tests/unit/pdf/drive-reference-progress.test.ts 2>&1 | tee drive-reference-vitest.log
+          exit ${PIPESTATUS[0]}
+      - name: Upload failure evidence
+        if: ${{ failure() && steps.tests.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: drive-reference-test-failure-${{ github.sha }}
+          path: drive-reference-vitest.log
+          if-no-files-found: error
+          retention-days: 2
+      - name: Commit migrated tests
+        if: ${{ success() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/migrate-drive-reference-tests-once.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'test: migrate Drive PDF coverage to descriptor leases'
+          git push origin HEAD:main
