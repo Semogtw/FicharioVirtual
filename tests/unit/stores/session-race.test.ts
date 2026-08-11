@@ -11,6 +11,7 @@ function deferred<T>() {
 
 const auth = vi.hoisted(() => ({
 	loadAuthorizedSession: vi.fn(),
+	loadPersistedSession: vi.fn(),
 	signIn: vi.fn(),
 	signOut: vi.fn()
 }));
@@ -25,6 +26,7 @@ vi.mock('$lib/services/auth', async (importOriginal) => {
 	return {
 		...original,
 		loadAuthorizedSession: auth.loadAuthorizedSession,
+		loadPersistedSession: auth.loadPersistedSession,
 		signIn: auth.signIn,
 		signOut: auth.signOut
 	};
@@ -60,6 +62,7 @@ describe('session operation ordering', () => {
 		sessionState.authorized = false;
 		sessionState.error = null;
 		auth.loadAuthorizedSession.mockReset();
+		auth.loadPersistedSession.mockReset();
 		auth.signIn.mockReset();
 		auth.signOut.mockReset();
 		tracking.callback = null;
@@ -83,6 +86,18 @@ describe('session operation ordering', () => {
 
 		expect(sessionState.authorized).toBe(true);
 		expect(sessionState.user?.id).toBe('11111111-1111-4111-8111-111111111111');
+		expect(sessionState.loading).toBe(false);
+	});
+
+	it('preserves a persisted Supabase session when allowlist verification is temporarily unavailable', async () => {
+		auth.loadAuthorizedSession.mockRejectedValueOnce(new Error('temporary allowlist outage'));
+		auth.loadPersistedSession.mockResolvedValueOnce(authenticatedSession);
+
+		await expect(initializeSession()).resolves.toBe(authenticatedSession);
+
+		expect(sessionState.authorized).toBe(true);
+		expect(sessionState.user?.id).toBe('11111111-1111-4111-8111-111111111111');
+		expect(sessionState.error).toBeNull();
 		expect(sessionState.loading).toBe(false);
 	});
 
@@ -225,7 +240,7 @@ describe('session operation ordering', () => {
 		stopTracking();
 	});
 
-	it('revalidates the current route after an external sign-in but not a same-user token refresh', async () => {
+	it('revalidates the current route after an external sign-in but trusts a same-user token refresh', async () => {
 		auth.loadAuthorizedSession.mockResolvedValue(authenticatedSession);
 		const onExternalSessionChange = vi.fn();
 		const stopTracking = startSessionTracking(onExternalSessionChange);
@@ -238,9 +253,12 @@ describe('session operation ordering', () => {
 
 		onExternalSessionChange.mockClear();
 		tracking.callback?.('TOKEN_REFRESHED', authenticatedSession);
-		await vi.waitFor(() => expect(auth.loadAuthorizedSession).toHaveBeenCalledTimes(2));
+		await Promise.resolve();
 
+		expect(auth.loadAuthorizedSession).toHaveBeenCalledTimes(1);
+		expect(auth.loadPersistedSession).not.toHaveBeenCalled();
 		expect(onExternalSessionChange).not.toHaveBeenCalled();
+		expect(sessionState.authorized).toBe(true);
 		stopTracking();
 	});
 });
