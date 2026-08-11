@@ -292,7 +292,6 @@ async function processPublishedOcrPages(
 
 export async function importStagedDrivePdfReference({
 	staged,
-	consentGranted: _consentGranted,
 	promptVersion: requestedPromptVersion,
 	signal,
 	onProgress,
@@ -448,7 +447,6 @@ export async function importStagedDrivePdfReference({
 			const referencePending = await runtime.referencePending(staged.documentId).catch(() => false);
 			if (referencePending) await runtime.remove(uploadedPaths).catch(() => undefined);
 		}
-		if (error instanceof PdfConsentRequiredError) throw error;
 		if (error instanceof DrivePdfReferenceChangedError) throw error;
 		if (error instanceof DOMException && error.name === 'AbortError') throw error;
 		throw new DrivePdfReferenceImportError();
