@@ -19,6 +19,8 @@ const session = {
 	}
 };
 
+test.use({ serviceWorkers: 'block' });
+
 test.beforeEach(async ({ page }) => {
 	await page.addInitScript(
 		({ authKey, value }) => {
