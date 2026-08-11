@@ -282,8 +282,14 @@ test('two tabs resume one persisted image import without duplicate upload or cli
 	await expect
 		.poll(
 			async () =>
-				(await first.getByText('Leitura em segundo plano', { exact: true }).count()) +
-				(await second.getByText('Leitura em segundo plano', { exact: true }).count()),
+				(await first
+					.locator('#global-import-queue')
+					.getByText('Leitura em segundo plano', { exact: true })
+					.count()) +
+				(await second
+					.locator('#global-import-queue')
+					.getByText('Leitura em segundo plano', { exact: true })
+					.count()),
 			{ timeout: 15_000 }
 		)
 		.toBe(1);
