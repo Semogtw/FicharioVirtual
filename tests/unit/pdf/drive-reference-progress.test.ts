@@ -55,7 +55,7 @@ describe('oversized Drive PDF progress', () => {
 		await expect(
 			importStagedDrivePdfReference({
 				staged,
-				consentGranted: true,
+
 				client: {} as never,
 				dependencies: deps,
 				onProgress

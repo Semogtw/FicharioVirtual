@@ -71,7 +71,7 @@ describe('oversized Drive PDF OCR batching', () => {
 
 		const result = await importStagedDrivePdfReference({
 			staged,
-			consentGranted: true,
+
 			client: {} as never,
 			dependencies: deps,
 			onProgress: (event) => progress.push(event)

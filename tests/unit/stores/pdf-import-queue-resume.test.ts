@@ -78,7 +78,7 @@ function storedRecord(): StoredPdfImportRecord {
 		resumeKey,
 		file: new File(['pdf'], 'notes.pdf', { type: 'application/pdf' }),
 		notebookId: null,
-		consentGranted: false,
+
 		status: 'uploading',
 		inspected: true,
 		uploaded: false,
@@ -179,7 +179,7 @@ describe('PDF import queue restoration', () => {
 			expect.any(File),
 			expect.objectContaining({
 				notebookId: null,
-				consentGranted: false,
+
 				signal: expect.any(AbortSignal),
 				onProgress: expect.any(Function)
 			})

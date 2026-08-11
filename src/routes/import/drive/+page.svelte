@@ -128,7 +128,7 @@
 		try {
 			return await importStagedDrivePdfReference({
 				staged,
-				consentGranted: true,
+
 				signal: controller.signal,
 				onProgress: (progress) => {
 					referenceProgress = progress;

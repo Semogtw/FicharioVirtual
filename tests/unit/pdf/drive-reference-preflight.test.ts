@@ -36,7 +36,7 @@ describe('oversized Drive PDF identity preflight', () => {
 		await expect(
 			importStagedDrivePdfReference({
 				staged,
-				consentGranted: true,
+
 				client: {} as never,
 				dependencies: deps
 			})
@@ -60,7 +60,7 @@ describe('oversized Drive PDF identity preflight', () => {
 		await expect(
 			importStagedDrivePdfReference({
 				staged,
-				consentGranted: true,
+
 				client: {} as never,
 				dependencies: deps
 			})

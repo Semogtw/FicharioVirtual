@@ -87,7 +87,7 @@ function waitingItem(): PdfQueueItem {
 		resumeKey: crypto.randomUUID(),
 		file: new File(['pdf'], 'scan.pdf', { type: 'application/pdf' }),
 		notebookId: null,
-		consentGranted: true,
+
 		status: 'waiting',
 		progress: null,
 		inspected: true,

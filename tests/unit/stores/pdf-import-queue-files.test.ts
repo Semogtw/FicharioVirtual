@@ -89,7 +89,7 @@ describe('PDF import queue file identity', () => {
 			lastModified: 1_700_000_000_000
 		});
 
-		addPdfs([first, second], { consentGranted: false });
+		addPdfs([first, second], {});
 
 		expect(pdfImportQueue.items).toHaveLength(2);
 		await vi.waitFor(() => expect(dependencies.uploadPdf).toHaveBeenCalledTimes(2));

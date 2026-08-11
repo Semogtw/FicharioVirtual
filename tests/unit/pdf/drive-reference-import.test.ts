@@ -60,7 +60,7 @@ describe('importStagedDrivePdfReference', () => {
 
 		const result = await importStagedDrivePdfReference({
 			staged,
-			consentGranted: true,
+
 			client: {} as never,
 			dependencies: deps
 		});
@@ -143,7 +143,7 @@ describe('importStagedDrivePdfReference', () => {
 		await expect(
 			importStagedDrivePdfReference({
 				staged,
-				consentGranted: true,
+
 				client: {} as never,
 				dependencies: deps
 			})
@@ -161,7 +161,7 @@ describe('importStagedDrivePdfReference', () => {
 
 		const result = await importStagedDrivePdfReference({
 			staged,
-			consentGranted: true,
+
 			client: {} as never,
 			dependencies: deps
 		});

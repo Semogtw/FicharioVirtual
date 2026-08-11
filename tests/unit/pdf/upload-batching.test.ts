@@ -81,12 +81,7 @@ describe('large PDF OCR import', () => {
 			type: 'application/pdf'
 		});
 
-		const result = await uploadPdfWithGateway(
-			largePdf,
-			{ consentGranted: true },
-			gateway(),
-			dependencies
-		);
+		const result = await uploadPdfWithGateway(largePdf, {}, gateway(), dependencies);
 
 		expect(calls.map((call) => call.length)).toEqual([40, 5]);
 		expect(result.ocrCompleted).toBe(45);
@@ -116,7 +111,7 @@ describe('large PDF OCR import', () => {
 
 		await uploadPdfWithGateway(
 			new File(['pdf'], 'dense.pdf', { type: 'application/pdf' }),
-			{ consentGranted: true },
+			{},
 			gateway(),
 			dependencies
 		);

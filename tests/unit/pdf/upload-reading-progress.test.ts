@@ -75,7 +75,6 @@ describe('PDF OCR progress', () => {
 		await uploadPdfWithGateway(
 			pdf(),
 			{
-				consentGranted: true,
 				onProgress(update) {
 					progress.push(update);
 				}

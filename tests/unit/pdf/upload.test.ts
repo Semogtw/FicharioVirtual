@@ -112,12 +112,7 @@ describe('uploadPdfWithGateway', () => {
 		const fixture = gatewayFixture();
 		const deps = dependencies();
 
-		const result = await uploadPdfWithGateway(
-			pdf(),
-			{ consentGranted: true },
-			fixture.gateway,
-			deps.values
-		);
+		const result = await uploadPdfWithGateway(pdf(), {}, fixture.gateway, deps.values);
 
 		expect(deps.rendered).toEqual([2]);
 		expect(deps.consentCalls).toBe(1);
@@ -144,12 +139,7 @@ describe('uploadPdfWithGateway', () => {
 			needsReview: true
 		});
 
-		const result = await uploadPdfWithGateway(
-			pdf(),
-			{ consentGranted: true },
-			fixture.gateway,
-			deps.values
-		);
+		const result = await uploadPdfWithGateway(pdf(), {}, fixture.gateway, deps.values);
 
 		expect(result.ocrCompleted).toBe(0);
 		expect(result.ocrNeedsReview).toBe(1);
@@ -165,7 +155,7 @@ describe('uploadPdfWithGateway', () => {
 
 		const permanent = await uploadPdfWithGateway(
 			pdf(),
-			{ consentGranted: true },
+			{},
 			permanentFixture.gateway,
 			permanentDeps.values
 		);
@@ -180,7 +170,7 @@ describe('uploadPdfWithGateway', () => {
 
 		const retryable = await uploadPdfWithGateway(
 			pdf(),
-			{ consentGranted: true },
+			{},
 			retryableFixture.gateway,
 			retryableDeps.values
 		);
@@ -215,7 +205,7 @@ describe('uploadPdfWithGateway', () => {
 
 		const pending = uploadPdfWithGateway(
 			pdf(),
-			{ consentGranted: true, signal: controller.signal },
+			{ signal: controller.signal },
 			fixture.gateway,
 			deps.values
 		);
@@ -243,7 +233,7 @@ describe('uploadPdfWithGateway', () => {
 			ocrReasonsByPage: []
 		});
 
-		await uploadPdfWithGateway(pdf(), { consentGranted: false }, fixture.gateway, deps.values);
+		await uploadPdfWithGateway(pdf(), {}, fixture.gateway, deps.values);
 
 		expect(deps.rendered).toEqual([]);
 		expect(deps.consentCalls).toBe(0);
@@ -254,9 +244,9 @@ describe('uploadPdfWithGateway', () => {
 		const fixture = gatewayFixture({ failMetadata: true });
 		const deps = dependencies();
 
-		await expect(
-			uploadPdfWithGateway(pdf(), { consentGranted: true }, fixture.gateway, deps.values)
-		).rejects.toThrow('metadata failed');
+		await expect(uploadPdfWithGateway(pdf(), {}, fixture.gateway, deps.values)).rejects.toThrow(
+			'metadata failed'
+		);
 		expect(fixture.removed).toHaveLength(1);
 		expect(fixture.removed[0]).toEqual(fixture.uploads.map((item) => item.path));
 	});

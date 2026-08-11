@@ -52,7 +52,7 @@ describe('Drive PDF finalization recovery', () => {
 		await expect(
 			importStagedDrivePdfReference({
 				staged,
-				consentGranted: true,
+
 				client: {} as never,
 				dependencies: deps
 			})
@@ -72,7 +72,7 @@ describe('Drive PDF finalization recovery', () => {
 		await expect(
 			importStagedDrivePdfReference({
 				staged,
-				consentGranted: true,
+
 				client: {} as never,
 				dependencies: deps
 			})
@@ -92,7 +92,7 @@ describe('Drive PDF finalization recovery', () => {
 		await expect(
 			importStagedDrivePdfReference({
 				staged,
-				consentGranted: true,
+
 				client: {} as never,
 				dependencies: deps
 			})

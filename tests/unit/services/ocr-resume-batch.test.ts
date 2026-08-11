@@ -29,7 +29,7 @@ describe('batched OCR resume', () => {
 		const result = await resumeDocumentOcrWithGateway(
 			documentId,
 			gateway(items),
-			async () => ({ state: 'busy' }),
+			async () => ({ state: 'retry_later' }),
 			{
 				batchProcessor: async (pageIds) => {
 					calls.push([...pageIds]);
@@ -57,7 +57,7 @@ describe('batched OCR resume', () => {
 		const result = await resumeDocumentOcrWithGateway(
 			documentId,
 			gateway(items),
-			async () => ({ state: 'busy' }),
+			async () => ({ state: 'retry_later' }),
 			{
 				sleep,
 				batchProcessor: async (pageIds) => {
@@ -100,7 +100,7 @@ describe('batched OCR resume', () => {
 		const result = await resumeDocumentOcrWithGateway(
 			documentId,
 			gateway(items),
-			async () => ({ state: 'busy' }),
+			async () => ({ state: 'retry_later' }),
 			{
 				signal: controller.signal,
 				batchProcessor: async (pageIds) => {

@@ -48,7 +48,7 @@ describe('Drive PDF derived page ceiling', () => {
 		await expect(
 			importStagedDrivePdfReference({
 				staged,
-				consentGranted: true,
+
 				client: {} as never,
 				dependencies: deps
 			})
