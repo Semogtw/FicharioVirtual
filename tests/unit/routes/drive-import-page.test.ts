@@ -48,10 +48,11 @@ describe('explicit Google Drive import page', () => {
 		expect(source).toContain('não é do documento lógico nem dos lotes de OCR');
 	});
 
-	it('requires explicit OCR consent and never exposes or persists credentials', () => {
+	it('avoids repeated OCR confirmations and never exposes or persists credentials', () => {
 		const source = readFileSync(path, 'utf8');
 
-		expect(source).toContain('Confirme a autorização de OCR antes de selecionar o arquivo.');
+		expect(source).not.toContain('Confirme a autorização de OCR antes de selecionar o arquivo.');
+		expect(source).not.toContain('type="checkbox"');
 		expect(source).toContain('Nenhuma leitura ampla da conta é realizada.');
 		expect(source).not.toContain('localStorage');
 		expect(source).not.toContain('sessionStorage');
