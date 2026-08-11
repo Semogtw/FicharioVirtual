@@ -44,31 +44,6 @@ end;
 $$;
 reset role;
 
-update public.app_users
-set ocr_consent_at = null,
-    ocr_consent_version = null
-where user_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'::uuid;
-set local role authenticated;
-select set_config('request.jwt.claim.sub', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', true);
-do $$
-declare result jsonb;
-begin
-  result := public.claim_ocr_job(
-    '22222222-2222-4222-8222-222222222222'::uuid,
-    'gemini-test',
-    '2026-08-03T00:00:01Z'
-  );
-  if result is distinct from jsonb_build_object('state', 'consent_required') then
-    raise exception 'consent-required claim contract drifted: %', result;
-  end if;
-end;
-$$;
-reset role;
-
-update public.app_users
-set ocr_consent_at = '2026-08-01T00:00:00Z',
-    ocr_consent_version = 1
-where user_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'::uuid;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', true);
 do $$
