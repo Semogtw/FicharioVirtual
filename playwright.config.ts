@@ -18,6 +18,10 @@ export default defineConfig({
 				...devices['Desktop Chrome'],
 				viewport: { width: 1200, height: 800 }
 			}
+		},
+		{
+			name: 'webkit-iphone-12',
+			use: devices['iPhone 12']
 		}
 	],
 	webServer: {
