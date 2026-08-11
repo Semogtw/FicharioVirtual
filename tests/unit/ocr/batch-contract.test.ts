@@ -5,11 +5,11 @@ const first = { pageId: '11111111-1111-4111-8111-111111111111', pageNumber: 1 };
 const second = { pageId: '22222222-2222-4222-8222-222222222222', pageNumber: 2 };
 
 function result(page = first, text = 'Texto') {
-	return { ...page, text, warnings: [] };
+	return { ...page, text, warnings: [], contentClass: 'unknown', wordGeometry: [] };
 }
 
 describe('parseOcrBatchPayload', () => {
-	it('accepts the exact requested set and restores request order', () => {
+	it('accepts the exact launch contract and restores request order', () => {
 		const parsed = parseOcrBatchPayload(
 			JSON.stringify({ pages: [result(second, 'Dois'), result(first, 'Um')] }),
 			[first, second]
@@ -108,10 +108,17 @@ describe('parseOcrBatchPayload', () => {
 		expect(parsed.missingPageIds).toEqual([second.pageId]);
 	});
 
-	it('turns malformed, mismatched, invalid-class or extended provider output into missing-page retry data', () => {
+	it('rejects malformed, mismatched, pre-launch, invalid-class or extended provider output', () => {
 		for (const payload of [
 			'{',
 			JSON.stringify({ pages: [{ ...result(first), pageNumber: 9 }] }),
+			JSON.stringify({ pages: [{ ...first, text: 'Texto', warnings: [] }] }),
+			JSON.stringify({
+				pages: [{ ...first, text: 'Texto', warnings: [], contentClass: 'unknown' }]
+			}),
+			JSON.stringify({
+				pages: [{ ...first, text: 'Texto', warnings: [], wordGeometry: [] }]
+			}),
 			JSON.stringify({ pages: [{ ...result(first), contentClass: 'not_a_class' }] }),
 			JSON.stringify({ pages: [{ ...result(first), commentary: 'extra' }] })
 		]) {
@@ -153,8 +160,7 @@ describe('parseOcrBatchPayload', () => {
 			JSON.stringify({
 				pages: [
 					{
-						...first,
-						text: '',
+						...result(first, ''),
 						warnings: [{ code: 'empty_page', message: 'Não há texto legível.' }]
 					}
 				]
