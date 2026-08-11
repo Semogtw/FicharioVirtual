@@ -4,12 +4,10 @@ import { createHash, randomUUID } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
 import { createClient } from '@supabase/supabase-js';
 import {
-	assertOcrInvocation,
 	assertOcrPersistence,
 	createOcrInvocationDiagnostic,
 	createOcrProbePng,
 	createOcrStagingReport,
-	formatOcrInvocationFailure,
 	normalizeOcrProbeText
 } from './ocr-staging-contract.mjs';
 import {
@@ -19,6 +17,10 @@ import {
 } from './supabase-staging-contract.mjs';
 
 const STORAGE_BUCKET = 'documents';
+const PERSISTENCE_TIMEOUT_MS = 120_000;
+const PERSISTENCE_POLL_MS = 1_000;
+const REKICK_INTERVAL_MS = 10_000;
+const TERMINAL_OCR_JOB_STATUSES = new Set(['ready', 'needs_review', 'failed', 'blocked_quota']);
 
 /** @param {string} name */
 function requireEnv(name) {
@@ -36,6 +38,11 @@ function createStagingClient(url, publishableKey) {
 			persistSession: false
 		}
 	});
+}
+
+/** @param {number} milliseconds */
+function sleep(milliseconds) {
+	return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 /**
@@ -153,6 +160,26 @@ async function readProbePersistence(client, probe) {
 
 /**
  * @param {ReturnType<typeof createStagingClient>} client
+ * @param {{ documentId: string; pageId: string; jobId: string }} probe
+ * @param {() => Promise<void>} rekick
+ */
+async function waitForProbePersistence(client, probe, rekick) {
+	const deadline = Date.now() + PERSISTENCE_TIMEOUT_MS;
+	let nextKickAt = Date.now() + REKICK_INTERVAL_MS;
+	while (Date.now() < deadline) {
+		const persisted = await readProbePersistence(client, probe);
+		if (persisted.job && TERMINAL_OCR_JOB_STATUSES.has(persisted.job.status)) return persisted;
+		if (Date.now() >= nextKickAt) {
+			await rekick();
+			nextKickAt = Date.now() + REKICK_INTERVAL_MS;
+		}
+		await sleep(PERSISTENCE_POLL_MS);
+	}
+	throw new Error('Background OCR did not reach a terminal persisted state before the smoke timeout');
+}
+
+/**
+ * @param {ReturnType<typeof createStagingClient>} client
  * @param {string} documentId
  */
 async function deleteProbeDocument(client, documentId) {
@@ -228,29 +255,36 @@ async function main() {
 		console.log('PASS synthetic OCR document was created with public credentials');
 
 		currentStage = 'invocation';
-		const invocation = await client.functions.invoke('process-ocr', {
-			body: { pageId: probe.pageId }
-		});
-		if (invocation.error) {
-			diagnostic = await createOcrInvocationDiagnostic({
-				error: invocation.error,
-				response: invocation.response
-			});
-			throw new Error(formatOcrInvocationFailure(diagnostic));
-		}
-		assertOcrInvocation({ data: invocation.data });
+		const kickBackgroundOcr = async () => {
+			const invocation = await client.functions.invoke('ocr-queue-kick', { body: {} });
+			if (invocation.error) {
+				diagnostic = await createOcrInvocationDiagnostic({
+					error: invocation.error,
+					response: invocation.response
+				});
+				throw new Error(
+					`ocr-queue-kick failed${diagnostic.httpStatus ? `: HTTP ${diagnostic.httpStatus}` : ''}`
+				);
+			}
+			if (invocation.data?.accepted !== true) {
+				throw new Error('ocr-queue-kick returned an unexpected response');
+			}
+		};
+		await kickBackgroundOcr();
 		stages.functionCompleted = true;
-		outcome.needsReview = invocation.data.needsReview;
-		outcome.warningCount = invocation.data.warningCount;
-		console.log('PASS process-ocr completed the synthetic image');
+		console.log('PASS ocr-queue-kick accepted the synthetic job for background processing');
 
 		currentStage = 'persistence';
-		const persisted = await readProbePersistence(client, probe);
+		const persisted = await waitForProbePersistence(client, probe, kickBackgroundOcr);
 		assertOcrPersistence(persisted);
 		stages.persistenceVerified = true;
 		outcome.documentStatus = persisted.document.status;
 		outcome.pageStatus = persisted.page.status;
 		outcome.jobStatus = persisted.job.status;
+		outcome.needsReview = persisted.page.status === 'needs_review';
+		outcome.warningCount = Array.isArray(persisted.page.warnings)
+			? persisted.page.warnings.length
+			: null;
 		outcome.attemptCount = persisted.job.attempt_count;
 		const transcriptTokens = normalizeOcrProbeText(persisted.page.ocr_raw_text).split(' ');
 		outcome.tokens = {
@@ -258,7 +292,7 @@ async function main() {
 			ocr: transcriptTokens.includes('ocr'),
 			numericProbe: transcriptTokens.includes('2718')
 		};
-		console.log('PASS OCR transcript and terminal database state match the synthetic probe');
+		console.log('PASS background OCR worker persisted the synthetic transcript and terminal state');
 		currentStage = null;
 	} catch (error) {
 		operationError = error;
