@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(56);
+select plan(57);
 
 select has_table('public', 'app_users', 'allowlist table exists');
 select has_table('public', 'notebooks', 'notebooks table exists');
