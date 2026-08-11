@@ -109,11 +109,7 @@ export function parseOcrClaimResult(value: unknown): OcrClaimResult | null {
 	const state = parseOcrClaimState(record.state);
 	if (state === null) return null;
 
-	if (
-		state === 'not_authorized' ||
-		state === 'invalid_configuration' ||
-		state === 'not_found'
-	) {
+	if (state === 'not_authorized' || state === 'invalid_configuration' || state === 'not_found') {
 		return hasExactKeys(record, ['state']) ? Object.freeze({ state }) : null;
 	}
 
