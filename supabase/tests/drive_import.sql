@@ -44,7 +44,7 @@ insert into public.notebooks (
 select lives_ok(
   $$
     select *
-    from public.create_drive_image_import(
+    from public.create_drive_image_import_v2(
       'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
       'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
       'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
@@ -57,8 +57,24 @@ select lives_ok(
       '2026-08-06T07:00:00Z',
       '3',
       'd41d8cd98f00b204e9800998ecf8427e',
+      auth.uid()::text || '/' || 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' || '/ocr.webp',
       '11111111-1111-4111-8111-111111111111/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/thumbnail.jpg',
       repeat('a', 64),
+      repeat('a', 64),
+      'ocr_clean_v1',
+      1,
+      false,
+      1000,
+      0,
+      true,
+      true,
+      false,
+      1600,
+      1200,
+      1600,
+      1200,
+      500000,
+      250000,
       '2026-08-05T10:00:00Z',
       1
     )
@@ -116,7 +132,7 @@ select is(
 select throws_ok(
   $$
     select *
-    from public.create_drive_image_import(
+    from public.create_drive_image_import_v2(
       'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
       'ffffffff-ffff-4fff-8fff-ffffffffffff',
       '99999999-9999-4999-8999-999999999999',
@@ -129,8 +145,24 @@ select throws_ok(
       '2026-08-06T07:00:00Z',
       '1',
       null,
+      auth.uid()::text || '/' || 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' || '/ocr.webp',
       '11111111-1111-4111-8111-111111111111/eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee/thumbnail.jpg',
       repeat('b', 64),
+      repeat('b', 64),
+      'ocr_clean_v1',
+      1,
+      false,
+      1000,
+      0,
+      true,
+      true,
+      false,
+      1600,
+      1200,
+      1600,
+      1200,
+      500000,
+      250000,
       null,
       1
     )
