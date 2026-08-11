@@ -16,15 +16,13 @@ function dependencies() {
 		renew: vi.fn().mockResolvedValue(undefined),
 		renewIfNeeded: vi.fn().mockResolvedValue(undefined),
 		abandon: vi.fn().mockResolvedValue(true),
-		stageAndFinalize: vi
-			.fn()
-			.mockResolvedValue({
-				documentId: staged.documentId,
-				pageCount: 1,
-				ocrPageCount: 1,
-				reviewPageCount: 0,
-				status: 'processing'
-			})
+		stageAndFinalize: vi.fn().mockResolvedValue({
+			documentId: staged.documentId,
+			pageCount: 1,
+			ocrPageCount: 1,
+			reviewPageCount: 0,
+			status: 'processing'
+		})
 	};
 	return {
 		lease,
