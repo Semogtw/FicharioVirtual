@@ -141,7 +141,8 @@
 			</label>
 			<label class="choice">
 				<input type="radio" bind:group={mode} value="high-definition" />
-				<span><strong>Alta definição</strong><small>Até 3.200 px · texto muito pequeno</small></span>
+				<span><strong>Alta definição</strong><small>Até 3.200 px · texto muito pequeno</small></span
+				>
 			</label>
 		</fieldset>
 	</section>

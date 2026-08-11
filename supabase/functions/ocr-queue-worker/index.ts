@@ -422,7 +422,11 @@ async function drainOnce(settings: WorkerConfig) {
 				pages: providerPages,
 				signal: controller.signal
 			});
-			return Object.freeze({ ok: true as const, outcome, latencyMs: performance.now() - startedAt });
+			return Object.freeze({
+				ok: true as const,
+				outcome,
+				latencyMs: performance.now() - startedAt
+			});
 		} catch (error) {
 			return Object.freeze({ ok: false as const, error, latencyMs: performance.now() - startedAt });
 		} finally {
