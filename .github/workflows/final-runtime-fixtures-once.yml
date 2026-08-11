@@ -78,6 +78,11 @@ jobs:
               "storagePath: `${userId}/document/original.webp`,",
               "storagePath: 'drive:2AbCdEfGhIjKlMnOpQrStUvWxYz_123456',"
           )
+          replace(
+              'tests/unit/stores/import-queue-resume.test.ts',
+              "state: 'already_complete',",
+              "state: 'complete',"
+          )
           PY
           pnpm exec prettier --write src/lib/components/UnifiedImportPage.svelte src/lib/components/ImportQueueTray.svelte tests/unit/desktop-worker/ollama-engine.test.ts tests/unit/desktop-worker/spool-retention.test.ts tests/unit/stores/import-queue-resume.test.ts
           pnpm exec vitest run tests/unit/desktop-worker/ollama-engine.test.ts tests/unit/desktop-worker/spool-retention.test.ts tests/unit/stores/import-queue-resume.test.ts
