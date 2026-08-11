@@ -5,7 +5,9 @@ const source = readFileSync('src/routes/+layout.ts', 'utf8');
 
 describe('layout authentication redirects', () => {
 	it('keeps a persisted session when allowlist verification is temporarily unavailable', () => {
-		expect(source).toContain("import { loadAuthorizedSession, loadPersistedSession } from '$lib/services/auth';");
+		expect(source).toContain(
+			"import { loadAuthorizedSession, loadPersistedSession } from '$lib/services/auth';"
+		);
 		expect(source).toContain('persistedSession = await loadPersistedSession();');
 		expect(source).toMatch(
 			/if \(persistedSession !== null\) \{[\s\S]*return \{ session: persistedSession, authState: 'session_preserved' as const \};/
