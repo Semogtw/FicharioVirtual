@@ -1,7 +1,7 @@
 # Operação 100% gratuita
 
-**Última verificação externa registrada:** 6 de agosto de 2026  
-**Implementação OCR atualizada:** 6 de agosto de 2026
+**Última verificação externa registrada:** 11 de agosto de 2026  
+**Implementação OCR atualizada:** 11 de agosto de 2026
 
 Este documento define as regras para manter o Fichário Virtual em R$ 0. Franquias externas podem mudar; a aplicação deve falhar de forma segura quando um serviço deixa de aceitar uso e nunca migrar automaticamente para cobrança.
 
@@ -16,7 +16,7 @@ Este documento define as regras para manter o Fichário Virtual em R$ 0. Franqui
 7. Não implementar fallback automático para API paga.
 8. Preservar arquivo, páginas concluídas e estado quando uma quota real termina.
 9. Não impor franquia diária artificial de OCR.
-10. Tratar contadores locais apenas como telemetria.
+10. Tratar contadores de consumo locais apenas como telemetria; o limitador compartilhado de RPM é um mecanismo de cadência, não uma quota de uso.
 11. Não enviar conteúdo privado para Cloudflare Pages ou host público de modelos.
 12. Não obrigar tablet ou celular a baixar modelos destinados ao computador.
 13. Permitir que trabalhos aguardem serviço externo ou computador sem perda.
@@ -62,28 +62,44 @@ O worker desktop continua aprovado em arquitetura, mas não faz parte da impleme
 
 Referências oficiais operacionais permanecem registradas em `docs/DEPLOYMENT.md` e `docs/OCR_STAGING.md`.
 
-Configuração obrigatória:
+Configuração de runtime:
 
 ```text
 APP_ORIGIN
 GEMINI_API_KEY
-OCR_MODEL_PRIMARY
-OCR_PROMPT_VERSION
+OCR_MODEL_PRIMARY=gemini-3.1-flash-lite
+OCR_MODEL_FALLBACK=gemini-3.5-flash-lite
+OCR_PROMPT_VERSION=1
 ```
 
-Controles técnicos opcionais:
+Controles técnicos opcionais com os defaults atuais:
 
 ```text
+OCR_MODEL_PRIMARY_RPM=12
+OCR_MODEL_FALLBACK_RPM=12
+OCR_PROVIDER_MAX_QUEUE_WAIT_MS=20000
 OCR_BATCH_MAX_PAGES=40
 OCR_BATCH_MAX_BYTES=12582912
 OCR_REQUEST_TIMEOUT_MS=120000
 ```
 
-Esses valores controlam páginas por chamada, memória e duração. Eles não representam franquia diária.
+Esses valores controlam cadência, páginas por chamada, memória e duração. Eles não representam franquia diária nem tentam prever RPD restante.
+
+### Roteamento gratuito atual
+
+- `gemini-3.1-flash-lite` recebe a primeira tentativa normal de OCR;
+- a cadência é reservada globalmente no banco por modelo, de modo que Edge Function isolates concorrentes compartilham o mesmo orçamento de RPM;
+- o default de 12 RPM preserva margem abaixo do limite observado para os dois Flash-Lite;
+- se a próxima vaga segura estiver próxima, a execução aguarda por até 20 segundos;
+- se a fila local exceder essa espera, o trabalho volta para retry sem chamar a Gemini e sem consumir o fallback;
+- somente um `429` realmente retornado pelo provedor após essa proteção autoriza uma tentativa no `gemini-3.5-flash-lite`;
+- o fallback tem seu próprio limitador global de 12 RPM;
+- falhas comuns de rede, timeout ou `5xx` seguem o plano normal de retry, sem trocar silenciosamente de modelo;
+- nenhuma rota ativa billing ou modelo pago.
 
 ### Política de quota
 
-A quota real do Gemini é a única autoridade para capacidade do provedor.
+A quota real do Gemini é a única autoridade para a capacidade diária do provedor. O Fichário não cria um teto artificial de RPD.
 
 O Fichário pode registrar:
 
@@ -91,15 +107,17 @@ O Fichário pode registrar:
 - lotes;
 - chamadas;
 - tentativas;
+- modelo efetivamente chamado;
+- rota primária ou fallback;
 - erros temporários;
 - bloqueios reais de quota;
 - média de páginas por chamada.
 
-Esses contadores não podem impedir uma chamada que ainda seria aceita.
+Esses contadores de telemetria não podem transformar uma estimativa local em bloqueio diário. A única antecipação permitida é o espaçamento técnico de RPM para evitar produzir `429` por concorrência própria.
 
 Estados relevantes:
 
-- `retryable`: falha curta, timeout ou rate limit temporário;
+- `retryable`: falha curta, timeout, fila local cheia ou rate limit temporário;
 - `blocked_quota`: quota real indisponível;
 - `waiting_desktop`: trabalho aguardando computador, quando essa rota existir;
 - `needs_review`: resultado incerto;
@@ -120,7 +138,9 @@ A implementação ativa inclui:
 - telemetria separada de páginas, lotes, chamadas e tentativas;
 - RLS e escrita de manifestos apenas por RPC;
 - transições terminais idempotentes;
-- rate limit temporário separado de quota diária real.
+- tabela de estado e RPC de reserva global de RPM acessíveis somente por `service_role`;
+- rate limit temporário separado de quota diária real;
+- fallback gratuito explícito 3.1 Flash-Lite → 3.5 Flash-Lite somente após `429` do provedor.
 
 O segredo diário antigo não é lido pelo código atual e deve ser removido do painel depois do rollout:
 
@@ -128,7 +148,7 @@ O segredo diário antigo não é lido pelo código atual e deve ser removido do 
 supabase secrets unset OCR_DAILY_HARD_LIMIT
 ```
 
-A ausência de teto interno está implementada, mas só recebe `PASS` operacional depois de migrations, CI e staging no mesmo SHA.
+A ausência de teto diário interno e o limitador de RPM só recebem `PASS` operacional depois de migrations, CI e staging no mesmo SHA.
 
 ## 5. Economia de chamadas
 
@@ -140,6 +160,7 @@ A ausência de teto interno está implementada, mas só recebe `PASS` operaciona
 - Conteúdo denso começa em até 20 páginas.
 - Resultado continua persistido por página.
 - Páginas válidas não são repetidas quando outra página falha.
+- O limitador conta uma chamada por lote, não uma chamada por página.
 
 O número do lote é ajustável e não é quota.
 
@@ -235,8 +256,12 @@ PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER
 APP_ORIGIN
 GEMINI_API_KEY
 OCR_MODEL_PRIMARY
+OCR_MODEL_FALLBACK
 OCR_MODEL_QUALITY
 OCR_PROMPT_VERSION
+OCR_MODEL_PRIMARY_RPM
+OCR_MODEL_FALLBACK_RPM
+OCR_PROVIDER_MAX_QUEUE_WAIT_MS
 OCR_BATCH_MAX_PAGES
 OCR_BATCH_MAX_BYTES
 OCR_REQUEST_TIMEOUT_MS
@@ -245,7 +270,7 @@ GOOGLE_CLIENT_SECRET
 GOOGLE_DRIVE_REDIRECT_URI
 ```
 
-`OCR_MODEL_QUALITY` continua opcional e não cria fallback automático.
+`OCR_MODEL_QUALITY` continua opcional. O fallback automático gratuito é configurado separadamente por `OCR_MODEL_FALLBACK`, tem modelo explicitamente versionado e só é acionado após `429` real do provedor.
 
 Nunca expor:
 
@@ -277,6 +302,9 @@ Também são obrigatórios:
 - migrations em Supabase limpo;
 - smoke Gemini real;
 - lote multipágina real;
+- verificação do roteamento principal 3.1 Flash-Lite;
+- verificação do limitador global de RPM;
+- verificação controlada do fallback 3.5 Flash-Lite quando houver fixture/sonda de `429`;
 - PDF textual com zero chamadas;
 - fixtures acima de 50 MB e 1.000 páginas;
 - hash do original inalterado;
@@ -296,7 +324,7 @@ Se um serviço deixar de atender gratuitamente:
 
 - **Cloudflare Pages:** mover frontend e artefatos públicos para host estático gratuito compatível;
 - **Supabase:** exportar PostgreSQL e temporários;
-- **Gemini:** pausar fila, usar correção manual ou rota desktop explicitamente aprovada;
+- **Gemini:** pausar fila, usar o outro Flash-Lite somente nas condições explicitamente previstas, correção manual ou rota desktop explicitamente aprovada;
 - **Google Drive:** exportar originais e metadados sem migração paga automática;
 - **projeto de modelos:** usar host público autorizado ou instalação manual com checksum.
 
