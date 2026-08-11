@@ -5,6 +5,7 @@ export type AuthServiceErrorCode =
 	'invalid_input' | 'invalid_credentials' | 'not_authorized' | 'auth_unavailable';
 
 type ServiceError = { message: string; status?: number };
+type SignOutScope = 'global' | 'local' | 'others';
 
 type AllowlistQuery = {
 	select(columns: string): AllowlistQuery;
@@ -19,7 +20,7 @@ export type AuthClientLike = {
 			email: string;
 			password: string;
 		}): Promise<{ data: { session: Session | null }; error: ServiceError | null }>;
-		signOut(): Promise<{ error: ServiceError | null }>;
+		signOut(options?: { scope?: SignOutScope }): Promise<{ error: ServiceError | null }>;
 	};
 	from(table: 'app_users'): AllowlistQuery;
 };
@@ -80,16 +81,11 @@ function parseAllowlistRow(data: unknown): boolean | null {
 
 async function closeUnauthorizedSession(client: AuthClientLike) {
 	try {
-		const { error } = await client.auth.signOut();
+		const { error } = await client.auth.signOut({ scope: 'global' });
 		if (error) throw new AuthServiceError('auth_unavailable');
 	} catch (error) {
 		unavailable(error);
 	}
-}
-
-async function closeFailedAuthorization(client: AuthClientLike, error: unknown): Promise<never> {
-	await closeUnauthorizedSession(client);
-	unavailable(error);
 }
 
 async function authorizeSession(session: Session, client: AuthClientLike): Promise<Session | null> {
@@ -101,19 +97,17 @@ async function authorizeSession(session: Session, client: AuthClientLike): Promi
 			.eq('user_id', session.user.id)
 			.eq('is_active', true)
 			.maybeSingle();
-		if (response.error) {
-			return closeFailedAuthorization(client, new AuthServiceError('auth_unavailable'));
-		}
+		if (response.error) throw new AuthServiceError('auth_unavailable');
 		data = response.data;
 	} catch (error) {
-		return closeFailedAuthorization(client, error);
+		unavailable(error);
 	}
 
 	let active: boolean | null;
 	try {
 		active = parseAllowlistRow(data);
 	} catch (error) {
-		return closeFailedAuthorization(client, error);
+		unavailable(error);
 	}
 	if (active === true) return session;
 
@@ -121,17 +115,24 @@ async function authorizeSession(session: Session, client: AuthClientLike): Promi
 	return null;
 }
 
-export async function loadAuthorizedSession(
+export async function loadPersistedSession(
 	client: AuthClientLike = defaultClient()
 ): Promise<Session | null> {
 	try {
 		const { data, error } = await client.auth.getSession();
 		if (error) throw new AuthServiceError('auth_unavailable');
-		if (data.session === null) return null;
-		return await authorizeSession(data.session, client);
+		return data.session;
 	} catch (error) {
 		unavailable(error);
 	}
+}
+
+export async function loadAuthorizedSession(
+	client: AuthClientLike = defaultClient()
+): Promise<Session | null> {
+	const session = await loadPersistedSession(client);
+	if (session === null) return null;
+	return authorizeSession(session, client);
 }
 
 export async function signIn(
@@ -163,7 +164,7 @@ export async function signIn(
 
 export async function signOut(client: AuthClientLike = defaultClient()): Promise<void> {
 	try {
-		const { error } = await client.auth.signOut();
+		const { error } = await client.auth.signOut({ scope: 'local' });
 		if (error) throw new AuthServiceError('auth_unavailable');
 	} catch (error) {
 		unavailable(error);
