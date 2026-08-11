@@ -3,7 +3,6 @@ import { RequestBodyTooLargeError, readBoundedJson } from '../_shared/bounded-js
 import { corsHeaders, parseAppOrigin } from '../_shared/cors.ts';
 import { GeminiEmbeddingHttpError } from '../_shared/gemini-embedding-client.ts';
 import {
-	SEMANTIC_CONSENT_VERSION,
 	SEMANTIC_EMBEDDING_MODEL,
 	SEMANTIC_SEARCH_MIN_SIMILARITY
 } from '../_shared/semantic-config.ts';
@@ -363,23 +362,14 @@ Deno.serve(async (request) => {
 
 	try {
 		const apiKey = Deno.env.get('GEMINI_API_KEY');
-		const { data: consent, error: consentError } = await supabase.rpc(
-			'has_search_semantic_consent',
-			{
-				consent_version: SEMANTIC_CONSENT_VERSION
-			}
-		);
 		const semanticAllowed =
 			parsed.query.length >= MIN_SEMANTIC_QUERY_CHARS &&
-			!consentError &&
-			consent === true &&
 			Boolean(apiKey) &&
 			parsed.offset + parsed.limit <= MAX_HYBRID_WINDOW;
 
 		if (!semanticAllowed) {
 			let reason = 'semantic_not_configured';
 			if (parsed.query.length < MIN_SEMANTIC_QUERY_CHARS) reason = 'query_too_short';
-			else if (!consentError && consent !== true) reason = 'consent_required';
 			else if (parsed.offset + parsed.limit > MAX_HYBRID_WINDOW)
 				reason = 'semantic_window_exhausted';
 			return respond(200, await fallbackResponse({ supabase, parsed, reason, startedAt }));
