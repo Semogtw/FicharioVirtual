@@ -37,9 +37,10 @@
 		background: var(--archive);
 		color: white;
 		box-shadow: var(--shadow-soft);
+		transform: translateY(0);
 		transition:
-			box-shadow 120ms ease,
-			transform 120ms ease;
+			box-shadow var(--motion-base) var(--ease-standard),
+			transform var(--motion-base) var(--ease-emphasized);
 	}
 
 	.notebook-card:focus-within {
@@ -51,6 +52,13 @@
 		display: grid;
 		grid-template-columns: 1.4rem minmax(0, 1fr);
 		min-height: 14rem;
+		transform: scale(1);
+		transition: transform var(--motion-fast) var(--ease-emphasized);
+	}
+
+	a:active {
+		transform: scale(0.985);
+		transition-duration: var(--motion-instant);
 	}
 
 	.binding {

@@ -33,7 +33,7 @@
 			class:active={isCurrent(item.href)}
 			aria-current={isCurrent(item.href) ? 'page' : undefined}
 		>
-			<NavigationIcon name={item.icon} />
+			<span class="icon"><NavigationIcon name={item.icon} /></span>
 			<small>{item.label}</small>
 		</a>
 	{/each}
@@ -63,16 +63,35 @@
 		min-height: 3.5rem;
 		border-radius: var(--radius-sm);
 		color: var(--muted);
+		transform: scale(1);
+		transition:
+			background-color var(--motion-fast) var(--ease-standard),
+			color var(--motion-fast) var(--ease-standard),
+			transform var(--motion-fast) var(--ease-emphasized);
 	}
 
-	a:active,
+	a:active {
+		background: var(--archive-soft);
+		color: var(--archive);
+		transform: scale(0.94);
+		transition-duration: var(--motion-instant);
+	}
+
 	a.active {
 		background: var(--archive-soft);
 		color: var(--archive);
+		font-weight: 760;
 	}
 
-	a.active {
-		font-weight: 760;
+	.icon {
+		display: grid;
+		place-items: center;
+		transform: translateY(0) scale(1);
+		transition: transform var(--motion-base) var(--ease-emphasized);
+	}
+
+	a.active .icon {
+		transform: translateY(-1px) scale(1.08);
 	}
 
 	small {

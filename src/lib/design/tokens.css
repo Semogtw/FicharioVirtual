@@ -32,6 +32,11 @@
 	--radius-lg: 1.25rem;
 	--shadow-soft: 0 0.625rem 1.875rem rgb(var(--ink-rgb) / 8%);
 	--shadow-raised: 0 1.25rem 3.5rem rgb(var(--ink-rgb) / 12%);
+	--motion-instant: 90ms;
+	--motion-fast: 140ms;
+	--motion-base: 200ms;
+	--ease-standard: cubic-bezier(0.2, 0, 0, 1);
+	--ease-emphasized: cubic-bezier(0.2, 0.8, 0.2, 1);
 	--font-heading: Georgia, Cambria, 'Times New Roman', serif;
 	--font-body: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 	--content-max: 90rem;
