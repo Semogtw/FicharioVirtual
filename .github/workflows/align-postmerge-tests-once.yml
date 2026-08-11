@@ -1,0 +1,401 @@
+name: Align post-merge architecture tests once
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  align:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Align tests with the merged architecture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > tests/unit/components/native-select-adoption.test.ts <<'EOF'
+          import { readFileSync } from 'node:fs';
+          import { describe, expect, it } from 'vitest';
+
+          const componentPath = 'src/lib/components/ui/native-select/NativeSelect.svelte';
+          const adoptedSurfaces = [
+            'src/routes/library/+page.svelte',
+            'src/routes/search/+page.svelte',
+            'src/lib/components/UnifiedImportPage.svelte',
+            'src/routes/library/organize/+page.svelte',
+            'src/routes/import/drive/+page.svelte'
+          ];
+
+          describe('shadcn-style native select primitive', () => {
+            it('keeps native select semantics while centralizing the visual treatment', () => {
+              const source = readFileSync(componentPath, 'utf8');
+              expect(source).toContain('<select');
+              expect(source).toContain('appearance: none');
+              expect(source).toContain('aria-hidden="true"');
+              expect(source).toContain('var(--surface-strong)');
+              expect(source).toContain('var(--line-strong)');
+            });
+
+            it.each(adoptedSurfaces)('%s uses the shared primitive instead of styling a raw select', (path) => {
+              const source = readFileSync(path, 'utf8');
+              expect(source).toContain('$lib/components/ui/native-select/NativeSelect.svelte');
+              expect(source).not.toContain('<select');
+            });
+
+            it.each(['src/routes/import/+page.svelte', 'src/routes/import/pdf/+page.svelte'])(
+              '%s delegates the actual import controls to the unified page',
+              (path) => {
+                const source = readFileSync(path, 'utf8');
+                expect(source).toContain('$lib/components/UnifiedImportPage.svelte');
+                expect(source).not.toContain('<select');
+              }
+            );
+          });
+          EOF
+
+          cat > tests/unit/hooks/client-ocr-queue.test.ts <<'EOF'
+          import { readFileSync } from 'node:fs';
+          import { describe, expect, it } from 'vitest';
+
+          const repositoryRoot = new URL('../../../', import.meta.url);
+          const hook = readFileSync(new URL('src/hooks.client.ts', repositoryRoot), 'utf8');
+          const session = readFileSync(new URL('src/lib/stores/session.svelte.ts', repositoryRoot), 'utf8');
+
+          describe('client OCR queue lifecycle', () => {
+            it('restores imports and controls the server-backed queue through authorization lifecycle', () => {
+              expect(hook).toContain("import { createOcrQueueLifecycle } from '$lib/import/job-runner-lifecycle';");
+              expect(hook).toContain("import { kickOcrQueueBestEffort } from '$lib/services/ocr-background';");
+              expect(hook).toContain("import { restoreImageImports } from '$lib/stores/import-queue.svelte';");
+              expect(hook).toContain("import { restorePdfImports } from '$lib/stores/pdf-import-queue.svelte';");
+              expect(hook).toContain('subscribeSessionAuthorization((authorized) => {');
+              expect(hook).toContain('const ocrQueueLifecycle = createOcrQueueLifecycle(() => kickOcrQueueBestEffort());');
+              expect(hook).toContain('if (authorized) ocrQueueLifecycle.start();');
+              expect(hook).toContain('else ocrQueueLifecycle.stop();');
+              expect(hook).toContain('void restoreImageImports(sessionState.user.id);');
+              expect(hook).toContain('void restorePdfImports(sessionState.user.id);');
+              expect(hook).not.toContain('pauseQueue();');
+              expect(hook).not.toContain('resumeQueue();');
+              expect(session).toContain('export function subscribeSessionAuthorization(');
+            });
+          });
+          EOF
+
+          cat > tests/unit/import/duplicate-consumers.test.ts <<'EOF'
+          import { readFileSync } from 'node:fs';
+          import { describe, expect, it } from 'vitest';
+
+          const imageUpload = readFileSync(new URL('../../../src/lib/import/drive-upload.ts', import.meta.url), 'utf8');
+          const pdfUpload = readFileSync(new URL('../../../src/lib/pdf/drive-upload.ts', import.meta.url), 'utf8');
+
+          describe('duplicate response consumers', () => {
+            it('uses the strict parser for image imports', () => {
+              expect(imageUpload).toContain('parseDuplicateDocumentId(data)');
+              expect(imageUpload).not.toContain('return data?.id ?? null');
+            });
+
+            it('uses the strict parser for PDF imports', () => {
+              expect(pdfUpload).toContain('parseDuplicateDocumentId(data)');
+              expect(pdfUpload).not.toContain('return data?.id ?? null');
+            });
+          });
+          EOF
+
+          cat > tests/unit/ocr/desktop-worker-pair-revoke.test.ts <<'EOF'
+          import { readFile } from 'node:fs/promises';
+          import { describe, expect, it } from 'vitest';
+
+          const SOURCE_PATH = 'supabase/functions/desktop-ocr-pair/index.ts';
+
+          describe('desktop OCR pairing boundary', () => {
+            it('is a redeem-only public gateway backed by the service-only one-time-code RPC', async () => {
+              const source = await readFile(SOURCE_PATH, 'utf8');
+              expect(source).toContain("record.action !== 'redeem'");
+              expect(source).toContain("admin.rpc('redeem_ocr_worker_pairing_code'");
+              expect(source).toContain('credentialDigest: string');
+              expect(source).toContain('SHA256_HEX.test(record.credentialDigest)');
+              expect(source).not.toContain("request.headers.get('Authorization')");
+              expect(source).not.toContain("if (input.action === 'revoke')");
+              expect(source).not.toContain("register_ocr_worker_device");
+            });
+
+            it('requires the exact code-redemption request shape', async () => {
+              const source = await readFile(SOURCE_PATH, 'utf8');
+              for (const field of ['action', 'pairingCode', 'label', 'capabilities', 'credentialDigest']) {
+                expect(source).toContain(`'${field}'`);
+              }
+              expect(source).toContain('PAIRING_CODE.test(record.pairingCode)');
+              expect(source).toContain('SHA256_HEX.test(record.credentialDigest)');
+            });
+          });
+          EOF
+
+          cat > tests/unit/routes/image-cancellation-affordance.test.ts <<'EOF'
+          import { readFileSync } from 'node:fs';
+          import { describe, expect, it } from 'vitest';
+
+          const source = readFileSync('src/lib/components/ImportQueueTray.svelte', 'utf8');
+
+          describe('image import cancellation affordance', () => {
+            it('keeps cancellation before durable publication and leaves OCR retry to the background worker', () => {
+              expect(source).toContain("return ['queued', 'preparing', 'uploading'].includes(entry.item.status);");
+              expect(source).toContain('cancelImport(entry.item.id);');
+              expect(source).not.toContain("['preparing', 'uploading', 'reading']");
+            });
+          });
+          EOF
+
+          cat > tests/unit/routes/pdf-cancellation-affordance.test.ts <<'EOF'
+          import { readFileSync } from 'node:fs';
+          import { describe, expect, it } from 'vitest';
+
+          const source = readFileSync('src/lib/components/ImportQueueTray.svelte', 'utf8');
+
+          describe('PDF cancellation affordance', () => {
+            it('keeps cancellation through publication but does not cancel durable background OCR', () => {
+              expect(source).toContain("return ['queued', 'inspecting', 'uploading', 'rendering', 'publishing'].includes(");
+              expect(source).toContain('cancelPdfImport(entry.item.id);');
+              expect(source).not.toContain("'publishing', 'reading'");
+            });
+          });
+          EOF
+
+          cat > tests/unit/routes/pdf-file-picker-focus.test.ts <<'EOF'
+          import { readFileSync } from 'node:fs';
+          import { describe, expect, it } from 'vitest';
+
+          const source = readFileSync('src/lib/components/UnifiedImportPage.svelte', 'utf8');
+
+          describe('PDF import file picker focus', () => {
+            it('surfaces keyboard focus on the visible unified file picker', () => {
+              expect(source).toContain('.file-button:focus-within');
+              expect(source).toContain('outline: 0.1875rem solid var(--focus)');
+              expect(source).toContain('outline-offset: 0.1875rem');
+            });
+          });
+          EOF
+
+          cat > tests/unit/routes/import-notebook-selection.test.ts <<'EOF'
+          import { readFileSync } from 'node:fs';
+          import { describe, expect, it } from 'vitest';
+
+          const repositoryRoot = new URL('../../../', import.meta.url);
+          const read = (path: string) => readFileSync(new URL(path, repositoryRoot), 'utf8');
+
+          describe('import notebook query selection', () => {
+            it('reacts to the notebook query and keeps the URL aligned in the unified import page', () => {
+              const source = read('src/lib/components/UnifiedImportPage.svelte');
+              expect(source).toContain("import { replaceState } from '$app/navigation';");
+              expect(source).toContain("import { page } from '$app/state';");
+              expect(source).toContain('parseRequestedNotebookId(page.url.searchParams)');
+              expect(source).toContain('resolveImportNotebookSelection(');
+              expect(source).toContain('let notebookOptionsReady = $state(false);');
+              expect(source).toContain('async function loadNotebookOptions');
+              expect(source).toContain('notebookRequests.isCurrent(version)');
+              expect(source).toContain('if (notebookSelection.requiresResolution)');
+              expect(source).toContain('importSelectionUrl(page.url, notebookId)');
+              expect(source).toContain('onDestroy(() =>');
+            });
+
+            it.each(['src/routes/import/+page.svelte', 'src/routes/import/pdf/+page.svelte'])(
+              '%s delegates selection behavior to the unified import page',
+              (path) => expect(read(path)).toContain('$lib/components/UnifiedImportPage.svelte')
+            );
+
+            it('preserves the selected notebook when switching import tabs', () => {
+              const source = read('src/routes/import/+layout.svelte');
+              expect(source).toContain('parseRequestedNotebookId(page.url.searchParams)');
+              expect(source).toContain("importHref('/import/', requestedNotebookId)");
+              expect(source).toContain("importHref('/import/pdf/', requestedNotebookId)");
+            });
+          });
+          EOF
+
+          cat > tests/unit/routes/import-progress-announcements.test.ts <<'EOF'
+          import { readFileSync } from 'node:fs';
+          import { describe, expect, it } from 'vitest';
+
+          const tray = readFileSync('src/lib/components/ImportQueueTray.svelte', 'utf8');
+          const unified = readFileSync('src/lib/components/UnifiedImportPage.svelte', 'utf8');
+
+          describe('import progress announcements', () => {
+            it('announces global queue status changes to assistive technology', () => {
+              expect(tray).toContain('role="status"');
+              expect(tray).toContain('aria-live="polite"');
+              expect(tray).toContain('aria-atomic="true"');
+            });
+
+            it('also announces file-selection feedback from the unified importer', () => {
+              expect(unified).toContain('role="status"');
+              expect(unified).toContain('aria-live="polite"');
+            });
+          });
+          EOF
+
+          cat > tests/unit/routes/local-draft-account-isolation.test.ts <<'EOF'
+          import { readFileSync } from 'node:fs';
+          import { describe, expect, it } from 'vitest';
+
+          const draftsRoute = readFileSync('src/routes/review/drafts/+page.svelte', 'utf8');
+          const draftContract = readFileSync('src/lib/review/drafts.ts', 'utf8');
+          const clientHook = readFileSync('src/hooks.client.ts', 'utf8');
+
+          describe('local correction draft account isolation', () => {
+            it('loads and discards drafts only for the active session user', () => {
+              expect(draftsRoute).toContain("import { sessionState } from '$lib/stores/session.svelte';");
+              expect(draftsRoute).toContain('const userId = sessionState.user?.id;');
+              expect(draftsRoute).toContain('drafts = listCorrectionDrafts(userId);');
+              expect(draftsRoute).toContain('discardCorrectionDraft(userId, pageId);');
+              expect(draftsRoute).not.toContain('drafts = listCorrectionDrafts();');
+            });
+
+            it('uses only the account-scoped v2 draft contract with no prelaunch purge path', () => {
+              expect(draftContract).toContain("const PREFIX = 'fichario:correction-draft:v2:';");
+              expect(draftContract).toContain('version: 2');
+              expect(draftContract).toContain('userId: ownerUserId');
+              expect(clientHook).not.toContain('purgeLegacyCorrectionDrafts');
+            });
+          });
+          EOF
+
+          cat > tests/unit/services/ocr-cancellation.test.ts <<'EOF'
+          import { describe, expect, it, vi } from 'vitest';
+          import { processPageOcr, type OcrFunctionClient } from '../../../src/lib/services/ocr';
+
+          function deferred<T>() {
+            let resolve!: (value: T) => void;
+            const promise = new Promise<T>((next) => { resolve = next; });
+            return { promise, resolve };
+          }
+
+          const pageId = '11111111-1111-4111-8111-111111111111';
+
+          describe('OCR request cancellation', () => {
+            it('forwards the AbortSignal through the batch contract and rejects a late result', async () => {
+              const request = deferred<{ data: unknown; error: null | { context?: unknown; message?: string } }>();
+              const invoke = vi.fn(() => request.promise);
+              const client = { functions: { invoke } } as unknown as OcrFunctionClient;
+              const controller = new AbortController();
+
+              const processing = processPageOcr(pageId, client, { signal: controller.signal });
+              expect(invoke).toHaveBeenCalledWith('process-ocr', {
+                body: { pageIds: [pageId] },
+                signal: controller.signal
+              });
+
+              controller.abort();
+              request.resolve({
+                data: {
+                  state: 'complete', completedPageIds: [pageId], reviewPageIds: [], pendingPageIds: [],
+                  failedPageIds: [], splitRequiredPageIds: [], unexpectedResultPageIds: []
+                },
+                error: null
+              });
+              await expect(processing).rejects.toMatchObject({ name: 'AbortError' });
+            });
+
+            it('does not invoke the Edge Function when already cancelled', async () => {
+              const invoke = vi.fn();
+              const client = { functions: { invoke } } as unknown as OcrFunctionClient;
+              const controller = new AbortController();
+              controller.abort();
+              await expect(processPageOcr(pageId, client, { signal: controller.signal })).rejects.toMatchObject({ name: 'AbortError' });
+              expect(invoke).not.toHaveBeenCalled();
+            });
+          });
+          EOF
+
+          cat > tests/unit/tooling/ocr-staging-runner.test.ts <<'EOF'
+          import { spawnSync } from 'node:child_process';
+          import { mkdtempSync, readFileSync, statSync } from 'node:fs';
+          import { tmpdir } from 'node:os';
+          import { join } from 'node:path';
+          import { describe, expect, it } from 'vitest';
+
+          const repositoryRoot = new URL('../../../', import.meta.url);
+
+          describe('OCR staging runner evidence', () => {
+            it('writes a sanitized schema-v3 report when configuration fails before authentication', () => {
+              const directory = mkdtempSync(join(tmpdir(), 'fichario-ocr-report-'));
+              const reportPath = join(directory, 'report.json');
+              const env: NodeJS.ProcessEnv = { ...process.env, OCR_STAGING_REPORT_PATH: reportPath };
+              for (const name of ['STAGING_SUPABASE_URL','STAGING_SUPABASE_PUBLISHABLE_KEY','STAGING_AUTHORIZED_EMAIL','STAGING_AUTHORIZED_PASSWORD']) delete env[name];
+              const result = spawnSync(process.execPath, [new URL('tools/checks/check-ocr-staging.mjs', repositoryRoot).pathname], { cwd: repositoryRoot, env, encoding: 'utf8' });
+              expect(result.status).not.toBe(0);
+              const report = JSON.parse(readFileSync(reportPath, 'utf8'));
+              expect(report).toMatchObject({ schemaVersion: 3, status: 'fail', failureStage: 'configuration', cleanup: { document: 'not_required', session: 'not_required' } });
+              expect(statSync(reportPath).mode & 0o777).toBe(0o600);
+            });
+
+            it('keeps bounded probe retries without treating retry_later as terminal success', () => {
+              const source = readFileSync(new URL('tools/checks/check-ocr-staging.mjs', repositoryRoot), 'utf8');
+              expect(source).toContain('const OCR_RETRY_DELAYS_MS = Object.freeze([0, 5_000, 20_000, 60_000]);');
+              expect(source).toContain('isRetryLater(invocation.data, pageId)');
+              expect(source).toContain('const invocation = await invokeProbeOcr(client, probe.pageId);');
+              expect(source).toContain('assertOcrInvocation({ data: invocation?.data, pageId: probe.pageId });');
+            });
+          });
+          EOF
+
+          cat > tests/unit/tooling/supabase-config.test.ts <<'EOF'
+          import { readFileSync } from 'node:fs';
+          import { describe, expect, it } from 'vitest';
+
+          const repositoryRoot = new URL('../../../', import.meta.url);
+          const read = (path: string) => readFileSync(new URL(path, repositoryRoot), 'utf8');
+
+          describe('Supabase local configuration', () => {
+            it('uses the current local SMTP section', () => {
+              const config = read('supabase/config.toml');
+              expect(config).toContain('[local_smtp]');
+              expect(config).not.toContain('[inbucket]');
+              expect(config).toMatch(/\[local_smtp\][\s\S]*?enabled\s*=\s*true/);
+            });
+
+            it('requires JWT for authenticated application Edge Functions', () => {
+              const config = read('supabase/config.toml');
+              for (const functionName of ['process-ocr','delete-document','drive-oauth-start','drive-access-token','drive-resolve-folder','drive-run-jobs','drive-sync']) {
+                expect(config).toMatch(new RegExp(`\\[functions\\.${functionName}\\]\\s+verify_jwt\\s*=\\s*true`));
+              }
+            });
+
+            it('allows only explicit non-JWT service endpoints through the gateway', () => {
+              const config = read('supabase/config.toml');
+              const entries = [...config.matchAll(/\[functions\.([^\]]+)\]\s+verify_jwt\s*=\s*false/g)].map((entry) => entry[1]);
+              expect(entries).toEqual(['ocr-queue-worker','drive-oauth-callback','desktop-ocr-pair','desktop-ocr-worker']);
+            });
+
+            it('keeps the public desktop pairing gateway redeem-only and service bounded', () => {
+              const source = read('supabase/functions/desktop-ocr-pair/index.ts');
+              expect(source).toContain("admin.rpc('redeem_ocr_worker_pairing_code'");
+              expect(source).toContain("record.action !== 'redeem'");
+              expect(source).not.toContain("request.headers.get('Authorization')");
+              expect(source).not.toContain("if (input.action === 'revoke')");
+              expect(source).not.toContain('userClient.auth.getUser()');
+            });
+          });
+          EOF
+
+          pnpm exec prettier --write tests/unit/components/native-select-adoption.test.ts tests/unit/hooks/client-ocr-queue.test.ts tests/unit/import/duplicate-consumers.test.ts tests/unit/ocr/desktop-worker-pair-revoke.test.ts tests/unit/routes/image-cancellation-affordance.test.ts tests/unit/routes/pdf-cancellation-affordance.test.ts tests/unit/routes/pdf-file-picker-focus.test.ts tests/unit/routes/import-notebook-selection.test.ts tests/unit/routes/import-progress-announcements.test.ts tests/unit/routes/local-draft-account-isolation.test.ts tests/unit/services/ocr-cancellation.test.ts tests/unit/tooling/ocr-staging-runner.test.ts tests/unit/tooling/supabase-config.test.ts
+          pnpm exec vitest run tests/unit/components/native-select-adoption.test.ts tests/unit/hooks/client-ocr-queue.test.ts tests/unit/import/duplicate-consumers.test.ts tests/unit/ocr/desktop-worker-pair-revoke.test.ts tests/unit/routes/image-cancellation-affordance.test.ts tests/unit/routes/pdf-cancellation-affordance.test.ts tests/unit/routes/pdf-file-picker-focus.test.ts tests/unit/routes/import-notebook-selection.test.ts tests/unit/routes/import-progress-announcements.test.ts tests/unit/routes/local-draft-account-isolation.test.ts tests/unit/services/ocr-cancellation.test.ts tests/unit/tooling/ocr-staging-runner.test.ts tests/unit/tooling/supabase-config.test.ts
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'test: align post-merge architecture contracts'
+          git push origin HEAD:main
