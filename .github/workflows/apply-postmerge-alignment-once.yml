@@ -26,7 +26,7 @@ jobs:
           node-version: 22.16.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Materialize and validate aligned tests
+      - name: Materialize aligned tests
         shell: bash
         run: |
           set -euo pipefail
@@ -113,7 +113,26 @@ jobs:
           path.write_text(text)
           PY
           pnpm exec prettier --write tests/unit/components/native-select-adoption.test.ts tests/unit/hooks/client-ocr-queue.test.ts tests/unit/import/duplicate-consumers.test.ts tests/unit/ocr/desktop-worker-pair-revoke.test.ts tests/unit/routes/image-cancellation-affordance.test.ts tests/unit/routes/pdf-cancellation-affordance.test.ts tests/unit/routes/pdf-file-picker-focus.test.ts tests/unit/routes/import-notebook-selection.test.ts tests/unit/routes/import-progress-announcements.test.ts tests/unit/routes/local-draft-account-isolation.test.ts tests/unit/services/ocr-cancellation.test.ts tests/unit/tooling/ocr-staging-runner.test.ts tests/unit/tooling/supabase-config.test.ts
-          pnpm exec vitest run tests/unit/components/native-select-adoption.test.ts tests/unit/hooks/client-ocr-queue.test.ts tests/unit/import/duplicate-consumers.test.ts tests/unit/ocr/desktop-worker-pair-revoke.test.ts tests/unit/routes/image-cancellation-affordance.test.ts tests/unit/routes/pdf-cancellation-affordance.test.ts tests/unit/routes/pdf-file-picker-focus.test.ts tests/unit/routes/import-notebook-selection.test.ts tests/unit/routes/import-progress-announcements.test.ts tests/unit/routes/local-draft-account-isolation.test.ts tests/unit/services/ocr-cancellation.test.ts tests/unit/tooling/ocr-staging-runner.test.ts tests/unit/tooling/supabase-config.test.ts
+      - name: Validate aligned tests
+        id: tests
+        shell: bash
+        run: |
+          set -uo pipefail
+          pnpm exec vitest run tests/unit/components/native-select-adoption.test.ts tests/unit/hooks/client-ocr-queue.test.ts tests/unit/import/duplicate-consumers.test.ts tests/unit/ocr/desktop-worker-pair-revoke.test.ts tests/unit/routes/image-cancellation-affordance.test.ts tests/unit/routes/pdf-cancellation-affordance.test.ts tests/unit/routes/pdf-file-picker-focus.test.ts tests/unit/routes/import-notebook-selection.test.ts tests/unit/routes/import-progress-announcements.test.ts tests/unit/routes/local-draft-account-isolation.test.ts tests/unit/services/ocr-cancellation.test.ts tests/unit/tooling/ocr-staging-runner.test.ts tests/unit/tooling/supabase-config.test.ts 2>&1 | tee alignment-vitest.log
+          exit ${PIPESTATUS[0]}
+      - name: Upload alignment failure log
+        if: ${{ failure() && steps.tests.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: postmerge-alignment-failure-${{ github.sha }}
+          path: alignment-vitest.log
+          if-no-files-found: error
+          retention-days: 2
+      - name: Commit validated alignment
+        if: ${{ success() }}
+        shell: bash
+        run: |
+          set -euo pipefail
           rm .github/workflows/align-postmerge-tests-once.yml .github/workflows/apply-postmerge-alignment-once.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
