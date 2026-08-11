@@ -163,28 +163,31 @@ jobs:
 
           node "$ARTIFACT_ROOT/checks/validate-pages-deploy-output.mjs"
 
-      - name: Verify the exact deployed URL with the artifact-pinned contract
+      - name: Verify exact URL and stable staging alias
         shell: bash
         env:
           ARTIFACT_ROOT: ${{ steps.artifact.outputs.root }}
           DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
+          DEPLOYMENT_ALIAS: ${{ steps.deploy.outputs.alias }}
         run: |
           set -euo pipefail
           node "$ARTIFACT_ROOT/checks/check-deployed-site.mjs" "$DEPLOYMENT_URL"
+          node "$ARTIFACT_ROOT/checks/check-deployed-site.mjs" "$DEPLOYMENT_ALIAS"
 
       - name: Verify rendered UI in Chromium
         shell: bash
         env:
           ARTIFACT_ROOT: ${{ steps.artifact.outputs.root }}
           DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
-          DEPLOYMENT_UI_EVIDENCE_DIR: ${{ github.workspace }}/deployment-ui-evidence
+          DEPLOYMENT_ALIAS: ${{ steps.deploy.outputs.alias }}
         run: |
           set -euo pipefail
           cd "$ARTIFACT_ROOT"
           printf '%s\n' '{"private":true,"type":"module"}' > package.json
           npm install --no-save --package-lock=false --ignore-scripts "playwright@${PLAYWRIGHT_VERSION}"
           npx playwright install --with-deps chromium
-          node checks/check-deployed-ui.mjs "$DEPLOYMENT_URL"
+          DEPLOYMENT_UI_EVIDENCE_DIR="$GITHUB_WORKSPACE/deployment-ui-evidence/exact" node checks/check-deployed-ui.mjs "$DEPLOYMENT_URL"
+          DEPLOYMENT_UI_EVIDENCE_DIR="$GITHUB_WORKSPACE/deployment-ui-evidence/staging-alias" node checks/check-deployed-ui.mjs "$DEPLOYMENT_ALIAS"
 
       - name: Upload rendered UI evidence
         if: ${{ always() && steps.deploy.outcome == 'success' }}
@@ -211,10 +214,8 @@ jobs:
             echo "- Source SHA: \`$EXPECTED_SOURCE_COMMIT\`"
             echo "- Deployment ID: \`$DEPLOYMENT_ID\`"
             echo "- Exact verified URL: \`$DEPLOYMENT_URL\`"
-            if [[ -n "$DEPLOYMENT_ALIAS" ]]; then
-              echo "- Alias reported by Wrangler: \`$DEPLOYMENT_ALIAS\`"
-            fi
-            echo '- Chromium UI smoke: `PASS` (home rendered + navigation to Biblioteca)'
+            echo "- Stable verified alias: \`$DEPLOYMENT_ALIAS\`"
+            echo '- Chromium UI smoke: `PASS` (anonymous root → login + active service-worker reload, exact URL and stable alias)'
             echo
-            echo 'Artifact checksums, HTTP/CSP contract and a real rendered-browser smoke all passed for the exact staging deployment URL.'
+            echo 'Artifact checksums, HTTP/CSP contract and real rendered-browser smoke all passed for the exact deployment URL and stable staging alias.'
           } >> "$GITHUB_STEP_SUMMARY"
