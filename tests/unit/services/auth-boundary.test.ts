@@ -96,12 +96,12 @@ describe('auth service failure boundary', () => {
 		).rejects.toEqual(unavailable());
 	});
 
-	it('closes authenticated SDK sessions when allowlist validation fails', async () => {
+	it('does not revoke a valid SDK session for transient or malformed allowlist checks', async () => {
 		const malformedSignOut = vi.fn(async () => ({ error: null }));
 		await expect(
 			loadAuthorizedSession(client({ signOut: malformedSignOut }, { is_active: 'yes' }))
 		).rejects.toEqual(unavailable());
-		expect(malformedSignOut).toHaveBeenCalledOnce();
+		expect(malformedSignOut).not.toHaveBeenCalled();
 
 		const transportSignOut = vi.fn(async () => ({ error: null }));
 		const transport = client({ signOut: transportSignOut });
@@ -111,10 +111,10 @@ describe('auth service failure boundary', () => {
 		await expect(signIn('owner@example.test', 'password', transport)).rejects.toEqual(
 			unavailable()
 		);
-		expect(transportSignOut).toHaveBeenCalledOnce();
+		expect(transportSignOut).not.toHaveBeenCalled();
 	});
 
-	it('normalizes allowlist and unauthorized-session sign-out transport failures', async () => {
+	it('normalizes allowlist and confirmed unauthorized-session sign-out transport failures', async () => {
 		const allowlistFailure = client();
 		allowlistFailure.from = () => {
 			throw new Error('postgrest internals');
