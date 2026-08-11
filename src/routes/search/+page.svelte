@@ -9,7 +9,6 @@
 	import { listNotebooks } from '$lib/services/notebooks';
 	import { RequestVersion } from '$lib/services/request-version';
 	import {
-		recordSemanticSearchConsent,
 		searchPagesHybrid,
 		type SemanticSearchAnalysis,
 		type SemanticSearchResult
@@ -39,22 +38,6 @@
 		controller = null;
 	}
 
-	async function searchWithAutomaticSemanticActivation(
-		normalized: string,
-		options: NonNullable<Parameters<typeof searchPagesHybrid>[1]>
-	) {
-		let response = await searchPagesHybrid(normalized, options);
-		if (response.analysis.reason !== 'consent_required') return response;
-
-		try {
-			await recordSemanticSearchConsent();
-			response = await searchPagesHybrid(normalized, options);
-		} catch {
-			// A busca textual já veio na resposta e continua disponível sem interromper a pesquisa.
-		}
-		return response;
-	}
-
 	async function run(reset: boolean, version = reset ? requests.next() : requests.current()) {
 		if (!reset && loadingMore) return;
 		const normalized = query.trim();
@@ -77,7 +60,7 @@
 		else loadingMore = true;
 		error = null;
 		try {
-			const response = await searchWithAutomaticSemanticActivation(normalized, {
+			const response = await searchPagesHybrid(normalized, {
 				notebookId: notebookId || null,
 				limit: pageSize,
 				offset: reset ? 0 : results.length,
@@ -107,8 +90,6 @@
 
 	function semanticStatus() {
 		if (!analysis) return null;
-		if (analysis.reason === 'consent_required')
-			return 'Busca textual ativa; a camada semântica não pôde ser iniciada automaticamente agora.';
 		if (analysis.mode === 'hybrid') {
 			const index = analysis.index;
 			if (!index) return 'Busca textual + semântica ativa.';
@@ -233,7 +214,7 @@
 	{:else if query.trim().length === 0}
 		<EmptyState
 			title="Digite algo para pesquisar"
-			description="A busca considera texto nativo de PDFs, transcrições, correções manuais e, quando ativada, proximidade semântica."
+			description="A busca considera texto nativo de PDFs, transcrições, correções manuais e proximidade semântica quando o serviço estiver disponível."
 		/>
 	{:else if results.length === 0}
 		<EmptyState
