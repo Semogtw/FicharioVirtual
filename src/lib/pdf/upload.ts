@@ -1,9 +1,6 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { calculateSha256 } from '$lib/import/hash';
-import { parseDuplicateDocumentId } from '$lib/import/duplicate-result';
 import { processOcrBatch as runOcrBatch, type OcrBatchRunResult } from '$lib/services/ocr';
-import { getSupabaseClient } from '$lib/services/supabase';
-import type { Database, DocumentStatus } from '$lib/types/database';
+import type { DocumentStatus } from '$lib/types/database';
 import { buildPdfImportPlan, type PdfImportPagePlan } from './import-plan';
 import { inspectPdf } from './inspector-client';
 import { runPdfOcrBatches, type PdfOcrBatchPage } from './ocr-batching';
@@ -369,88 +366,10 @@ export async function uploadPdfWithGateway(
 	}
 }
 
-class SupabasePdfGateway implements PdfImportGateway {
-	readonly #client: SupabaseClient<Database>;
-
-	constructor(client: SupabaseClient<Database>) {
-		this.#client = client;
-	}
-
-	async currentUserId() {
-		const { data, error } = await this.#client.auth.getSession();
-		if (error || data.session === null) throw new PdfUploadError('not_authenticated');
-		return data.session.user.id;
-	}
-
-	async findDuplicate(sha256: string) {
-		const { data, error } = await this.#client
-			.from('documents')
-			.select('id')
-			.eq('sha256', sha256)
-			.maybeSingle();
-		if (error) throw new PdfUploadError('duplicate_check_failed');
-		try {
-			return parseDuplicateDocumentId(data);
-		} catch {
-			throw new PdfUploadError('duplicate_check_failed');
-		}
-	}
-
-	async upload(path: string, blob: Blob) {
-		const { error } = await this.#client.storage.from('documents').upload(path, blob, {
-			contentType: blob.type,
-			cacheControl: blob.type === 'application/pdf' ? '3600' : '86400',
-			upsert: false
-		});
-		if (error) throw new PdfUploadError('upload_failed');
-	}
-
-	async remove(paths: readonly string[]) {
-		if (paths.length === 0) return;
-		await this.#client.storage.from('documents').remove([...paths]);
-	}
-
-	async createImport(input: PdfCreateImportInput) {
-		type RpcClient = {
-			rpc(
-				name: 'create_pdf_import',
-				args: Record<string, unknown>
-			): Promise<{ data: Record<string, unknown> | null; error: unknown }>;
-		};
-		const { data, error } = await (this.#client as unknown as RpcClient).rpc('create_pdf_import', {
-			target_document_id: input.documentId,
-			target_notebook_id: input.notebookId,
-			document_title: input.title,
-			original_filename: input.originalFilename,
-			original_storage_path: input.originalStoragePath,
-			prepared_sha256: input.sha256,
-			source_created_at: input.sourceCreatedAt,
-			page_descriptors: input.pages,
-			prompt_version: input.promptVersion
-		});
-		if (error) throw new PdfUploadError('metadata_failed');
-		try {
-			return parsePdfImportPublication(data, input.documentId);
-		} catch {
-			throw new PdfUploadError('metadata_failed');
-		}
-	}
-}
-
-export function uploadPdfToSupabase(
-	file: File,
-	options: PdfUploadOptions,
-	client: SupabaseClient<Database> = getSupabaseClient()
-) {
-	return uploadPdfWithGateway(file, options, new SupabasePdfGateway(client));
-}
-
 export async function uploadPdf(
 	file: File,
-	options: PdfUploadOptions,
-	client?: SupabaseClient<Database>
+	options: PdfUploadOptions
 ): Promise<UploadedPdf> {
-	if (client !== undefined) return uploadPdfToSupabase(file, options, client);
 	const { uploadPdfToDrive } = await import('./drive-upload');
 	return uploadPdfToDrive(file, options);
 }
