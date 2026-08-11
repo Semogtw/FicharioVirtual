@@ -1,4 +1,4 @@
-import { classifyGeminiFailure, geminiFailureResponse } from './ocr-contract.ts';
+import { classifyGeminiFailure } from './ocr-contract.ts';
 import { GeminiHttpError, GeminiResponseError, GeminiTransportError } from './gemini-ocr-client.ts';
 import { randomJitterMs } from './random-jitter.ts';
 
@@ -19,10 +19,6 @@ export type OcrFailurePersistence =
 
 export type OcrFailureDecision = {
 	persistence: OcrFailurePersistence;
-	response: {
-		status: number;
-		body: Record<string, unknown>;
-	};
 };
 
 export type OcrFailureOptions = {
@@ -60,15 +56,8 @@ function nextRetryAt(
 	return new Date(failedAt.getTime() + delayMs).toISOString();
 }
 
-function frozenDecision(
-	persistence: OcrFailurePersistence,
-	status: number,
-	body: Record<string, unknown>
-): OcrFailureDecision {
-	return Object.freeze({
-		persistence: Object.freeze(persistence),
-		response: Object.freeze({ status, body: Object.freeze(body) })
-	});
+function frozenDecision(persistence: OcrFailurePersistence): OcrFailureDecision {
+	return Object.freeze({ persistence: Object.freeze(persistence) });
 }
 
 export function planOcrFailure(error: unknown, options: OcrFailureOptions): OcrFailureDecision {
@@ -77,33 +66,24 @@ export function planOcrFailure(error: unknown, options: OcrFailureOptions): OcrF
 
 	if (error instanceof GeminiHttpError) {
 		const failure = classifyGeminiFailure(error.status, error.responseBody);
-		const response = geminiFailureResponse(failure, error.status);
 		if (failure.quotaExhausted) {
-			return frozenDecision(
-				{
-					kind: 'block_quota',
-					code: failure.code,
-					failedAt
-				},
-				response.status,
-				response.body
-			);
-		}
-		return frozenDecision(
-			{
-				kind: 'fail_job',
+			return frozenDecision({
+				kind: 'block_quota',
 				code: failure.code,
-				message: failure.safeMessage,
-				retryable: failure.retryable,
-				failedAt,
-				nextRetryAt:
-					failure.retryable && failure.delaySeconds
-						? nextRetryAt(options.failedAt, options.attemptCount, failure.delaySeconds, jitterMs)
-						: null
-			},
-			response.status,
-			response.body
-		);
+				failedAt
+			});
+		}
+		return frozenDecision({
+			kind: 'fail_job',
+			code: failure.code,
+			message: failure.safeMessage,
+			retryable: failure.retryable,
+			failedAt,
+			nextRetryAt:
+				failure.retryable && failure.delaySeconds
+					? nextRetryAt(options.failedAt, options.attemptCount, failure.delaySeconds, jitterMs)
+					: null
+		});
 	}
 
 	const retryable = options.attemptCount < 3;
@@ -112,22 +92,18 @@ export function planOcrFailure(error: unknown, options: OcrFailureOptions): OcrF
 		error instanceof GeminiTransportError ||
 		(error instanceof DOMException && error.name === 'AbortError');
 	const code = responseInvalid ? 'ocr_response_invalid' : 'ocr_request_failed';
-	return frozenDecision(
-		{
-			kind: 'fail_job',
-			code,
-			message: responseInvalid
-				? 'O provedor retornou um formato de transcrição inválido.'
-				: requestInterrupted
-					? 'A solicitação de leitura foi interrompida.'
-					: 'A leitura falhou antes de produzir um resultado válido.',
-			retryable,
-			failedAt,
-			nextRetryAt: retryable
-				? nextRetryAt(options.failedAt, options.attemptCount, 45, jitterMs)
-				: null
-		},
-		retryable ? 202 : responseInvalid ? 422 : 503,
-		retryable ? { state: 'retry_later' } : { code, retryable: false }
-	);
+	return frozenDecision({
+		kind: 'fail_job',
+		code,
+		message: responseInvalid
+			? 'O provedor retornou um formato de transcrição inválido.'
+			: requestInterrupted
+				? 'A solicitação de leitura foi interrompida.'
+				: 'A leitura falhou antes de produzir um resultado válido.',
+		retryable,
+		failedAt,
+		nextRetryAt: retryable
+			? nextRetryAt(options.failedAt, options.attemptCount, 45, jitterMs)
+			: null
+	});
 }
