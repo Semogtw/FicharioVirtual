@@ -15,7 +15,10 @@ function forbidText(text, detail) {
 	if (source.includes(text)) failures.push(detail);
 }
 
-requireText('on:\n  workflow_dispatch:', 'workflow must retain an explicit manual recovery trigger');
+requireText(
+	'on:\n  workflow_dispatch:',
+	'workflow must retain an explicit manual recovery trigger'
+);
 requireText(
 	'  workflow_run:\n    workflows:\n      - Build deployable Fichário staging artifact\n    types:\n      - completed',
 	'automatic deploys must be triggered only by completion of the reviewed artifact workflow'
@@ -32,11 +35,11 @@ requireText(
 	'automatic deployment must accept artifact workflow runs from main only'
 );
 requireText(
-	'EXPECTED_SOURCE_COMMIT: ${{ github.event_name == \'workflow_run\' && github.event.workflow_run.head_sha || inputs.expected_source_commit }}',
+	"EXPECTED_SOURCE_COMMIT: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.expected_source_commit }}",
 	'deployment source SHA must bind to the triggering build SHA or the explicit recovery input'
 );
 requireText(
-	'ARTIFACT_RUN_ID: ${{ github.event_name == \'workflow_run\' && github.event.workflow_run.id || inputs.artifact_run_id }}',
+	"ARTIFACT_RUN_ID: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.artifact_run_id }}",
 	'deployment artifact run must bind to the triggering build run or the explicit recovery input'
 );
 requireText(
