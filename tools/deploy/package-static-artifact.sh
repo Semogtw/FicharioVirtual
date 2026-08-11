@@ -50,6 +50,7 @@ for required in \
   package.json \
   pnpm-lock.yaml \
   tools/checks/check-deployed-site.mjs \
+  tools/checks/check-deployed-ui.mjs \
   tools/checks/deployment-contract.mjs \
   tools/checks/check-deployment-artifact.mjs \
   tools/checks/validate-pages-deploy-output.mjs; do
@@ -65,6 +66,7 @@ cp -a build/. "$output_name/site/"
 cp package.json pnpm-lock.yaml "$output_name/source/"
 cp \
   tools/checks/check-deployed-site.mjs \
+  tools/checks/check-deployed-ui.mjs \
   tools/checks/deployment-contract.mjs \
   tools/checks/check-deployment-artifact.mjs \
   tools/checks/validate-pages-deploy-output.mjs \
