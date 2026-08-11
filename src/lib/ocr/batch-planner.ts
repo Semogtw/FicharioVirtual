@@ -27,6 +27,13 @@ export type PlannedOcrBatch = {
 	oversizedSinglePage: boolean;
 };
 
+export type OcrBatchResultIntegrity = {
+	valid: boolean;
+	missingPageIds: readonly string[];
+	duplicatePageIds: readonly string[];
+	unexpectedPageIds: readonly string[];
+};
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DEFAULT_MAX_PAGES = 28;
 const DEFAULT_DENSE_MAX_PAGES = 14;
