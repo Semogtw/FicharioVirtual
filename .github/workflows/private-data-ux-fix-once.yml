@@ -1,0 +1,174 @@
+name: Fix private data UX validation once
+
+on:
+  push:
+    branches:
+      - feat/private-data-ux
+    paths:
+      - .github/workflows/private-data-ux-fix-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up formatter runtime
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22.16.0'
+
+      - name: Install formatter only
+        shell: bash
+        run: npm install --no-save prettier@3 prettier-plugin-svelte@3 svelte@5
+
+      - name: Repair source, tests and formatting through GitHub API
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const path = require('node:path');
+            const { pathToFileURL } = require('node:url');
+            const workspace = process.env.GITHUB_WORKSPACE;
+            const prettier = await import(pathToFileURL(path.join(workspace, 'node_modules/prettier/index.mjs')).href);
+            const sveltePluginModule = await import(pathToFileURL(path.join(workspace, 'node_modules/prettier-plugin-svelte/plugin.js')).href);
+            const sveltePlugin = sveltePluginModule.default ?? sveltePluginModule;
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const branch = 'feat/private-data-ux';
+
+            function replaceOnce(text, from, to, label) {
+              const index = text.indexOf(from);
+              if (index < 0) throw new Error(`Missing patch target: ${label}`);
+              if (text.indexOf(from, index + from.length) >= 0) throw new Error(`Ambiguous patch target: ${label}`);
+              return text.slice(0, index) + to + text.slice(index + from.length);
+            }
+
+            function replaceRegexOnce(text, regex, to, label) {
+              const flags = regex.flags.includes('g') ? regex.flags : `${regex.flags}g`;
+              const matches = [...text.matchAll(new RegExp(regex.source, flags))];
+              if (matches.length !== 1) throw new Error(`Expected one target for ${label}, found ${matches.length}`);
+              return text.replace(regex, to);
+            }
+
+            async function load(filePath) {
+              const response = await github.rest.repos.getContent({ owner, repo, path: filePath, ref: branch });
+              if (Array.isArray(response.data) || response.data.type !== 'file' || !response.data.content) {
+                throw new Error(`Could not load ${filePath}`);
+              }
+              return {
+                sha: response.data.sha,
+                text: Buffer.from(response.data.content, 'base64').toString('utf8')
+              };
+            }
+
+            async function save(filePath, sha, text, message) {
+              await github.rest.repos.createOrUpdateFileContents({
+                owner,
+                repo,
+                path: filePath,
+                branch,
+                sha,
+                message,
+                content: Buffer.from(text, 'utf8').toString('base64')
+              });
+              core.info(`Updated ${filePath}`);
+            }
+
+            async function mutate(filePath, message, transform, parser) {
+              const current = await load(filePath);
+              let next = transform(current.text);
+              if (parser) {
+                next = await prettier.format(next, {
+                  parser,
+                  useTabs: true,
+                  singleQuote: true,
+                  trailingComma: 'none',
+                  printWidth: 100,
+                  plugins: parser === 'svelte' ? [sveltePlugin] : []
+                });
+              }
+              if (next === current.text) {
+                core.info(`No changes needed for ${filePath}`);
+                return;
+              }
+              await save(filePath, current.sha, next, message);
+            }
+
+            await mutate(
+              'src/lib/pdf/drive-reference-import.ts',
+              'fix: remove residual Drive consent exception reference',
+              (text) => {
+                let next = replaceOnce(
+                  text,
+                  '\tconsentGranted: _consentGranted,\n',
+                  '',
+                  'unused Drive consent binding'
+                );
+                next = replaceOnce(
+                  next,
+                  '\t\tif (error instanceof PdfConsentRequiredError) throw error;\n',
+                  '',
+                  'residual Drive consent exception'
+                );
+                return next;
+              },
+              'typescript'
+            );
+
+            await mutate(
+              'src/routes/search/+page.svelte',
+              'fix: remove obsolete semantic consent styles',
+              (text) => replaceOnce(
+                text,
+                '\n\t\t.semantic-consent {\n\t\t\talign-items: stretch;\n\t\t\tflex-direction: column;\n\t\t}\n',
+                '',
+                'obsolete semantic consent media style'
+              ),
+              'svelte'
+            );
+
+            await mutate(
+              'tools/checks/check-browser-storage-security.mjs',
+              'test: allow one-time privacy notice storage flag',
+              (text) => replaceOnce(
+                text,
+                "const allowedLocalStorage = new Set([\n\t'src/lib/import/browser-exclusive.ts',\n",
+                "const allowedLocalStorage = new Set([\n\t'src/lib/components/DataProcessingNotice.svelte',\n\t'src/lib/import/browser-exclusive.ts',\n",
+                'browser storage allowlist'
+              ),
+              'babel'
+            );
+
+            await mutate(
+              'tests/unit/routes/drive-import-page.test.ts',
+              'test: expect automatic Drive OCR processing',
+              (text) => replaceRegexOnce(
+                text,
+                /\n\tit\('requires explicit OCR consent and never exposes or persists credentials',[\s\S]*?\n\t\}\);\n(?=\}\);)/,
+                `\n\tit('avoids repeated OCR confirmations and never exposes or persists credentials', () => {\n\t\tconst source = readFileSync(path, 'utf8');\n\n\t\texpect(source).not.toContain('Confirme a autorização de OCR antes de selecionar o arquivo.');\n\t\texpect(source).not.toContain('type="checkbox"');\n\t\texpect(source).toContain('Nenhuma leitura ampla da conta é realizada.');\n\t\texpect(source).not.toContain('localStorage');\n\t\texpect(source).not.toContain('sessionStorage');\n\t\texpect(source).not.toContain('accessToken');\n\t\texpect(source).not.toContain('refreshToken');\n\t});\n`,
+                'Drive route consent expectation'
+              ),
+              'typescript'
+            );
+
+            await mutate(
+              'tests/e2e/pdf-import.spec.ts',
+              'test: cover automatic selective PDF OCR disclosure',
+              (text) => replaceRegexOnce(
+                text,
+                /test\('offers a separate PDF import flow with selective OCR disclosure',[\s\S]*?\n\}\);\n$/,
+                `test('offers a separate PDF import flow with automatic selective OCR disclosure', async ({ page }) => {\n\tawait page.goto('/import/pdf/');\n\n\tawait expect(page.getByRole('heading', { name: 'Importar PDFs' })).toBeVisible();\n\tawait expect(page.getByText(/somente páginas visuais/)).toBeVisible();\n\tawait expect(\n\t\tpage.getByRole('checkbox', { name: /Permitir OCR quando uma página não possuir texto/ })\n\t).toHaveCount(0);\n\tawait expect(page.getByText('Processamento privado, sem confirmações repetidas')).toBeVisible();\n\tawait expect(page.locator('input[type="file"][accept="application/pdf"]')).toBeAttached();\n\tawait expect(page.getByRole('link', { name: 'Imagens' })).toBeVisible();\n\tawait expect(page.getByRole('link', { name: 'PDFs' })).toBeVisible();\n});\n`,
+                'PDF e2e consent expectation'
+              ),
+              'typescript'
+            );
+
+            for (const filePath of [
+              'src/routes/import/+page.svelte',
+              'src/routes/import/drive/+page.svelte',
+              'src/routes/settings/+page.svelte'
+            ]) {
+              await mutate(filePath, 'style: format private data UX changes', (text) => text, 'svelte');
+            }
