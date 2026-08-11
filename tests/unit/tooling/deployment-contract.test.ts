@@ -1,7 +1,9 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
 	assertAppShell,
 	assertHttpRedirect,
+	assertInlineScriptsAllowedByCsp,
 	assertManifest,
 	assertSecurityHeaders,
 	assertServiceWorker,
@@ -21,6 +23,10 @@ function secureHeaders(overrides: Record<string, string> = {}) {
 		'cross-origin-resource-policy': 'same-origin',
 		...overrides
 	});
+}
+
+function sha256Source(source: string) {
+	return `'sha256-${createHash('sha256').update(source, 'utf8').digest('base64')}'`;
 }
 
 describe('deployment contract', () => {
@@ -62,6 +68,18 @@ describe('deployment contract', () => {
 		expect(() =>
 			assertSecurityHeaders(secureHeaders({ 'strict-transport-security': 'max-age=31536000' }))
 		).toThrow(/includeSubDomains/);
+	});
+
+	it('requires CSP hashes for generated inline bootstraps', () => {
+		const bootstrap = '\nwindow.__FICHARIO_BOOTSTRAPPED__ = true;\n';
+		const html = `<html><body><script>${bootstrap}</script><script src="/app.js"></script></body></html>`;
+		const hash = sha256Source(bootstrap);
+		const csp = `default-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'wasm-unsafe-eval' https://apis.google.com ${hash}; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://www.googleapis.com`;
+
+		expect(() =>
+			assertInlineScriptsAllowedByCsp(secureHeaders({ 'content-security-policy': csp }), html)
+		).not.toThrow();
+		expect(() => assertInlineScriptsAllowedByCsp(secureHeaders(), html)).toThrow(/inline bootstrap/);
 	});
 
 	it('checks the generated app shell and manifest', () => {
