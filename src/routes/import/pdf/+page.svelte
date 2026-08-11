@@ -27,7 +27,6 @@
 	let notebookOptionsReady = $state(false);
 	let notebookLoading = $state(true);
 	let notebookError = $state<string | null>(null);
-	let consent = $state(false);
 	let error = $state<string | null>(null);
 	let dragging = $state(false);
 
@@ -63,7 +62,7 @@
 		}
 		const pdfs = files.filter((file) => file.type === 'application/pdf');
 		if (pdfs.length !== files.length) error = 'Selecione somente arquivos PDF.';
-		if (pdfs.length > 0) addPdfs(pdfs, { notebookId: notebookId || null, consentGranted: consent });
+		if (pdfs.length > 0) addPdfs(pdfs, { notebookId: notebookId || null, consentGranted: true });
 	}
 
 	function selected(event: Event) {
@@ -154,16 +153,6 @@
 				<option value="">Sem caderno</option>
 				{#each notebooks as notebook}<option value={notebook.id}>{notebook.name}</option>{/each}
 			</NativeSelect>
-		</label>
-		<label class="consent">
-			<input type="checkbox" bind:checked={consent} />
-			<span>
-				<strong>Permitir OCR quando uma página não possuir texto</strong>
-				<small>
-					PDFs textuais não usam o provedor. Em digitalizações, somente as páginas necessárias são
-					encaminhadas e cada resultado continua associado à página original.
-				</small>
-			</span>
 		</label>
 	</section>
 
@@ -311,7 +300,7 @@
 	}
 	.options {
 		display: grid;
-		grid-template-columns: minmax(12rem, 0.4fr) minmax(22rem, 1fr);
+		grid-template-columns: minmax(12rem, 24rem);
 		gap: 1rem;
 		padding: 1rem;
 		border: 1px solid var(--line);
@@ -327,25 +316,10 @@
 		font-size: 0.75rem;
 		font-weight: 740;
 	}
-	.consent {
-		display: flex;
-		align-items: flex-start;
-		gap: 0.7rem;
-		padding: 0.8rem;
-		border-left: 0.3rem solid var(--accent);
-		background: rgb(166 94 67 / 7%);
-	}
-	.consent input {
-		width: 1.1rem;
-		height: 1.1rem;
-		margin-top: 0.2rem;
-	}
-	.consent span,
 	.item-copy {
 		display: grid;
 		gap: 0.25rem;
 	}
-	.consent small,
 	.queue-heading > span,
 	.item-copy small {
 		color: var(--muted);
