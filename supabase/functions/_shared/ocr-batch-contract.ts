@@ -122,34 +122,15 @@ export function parseOcrBatchPayload(
 			return invalidProviderResponse(requestedPages);
 		}
 		const page = item as Record<string, unknown>;
-		const hasLegacyShape = hasExactKeys(page, ['pageId', 'pageNumber', 'text', 'warnings']);
-		const hasClassifiedShape = hasExactKeys(page, [
-			'pageId',
-			'pageNumber',
-			'text',
-			'warnings',
-			'contentClass'
-		]);
-		const hasGeometryShape = hasExactKeys(page, [
-			'pageId',
-			'pageNumber',
-			'text',
-			'warnings',
-			'wordGeometry'
-		]);
-		const hasClassifiedGeometryShape = hasExactKeys(page, [
-			'pageId',
-			'pageNumber',
-			'text',
-			'warnings',
-			'contentClass',
-			'wordGeometry'
-		]);
 		if (
-			!hasLegacyShape &&
-			!hasClassifiedShape &&
-			!hasGeometryShape &&
-			!hasClassifiedGeometryShape
+			!hasExactKeys(page, [
+				'pageId',
+				'pageNumber',
+				'text',
+				'warnings',
+				'contentClass',
+				'wordGeometry'
+			])
 		) {
 			return invalidProviderResponse(requestedPages);
 		}
@@ -157,15 +138,9 @@ export function parseOcrBatchPayload(
 			typeof page.pageId !== 'string' ||
 			!UUID.test(page.pageId) ||
 			typeof page.pageNumber !== 'number' ||
-			!Number.isInteger(page.pageNumber)
-		) {
-			return invalidProviderResponse(requestedPages);
-		}
-		const hasClass = hasClassifiedShape || hasClassifiedGeometryShape;
-		if (
-			hasClass &&
-			(typeof page.contentClass !== 'string' ||
-				!CONTENT_CLASSES.has(page.contentClass as OcrContentClass))
+			!Number.isInteger(page.pageNumber) ||
+			typeof page.contentClass !== 'string' ||
+			!CONTENT_CLASSES.has(page.contentClass as OcrContentClass)
 		) {
 			return invalidProviderResponse(requestedPages);
 		}
@@ -186,16 +161,16 @@ export function parseOcrBatchPayload(
 		} catch {
 			return invalidProviderResponse(requestedPages);
 		}
-		const hasGeometry = hasGeometryShape || hasClassifiedGeometryShape;
-		const wordGeometry = hasGeometry
-			? filterWordGeometryByTranscription(parseCompactWordGeometry(page.wordGeometry), payload.text)
-			: Object.freeze([]);
+		const wordGeometry = filterWordGeometryByTranscription(
+			parseCompactWordGeometry(page.wordGeometry),
+			payload.text
+		);
 		parsedById.set(
 			page.pageId,
 			Object.freeze({
 				pageId: page.pageId,
 				pageNumber: page.pageNumber,
-				contentClass: hasClass ? (page.contentClass as OcrContentClass) : 'unknown',
+				contentClass: page.contentClass as OcrContentClass,
 				wordGeometry,
 				...payload
 			})
