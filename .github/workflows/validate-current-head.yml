@@ -127,11 +127,11 @@ jobs:
         continue-on-error: true
         run: pnpm test:source:offline
 
-      - name: Install Chromium
+      - name: Install Chromium and WebKit
         id: chromium
         if: steps.frontend.outcome == 'success'
         continue-on-error: true
-        run: pnpm exec playwright install --with-deps chromium
+        run: pnpm exec playwright install --with-deps chromium webkit
 
       - name: Run browser tests
         id: browser
