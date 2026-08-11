@@ -88,7 +88,7 @@ returns void
 language plpgsql
 security definer
 set search_path = ''
-as $$;
+as $$
 begin
   if (select auth.uid()) is null or not (select public.is_authorized_user()) then
     raise exception 'Not authorized';
@@ -126,7 +126,7 @@ returns integer
 language plpgsql
 security definer
 set search_path = ''
-as $$;
+as $$
 declare
   deleted_count integer;
 begin
@@ -160,7 +160,7 @@ returns void
 language plpgsql
 security definer
 set search_path = ''
-as $$;
+as $$
 begin
   if (select auth.uid()) is null or not (select public.is_authorized_user()) then
     raise exception 'Not authorized';
@@ -212,7 +212,7 @@ language sql
 stable
 security invoker
 set search_path = ''
-as $$;
+as $$
   select
     count(*)::bigint,
     coalesce(sum(e.semantic_only_count), 0)::bigint,
@@ -241,7 +241,7 @@ returns integer
 language plpgsql
 security definer
 set search_path = ''
-as $$;
+as $$
 declare
   owner_id uuid;
   current_hash text;
@@ -342,7 +342,7 @@ returns integer
 language plpgsql
 security definer
 set search_path = ''
-as $$;
+as $$
 declare
   deleted_count integer;
 begin
@@ -391,7 +391,7 @@ language plpgsql
 stable
 security invoker
 set search_path = ''
-as $$;
+as $$
 begin
   perform set_config('hnsw.ef_search', '80', true);
 
