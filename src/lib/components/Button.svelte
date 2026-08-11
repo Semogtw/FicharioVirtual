@@ -38,14 +38,19 @@
 		font-weight: 720;
 		line-height: 1;
 		cursor: pointer;
+		transform: translateY(0) scale(1);
 		transition:
-			background-color 120ms ease,
-			border-color 120ms ease,
-			transform 120ms ease;
+			background-color var(--motion-fast) var(--ease-standard),
+			border-color var(--motion-fast) var(--ease-standard),
+			color var(--motion-fast) var(--ease-standard),
+			box-shadow var(--motion-base) var(--ease-standard),
+			transform var(--motion-fast) var(--ease-emphasized);
 	}
 
 	.button:not(:disabled):active {
-		transform: translateY(1px);
+		box-shadow: none;
+		transform: translateY(1px) scale(0.98);
+		transition-duration: var(--motion-instant);
 	}
 
 	.primary {
@@ -81,5 +86,17 @@
 	.button:disabled {
 		cursor: not-allowed;
 		opacity: 0.55;
+	}
+
+	@media (hover: hover) and (pointer: fine) {
+		.button:not(:disabled):hover {
+			box-shadow: 0 0.45rem 1.1rem rgb(var(--ink-rgb) / 10%);
+			transform: translateY(-1px);
+		}
+
+		.button:not(:disabled):active {
+			box-shadow: none;
+			transform: translateY(1px) scale(0.98);
+		}
 	}
 </style>
