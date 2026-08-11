@@ -370,6 +370,12 @@
 		color: var(--archive);
 	}
 
+	.file-button:focus-within,
+	.camera-button:focus-within {
+		outline: 0.1875rem solid var(--focus);
+		outline-offset: 0.1875rem;
+	}
+
 	.file-button input,
 	.camera-button input {
 		position: absolute;

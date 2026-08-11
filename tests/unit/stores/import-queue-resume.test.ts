@@ -99,7 +99,7 @@ const uploadedPage = {
 	pageId,
 	ocrJobId: '66666666-6666-4666-8666-666666666666',
 	sha256: 'a'.repeat(64),
-	storagePath: `${userId}/document/original.webp`,
+	storagePath: 'drive:2AbCdEfGhIjKlMnOpQrStUvWxYz_123456',
 	thumbnailPath: `${userId}/document/thumbnail.webp`
 };
 
@@ -157,7 +157,7 @@ describe('image import queue restoration', () => {
 	it('resumes OCR without preparing or uploading an already published page', async () => {
 		const store = new MemoryStore(storedRecord(uploadedPage));
 		dependencies.processPageOcr.mockResolvedValue({
-			state: 'already_complete',
+			state: 'complete',
 			needsReview: false
 		});
 		const queue = await import('../../../src/lib/stores/import-queue.svelte');

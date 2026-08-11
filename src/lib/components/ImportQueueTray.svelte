@@ -221,7 +221,7 @@
 							<div class="kind" aria-hidden="true">{entry.kind === 'pdf' ? 'PDF' : 'IMG'}</div>
 							<div class="copy">
 								<strong title={entry.item.file.name}>{entry.item.file.name}</strong>
-								<span>{label(entry)}</span>
+								<span role="status" aria-live="polite" aria-atomic="true">{label(entry)}</span>
 								{#if entry.kind === 'pdf' && entry.item.progress}
 									<small>
 										{entry.item.progress.completed}/{entry.item.progress
