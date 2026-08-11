@@ -106,8 +106,8 @@ revoke execute on function public.create_ocr_staging_probe(uuid, uuid, uuid, tex
 grant execute on function public.create_ocr_staging_probe(uuid, uuid, uuid, text, text, integer)
   to authenticated;
 
--- Drop every overload of the retired names. Their current replacements have distinct names,
--- so this cannot remove create_drive_image_import_v2 or complete_ocr_job_with_geometry.
+-- Drop every overload of the retired import names. Their current replacements have distinct
+-- names, so this cannot remove create_drive_image_import_v2 or any current OCR completion RPC.
 do $$
 declare
   target record;
@@ -124,8 +124,7 @@ begin
         'create_image_import',
         'create_image_import_v2',
         'create_pdf_import',
-        'create_drive_image_import',
-        'complete_ocr_job'
+        'create_drive_image_import'
       )
   loop
     execute format(
