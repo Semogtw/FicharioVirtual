@@ -192,9 +192,9 @@ describe('OCR staging contract', () => {
 
 	it('requires the aggregate launch Edge Function response', () => {
 		expect(assertOcrInvocation({ data: aggregate(), pageId })).toEqual({ needsReview: false });
-		expect(
-			assertOcrInvocation({ data: aggregate({ reviewPageIds: [pageId] }), pageId })
-		).toEqual({ needsReview: true });
+		expect(assertOcrInvocation({ data: aggregate({ reviewPageIds: [pageId] }), pageId })).toEqual({
+			needsReview: true
+		});
 		expect(() =>
 			assertOcrInvocation({
 				data: aggregate({
