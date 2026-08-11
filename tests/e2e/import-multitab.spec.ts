@@ -26,7 +26,6 @@ const session = {
 };
 
 type RequestCounters = {
-	consents: number;
 	metadataCreates: number;
 	ocrRuns: number;
 	storageUploads: number;
@@ -100,10 +99,6 @@ async function mockSupabase(context: BrowserContext, counters: RequestCounters) 
 
 		if (path === '/rest/v1/rpc/recover_stale_ocr_jobs') return json(route, null);
 		if (path === '/rest/v1/rpc/list_runnable_ocr_jobs') return json(route, []);
-		if (path === '/rest/v1/rpc/record_ocr_consent') {
-			counters.consents += 1;
-			return json(route, true);
-		}
 		if (path === '/rest/v1/rpc/create_drive_image_import_v2') {
 			counters.metadataCreates += 1;
 			const body = request.postDataJSON() as Record<string, string>;
@@ -132,7 +127,17 @@ async function mockSupabase(context: BrowserContext, counters: RequestCounters) 
 		}
 		if (path === '/functions/v1/process-ocr') {
 			counters.ocrRuns += 1;
-			return json(route, { state: 'complete', needsReview: false, warningCount: 0 });
+			const body = request.postDataJSON() as { pageIds?: unknown };
+			const pageIds = Array.isArray(body.pageIds) ? body.pageIds : [];
+			return json(route, {
+				state: 'complete',
+				completedPageIds: pageIds,
+				reviewPageIds: [],
+				pendingPageIds: [],
+				failedPageIds: [],
+				splitRequiredPageIds: [],
+				unexpectedResultPageIds: []
+			});
 		}
 
 		counters.unknown.push(`${request.method()} ${path}`);
@@ -248,7 +253,6 @@ test('two tabs resume one persisted image import without duplicate upload or OCR
 	context
 }) => {
 	const counters: RequestCounters = {
-		consents: 0,
 		metadataCreates: 0,
 		ocrRuns: 0,
 		storageUploads: 0,
@@ -277,8 +281,6 @@ test('two tabs resume one persisted image import without duplicate upload or OCR
 			{ timeout: 15_000 }
 		)
 		.toBe(1);
-
-	expect(counters.consents).toBe(1);
 	expect(counters.metadataCreates).toBe(1);
 	expect(counters.storageUploads).toBe(3);
 	expect(counters.unknown).toEqual([]);
