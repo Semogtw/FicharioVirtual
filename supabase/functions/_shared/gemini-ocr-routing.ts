@@ -14,10 +14,7 @@ export class LocalOcrProviderRateLimitError extends Error {
 	readonly retryAfterMs: number;
 	readonly reason: 'rate_limiter_unavailable' | 'local_queue_full';
 
-	constructor(
-		reason: 'rate_limiter_unavailable' | 'local_queue_full',
-		retryAfterMs: number
-	) {
+	constructor(reason: 'rate_limiter_unavailable' | 'local_queue_full', retryAfterMs: number) {
 		super(
 			reason === 'local_queue_full'
 				? 'The local OCR provider queue is full.'
