@@ -71,112 +71,113 @@
 		input.value = '';
 	}
 
-	function drop(event: DragEvent) {
+	function dropped(event: DragEvent) {
 		event.preventDefault();
 		dragging = false;
 		queue(Array.from(event.dataTransfer?.files ?? []));
 	}
 
-	function selectNotebook(event: Event) {
-		const select = event.currentTarget as HTMLSelectElement;
-		notebookId = select.value;
-		replaceState(importSelectionUrl(page.url, notebookId), page.state);
+	function dragged(event: DragEvent) {
+		event.preventDefault();
+		dragging = true;
+	}
+
+	function left(event: DragEvent) {
+		const current = event.currentTarget as HTMLElement;
+		const related = event.relatedTarget;
+		if (!(related instanceof Node) || !current.contains(related)) dragging = false;
 	}
 
 	async function loadNotebookOptions(version = notebookRequests.next()) {
 		notebookLoading = true;
-		notebookOptionsReady = false;
 		notebookError = null;
 		try {
 			const items = await listNotebooks();
-			if (!notebookRequests.isCurrent(version)) return;
-			notebooks = items;
-			notebookOptionsReady = true;
+			if (notebookRequests.isCurrent(version)) {
+				notebooks = items;
+				notebookOptionsReady = true;
+			}
 		} catch {
 			if (notebookRequests.isCurrent(version)) {
-				notebookError = 'Não foi possível carregar os cadernos para a importação.';
+				notebookError = 'Não foi possível carregar os cadernos agora.';
+				notebookOptionsReady = false;
 			}
 		} finally {
 			if (notebookRequests.isCurrent(version)) notebookLoading = false;
 		}
 	}
 
-	function clearRequestedNotebook() {
-		notebookId = '';
-		replaceState(importSelectionUrl(page.url, ''), page.state);
-	}
+	$effect(() => {
+		void loadNotebookOptions();
+	});
 
-	$effect(() => void loadNotebookOptions());
-	onDestroy(() => notebookRequests.next());
+	$effect(() => {
+		if (!notebookOptionsReady) return;
+		if (requestedNotebookUnavailable) return;
+		const next = importSelectionUrl(page.url, notebookId);
+		if (`${next.pathname}${next.search}` !== `${page.url.pathname}${page.url.search}`) {
+			replaceState(next, {});
+		}
+	});
+
+	onDestroy(() => {
+		notebookRequests.next();
+	});
 </script>
 
-<div class="page" aria-labelledby="import-title">
+<div class="page">
 	<header>
-		<p class="eyebrow">Entrada de materiais</p>
-		<h1 id="import-title">Adicionar ao fichário</h1>
+		<p class="eyebrow">Entrada unificada</p>
+		<h1>Adicionar ao fichário</h1>
 		<p>
-			Selecione fotos e PDFs juntos. Eles entram na mesma fila visual; cada formato mantém o fluxo
-			mais seguro por baixo.
+			Solte fotos e PDFs juntos. O dispositivo cuida só da preparação necessária e a leitura
+			automática continua em segundo plano depois que o material já está salvo.
 		</p>
 	</header>
 
-	<section class="options" aria-label="Opções da importação">
+	<section class="options" aria-label="Destino e preparo">
 		<label>
-			<span>Caderno</span>
-			<NativeSelect
-				bind:value={notebookId}
-				disabled={notebookLoading || !notebookOptionsReady}
-				onchange={selectNotebook}
-			>
-				<option value="">Sem caderno</option>
-				{#each notebooks as notebook}<option value={notebook.id}>{notebook.name}</option>{/each}
+			<span>Salvar em</span>
+			<NativeSelect bind:value={notebookId} disabled={notebookLoading || notebooks.length === 0}>
+				<option value="">Nenhum caderno específico</option>
+				{#each notebooks as notebook (notebook.id)}
+					<option value={notebook.id}>{notebook.name}</option>
+				{/each}
 			</NativeSelect>
 		</label>
-
 		<fieldset>
 			<legend>Fotos</legend>
 			<label class="choice">
-				<input type="radio" bind:group={mode} value="standard" />
-				<span><strong>Padrão</strong><small>Até 2.560 px · recomendado</small></span>
+				<input type="radio" name="image-mode" value="standard" bind:group={mode} />
+				<span><strong>Documento</strong><small>Limpa fundo e melhora legibilidade.</small></span>
 			</label>
 			<label class="choice">
-				<input type="radio" bind:group={mode} value="high-definition" />
-				<span><strong>Alta definição</strong><small>Até 3.200 px · texto muito pequeno</small></span
-				>
+				<input type="radio" name="image-mode" value="original" bind:group={mode} />
+				<span><strong>Original</strong><small>Guarda a foto sem transformação.</small></span>
 			</label>
 		</fieldset>
 	</section>
 
-	{#if notebookError}
-		<div class="notice warning" role="status">
-			<p>{notebookError}</p>
-			<button type="button" onclick={() => void loadNotebookOptions()}>Tentar novamente</button>
-		</div>
-	{:else if requestedNotebookUnavailable}
-		<div class="notice warning" role="alert">
-			<p>O caderno solicitado não está disponível.</p>
-			<button type="button" onclick={clearRequestedNotebook}>Continuar sem caderno</button>
-		</div>
+	{#if notebookError}<p class="selection-error" role="alert">{notebookError}</p>{/if}
+	{#if requestedNotebookUnavailable}
+		<p class="selection-error" role="alert">
+			O caderno solicitado não está disponível. Escolha outro destino antes de adicionar arquivos.
+		</p>
 	{/if}
 
 	<section
-		class="drop-zone"
 		class:dragging
-		aria-label="Área para adicionar fotos e PDFs"
-		ondragenter={(event) => {
-			event.preventDefault();
-			dragging = true;
-		}}
-		ondragover={(event) => event.preventDefault()}
-		ondragleave={() => (dragging = false)}
-		ondrop={drop}
+		class="drop-zone"
+		ondragover={dragged}
+		ondragleave={left}
+		ondrop={dropped}
 	>
-		<div class="drop-icon" aria-hidden="true">＋</div>
-		<h2>Fotos e PDFs podem entrar juntos</h2>
-		<p>PDF, JPG, PNG e WebP · selecione quantos arquivos precisar.</p>
-		<div class="picker-actions">
+		<div class="drop-icon" aria-hidden="true">+</div>
+		<h2>Fotos e PDFs entram na mesma fila</h2>
+		<p>JPG, PNG, WebP e PDF. Você pode escolher vários de uma vez.</p>
+		<div class="actions">
 			<label class="file-button">
-				Selecionar arquivos
+				Escolher arquivos
 				<input
 					type="file"
 					accept="application/pdf,image/jpeg,image/png,image/webp"
@@ -191,7 +192,11 @@
 		</div>
 	</section>
 
-	{#if selectionMessage}<p class="selection-message" role="status">{selectionMessage}</p>{/if}
+	{#if selectionMessage}
+		<p class="selection-message" role="status" aria-live="polite" aria-atomic="true">
+			{selectionMessage}
+		</p>
+	{/if}
 	{#if selectionError}<p class="selection-error" role="alert">{selectionError}</p>{/if}
 
 	<section class="background-note" aria-labelledby="background-title">
@@ -328,7 +333,8 @@
 	}
 
 	.drop-zone h2 {
-		margin: 0.4rem 0 0;
+		margin: 0;
+		font-size: clamp(1.35rem, 3vw, 2rem);
 	}
 
 	.drop-zone p {
@@ -336,38 +342,23 @@
 		color: var(--muted);
 	}
 
-	.picker-actions {
+	.actions {
 		display: flex;
 		flex-wrap: wrap;
 		justify-content: center;
-		gap: 0.7rem;
-		margin-top: 0.7rem;
+		gap: 0.6rem;
+		margin-top: 0.45rem;
 	}
 
 	.file-button,
-	.camera-button,
-	.notice button {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		min-height: 2.75rem;
-		padding: 0.65rem 1rem;
+	.camera-button {
+		position: relative;
+		padding: 0.72rem 1rem;
 		border: 1px solid var(--line-strong);
 		border-radius: var(--radius-sm);
-		font-size: 0.82rem;
+		background: var(--surface-strong);
 		font-weight: 760;
 		cursor: pointer;
-	}
-
-	.file-button {
-		background: var(--archive);
-		color: white;
-	}
-
-	.camera-button,
-	.notice button {
-		background: var(--surface-strong);
-		color: var(--archive);
 	}
 
 	.file-button:focus-within,
@@ -388,64 +379,51 @@
 	}
 
 	.selection-message,
-	.selection-error,
-	.notice {
+	.selection-error {
 		margin: 0;
-		padding: 0.8rem 1rem;
+		padding: 0.85rem 1rem;
 		border-radius: var(--radius-sm);
 	}
 
 	.selection-message {
-		background: var(--archive-soft);
-		color: var(--archive);
+		background: var(--success-soft);
+		color: var(--success);
 	}
 
-	.selection-error,
-	.warning {
-		background: rgb(155 63 54 / 9%);
+	.selection-error {
+		background: var(--danger-soft);
 		color: var(--danger);
-	}
-
-	.notice {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1rem;
-	}
-
-	.notice p {
-		margin: 0;
 	}
 
 	.background-note {
 		display: grid;
-		grid-template-columns: auto minmax(0, 1fr);
-		gap: 1rem;
-		padding: 1.1rem;
+		grid-template-columns: auto 1fr;
+		gap: 0.9rem;
+		align-items: start;
+		padding: 1rem;
 		border: 1px solid var(--line);
 		border-radius: var(--radius-md);
 		background: var(--surface);
 	}
 
 	.background-note > div:first-child {
-		width: 2.5rem;
-		height: 2.5rem;
+		width: 2.2rem;
+		height: 2.2rem;
 		display: grid;
 		place-items: center;
-		border-radius: 0.65rem;
+		border-radius: 50%;
 		background: var(--archive-soft);
 		color: var(--archive);
-		font-size: 1.2rem;
+		font-weight: 900;
 	}
 
 	.background-note h2 {
-		margin: 0 0 0.35rem;
-		font-size: 1.35rem;
+		margin: 0 0 0.25rem;
+		font-size: 1rem;
 	}
 
-	@media (max-width: 720px) {
-		.options,
-		fieldset {
+	@media (max-width: 760px) {
+		.options {
 			grid-template-columns: 1fr;
 		}
 	}
