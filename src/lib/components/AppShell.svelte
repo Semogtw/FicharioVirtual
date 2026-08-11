@@ -107,7 +107,7 @@
 		color: white;
 		font-weight: 700;
 		transform: translateY(-150%);
-		transition: transform 120ms ease;
+		transition: transform var(--motion-fast) var(--ease-emphasized);
 	}
 
 	.skip-link:focus {
@@ -153,6 +153,18 @@
 		font-family: var(--font-heading);
 		font-size: 1.1rem;
 		font-weight: 700;
+		transform: translateY(0) scale(1);
+		transition:
+			background-color var(--motion-fast) var(--ease-standard),
+			border-color var(--motion-fast) var(--ease-standard),
+			box-shadow var(--motion-base) var(--ease-standard),
+			transform var(--motion-fast) var(--ease-emphasized);
+	}
+
+	.profile-link:active {
+		box-shadow: none;
+		transform: translateY(1px) scale(0.94);
+		transition-duration: var(--motion-instant);
 	}
 
 	main {
@@ -163,6 +175,20 @@
 	.content {
 		width: min(100%, var(--content-max));
 		margin-inline: auto;
+	}
+
+	@media (hover: hover) and (pointer: fine) {
+		.profile-link:hover {
+			border-color: var(--archive);
+			background: var(--archive-soft);
+			box-shadow: 0 0.35rem 1rem rgb(var(--ink-rgb) / 9%);
+			transform: translateY(-1px);
+		}
+
+		.profile-link:active {
+			box-shadow: none;
+			transform: translateY(1px) scale(0.94);
+		}
 	}
 
 	@media (min-width: 768px) {
@@ -204,6 +230,13 @@
 			font-size: 0.85rem;
 			font-weight: 700;
 			letter-spacing: -0.04em;
+			transform: scale(1);
+			transition: transform var(--motion-base) var(--ease-emphasized);
+		}
+
+		.brand:active .brand-mark {
+			transform: scale(0.94);
+			transition-duration: var(--motion-instant);
 		}
 
 		.brand-copy,
@@ -224,6 +257,11 @@
 			min-height: 3.25rem;
 			border-radius: var(--radius-sm);
 			color: var(--muted);
+			transform: translateX(0) scale(1);
+			transition:
+				background-color var(--motion-fast) var(--ease-standard),
+				color var(--motion-fast) var(--ease-standard),
+				transform var(--motion-fast) var(--ease-emphasized);
 		}
 
 		.sidebar nav a:hover,
@@ -232,6 +270,12 @@
 		.settings.active {
 			background: var(--archive-soft);
 			color: var(--archive);
+		}
+
+		.sidebar nav a:active,
+		.settings:active {
+			transform: scale(0.96);
+			transition-duration: var(--motion-instant);
 		}
 
 		.sidebar nav a.active,
@@ -244,6 +288,13 @@
 			place-items: center;
 			width: 1.4rem;
 			height: 1.4rem;
+			transform: scale(1);
+			transition: transform var(--motion-base) var(--ease-emphasized);
+		}
+
+		.sidebar nav a.active .nav-mark,
+		.settings.active .nav-mark {
+			transform: scale(1.08);
 		}
 
 		.settings {
@@ -256,6 +307,22 @@
 
 		main {
 			padding: clamp(1.5rem, 3vw, 3rem);
+		}
+
+		@media (hover: hover) and (pointer: fine) {
+			.sidebar nav a:hover,
+			.settings:hover {
+				transform: translateX(2px);
+			}
+
+			.sidebar nav a:active,
+			.settings:active {
+				transform: translateX(1px) scale(0.97);
+			}
+
+			.brand:hover .brand-mark {
+				transform: translateY(-1px) scale(1.03);
+			}
 		}
 	}
 
