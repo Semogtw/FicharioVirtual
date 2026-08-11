@@ -4,6 +4,16 @@ Este documento define a cobertura do Fichário Virtual e serve como checklist de
 
 ## Último recibo completo conhecido
 
+Source commit: `6ea434f65714c665a62037e7c4c0a561bdcccf74`<br>
+Workflow: [`Validate current head`](https://github.com/Semogtw/FicharioVirtual/actions/runs/31457054179)<br>
+Conclusão terminal: **success**
+
+No mesmo SHA, as verificações protegidas [`Verify Supabase staging`](https://github.com/Semogtw/FicharioVirtual/actions/runs/31457552460) e [`Verify OCR staging`](https://github.com/Semogtw/FicharioVirtual/actions/runs/31457554164) também terminaram com **success**. A primeira cobriu Auth, RLS, Storage privado e pareamento desktop por código de uso único; a segunda executou OCR real com imagem sintética e publicou somente o relatório sanitizado.
+
+O artifact público ainda não foi promovido: [`Verify staging artifact configuration`](https://github.com/Semogtw/FicharioVirtual/actions/runs/31457371879) falhou de forma fail-closed por ausência de `PUBLIC_GOOGLE_CLIENT_ID`, e [`Verify Cloudflare staging deploy credentials`](https://github.com/Semogtw/FicharioVirtual/actions/runs/31457373696) por ausência de `CLOUDFLARE_API_TOKEN`.
+
+## Recibo histórico completo anterior
+
 Source commit: `f87e1edc47268b4e0d2ea0742dac690c96d93646`<br>
 Workflow: [`Validate current head`](https://github.com/Semogtw/FicharioVirtual/actions/runs/31333367357)<br>
 Run: `31333367357`<br>

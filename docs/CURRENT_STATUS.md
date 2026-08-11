@@ -1,8 +1,8 @@
 # Estado atual do Fichário Virtual
 
-_Atualizado: 2026-08-10_<br>
+_Atualizado: 2026-08-11_<br>
 _Branch ativa: `main`_<br>
-_Estado: Drive-first e OCR seletivo por lotes seguem integrados. O defeito de request Gemini HTTP 400 foi reproduzido e corrigido em staging: o checkpoint `f87e1edc` passou o CI completo (`31333367357`), o deploy (`31333367356`) e a sonda protegida (`31333418948`), cujo caminho `process-ocr` retornou `provider_ok` HTTP 200. A instrumentação temporária foi removida, o cleanup remoto `31333977753` terminou com sucesso, `process-ocr` ficou `ACTIVE v19` e `ocr-boundary-probe` não existe mais. O Desktop OCR Worker já possui runtime local, spool, lease renovável, keyring, backend Ollama loopback, serviço systemd e gestão web de dispositivos em código, mas ainda depende de validação real de hardware/modelo e pareamento web sem token manual. Release continua dependente dos gates externos de Drive, host e dispositivos._
+_Estado: Drive-first e OCR seletivo por lotes seguem integrados. No SHA atual `6ea434f`, `Validate current head` (`31457054179`), a verificação Supabase staging (`31457552460`) e o OCR staging sintético (`31457554164`) passaram; Auth, RLS, Storage privado, pareamento desktop de uso único e OCR real estão comprovados neste checkpoint. O Cloudflare Pages ainda não tem deployment, e o artifact público continua bloqueado pelos secrets Google Picker e pelo token Cloudflare documentados em `DEPLOYMENT_EXTERNAL_BLOCKERS.md`. O Desktop OCR Worker ainda depende de validação real de hardware/modelo. Release continua dependente dos gates externos de Drive, host e dispositivos._
 
 ## Resumo executivo
 

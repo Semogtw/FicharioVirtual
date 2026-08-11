@@ -1,10 +1,21 @@
 # Checkpoint de deploy
 
-_Atualizado: 2026-08-10_
+_Atualizado: 2026-08-11_
 
 Este arquivo registra a evidência operacional mais recente do caminho de release. Ele complementa os documentos históricos de arquitetura e substitui checkpoints antigos quando houver conflito de status.
 
 ## SHA validado e staging
+
+O checkpoint operacional atual é:
+
+```text
+SHA: 6ea434f65714c665a62037e7c4c0a561bdcccf74
+Validate current head: 31457054179 — PASS
+Verify Supabase staging: 31457552460 — PASS
+Verify OCR staging: 31457554164 — PASS
+```
+
+Esses recibos comprovam os gates locais completos, Auth/RLS/Storage privado, pareamento desktop por código de uso único e OCR real com imagem sintética. O primeiro deploy do artifact no Cloudflare Pages continua pendente: o projeto existe, mas não há deployment, e os verificadores registraram a ausência dos secrets Google Picker e `CLOUDFLARE_API_TOKEN`.
 
 O checkpoint funcional mais recente validado antes deste documento é:
 
