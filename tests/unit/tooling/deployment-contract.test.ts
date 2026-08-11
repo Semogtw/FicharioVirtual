@@ -79,7 +79,9 @@ describe('deployment contract', () => {
 		expect(() =>
 			assertInlineScriptsAllowedByCsp(secureHeaders({ 'content-security-policy': csp }), html)
 		).not.toThrow();
-		expect(() => assertInlineScriptsAllowedByCsp(secureHeaders(), html)).toThrow(/inline bootstrap/);
+		expect(() => assertInlineScriptsAllowedByCsp(secureHeaders(), html)).toThrow(
+			/inline bootstrap/
+		);
 	});
 
 	it('checks the generated app shell and manifest', () => {
