@@ -47,46 +47,6 @@ export type DatabaseRpcExtensions = {
 				};
 				Returns: Array<{ document_id: string; page_id: string; ocr_job_id: string }>;
 			};
-			create_image_import_v2: {
-				Args: {
-					target_document_id: string;
-					target_page_id: string;
-					target_job_id: string;
-					target_notebook_id: string | null;
-					document_title: string;
-					original_filename: string;
-					prepared_storage_path: string;
-					source_storage_path: string;
-					thumbnail_storage_path: string;
-					prepared_sha256: string;
-					source_sha256: string;
-					preprocessing_profile: string;
-					preprocessing_version: number;
-					preprocessing_auto_crop: boolean;
-					preprocessing_retained_permille: number;
-					preprocessing_deskew_mdeg: number;
-					preprocessing_illumination: boolean;
-					preprocessing_contrast: boolean;
-					preprocessing_fallback: boolean;
-					preprocessing_source_width: number;
-					preprocessing_source_height: number;
-					preprocessing_prepared_width: number;
-					preprocessing_prepared_height: number;
-					preprocessing_original_bytes: number;
-					preprocessing_prepared_bytes: number;
-					source_created_at?: string | null;
-					prompt_version?: number;
-				};
-				Returns: Array<{ document_id: string; page_id: string; ocr_job_id: string }>;
-			};
-			has_coverage_semantic_consent: {
-				Args: { consent_version?: number };
-				Returns: boolean;
-			};
-			has_search_semantic_consent: {
-				Args: { consent_version?: number };
-				Returns: boolean;
-			};
 			list_gemini_ocr_candidates: {
 				Args: Record<string, never>;
 				Returns: Array<{
@@ -99,14 +59,6 @@ export type DatabaseRpcExtensions = {
 					created_at: string;
 					updated_at: string;
 				}>;
-			};
-			record_coverage_semantic_consent: {
-				Args: { consent_version?: number };
-				Returns: boolean;
-			};
-			record_search_semantic_consent: {
-				Args: { consent_version?: number };
-				Returns: boolean;
 			};
 		};
 		Enums: Record<string, never>;
