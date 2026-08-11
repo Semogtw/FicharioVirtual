@@ -84,6 +84,7 @@ jobs:
             .github/workflows/verify-supabase-staging.yml \
             .github/workflows/verify-ocr-staging.yml \
             tools/checks/check-supabase-staging.mjs \
+            tools/checks/check-drive-oauth-staging.mjs \
             tools/checks/check-ocr-staging.mjs \
             tools/checks/check-desktop-ocr-pairing-staging.mjs; then
             echo "required=false" >> "$GITHUB_OUTPUT"
@@ -101,6 +102,7 @@ jobs:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.STAGING_SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.STAGING_SUPABASE_DB_PASSWORD }}
       STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+      STAGING_APP_ORIGIN: https://staging.fichario-virtual.pages.dev
 
     steps:
       - name: Checkout validated repository
@@ -122,6 +124,16 @@ jobs:
 
       - name: Link staging project
         run: supabase link --project-ref "$STAGING_SUPABASE_PROJECT_REF"
+
+      - name: Align canonical staging Edge Function configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase secrets set --project-ref "$STAGING_SUPABASE_PROJECT_REF" \
+            "APP_ORIGIN=$STAGING_APP_ORIGIN" \
+            "GOOGLE_DRIVE_REDIRECT_URI=https://$STAGING_SUPABASE_PROJECT_REF.supabase.co/functions/v1/drive-oauth-callback" \
+            "GOOGLE_DRIVE_SCOPE=https://www.googleapis.com/auth/drive.file" \
+            "GOOGLE_DRIVE_ROOT_FOLDER_NAME=Fichário Digital"
 
       - name: Show migration drift before deployment
         run: supabase migration list --linked
@@ -185,6 +197,15 @@ jobs:
           STAGING_UNAUTHORIZED_EMAIL: ${{ secrets.STAGING_UNAUTHORIZED_EMAIL }}
           STAGING_UNAUTHORIZED_PASSWORD: ${{ secrets.STAGING_UNAUTHORIZED_PASSWORD }}
         run: pnpm test:staging:supabase
+
+      - name: Verify Google Drive OAuth bootstrap
+        env:
+          STAGING_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+          STAGING_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
+          STAGING_AUTHORIZED_EMAIL: ${{ secrets.STAGING_AUTHORIZED_EMAIL }}
+          STAGING_AUTHORIZED_PASSWORD: ${{ secrets.STAGING_AUTHORIZED_PASSWORD }}
+          STAGING_APP_ORIGIN: https://staging.fichario-virtual.pages.dev
+        run: node tools/checks/check-drive-oauth-staging.mjs
 
       - name: Verify desktop OCR one-time pairing
         env:
