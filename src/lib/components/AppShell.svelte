@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { Snippet } from 'svelte';
+	import DataProcessingNotice from './DataProcessingNotice.svelte';
 	import MobileNavigation from './MobileNavigation.svelte';
 	import NavigationIcon from './NavigationIcon.svelte';
 	import TopSearch from './TopSearch.svelte';
@@ -86,6 +87,8 @@
 			<TopSearch initialValue={searchQuery} onSearch={search} />
 			<a class="profile-link" href="/settings/" aria-label="Abrir configurações">A</a>
 		</header>
+
+		<DataProcessingNotice />
 
 		<main id="main-content">
 			<div class="content">{@render children()}</div>
