@@ -8,6 +8,7 @@ import {
 	type UpdateNotebookInput
 } from '$lib/domain/notebook';
 import type { Database } from '$lib/types/database';
+import type { DatabaseWithNotebookBanners } from '$lib/types/database-notebook-banner-extensions';
 import { isIsoTimestamp } from '$lib/validation/iso-timestamp';
 import { getSupabaseClient } from './supabase';
 
@@ -73,6 +74,9 @@ const notebookRecordSchema = z
 		name: z.string().trim().min(1).max(120),
 		description: z.string().max(2_000).nullable(),
 		cover_style: z.string().trim().min(1).max(64),
+		banner_path: z.string().min(3).max(1_024).nullable(),
+		banner_position_x: z.number().int().min(0).max(100),
+		banner_position_y: z.number().int().min(0).max(100),
 		created_at: timestamp,
 		updated_at: timestamp
 	})
@@ -161,7 +165,8 @@ export async function createNotebook(
 	const resolvedClient = clientOrDefault(client);
 	const userId = await currentUserId(resolvedClient);
 	try {
-		const { data, error } = await resolvedClient
+		const bannerClient = resolvedClient as unknown as SupabaseClient<DatabaseWithNotebookBanners>;
+		const { data, error } = await bannerClient
 			.from('notebooks')
 			.insert({
 				user_id: userId,
@@ -169,7 +174,9 @@ export async function createNotebook(
 				description: validatedInput.description ?? null,
 				cover_style: validatedInput.coverStyle ?? 'linen'
 			})
-			.select('id,name,description,cover_style,created_at,updated_at')
+			.select(
+				'id,name,description,cover_style,banner_path,banner_position_x,banner_position_y,created_at,updated_at'
+			)
 			.single();
 
 		if (error || data === null) throw new NotebookServiceError();

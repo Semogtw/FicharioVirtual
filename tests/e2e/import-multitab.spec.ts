@@ -205,7 +205,6 @@ async function seedStoredImport(context: BrowserContext) {
 	await seedPage.evaluate(
 		async ({ encoded, id, ownerId, key, updatedAt }) => {
 			const bytes = Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
-			const file = new File([bytes], 'shared.png', { type: 'image/png', lastModified: 0 });
 			const database = await new Promise<IDBDatabase>((resolve, reject) => {
 				const request = indexedDB.open('fichario-resume', 2);
 				request.onupgradeneeded = () => {
@@ -228,7 +227,13 @@ async function seedStoredImport(context: BrowserContext) {
 					userId: ownerId,
 					sessionId: null,
 					resumeKey: key,
-					file,
+					file: {
+						__ficharioResumeFile: 'fichario-resume-file-v1',
+						name: 'shared.png',
+						type: 'image/png',
+						lastModified: 0,
+						bytes: bytes.buffer
+					},
 					mode: 'standard',
 					notebookId: null,
 					status: 'queued',

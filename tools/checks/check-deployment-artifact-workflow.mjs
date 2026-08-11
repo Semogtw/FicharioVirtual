@@ -125,19 +125,27 @@ requireText(
 );
 requireText(
 	source,
-	'[[ "$TARGET_ENVIRONMENT" == \'staging\' ]]',
-	'artifact build must fail closed if staging target is ever altered'
-);
-requireText(
-	source,
-	'Google Picker public settings must be configured together',
-	'artifact build must keep Google Picker public settings all-or-none'
+	'run: node tools/checks/check-staging-public-config.mjs',
+	'artifact build must use the shared fail-closed staging public configuration checker'
 );
 requireText(
 	source,
 	'run: pnpm verify',
 	'artifact build must execute the full repository verify command'
 );
+for (const publicValue of [
+	'PUBLIC_SUPABASE_URL',
+	'PUBLIC_SUPABASE_PUBLISHABLE_KEY',
+	'PUBLIC_GOOGLE_CLIENT_ID',
+	'PUBLIC_GOOGLE_PICKER_API_KEY',
+	'PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER'
+]) {
+	requireText(
+		source,
+		`grep -R -F -- "$${publicValue}" build >/dev/null`,
+		`artifact build must prove ${publicValue} is frozen into the static output`
+	);
+}
 requireText(
 	source,
 	`! grep -R -F '127.0.0.1:54321' build`,

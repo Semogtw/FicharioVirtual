@@ -15,6 +15,9 @@ function record(overrides: Record<string, unknown> = {}) {
 		name: 'Biologia',
 		description: null,
 		cover_style: 'linen',
+		banner_path: null,
+		banner_position_x: 50,
+		banner_position_y: 50,
 		created_at: '2026-08-02T01:00:00.000Z',
 		updated_at: '2026-08-02T02:00:00.000Z',
 		...overrides

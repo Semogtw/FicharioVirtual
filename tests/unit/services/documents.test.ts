@@ -127,6 +127,9 @@ describe('notebook mapping', () => {
 				name: 'Biologia',
 				description: null,
 				cover_style: 'linen',
+				banner_path: null,
+				banner_position_x: 50,
+				banner_position_y: 50,
 				created_at: '2026-08-02T01:00:00.000Z',
 				updated_at: '2026-08-02T02:00:00.000Z',
 				document_count: 4
@@ -136,6 +139,9 @@ describe('notebook mapping', () => {
 			name: 'Biologia',
 			description: null,
 			coverStyle: 'linen',
+			bannerPath: null,
+			bannerPositionX: 50,
+			bannerPositionY: 50,
 			documentCount: 4,
 			createdAt: '2026-08-02T01:00:00.000Z',
 			updatedAt: '2026-08-02T02:00:00.000Z'

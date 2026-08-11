@@ -1,0 +1,52 @@
+name: Verify staging artifact configuration
+
+on:
+  workflow_run:
+    workflows: [Validate current head]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-staging-artifact-configuration
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: staging
+    env:
+      TARGET_ENVIRONMENT: staging
+      PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+      PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+      PUBLIC_GOOGLE_CLIENT_ID: ${{ secrets.PUBLIC_GOOGLE_CLIENT_ID }}
+      PUBLIC_GOOGLE_PICKER_API_KEY: ${{ secrets.PUBLIC_GOOGLE_PICKER_API_KEY }}
+      PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER: ${{ secrets.PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Validate protected public artifact configuration
+        run: node tools/checks/check-staging-public-config.mjs
+
+      - name: Publish readiness summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## Staging artifact public configuration'
+            echo
+            echo '- Environment: `staging`'
+            echo '- Supabase public configuration: required and validated without printing values when the preceding step passes.'
+            echo '- Google Drive Picker: required for a release artifact because Drive is a core product capability.'
+            echo '- Backend, service-role, Gemini and Cloudflare secrets are intentionally outside this workflow.'
+          } >> "$GITHUB_STEP_SUMMARY"
