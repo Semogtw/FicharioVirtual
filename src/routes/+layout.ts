@@ -1,6 +1,6 @@
 import { browser } from '$app/environment';
 import { redirect } from '@sveltejs/kit';
-import { loadAuthorizedSession } from '$lib/services/auth';
+import { loadAuthorizedSession, loadPersistedSession } from '$lib/services/auth';
 import type { LayoutLoad } from './$types';
 
 export const prerender = true;
@@ -18,6 +18,17 @@ export const load: LayoutLoad = async ({ url }) => {
 	try {
 		session = await loadAuthorizedSession();
 	} catch {
+		let persistedSession = null;
+		try {
+			persistedSession = await loadPersistedSession();
+		} catch {
+			// A missing persisted session below is the only case that sends the user back to login.
+		}
+
+		if (persistedSession !== null) {
+			if (isLoginRoute) redirect(307, '/');
+			return { session: persistedSession, authState: 'session_preserved' as const };
+		}
 		if (!isLoginRoute) {
 			redirect(307, '/login/?reason=unavailable');
 		}
