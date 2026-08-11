@@ -5,11 +5,8 @@ const ERROR_CODE = /^[a-z][a-z0-9_]{1,63}$/;
 const MAX_BATCH_PAGES = 100;
 
 export type OcrRunResult =
-	| { state: 'complete'; needsReview: boolean; warningCount: number }
-	| { state: 'already_complete'; needsReview: boolean }
-	| { state: 'busy' }
-	| { state: 'retry_later' }
-	| { state: 'quota_exhausted' };
+	| { state: 'complete'; needsReview: boolean }
+	| { state: 'retry_later' };
 
 export type OcrBatchRunResult = {
 	state: 'complete' | 'partial';
@@ -252,7 +249,7 @@ export async function processPageOcr(
 	const batch = await processOcrBatch([pageId], client, options);
 	if (batch.completedPageIds.includes(pageId)) {
 		return Object.freeze({
-			state: 'already_complete',
+			state: 'complete',
 			needsReview: batch.reviewPageIds.includes(pageId)
 		});
 	}
