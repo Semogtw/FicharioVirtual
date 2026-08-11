@@ -291,7 +291,6 @@ async function main() {
 						await signOut(client);
 						sessionCleanup = 'success';
 					}
-				]
 			: []
 	});
 	const failure = resolveStagingFailure({ operationError, cleanupResults });
