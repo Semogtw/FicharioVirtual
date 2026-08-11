@@ -29,7 +29,6 @@
 	let notebookLoading = $state(true);
 	let notebookError = $state<string | null>(null);
 	let mode = $state<ImagePreparationMode>('standard');
-	let consent = $state(false);
 	let dragging = $state(false);
 	let selectionError = $state<string | null>(null);
 
@@ -65,10 +64,6 @@
 		selectionError = null;
 		if (notebookSelection.requiresResolution) {
 			selectionError = 'O caderno solicitado precisa ser confirmado antes da importação.';
-			return;
-		}
-		if (!consent) {
-			selectionError = 'Confirme o aviso de privacidade antes de enviar imagens para leitura.';
 			return;
 		}
 		const images = files.filter((file) =>
@@ -202,17 +197,6 @@
 			<button type="button" onclick={clearRequestedNotebook}>Continuar sem caderno</button>
 		</div>
 	{/if}
-
-	<label class="consent">
-		<input type="checkbox" bind:checked={consent} />
-		<span>
-			<strong>Autorizo a leitura automática destas imagens.</strong>
-			<small>
-				No nível gratuito do provedor, o conteúdo pode ser usado para melhorar produtos. A chave
-				nunca fica neste navegador e nenhuma cobrança é ativada automaticamente.
-			</small>
-		</span>
-	</label>
 
 	<section
 		aria-label="Área para importar imagens"
@@ -386,8 +370,7 @@
 		grid-column: 1 / -1;
 	}
 
-	.choice,
-	.consent {
+	.choice {
 		display: flex;
 		align-items: flex-start;
 		gap: 0.65rem;
@@ -401,33 +384,15 @@
 		background: var(--surface-strong);
 	}
 
-	.choice span,
-	.consent span {
+	.choice span {
 		display: grid;
 		gap: 0.2rem;
 	}
 
-	.choice small,
-	.consent small {
+	.choice small {
 		color: var(--muted);
 	}
 
-	.consent {
-		padding: 1rem;
-		border-left: 0.3rem solid var(--accent);
-		background: rgb(166 94 67 / 7%);
-	}
-
-	.consent input {
-		width: 1.1rem;
-		height: 1.1rem;
-		margin-top: 0.18rem;
-	}
-
-	.consent small {
-		max-width: 68rem;
-		line-height: 1.5;
-	}
 
 	.drop-zone {
 		display: grid;
