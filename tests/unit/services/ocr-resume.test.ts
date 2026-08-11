@@ -50,7 +50,7 @@ describe('resumeDocumentOcrWithGateway', () => {
 				processed.push(Number(pageId.at(-1)));
 				await Promise.resolve();
 				active -= 1;
-				return { state: 'complete', needsReview: false, warningCount: 0 };
+				return { state: 'complete', needsReview: false };
 			}
 		);
 
@@ -74,7 +74,7 @@ describe('resumeDocumentOcrWithGateway', () => {
 			async () => {
 				calls += 1;
 				if (calls <= 2) await new Promise<void>((resolve) => releases.push(resolve));
-				return { state: 'complete', needsReview: false, warningCount: 0 };
+				return { state: 'complete', needsReview: false };
 			},
 			{ signal: controller.signal }
 		);
@@ -92,7 +92,7 @@ describe('resumeDocumentOcrWithGateway', () => {
 		expect(calls).toBe(2);
 	});
 
-	it('preserves review state for pages completed by another worker', async () => {
+	it('preserves review state for completed pages', async () => {
 		const pages = [
 			{ id: '00000000-0000-4000-8000-000000000001', pageNumber: 1 },
 			{ id: '00000000-0000-4000-8000-000000000002', pageNumber: 2 }
@@ -102,7 +102,7 @@ describe('resumeDocumentOcrWithGateway', () => {
 			documentId,
 			gateway(pages),
 			async (pageId) => ({
-				state: 'already_complete',
+				state: 'complete',
 				needsReview: pageId.endsWith('1')
 			})
 		);
@@ -110,7 +110,7 @@ describe('resumeDocumentOcrWithGateway', () => {
 		expect(result).toEqual({ completed: 1, needsReview: 1, pending: 0, failed: 0 });
 	});
 
-	it('keeps retryable and busy results pending without treating them as complete', async () => {
+	it('keeps retry-later results pending and counts terminal failures separately', async () => {
 		const pages = [
 			{ id: '00000000-0000-4000-8000-000000000001', pageNumber: 1 },
 			{ id: '00000000-0000-4000-8000-000000000002', pageNumber: 2 }
@@ -118,7 +118,7 @@ describe('resumeDocumentOcrWithGateway', () => {
 		let call = 0;
 		const result = await resumeDocumentOcrWithGateway(documentId, gateway(pages), async () => {
 			call += 1;
-			if (call === 1) return { state: 'busy' };
+			if (call === 1) return { state: 'retry_later' };
 			throw new Error('terminal failure');
 		});
 
