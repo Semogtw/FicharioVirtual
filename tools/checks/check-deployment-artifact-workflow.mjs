@@ -19,8 +19,12 @@ function forbidText(haystack, text, detail) {
 	if (haystack.includes(text)) failures.push(detail);
 }
 
-requireText(source, 'on:\n  workflow_dispatch:', 'artifact build workflow must remain manual-only');
-forbidText(source, '\n  push:', 'artifact build workflow must not run on push');
+requireText(source, 'on:\n  workflow_dispatch:', 'artifact build workflow must retain manual recovery');
+requireText(
+	source,
+	'  push:\n    branches:\n      - main',
+	'artifact build workflow must automatically run only for pushes to main'
+);
 forbidText(source, '\n  pull_request:', 'artifact build workflow must not run on pull requests');
 forbidText(source, '\n  schedule:', 'artifact build workflow must not run on a schedule');
 requireText(
@@ -61,27 +65,32 @@ requireText(
 requireText(
 	source,
 	'/git/ref/heads/main',
-	'artifact build must bind the requested SHA to the current main ref'
+	'artifact build must bind the workflow SHA to the current main ref'
 );
 requireText(
 	source,
 	'if [[ "$main_sha" != "$GITHUB_SHA" ]]',
-	'artifact build must reject stale or non-main workflow dispatches'
+	'artifact build must reject stale or non-main workflow executions'
 );
 requireText(
 	source,
-	'/actions/workflows/validate-current-head.yml/runs?head_sha=${GITHUB_SHA}&status=completed',
-	'artifact build must query completed current-head validation runs for the exact SHA'
+	'/actions/workflows/validate-current-head.yml/runs?head_sha=${GITHUB_SHA}&per_page=100',
+	'artifact build must query current-head validation runs for the exact SHA'
 );
 requireText(
 	source,
-	'.event == \\"push\\" and .conclusion == \\"success\\"',
-	'artifact build must accept only successful push validation evidence'
+	'.head_sha == \\"${GITHUB_SHA}\\" and .head_branch == \\"main\\" and .event == \\"push\\" and .status == \\"completed\\" and .conclusion == \\"success\\"',
+	'artifact build must accept only completed successful main push validation evidence for the exact SHA'
 );
 requireText(
 	source,
-	'No successful Validate current head push run exists',
-	'artifact build must fail closed when exact-SHA validation evidence is missing'
+	'.status == \\"completed\\" and .conclusion != \\"success\\"',
+	'artifact build must fail early when matching validation completes unsuccessfully'
+);
+requireText(
+	source,
+	'No successful Validate current head push run became available for main SHA $GITHUB_SHA.',
+	'artifact build must fail closed when exact-SHA validation evidence never becomes available'
 );
 requireText(
 	source,
@@ -205,6 +214,7 @@ for (const requiredFile of [
 	'build/registerSW.js',
 	'build/sw.js',
 	'tools/checks/check-deployed-site.mjs',
+	'tools/checks/check-deployed-ui.mjs',
 	'tools/checks/check-deployment-artifact.mjs',
 	'tools/checks/deployment-contract.mjs',
 	'tools/checks/validate-pages-deploy-output.mjs'
