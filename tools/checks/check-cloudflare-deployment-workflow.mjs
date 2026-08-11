@@ -15,10 +15,30 @@ function forbidText(text, detail) {
 	if (source.includes(text)) failures.push(detail);
 }
 
-requireText('on:\n  workflow_dispatch:', 'workflow must remain manual-only');
-forbidText('\n  push:', 'workflow must not deploy on push');
+requireText('on:\n  workflow_dispatch:', 'workflow must retain an explicit manual recovery trigger');
+requireText(
+	'  workflow_run:\n    workflows:\n      - Build deployable Fichário staging artifact\n    types:\n      - completed',
+	'automatic deploys must be triggered only by completion of the reviewed artifact workflow'
+);
+forbidText('\n  push:', 'deployment workflow must not deploy directly on push');
 forbidText('\n  pull_request:', 'workflow must not deploy on pull requests');
 forbidText('\n  schedule:', 'workflow must not deploy on a schedule');
+requireText(
+	"github.event.workflow_run.conclusion == 'success'",
+	'automatic deployment must require a successful artifact workflow conclusion'
+);
+requireText(
+	"github.event.workflow_run.head_branch == 'main'",
+	'automatic deployment must accept artifact workflow runs from main only'
+);
+requireText(
+	'EXPECTED_SOURCE_COMMIT: ${{ github.event_name == \'workflow_run\' && github.event.workflow_run.head_sha || inputs.expected_source_commit }}',
+	'deployment source SHA must bind to the triggering build SHA or the explicit recovery input'
+);
+requireText(
+	'ARTIFACT_RUN_ID: ${{ github.event_name == \'workflow_run\' && github.event.workflow_run.id || inputs.artifact_run_id }}',
+	'deployment artifact run must bind to the triggering build run or the explicit recovery input'
+);
 requireText(
 	'permissions:\n  actions: read\n  contents: read',
 	'workflow permissions must remain actions:read + contents:read'
@@ -46,15 +66,16 @@ requireText(
 	'artifact download action must remain pinned'
 );
 requireText(
-	'name: fichario-static-${{ inputs.expected_source_commit }}-staging',
-	'artifact identity must bind the source SHA to staging'
+	'name: fichario-static-${{ env.EXPECTED_SOURCE_COMMIT }}-staging',
+	'artifact identity must bind the resolved source SHA to staging'
 );
 requireText(
-	'run-id: ${{ inputs.artifact_run_id }}',
-	'artifact must come from the explicitly selected build run'
+	'run-id: ${{ env.ARTIFACT_RUN_ID }}',
+	'artifact must come from the resolved triggering or explicitly selected build run'
 );
 for (const validator of [
 	'checks/check-deployed-site.mjs',
+	'checks/check-deployed-ui.mjs',
 	'checks/check-deployment-artifact.mjs',
 	'checks/deployment-contract.mjs',
 	'checks/validate-pages-deploy-output.mjs'
@@ -63,6 +84,10 @@ for (const validator of [
 }
 requireText('sha256sum -c SHA256SUMS', 'artifact checksums must be revalidated before deployment');
 requireText('find "$artifact_root" -type l', 'artifact symlinks must be rejected');
+requireText(
+	'[[ "$(manifest_value source_commit)" == "$EXPECTED_SOURCE_COMMIT" ]]',
+	'artifact manifest source SHA must equal the resolved deployment SHA'
+);
 requireText(
 	'[[ "$(manifest_value target_environment)" == \'staging\' ]]',
 	'artifact manifest must target staging'
@@ -87,7 +112,19 @@ requireText(
 );
 requireText(
 	'node "$ARTIFACT_ROOT/checks/check-deployed-site.mjs" "$DEPLOYMENT_URL"',
-	'exact deployment URL must pass the artifact-pinned HTTP contract'
+	'exact deployment URL must pass the artifact-pinned HTTP/CSP contract'
+);
+requireText(
+	'node checks/check-deployed-ui.mjs "$DEPLOYMENT_URL"',
+	'exact deployment URL must pass the artifact-pinned Chromium rendering smoke'
+);
+requireText(
+	'npx playwright install --with-deps chromium',
+	'deployment smoke must install and use real Chromium'
+);
+requireText(
+	'name: deployed-ui-${{ env.EXPECTED_SOURCE_COMMIT }}',
+	'rendered UI evidence must remain bound to the deployed SHA'
 );
 
 for (const forbidden of [
