@@ -35,7 +35,6 @@
 	let referenceAbortController: AbortController | null = null;
 	let deletingDocumentId = $state<string | null>(null);
 	let selecting = $state(false);
-	let consent = $state(false);
 	let error = $state<string | null>(null);
 	let referenceError = $state<string | null>(null);
 	let message = $state<string | null>(null);
@@ -162,10 +161,6 @@
 		if (resumingDocumentId !== null || deletingDocumentId !== null || selecting) return;
 		error = null;
 		message = null;
-		if (!consent) {
-			error = 'Confirme a autorização de OCR antes de retomar o PDF.';
-			return;
-		}
 		try {
 			const imported = await runReferenceImport(
 				{
@@ -217,10 +212,6 @@
 			return;
 		error = null;
 		message = null;
-		if (!consent) {
-			error = 'Confirme a autorização de OCR antes de selecionar o arquivo.';
-			return;
-		}
 		selecting = true;
 		try {
 			const selected = await selectGoogleDriveImportSource({
@@ -312,20 +303,6 @@
 			</NativeSelect>
 		</label>
 
-		<label class="consent">
-			<input
-				type="checkbox"
-				bind:checked={consent}
-				disabled={selecting || resumingDocumentId !== null || deletingDocumentId !== null}
-			/>
-			<span>
-				<strong>Permitir OCR somente quando necessário</strong>
-				<small>
-					Imagens precisam dessa autorização. PDFs preservam texto nativo e enviam apenas páginas
-					sem texto ao provedor de leitura.
-				</small>
-			</span>
-		</label>
 	</section>
 
 	<section class="picker-card" aria-labelledby="picker-title">
@@ -468,7 +445,7 @@
 	}
 	.options {
 		display: grid;
-		grid-template-columns: minmax(12rem, 0.4fr) minmax(20rem, 1fr);
+		grid-template-columns: minmax(12rem, 24rem);
 		gap: 1rem;
 	}
 	.options > label:first-child {
@@ -480,24 +457,6 @@
 		font-size: 0.75rem;
 		font-weight: 740;
 	}
-	.consent {
-		display: flex;
-		align-items: flex-start;
-		gap: 0.65rem;
-		padding: 0.75rem;
-		border-left: 0.3rem solid var(--accent);
-		background: rgb(166 94 67 / 7%);
-	}
-	.consent input {
-		width: 1.1rem;
-		height: 1.1rem;
-		margin-top: 0.18rem;
-	}
-	.consent span {
-		display: grid;
-		gap: 0.2rem;
-	}
-	.consent small,
 	.queues span,
 	.reference-list small,
 	.muted {
