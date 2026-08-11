@@ -30,7 +30,7 @@ const expected = Object.freeze({
 });
 
 describe('Cloudflare Pages structured deployment output', () => {
-	it('accepts one deployment matching the immutable artifact identity', () => {
+	it('accepts one deployment matching the immutable artifact identity and staging alias', () => {
 		expect(validatePagesDeployOutput(output(), expected)).toEqual({
 			url: 'https://abc123.fichario-virtual.pages.dev',
 			alias: 'https://staging.fichario-virtual.pages.dev',
@@ -71,7 +71,7 @@ describe('Cloudflare Pages structured deployment output', () => {
 		);
 	});
 
-	it('rejects URLs outside the expected Pages project or with URL decorations', () => {
+	it('rejects URLs outside the expected Pages project, decorated URLs or another alias', () => {
 		expect(() =>
 			validatePagesDeployOutput(output({ url: 'https://abc123.other.pages.dev' }), expected)
 		).toThrow(/outside/);
@@ -83,6 +83,9 @@ describe('Cloudflare Pages structured deployment output', () => {
 		).toThrow(/clean HTTPS origin/);
 		expect(() =>
 			validatePagesDeployOutput(output({ alias: 'https://example.com' }), expected)
-		).toThrow(/alias is outside/);
+		).toThrow(/deployment alias must be/);
+		expect(() => validatePagesDeployOutput(output({ alias: null }), expected)).toThrow(
+			/deployment alias is missing/
+		);
 	});
 });
