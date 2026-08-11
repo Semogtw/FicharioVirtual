@@ -60,13 +60,11 @@
 	let loading = $state(false);
 	let error = $state<string | null>(null);
 	let controller: AbortController | null = null;
-	let photoConsent = $state(false);
 	let photoImporting = $state(false);
 	let photoStage = $state<CoveragePhotoImportStage | null>(null);
 	let photoError = $state<string | null>(null);
 	let photoNotice = $state<string | null>(null);
 	let photoController: AbortController | null = null;
-	let semanticEnabled = $state(false);
 	let semanticConsentRecorded = $state(false);
 	let semanticNotice = $state<string | null>(null);
 
@@ -113,10 +111,6 @@
 		summary = null;
 	}
 
-	function toggleSemantic() {
-		semanticNotice = null;
-		invalidateCoverage();
-	}
 
 	function semanticResultNotice(result: AnalyzedUnitCoverageSummary) {
 		const analysis = result.analysis;
@@ -262,10 +256,6 @@
 	async function importPhoto(file: File) {
 		photoError = null;
 		photoNotice = null;
-		if (!photoConsent) {
-			photoError = 'Confirme o aviso de privacidade antes de enviar a foto para leitura.';
-			return;
-		}
 		if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
 			photoError = 'Selecione uma foto JPG, PNG ou WebP.';
 			return;
@@ -349,7 +339,7 @@
 		error = null;
 		semanticNotice = null;
 		try {
-			let semanticRequested = semanticEnabled;
+			let semanticRequested = true;
 			if (semanticRequested && !semanticConsentRecorded) {
 				try {
 					await recordSemanticCoverageConsent();
@@ -358,7 +348,7 @@
 				} catch {
 					semanticRequested = false;
 					semanticNotice =
-						'Não foi possível registrar o consentimento para enviar trechos ao Gemini. A análise textual/fuzzy será usada desta vez.';
+						'A camada semântica não pôde ser iniciada nesta análise. O modo textual/fuzzy foi preservado normalmente.';
 				}
 			}
 
@@ -465,33 +455,24 @@
 						usada temporariamente e removida depois da extração.
 					</p>
 				</div>
-				<label class="consent">
-					<input type="checkbox" bind:checked={photoConsent} disabled={photoImporting} />
-					<span>
-						<strong>Autorizo a leitura automática desta foto.</strong>
-						<small>
-							No nível gratuito do provedor, o conteúdo pode ser usado para melhorar produtos. A chave
-							nunca fica neste navegador e nenhuma cobrança é ativada automaticamente.
-						</small>
-					</span>
-				</label>
+
 				<div class="photo-actions">
-					<label class:disabled={!photoConsent || photoImporting} class="file-button">
+					<label class:disabled={photoImporting} class="file-button">
 						Selecionar foto
 						<input
 							type="file"
 							accept="image/jpeg,image/png,image/webp"
-							disabled={!photoConsent || photoImporting}
+							disabled={photoImporting}
 							onchange={selectPhoto}
 						/>
 					</label>
-					<label class:disabled={!photoConsent || photoImporting} class="file-button secondary">
+					<label class:disabled={photoImporting} class="file-button secondary">
 						Usar câmera
 						<input
 							type="file"
 							accept="image/*"
 							capture="environment"
-							disabled={!photoConsent || photoImporting}
+							disabled={photoImporting}
 							onchange={selectPhoto}
 						/>
 					</label>
@@ -603,23 +584,10 @@
 			</div>
 		{/if}
 
-		<label class="consent">
-			<input
-				type="checkbox"
-				bind:checked={semanticEnabled}
-				disabled={loading}
-				onchange={toggleSemantic}
-			/>
-			<span>
-				<strong>Usar relação semântica com Gemini.</strong>
-				<small>
-					Quando ativado, trechos das suas páginas podem ser enviados ao Gemini para gerar embeddings e
-					verificar os melhores candidatos. A busca textual/fuzzy continua sendo o fallback e cobre o
-					fichário mesmo sem cota. No nível gratuito do provedor, os dados podem ser usados para melhorar
-					produtos.
-				</small>
-			</span>
-		</label>
+		<div class="processing-note">
+			<strong>Comparação por significado incluída automaticamente.</strong>
+			<span>Quando necessário, pequenos trechos podem ser processados pelo Gemini. A busca textual/fuzzy continua como fallback.</span>
+		</div>
 		{#if semanticNotice}<p class="photo-notice" role="status">{semanticNotice}</p>{/if}
 
 		<div class="actions">
@@ -643,9 +611,7 @@
 
 	{#if loading}
 		<p class="loading" role="status">
-			{semanticEnabled
-				? 'Comparando os assuntos por texto e significado…'
-				: 'Comparando os assuntos com as páginas pesquisáveis…'}
+			Comparando os assuntos por texto e significado…
 		</p>
 	{:else if summary}
 		<section class="coverage" aria-labelledby="coverage-title">
@@ -866,29 +832,17 @@
 		flex-wrap: wrap;
 	}
 
-	.consent {
-		display: flex;
-		align-items: flex-start;
-		gap: 0.65rem;
-		padding: 0.85rem;
-		border: 1px solid var(--line);
-		border-radius: var(--radius-sm);
-		background: var(--paper);
-	}
-
-	.consent input {
-		width: auto;
-		margin-top: 0.2rem;
-	}
-
-	.consent span {
+	.processing-note {
 		display: grid;
 		gap: 0.25rem;
+		padding: 0.85rem;
+		border-left: 0.3rem solid var(--archive);
+		background: var(--archive-soft);
 	}
 
-	.consent small {
+	.processing-note span {
 		color: var(--muted);
-		font-weight: 500;
+		font-size: 0.86rem;
 		line-height: 1.45;
 	}
 
