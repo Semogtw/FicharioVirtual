@@ -33,15 +33,39 @@ async function readBody(incoming: IncomingMessage): Promise<string> {
 async function handleRequest(incoming: IncomingMessage, response: ServerResponse) {
 	if (incoming.method !== 'POST') throw new Error('fault server requires POST');
 	if (incoming.headers['x-goog-api-key'] !== API_KEY) throw new Error('Gemini API key missing');
-	const body = JSON.parse(await readBody(incoming)) as { generationConfig?: Record<string, unknown> };
-	if (body.generationConfig?.responseMimeType !== 'application/json') throw new Error('JSON required');
+	const body = JSON.parse(await readBody(incoming)) as {
+		generationConfig?: Record<string, unknown>;
+	};
+	if (body.generationConfig?.responseMimeType !== 'application/json')
+		throw new Error('JSON required');
 	switch (incoming.url) {
-		case '/transient-rate-limit': response.writeHead(429); response.end('Rate limit exceeded'); return;
-		case '/daily-quota': response.writeHead(429); response.end('Requests per day quota exceeded'); return;
-		case '/service-unavailable': response.writeHead(503); response.end('Service unavailable'); return;
-		case '/invalid-payload': response.writeHead(200, { 'Content-Type': 'application/json' }); response.end('{'); return;
-		case '/timeout': setTimeout(() => { if (!response.destroyed) { response.writeHead(200); response.end('{}'); } }, 250); return;
-		default: response.writeHead(404); response.end('Unknown');
+		case '/transient-rate-limit':
+			response.writeHead(429);
+			response.end('Rate limit exceeded');
+			return;
+		case '/daily-quota':
+			response.writeHead(429);
+			response.end('Requests per day quota exceeded');
+			return;
+		case '/service-unavailable':
+			response.writeHead(503);
+			response.end('Service unavailable');
+			return;
+		case '/invalid-payload':
+			response.writeHead(200, { 'Content-Type': 'application/json' });
+			response.end('{');
+			return;
+		case '/timeout':
+			setTimeout(() => {
+				if (!response.destroyed) {
+					response.writeHead(200);
+					response.end('{}');
+				}
+			}, 250);
+			return;
+		default:
+			response.writeHead(404);
+			response.end('Unknown');
 	}
 }
 
@@ -80,27 +104,48 @@ afterAll(async () => {
 describe.sequential('local OCR provider fault injection', () => {
 	it('classifies transient 429 as retryable rate limiting', async () => {
 		expect(decision(await captureFailure('transient-rate-limit'), 1).persistence).toEqual(
-			expect.objectContaining({ kind: 'fail_job', code: 'gemini_rate_limited', retryable: true, nextRetryAt: '2026-08-03T00:01:00.000Z' })
+			expect.objectContaining({
+				kind: 'fail_job',
+				code: 'gemini_rate_limited',
+				retryable: true,
+				nextRetryAt: '2026-08-03T00:01:00.000Z'
+			})
 		);
 	});
 	it('classifies provider daily quota separately', async () => {
-		expect(decision(await captureFailure('daily-quota'), 1).persistence).toEqual({ kind: 'block_quota', code: 'gemini_daily_quota', failedAt: FAILED_AT.toISOString() });
+		expect(decision(await captureFailure('daily-quota'), 1).persistence).toEqual({
+			kind: 'block_quota',
+			code: 'gemini_daily_quota',
+			failedAt: FAILED_AT.toISOString()
+		});
 	});
 	it('classifies 503 as retryable provider unavailability', async () => {
 		expect(decision(await captureFailure('service-unavailable'), 1).persistence).toEqual(
-			expect.objectContaining({ code: 'gemini_service_unavailable', retryable: true, nextRetryAt: '2026-08-03T00:00:30.000Z' })
+			expect.objectContaining({
+				code: 'gemini_service_unavailable',
+				retryable: true,
+				nextRetryAt: '2026-08-03T00:00:30.000Z'
+			})
 		);
 	});
 	it('bounds invalid provider payload retries', async () => {
-		expect(decision(await captureFailure('invalid-payload'), 1).persistence).toEqual(expect.objectContaining({ code: 'ocr_response_invalid', retryable: true }));
-		expect(decision(await captureFailure('invalid-payload'), 3).persistence).toEqual(expect.objectContaining({ code: 'ocr_response_invalid', retryable: false, nextRetryAt: null }));
+		expect(decision(await captureFailure('invalid-payload'), 1).persistence).toEqual(
+			expect.objectContaining({ code: 'ocr_response_invalid', retryable: true })
+		);
+		expect(decision(await captureFailure('invalid-payload'), 3).persistence).toEqual(
+			expect.objectContaining({ code: 'ocr_response_invalid', retryable: false, nextRetryAt: null })
+		);
 	});
 	it('bounds aborted request retries', async () => {
 		const first = new AbortController();
 		setTimeout(() => first.abort(), 25);
-		expect(decision(await captureFailure('timeout', first.signal), 1).persistence).toEqual(expect.objectContaining({ code: 'ocr_request_failed', retryable: true }));
+		expect(decision(await captureFailure('timeout', first.signal), 1).persistence).toEqual(
+			expect.objectContaining({ code: 'ocr_request_failed', retryable: true })
+		);
 		const third = new AbortController();
 		setTimeout(() => third.abort(), 25);
-		expect(decision(await captureFailure('timeout', third.signal), 3).persistence).toEqual(expect.objectContaining({ code: 'ocr_request_failed', retryable: false, nextRetryAt: null }));
+		expect(decision(await captureFailure('timeout', third.signal), 3).persistence).toEqual(
+			expect.objectContaining({ code: 'ocr_request_failed', retryable: false, nextRetryAt: null })
+		);
 	});
 });

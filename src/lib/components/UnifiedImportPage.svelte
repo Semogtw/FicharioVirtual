@@ -49,7 +49,7 @@
 		let queued = 0;
 
 		if (pdfs.length > 0) {
-			addPdfs(pdfs, { notebookId: notebookId || null, consentGranted: true });
+			addPdfs(pdfs, { notebookId: notebookId || null });
 			queued += pdfs.length;
 		}
 		if (images.length > 0) {

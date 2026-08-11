@@ -4,7 +4,6 @@ import {
 	type OcrQueueCoordinator,
 	type OcrQueueGateway
 } from '../../../src/lib/import/job-runner';
-import { OcrProcessingError } from '../../../src/lib/services/ocr';
 
 function deferred() {
 	let resolve!: () => void;
@@ -42,7 +41,7 @@ describe('OcrJobRunner', () => {
 				maximum = Math.max(maximum, active);
 				await Promise.resolve();
 				active -= 1;
-				return { state: 'complete' as const, needsReview: false };
+				return { state: 'complete' as const, needsReview: false, warningCount: 0 };
 			})
 		};
 		const runner = new OcrJobRunner(gateway, coordinator(), {
@@ -81,7 +80,7 @@ describe('OcrJobRunner', () => {
 					signal.addEventListener('abort', abort, { once: true });
 					void release?.promise.then(resolve);
 				});
-				return { state: 'complete' as const, needsReview: false };
+				return { state: 'complete' as const, needsReview: false, warningCount: 0 };
 			})
 		};
 		const runner = new OcrJobRunner(gateway, coordinator());
@@ -95,41 +94,26 @@ describe('OcrJobRunner', () => {
 		expect(runner.state).toBe('paused');
 	});
 
-	it('keeps a deferred retry alive while database polls are temporarily empty', async () => {
-		const wait = vi.fn(async (milliseconds: number, signal: AbortSignal) => {
-			void milliseconds;
-			void signal;
-		});
+	it('uses the bounded backoff schedule for transient work', async () => {
+		const wait = vi.fn(async () => undefined);
 		const gateway: OcrQueueGateway = {
-			listRunnableJobs: vi
-				.fn()
-				.mockResolvedValueOnce([jobs[0]])
-				.mockResolvedValueOnce([])
-				.mockResolvedValueOnce([])
-				.mockResolvedValueOnce([jobs[0]]),
-			processJob: vi
-				.fn()
-				.mockResolvedValueOnce({ state: 'retry_later' as const })
-				.mockResolvedValueOnce({ state: 'complete' as const, needsReview: false })
+			listRunnableJobs: vi.fn().mockResolvedValueOnce([jobs[0]]).mockResolvedValueOnce([]),
+			processJob: vi.fn(async () => ({ state: 'retry_later' as const }))
 		};
 		const runner = new OcrJobRunner(gateway, coordinator(), { wait });
 
 		await runner.startQueue();
 
-		expect(wait.mock.calls.map(([delay]) => delay)).toEqual([5_000, 20_000, 60_000]);
-		expect(gateway.listRunnableJobs).toHaveBeenCalledTimes(4);
-		expect(gateway.processJob).toHaveBeenCalledTimes(2);
-		expect(gateway.processJob).toHaveBeenNthCalledWith(1, jobs[0].pageId, expect.any(AbortSignal));
-		expect(gateway.processJob).toHaveBeenNthCalledWith(2, jobs[0].pageId, expect.any(AbortSignal));
+		expect(wait).toHaveBeenCalledTimes(1);
+		expect(wait).toHaveBeenCalledWith(5_000, expect.any(AbortSignal));
+		expect(gateway.listRunnableJobs).toHaveBeenCalledTimes(2);
 	});
 
-	it('does not loop automatically after a terminal OCR error', async () => {
+	it('does not loop automatically after a daily quota result', async () => {
 		const wait = vi.fn(async () => undefined);
 		const gateway: OcrQueueGateway = {
 			listRunnableJobs: vi.fn().mockResolvedValueOnce([jobs[0]]),
-			processJob: vi.fn(async () => {
-				throw new OcrProcessingError('ocr_not_retryable', false);
-			})
+			processJob: vi.fn(async () => ({ state: 'quota_exhausted' as const }))
 		};
 		const runner = new OcrJobRunner(gateway, coordinator(), { wait });
 
