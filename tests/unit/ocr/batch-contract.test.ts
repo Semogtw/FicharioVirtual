@@ -16,7 +16,7 @@ function result(page = first, text = 'Texto', overrides: Record<string, unknown>
 }
 
 describe('parseOcrBatchPayload', () => {
-	it('accepts the exact requested set and restores request order', () => {
+	it('accepts the exact launch contract and restores request order', () => {
 		const parsed = parseOcrBatchPayload(
 			JSON.stringify({ pages: [result(second, 'Dois'), result(first, 'Um')] }),
 			[first, second]
@@ -117,10 +117,25 @@ describe('parseOcrBatchPayload', () => {
 		expect(parsed.missingPageIds).toEqual([second.pageId]);
 	});
 
-	it('turns malformed, mismatched, invalid-class or extended provider output into retry data', () => {
+	it('rejects malformed, mismatched, pre-launch, invalid-class or extended provider output', () => {
+		const oldWordGeometry = {
+			...first,
+			text: 'Texto',
+			warnings: [],
+			contentClass: 'unknown',
+			wordGeometry: ['1000,1000,9000,2000|Texto']
+		};
+		const missingLineGeometry = {
+			...first,
+			text: 'Texto',
+			warnings: [],
+			contentClass: 'unknown'
+		};
 		for (const payload of [
 			'{',
 			JSON.stringify({ pages: [{ ...result(first), pageNumber: 9 }] }),
+			JSON.stringify({ pages: [oldWordGeometry] }),
+			JSON.stringify({ pages: [missingLineGeometry] }),
 			JSON.stringify({ pages: [result(first, 'Texto', { contentClass: 'not_a_class' })] }),
 			JSON.stringify({ pages: [{ ...result(first), commentary: 'extra' }] })
 		]) {
