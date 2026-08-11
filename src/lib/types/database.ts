@@ -397,6 +397,16 @@ export type Database = {
 				Args: { target_page_id: string; target_model: string; claimed_at: string };
 				Returns: Json;
 			};
+			complete_ocr_job: {
+				Args: {
+					target_page_id: string;
+					extracted_text: string;
+					extraction_warnings: Json;
+					terminal_status: 'ready' | 'needs_review';
+					completed_at: string;
+				};
+				Returns: boolean;
+			};
 			create_drive_pdf_import: {
 				Args: {
 					target_document_id: string;
@@ -415,6 +425,17 @@ export type Database = {
 					prompt_version?: number;
 				};
 				Returns: Json;
+			};
+			create_ocr_staging_probe: {
+				Args: {
+					target_document_id: string;
+					target_page_id: string;
+					target_job_id: string;
+					image_storage_path: string;
+					prepared_sha256: string;
+					prompt_version?: number;
+				};
+				Returns: Array<{ document_id: string; page_id: string; ocr_job_id: string }>;
 			};
 			create_ocr_worker_pairing_code: {
 				Args: Record<string, never>;
