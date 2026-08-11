@@ -9,12 +9,14 @@
 	let pdfHref = $derived(importHref('/import/pdf/', requestedNotebookId));
 </script>
 
-<nav class="import-tabs" aria-label="Tipo de importação">
+<nav class="import-tabs" aria-label="Tipo de arquivo para importar">
 	<a href={imageHref} aria-current={page.url.pathname === '/import/' ? 'page' : undefined}>
-		Imagens
+		<span>Imagens e câmera</span>
+		<small>JPG, PNG ou WebP</small>
 	</a>
 	<a href={pdfHref} aria-current={page.url.pathname.startsWith('/import/pdf') ? 'page' : undefined}>
-		PDFs
+		<span>PDFs e arquivos</span>
+		<small>Selecionar PDF</small>
 	</a>
 </nav>
 
@@ -33,19 +35,39 @@
 	}
 
 	a {
-		min-height: 2.5rem;
-		display: inline-flex;
-		align-items: center;
+		min-height: 3rem;
+		display: grid;
+		align-content: center;
+		gap: 0.12rem;
 		padding: 0.55rem 0.9rem;
 		border-radius: calc(var(--radius-md) - 0.2rem);
 		color: var(--muted);
 		font-size: 0.86rem;
 		font-weight: 740;
+		line-height: 1.2;
+	}
+
+	a small {
+		font-size: 0.68rem;
+		font-weight: 620;
+		opacity: 0.82;
 	}
 
 	a[aria-current='page'] {
 		background: var(--archive);
 		color: white;
 		box-shadow: 0 0.2rem 0.8rem rgb(32 33 36 / 10%);
+	}
+
+	@media (max-width: 600px) {
+		.import-tabs {
+			width: 100%;
+		}
+
+		a {
+			min-width: 0;
+			flex: 1;
+			text-align: center;
+		}
 	}
 </style>
