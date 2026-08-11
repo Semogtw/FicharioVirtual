@@ -393,7 +393,6 @@
 		color: var(--muted);
 	}
 
-
 	.drop-zone {
 		display: grid;
 		justify-items: center;
