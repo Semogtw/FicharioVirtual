@@ -101,7 +101,7 @@ language plpgsql
 stable
 security definer
 set search_path = ''
-as $$;
+as $$
 begin
   if (select auth.uid()) is null or not (select public.is_authorized_user()) then
     raise exception 'Not authorized';
@@ -156,7 +156,7 @@ returns integer
 language plpgsql
 security definer
 set search_path = ''
-as $$;
+as $$
 declare
   owner_id uuid;
   current_hash text;
@@ -269,7 +269,7 @@ language plpgsql
 stable
 security definer
 set search_path = ''
-as $$;
+as $$
 begin
   if (select auth.uid()) is null or not (select public.is_authorized_user()) then
     raise exception 'Not authorized';
