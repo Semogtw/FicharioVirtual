@@ -24,17 +24,8 @@ where id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'::uuid;
 insert into auth.users (id, email)
 values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'ocr-gate@example.test');
 
-insert into public.app_users (
-  user_id,
-  is_active,
-  ocr_consent_at,
-  ocr_consent_version
-) values (
-  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-  true,
-  '2026-08-01T00:00:00Z',
-  1
-);
+insert into public.app_users (user_id, is_active)
+values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', true);
 
 insert into public.documents (
   id,
