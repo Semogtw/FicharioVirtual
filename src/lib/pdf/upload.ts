@@ -1,14 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { calculateSha256 } from '$lib/import/hash';
 import { parseDuplicateDocumentId } from '$lib/import/duplicate-result';
-import { recordOcrConsent } from '$lib/services/ocr-consent';
-import {
-	OcrProcessingError,
-	processOcrBatch as runOcrBatch,
-	processPageOcr,
-	type OcrBatchRunResult,
-	type OcrRunResult
-} from '$lib/services/ocr';
+import { processOcrBatch as runOcrBatch, type OcrBatchRunResult } from '$lib/services/ocr';
 import { getSupabaseClient } from '$lib/services/supabase';
 import type { Database, DocumentStatus } from '$lib/types/database';
 import { buildPdfImportPlan, type PdfImportPagePlan } from './import-plan';
@@ -56,9 +49,7 @@ export type PdfUploadDependencies = {
 		options?: { maxDimension?: number; quality?: number; signal?: AbortSignal }
 	): Promise<Blob>;
 	calculateSha256(input: Blob | ArrayBuffer | ArrayBufferView): Promise<string>;
-	recordOcrConsent(version?: number): Promise<void>;
-	processPageOcr(pageId: string, options?: { signal?: AbortSignal }): Promise<OcrRunResult>;
-	processOcrBatch?(
+	processOcrBatch(
 		pageIds: readonly string[],
 		options?: { signal?: AbortSignal }
 	): Promise<OcrBatchRunResult>;
@@ -67,7 +58,6 @@ export type PdfUploadDependencies = {
 export type PdfUploadOptions = {
 	title?: string;
 	notebookId?: string | null;
-	consentGranted?: boolean;
 	promptVersion?: number;
 	signal?: AbortSignal;
 	onProgress?: (progress: PdfUploadProgress) => void;
@@ -97,13 +87,6 @@ export class DuplicatePdfError extends Error {
 		super('Este PDF já está no fichário.');
 		this.name = 'DuplicatePdfError';
 		this.documentId = documentId;
-	}
-}
-
-export class PdfConsentRequiredError extends Error {
-	constructor() {
-		super('Este PDF contém páginas sem texto e exige consentimento para leitura automática.');
-		this.name = 'PdfConsentRequiredError';
 	}
 }
 
@@ -239,54 +222,6 @@ function pageDensity(pageNumber: number, inspection: PdfInspection): PdfOcrBatch
 	return 'normal';
 }
 
-async function processLegacyOcrPages(
-	pages: readonly PdfImportPagePlan[],
-	dependencies: PdfUploadDependencies,
-	onProgress?: PdfUploadOptions['onProgress'],
-	signal?: AbortSignal
-) {
-	const queue = pages.filter((page) => page.needsOcr);
-	if (queue.length > 0) onProgress?.({ phase: 'reading', completed: 0, total: queue.length });
-	let index = 0;
-	let complete = 0;
-	let needsReview = 0;
-	let pending = 0;
-	let failed = 0;
-	let progress = 0;
-
-	async function worker() {
-		while (index < queue.length) {
-			if (signal?.aborted) return;
-			const page = queue[index++];
-			if (!page) return;
-			try {
-				const result = await dependencies.processPageOcr(page.id, { signal });
-				if (result.state === 'complete' || result.state === 'already_complete') {
-					if (result.needsReview) needsReview += 1;
-					else complete += 1;
-				} else {
-					pending += 1;
-				}
-			} catch (error) {
-				if (error instanceof OcrProcessingError && !error.retryable) failed += 1;
-				else pending += 1;
-			} finally {
-				progress += 1;
-				onProgress?.({
-					phase: 'reading',
-					completed: progress,
-					total: queue.length,
-					pageNumber: page.pageNumber
-				});
-			}
-		}
-	}
-
-	await Promise.all(Array.from({ length: Math.min(2, queue.length) }, () => worker()));
-	pending += queue.length - progress;
-	return { complete, needsReview, pending, failed };
-}
-
 async function processOcrPages(
 	pages: readonly PdfImportPagePlan[],
 	renderedSizes: ReadonlyMap<string, number>,
@@ -296,9 +231,6 @@ async function processOcrPages(
 	signal?: AbortSignal
 ) {
 	const queue = pages.filter((page) => page.needsOcr);
-	if (!dependencies.processOcrBatch) {
-		return processLegacyOcrPages(queue, dependencies, onProgress, signal);
-	}
 	if (queue.length === 0) return { complete: 0, needsReview: 0, pending: 0, failed: 0 };
 	onProgress?.({ phase: 'reading', completed: 0, total: queue.length });
 	return runPdfOcrBatches({
@@ -308,7 +240,7 @@ async function processOcrPages(
 			derivedBytes: renderedSizes.get(page.id) ?? 1,
 			density: pageDensity(page.pageNumber, inspection)
 		})),
-		processBatch: (pageIds) => dependencies.processOcrBatch!(pageIds, { signal }),
+		processBatch: (pageIds) => dependencies.processOcrBatch(pageIds, { signal }),
 		signal,
 		onPageFinished: (pageNumber, completed, total) =>
 			onProgress?.({ phase: 'reading', completed, total, pageNumber })
@@ -319,8 +251,6 @@ const defaultDependencies: PdfUploadDependencies = {
 	inspectPdf,
 	renderPdfPage,
 	calculateSha256,
-	recordOcrConsent,
-	processPageOcr: (pageId, options) => processPageOcr(pageId, undefined, options),
 	processOcrBatch: (pageIds, options) => runOcrBatch(pageIds, undefined, options)
 };
 
@@ -335,10 +265,6 @@ export async function uploadPdfWithGateway(
 	options.onProgress?.({ phase: 'inspecting', completed: 0, total: 1 });
 	const inspection = await dependencies.inspectPdf(file, { signal: options.signal });
 	options.onProgress?.({ phase: 'inspecting', completed: 1, total: 1 });
-
-	if (inspection.pagesNeedingOcr.length > 0) {
-		await dependencies.recordOcrConsent();
-	}
 	if (options.signal?.aborted) throw abortError();
 
 	const [userId, sha256] = await Promise.all([
