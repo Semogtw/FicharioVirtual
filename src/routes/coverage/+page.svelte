@@ -19,7 +19,6 @@
 	} from '$lib/services/coverage-photo-import';
 	import { listNotebooks } from '$lib/services/notebooks';
 	import { RequestVersion } from '$lib/services/request-version';
-	import { recordSemanticCoverageConsent } from '$lib/services/semantic-coverage';
 	import { analyzeUnitCoverage } from '$lib/services/topic-coverage';
 
 	type EditableTopic = {
@@ -65,7 +64,6 @@
 	let photoError = $state<string | null>(null);
 	let photoNotice = $state<string | null>(null);
 	let photoController: AbortController | null = null;
-	let semanticConsentRecorded = $state(false);
 	let semanticNotice = $state<string | null>(null);
 
 	let topicValidation = $derived.by(() => {
@@ -339,18 +337,7 @@
 		error = null;
 		semanticNotice = null;
 		try {
-			let semanticRequested = true;
-			if (semanticRequested && !semanticConsentRecorded) {
-				try {
-					await recordSemanticCoverageConsent();
-					if (!coverageRequests.isCurrent(version)) return;
-					semanticConsentRecorded = true;
-				} catch {
-					semanticRequested = false;
-					semanticNotice =
-						'A camada semântica não pôde ser iniciada nesta análise. O modo textual/fuzzy foi preservado normalmente.';
-				}
-			}
+			const semanticRequested = true;
 
 			const result = await analyzeUnitCoverage(topicValidation.topics, {
 				notebookId: notebookId || null,

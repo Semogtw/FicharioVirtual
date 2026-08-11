@@ -30,7 +30,6 @@ function record(overrides: Partial<StoredPdfImportRecord> = {}): StoredPdfImport
 		resumeKey,
 		file: new File(['pdf'], 'notes.pdf', { type: 'application/pdf', lastModified: 1 }),
 		notebookId: null,
-		consentGranted: true,
 		status: 'queued',
 		inspected: false,
 		uploaded: false,

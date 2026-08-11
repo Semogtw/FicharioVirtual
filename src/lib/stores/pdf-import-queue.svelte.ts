@@ -14,7 +14,6 @@ import {
 } from '$lib/pdf/resume-store';
 import {
 	DuplicatePdfError,
-	PdfConsentRequiredError,
 	uploadPdf,
 	type PdfUploadProgress,
 	type UploadedPdf
@@ -48,7 +47,6 @@ export type PdfQueueItem = {
 	resumeKey: string;
 	file: File;
 	notebookId: string | null;
-	consentGranted: boolean;
 	status: PdfQueueStatus;
 	progress: PdfUploadProgress | null;
 	inspected: boolean;
@@ -146,7 +144,6 @@ function storedRecord(item: PdfQueueItem): StoredPdfImportRecord {
 		resumeKey: item.resumeKey,
 		file: item.file,
 		notebookId: item.notebookId,
-		consentGranted: item.consentGranted,
 		status: storedStatus(item),
 		inspected: item.inspected,
 		uploaded: item.uploaded,
@@ -261,20 +258,16 @@ async function processItem(item: PdfQueueItem) {
 	try {
 		item.result = await uploadPdf(item.file, {
 			notebookId: item.notebookId,
-			consentGranted: item.consentGranted,
 			signal: controller.signal,
 			onProgress(progress) {
 				item.progress = progress;
 				item.status = phaseStatus(progress);
-				if (progress.phase === 'inspecting' && progress.completed === progress.total) {
+				if (progress.phase === 'inspecting' && progress.completed === progress.total)
 					item.inspected = true;
-				}
-				if (progress.phase === 'uploading' && progress.completed === progress.total) {
+				if (progress.phase === 'uploading' && progress.completed === progress.total)
 					item.uploaded = true;
-				}
-				if (progress.phase === 'publishing' && progress.completed === progress.total) {
+				if (progress.phase === 'publishing' && progress.completed === progress.total)
 					item.published = true;
-				}
 				void persistItem(item);
 			}
 		});
@@ -293,9 +286,6 @@ async function processItem(item: PdfQueueItem) {
 		} else if (error instanceof DuplicatePdfError) {
 			item.status = 'duplicate';
 			item.duplicateDocumentId = error.documentId;
-			item.error = error.message;
-		} else if (error instanceof PdfConsentRequiredError) {
-			item.status = 'failed';
 			item.error = error.message;
 		} else {
 			item.status = 'failed';
@@ -326,12 +316,8 @@ function discardCompletedElsewhere(itemId: string) {
 	completedElsewhere.add(item);
 	controllers.get(item.id)?.abort();
 	queuedFiles.delete(item.file);
-	if (!pdfImportQueue.items.some((candidate) => candidate.status === 'queued')) {
-		clearPumpRetry();
-	}
-	void persistItem(item).finally(() => {
-		itemStores.delete(item.id);
-	});
+	if (!pdfImportQueue.items.some((candidate) => candidate.status === 'queued')) clearPumpRetry();
+	void persistItem(item).finally(() => itemStores.delete(item.id));
 }
 
 function handleImportUpdate(update: ImportBroadcastUpdate) {
@@ -373,10 +359,7 @@ async function pump() {
 	}
 }
 
-export function addPdfs(
-	files: readonly File[],
-	options: { notebookId?: string | null; consentGranted: boolean }
-) {
+export function addPdfs(files: readonly File[], options: { notebookId?: string | null } = {}) {
 	const userId = sessionState.user?.id;
 	if (!userId) return;
 	for (const file of files) {
@@ -389,7 +372,6 @@ export function addPdfs(
 			resumeKey: id('resume'),
 			file,
 			notebookId: options.notebookId ?? null,
-			consentGranted: options.consentGranted,
 			status: 'queued',
 			progress: null,
 			inspected: false,
@@ -410,9 +392,7 @@ export function cancelPdfImport(itemId: string) {
 	if (item?.status === 'queued') {
 		item.status = 'cancelled';
 		void persistItem(item);
-		if (!pdfImportQueue.items.some((candidate) => candidate.status === 'queued')) {
-			clearPumpRetry();
-		}
+		if (!pdfImportQueue.items.some((candidate) => candidate.status === 'queued')) clearPumpRetry();
 	}
 }
 
@@ -461,16 +441,13 @@ export function removePdfImport(itemId: string) {
 	if (!item.published && !terminalStatus(item)) item.status = 'cancelled';
 	void persistItem(item).finally(() => itemStores.delete(item.id));
 	queuedFiles.delete(item.file);
-	if (!pdfImportQueue.items.some((candidate) => candidate.status === 'queued')) {
-		clearPumpRetry();
-	}
+	if (!pdfImportQueue.items.some((candidate) => candidate.status === 'queued')) clearPumpRetry();
 }
 
 export function clearFinishedPdfImports() {
 	for (const item of [...pdfImportQueue.items]) {
-		if (['complete', 'needs_review', 'duplicate', 'cancelled'].includes(item.status)) {
+		if (['complete', 'needs_review', 'duplicate', 'cancelled'].includes(item.status))
 			removePdfImport(item.id);
-		}
 	}
 }
 
@@ -519,7 +496,6 @@ export async function restorePdfImports(userId: string, store?: PdfResumeStore) 
 				resumeKey: record.resumeKey,
 				file: record.file,
 				notebookId: record.notebookId,
-				consentGranted: record.consentGranted,
 				status: 'queued',
 				progress: null,
 				inspected: record.inspected,

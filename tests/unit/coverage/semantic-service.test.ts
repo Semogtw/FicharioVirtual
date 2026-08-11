@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-	recordSemanticCoverageConsent,
 	requestSemanticCoverage,
 	SemanticCoverageServiceError
 } from '../../../src/lib/services/semantic-coverage';
@@ -33,11 +32,7 @@ describe('semantic coverage service', () => {
 			},
 			error: null
 		});
-		const result = await requestSemanticCoverage(
-			[topic],
-			{ signal },
-			{ functions: { invoke } }
-		);
+		const result = await requestSemanticCoverage([topic], { signal }, { functions: { invoke } });
 		expect(invoke).toHaveBeenCalledWith('semantic-coverage', {
 			body: { topics: [topic], notebookId: null },
 			signal
@@ -55,12 +50,7 @@ describe('semantic coverage service', () => {
 				embeddingModel: 'gemini-embedding-2',
 				index: null,
 				verification: 'unavailable',
-				topics: [
-					{
-						topic,
-						candidates: [{ ...candidate, semanticSimilarity: 0, verification: null }]
-					}
-				]
+				topics: [{ topic, candidates: [{ ...candidate, semanticSimilarity: 0, verification: null }] }]
 			},
 			error: null
 		});
@@ -84,20 +74,5 @@ describe('semantic coverage service', () => {
 		await expect(
 			requestSemanticCoverage([topic], {}, { functions: { invoke } })
 		).rejects.toBeInstanceOf(SemanticCoverageServiceError);
-	});
-
-	it('records semantic consent through the dedicated RPC', async () => {
-		const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
-		await expect(recordSemanticCoverageConsent({ rpc })).resolves.toBeUndefined();
-		expect(rpc).toHaveBeenCalledWith('record_coverage_semantic_consent', {
-			consent_version: 1
-		});
-	});
-
-	it('does not silently accept a failed consent write', async () => {
-		const rpc = vi.fn().mockResolvedValue({ data: false, error: null });
-		await expect(recordSemanticCoverageConsent({ rpc })).rejects.toBeInstanceOf(
-			SemanticCoverageServiceError
-		);
 	});
 });

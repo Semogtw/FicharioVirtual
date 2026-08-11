@@ -5,10 +5,9 @@ import type {
 } from './browser-exclusive';
 import { Semaphore } from './semaphore';
 import { listRunnableOcrJobs, type RunnableOcrJob } from '$lib/services/jobs';
-import { OcrProcessingError, processPageOcr, type OcrRunResult } from '$lib/services/ocr';
+import { processPageOcr, type OcrRunResult } from '$lib/services/ocr';
 
 const BATCH_LIMIT = 50;
-const BACKOFF_DELAYS = [0, 5_000, 20_000, 60_000] as const;
 
 export type OcrQueueState = 'idle' | 'running' | 'paused';
 
@@ -23,10 +22,6 @@ export interface OcrQueueCoordinator {
 	close(): void;
 }
 
-export interface OcrQueueDelay {
-	wait(milliseconds: number, signal: AbortSignal): Promise<void>;
-}
-
 export type OcrQueueLeaseStorage = BrowserExclusiveStorage;
 
 export interface OcrQueueChannel {
@@ -34,7 +29,7 @@ export interface OcrQueueChannel {
 	close(): void;
 }
 
-type ProcessingOutcome = 'complete' | 'retry' | 'terminal' | 'aborted';
+type ProcessingOutcome = 'complete' | 'terminal' | 'aborted';
 
 export type BrowserOcrQueueCoordinatorOptions = BrowserExclusiveCoordinatorOptions & {
 	channel?: OcrQueueChannel | null;
@@ -67,25 +62,6 @@ export class BrowserOcrQueueCoordinator implements OcrQueueCoordinator {
 	}
 }
 
-const defaultDelay: OcrQueueDelay = {
-	wait(milliseconds, signal) {
-		if (signal.aborted) {
-			return Promise.reject(new DOMException('OCR queue was paused', 'AbortError'));
-		}
-		return new Promise<void>((resolve, reject) => {
-			const timeout = setTimeout(() => {
-				signal.removeEventListener('abort', abort);
-				resolve();
-			}, milliseconds);
-			const abort = () => {
-				clearTimeout(timeout);
-				reject(new DOMException('OCR queue was paused', 'AbortError'));
-			};
-			signal.addEventListener('abort', abort, { once: true });
-		});
-	}
-};
-
 const defaultGateway: OcrQueueGateway = {
 	listRunnableJobs(limit) {
 		return listRunnableOcrJobs({ limit });
@@ -100,7 +76,7 @@ function isAbortError(error: unknown) {
 }
 
 function outcomeForResult(result: OcrRunResult): ProcessingOutcome {
-	return result.state === 'complete' ? 'complete' : 'retry';
+	return result.state === 'complete' ? 'complete' : 'terminal';
 }
 
 export class OcrJobRunner {
@@ -111,8 +87,7 @@ export class OcrJobRunner {
 
 	constructor(
 		private readonly gateway: OcrQueueGateway,
-		private readonly coordinator: OcrQueueCoordinator,
-		private readonly delay: OcrQueueDelay = defaultDelay
+		private readonly coordinator: OcrQueueCoordinator
 	) {}
 
 	startQueue(): Promise<void> {
@@ -123,7 +98,7 @@ export class OcrJobRunner {
 		this.coordinator.publish(this.state);
 
 		const running = this.coordinator
-			.runExclusive(() => this.runRounds(controller.signal))
+			.runExclusive(() => this.runAvailableJobs(controller.signal))
 			.then((acquired) => {
 				if (!acquired && this.state === 'running') this.state = 'idle';
 			})
@@ -160,30 +135,11 @@ export class OcrJobRunner {
 		this.coordinator.close();
 	}
 
-	private async runRounds(signal: AbortSignal) {
-		const deferredRetryPageIds = new Set<string>();
-		for (const [round, delay] of BACKOFF_DELAYS.entries()) {
-			if (signal.aborted) return;
-			if (delay > 0) await this.delay.wait(delay, signal);
-			if (signal.aborted) return;
-
-			const jobs = await this.gateway.listRunnableJobs(BATCH_LIMIT);
-			if (jobs.length === 0) {
-				if (deferredRetryPageIds.size > 0 && round < BACKOFF_DELAYS.length - 1) continue;
-				return;
-			}
-			const outcomes = await Promise.all(jobs.map((job) => this.process(job, signal)));
-			if (signal.aborted) return;
-
-			for (const [index, job] of jobs.entries()) {
-				if (outcomes[index] === 'retry') deferredRetryPageIds.add(job.pageId);
-				else deferredRetryPageIds.delete(job.pageId);
-			}
-			const retryable = deferredRetryPageIds.size > 0;
-			const fullBatch = jobs.length === BATCH_LIMIT;
-			if (!retryable && !fullBatch) return;
-			if (round === BACKOFF_DELAYS.length - 1) return;
-		}
+	private async runAvailableJobs(signal: AbortSignal) {
+		if (signal.aborted) return;
+		const jobs = await this.gateway.listRunnableJobs(BATCH_LIMIT);
+		if (jobs.length === 0 || signal.aborted) return;
+		await Promise.all(jobs.map((job) => this.process(job, signal)));
 	}
 
 	private process(job: RunnableOcrJob, signal: AbortSignal): Promise<ProcessingOutcome> {
@@ -193,7 +149,6 @@ export class OcrJobRunner {
 				return outcomeForResult(await this.gateway.processJob(job.pageId, signal));
 			} catch (error) {
 				if (isAbortError(error) || signal.aborted) return 'aborted';
-				if (error instanceof OcrProcessingError && error.retryable) return 'retry';
 				return 'terminal';
 			}
 		});
@@ -203,11 +158,7 @@ export class OcrJobRunner {
 let defaultRunner: OcrJobRunner | null = null;
 
 function runner() {
-	defaultRunner ??= new OcrJobRunner(
-		defaultGateway,
-		new BrowserOcrQueueCoordinator(),
-		defaultDelay
-	);
+	defaultRunner ??= new OcrJobRunner(defaultGateway, new BrowserOcrQueueCoordinator());
 	return defaultRunner;
 }
 

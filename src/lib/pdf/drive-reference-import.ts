@@ -228,12 +228,12 @@ export async function importStagedDrivePdfReference({
 	signal?: AbortSignal;
 	onProgress?: (progress: DrivePdfReferenceImportProgress) => void;
 	client?: ReferenceImportClient;
-	dependencies?: DrivePdfReferenceImportDependencies;
+	dependencies?: Partial<DrivePdfReferenceImportDependencies>;
 }): Promise<DrivePdfReferenceImportResult> {
 	validateStagedReference(staged);
 	const promptVersion = validatePromptVersion(requestedPromptVersion);
 	if (signal?.aborted) throw abortError();
-	const runtime = dependencies ?? createDefaultDependencies(client);
+	const runtime = Object.assign(createDefaultDependencies(client), dependencies ?? {});
 	const uploadedPaths: string[] = [];
 	let metadataPublished = false;
 	let descriptorLease: DrivePdfReferenceDescriptorLease | null = null;

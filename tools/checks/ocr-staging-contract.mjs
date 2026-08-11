@@ -376,7 +376,8 @@ export function assertOcrInvocation({ data, pageId }) {
 	if (
 		completed.length !== 1 ||
 		completed[0] !== pageId ||
-		(review.length > 1 || (review.length === 1 && review[0] !== pageId)) ||
+		review.length > 1 ||
+		(review.length === 1 && review[0] !== pageId) ||
 		pending.length !== 0 ||
 		failed.length !== 0 ||
 		split.length !== 0 ||

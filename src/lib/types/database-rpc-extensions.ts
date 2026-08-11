@@ -47,6 +47,16 @@ export type DatabaseRpcExtensions = {
 				};
 				Returns: Array<{ document_id: string; page_id: string; ocr_job_id: string }>;
 			};
+			get_document_ocr_summary: {
+				Args: { target_document_id: string };
+				Returns: Array<{
+					total: number;
+					completed: number;
+					needs_review: number;
+					pending: number;
+					failed: number;
+				}>;
+			};
 			list_gemini_ocr_candidates: {
 				Args: Record<string, never>;
 				Returns: Array<{

@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import type { Snippet } from 'svelte';
 	import DataProcessingNotice from './DataProcessingNotice.svelte';
+	import ImportQueueTray from './ImportQueueTray.svelte';
 	import MobileNavigation from './MobileNavigation.svelte';
 	import NavigationIcon from './NavigationIcon.svelte';
 	import TopSearch from './TopSearch.svelte';
@@ -85,6 +86,7 @@
 	<div class="workspace">
 		<header class="topbar">
 			<TopSearch initialValue={searchQuery} onSearch={search} />
+			<ImportQueueTray />
 			<a class="profile-link" href="/settings/" aria-label="Abrir configurações">A</a>
 		</header>
 

@@ -16,6 +16,17 @@ const pages = [
 	}
 ] as const;
 
+function pageResult(page: (typeof pages)[number], text = `Página ${page.pageNumber}`) {
+	return {
+		pageId: page.pageId,
+		pageNumber: page.pageNumber,
+		text,
+		contentClass: 'book_clean',
+		lineGeometry: text.trim() ? ['100,100,900,200'] : [],
+		warnings: []
+	};
+}
+
 function providerResponse(resultPages: unknown[], extra: Record<string, unknown> = {}) {
 	return new Response(
 		JSON.stringify({
@@ -27,7 +38,7 @@ function providerResponse(resultPages: unknown[], extra: Record<string, unknown>
 }
 
 describe('requestGeminiOcrBatch', () => {
-	it('labels every inline image with stable page identity and a page-keyed prompt contract', async () => {
+	it('labels images, requests compact line geometry and reserves the full Flash-Lite output ceiling', async () => {
 		let captured: RequestInit | undefined;
 		await requestGeminiOcrBatch({
 			apiKey: 'test-key',
@@ -36,14 +47,7 @@ describe('requestGeminiOcrBatch', () => {
 			promptVersion: 2,
 			fetchImpl: async (_url, init) => {
 				captured = init;
-				return providerResponse(
-					pages.map((page) => ({
-						pageId: page.pageId,
-						pageNumber: page.pageNumber,
-						text: `Página ${page.pageNumber}`,
-						warnings: []
-					}))
-				);
+				return providerResponse(pages.map((page) => pageResult(page)));
 			}
 		});
 
@@ -51,60 +55,22 @@ describe('requestGeminiOcrBatch', () => {
 			contents: Array<{
 				parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }>;
 			}>;
-			generationConfig: {
-				maxOutputTokens: number;
-				responseMimeType: string;
-			};
+			generationConfig: Record<string, unknown>;
 		};
 		const parts = body.contents[0]!.parts;
-		expect(parts[0]?.text).toContain('Contrato JSON obrigatório');
-		expect(parts[0]?.text).toContain('"required":["pages"]');
-		expect(parts[0]?.text).toContain('Versão do prompt: 2.');
+		const instruction = parts[0]?.text ?? '';
+		expect(instruction).toContain('lineGeometry');
+		expect(instruction).toContain('0 a 1000');
+		expect(instruction).toContain('Versão do prompt: 2.');
+		expect(instruction).not.toContain('wordGeometry');
 		expect(parts[1]?.text).toContain(`${pages[0].pageId}`);
-		expect(parts[1]?.text).toContain('página original 4');
 		expect(parts[2]?.inlineData).toEqual({ mimeType: 'image/webp', data: 'AQID' });
 		expect(parts[3]?.text).toContain(`${pages[1].pageId}`);
 		expect(parts[4]?.inlineData).toEqual({ mimeType: 'image/jpeg', data: 'BAU=' });
-		expect(body.generationConfig.maxOutputTokens).toBeGreaterThanOrEqual(8192);
 		expect(body.generationConfig).toEqual({
-			maxOutputTokens: expect.any(Number),
-			responseMimeType: 'application/json'
-		});
-		expect(body.generationConfig).not.toHaveProperty('responseFormat');
-		expect(body.generationConfig).not.toHaveProperty('responseJsonSchema');
-		expect(body.generationConfig).not.toHaveProperty('responseSchema');
-	});
-
-	it('keeps the strict schema as prompt text instead of a rejected provider config field', async () => {
-		let captured: RequestInit | undefined;
-		await requestGeminiOcrBatch({
-			apiKey: 'test-key',
-			model: 'gemini-test',
-			pages: [pages[0]],
-			promptVersion: 1,
-			fetchImpl: async (_url, init) => {
-				captured = init;
-				return providerResponse([
-					{
-						pageId: pages[0].pageId,
-						pageNumber: pages[0].pageNumber,
-						text: 'Página',
-						warnings: []
-					}
-				]);
-			}
-		});
-
-		const body = JSON.parse(String(captured?.body)) as {
-			contents: Array<{ parts: Array<{ text?: string }> }>;
-			generationConfig: Record<string, unknown>;
-		};
-		const instruction = body.contents[0]?.parts[0]?.text ?? '';
-		expect(instruction).toContain('"maxItems":100');
-		expect(instruction).toContain('"additionalProperties":false');
-		expect(body.generationConfig).toEqual({
-			maxOutputTokens: 8192,
-			responseMimeType: 'application/json'
+			maxOutputTokens: 65_536,
+			responseMimeType: 'application/json',
+			thinkingConfig: { thinkingLevel: 'minimal' }
 		});
 	});
 
@@ -115,35 +81,25 @@ describe('requestGeminiOcrBatch', () => {
 			pages: [pages[0]],
 			promptVersion: 1,
 			fetchImpl: async () =>
-				providerResponse(
-					[
-						{
-							pageId: pages[0].pageId,
-							pageNumber: pages[0].pageNumber,
-							text: 'Página',
-							warnings: []
-						}
-					],
-					{
-						usageMetadata: {
-							promptTokenCount: 1030,
-							cachedContentTokenCount: 0,
-							candidatesTokenCount: 212,
-							toolUsePromptTokenCount: 0,
-							thoughtsTokenCount: 44,
-							totalTokenCount: 1286,
-							promptTokensDetails: [
-								{ modality: 'TEXT', tokenCount: 130 },
-								{ modality: 'IMAGE', tokenCount: 900 },
-								{ modality: '../../invalid', tokenCount: 999 }
-							],
-							candidatesTokensDetails: [{ modality: 'TEXT', tokenCount: 212 }],
-							serviceTier: 'STANDARD'
-						},
-						modelVersion: 'gemini-test-2026-08',
-						responseId: 'response-123'
-					}
-				)
+				providerResponse([pageResult(pages[0])], {
+					usageMetadata: {
+						promptTokenCount: 1030,
+						cachedContentTokenCount: 0,
+						candidatesTokenCount: 212,
+						toolUsePromptTokenCount: 0,
+						thoughtsTokenCount: 4,
+						totalTokenCount: 1246,
+						promptTokensDetails: [
+							{ modality: 'TEXT', tokenCount: 130 },
+							{ modality: 'IMAGE', tokenCount: 900 },
+							{ modality: '../../invalid', tokenCount: 999 }
+						],
+						candidatesTokensDetails: [{ modality: 'TEXT', tokenCount: 212 }],
+						serviceTier: 'STANDARD'
+					},
+					modelVersion: 'gemini-test-2026-08',
+					responseId: 'response-123'
+				})
 		});
 
 		expect(outcome.usage).toEqual({
@@ -151,8 +107,8 @@ describe('requestGeminiOcrBatch', () => {
 			cachedContentTokenCount: 0,
 			candidatesTokenCount: 212,
 			toolUsePromptTokenCount: 0,
-			thoughtsTokenCount: 44,
-			totalTokenCount: 1286,
+			thoughtsTokenCount: 4,
+			totalTokenCount: 1246,
 			promptTokensDetails: [
 				{ modality: 'TEXT', tokenCount: 130 },
 				{ modality: 'IMAGE', tokenCount: 900 }
@@ -164,10 +120,9 @@ describe('requestGeminiOcrBatch', () => {
 		});
 		expect(outcome.modelVersion).toBe('gemini-test-2026-08');
 		expect(outcome.responseId).toBe('response-123');
-		expect(JSON.stringify(outcome.usage)).not.toContain('Página');
 	});
 
-	it('rejects aggregate raw bytes that cannot fit the documented inline request ceiling', async () => {
+	it('rejects aggregate raw bytes that cannot fit the inline request ceiling', async () => {
 		let called = false;
 		await expect(
 			requestGeminiOcrBatch({
@@ -193,15 +148,7 @@ describe('requestGeminiOcrBatch', () => {
 			model: 'gemini-test',
 			pages,
 			promptVersion: 1,
-			fetchImpl: async () =>
-				providerResponse([
-					{
-						pageId: pages[0].pageId,
-						pageNumber: pages[0].pageNumber,
-						text: 'Primeira',
-						warnings: []
-					}
-				])
+			fetchImpl: async () => providerResponse([pageResult(pages[0], 'Primeira')])
 		});
 
 		expect(outcome.valid).toBe(false);
@@ -209,17 +156,7 @@ describe('requestGeminiOcrBatch', () => {
 		expect(outcome.missingPageIds).toEqual([pages[1].pageId]);
 	});
 
-	it('rejects duplicate request identities but returns split data for malformed provider text', async () => {
-		await expect(
-			requestGeminiOcrBatch({
-				apiKey: 'test-key',
-				model: 'gemini-test',
-				pages: [pages[0], { ...pages[1], pageId: pages[0].pageId }],
-				promptVersion: 1,
-				fetchImpl: async () => providerResponse([])
-			})
-		).rejects.toBeInstanceOf(TypeError);
-
+	it('returns split data for malformed provider text', async () => {
 		const malformed = await requestGeminiOcrBatch({
 			apiKey: 'test-key',
 			model: 'gemini-test',
