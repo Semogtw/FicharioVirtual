@@ -105,13 +105,13 @@ O retorno é agregado:
 
 ```json
 {
-  "state": "complete",
-  "completedPageIds": ["<uuid>"],
-  "reviewPageIds": [],
-  "pendingPageIds": [],
-  "failedPageIds": [],
-  "splitRequiredPageIds": [],
-  "unexpectedResultPageIds": []
+	"state": "complete",
+	"completedPageIds": ["<uuid>"],
+	"reviewPageIds": [],
+	"pendingPageIds": [],
+	"failedPageIds": [],
+	"splitRequiredPageIds": [],
+	"unexpectedResultPageIds": []
 }
 ```
 
