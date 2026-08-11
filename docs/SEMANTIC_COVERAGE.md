@@ -1,6 +1,6 @@
 # Busca e cobertura semântica
 
-Este documento é o contrato operacional da camada semântica do Fichário Virtual antes do primeiro deploy. A semântica melhora recuperação e cobertura, mas **não é requisito para o produto funcionar**: busca textual/fuzzy permanece como fallback completo quando a ativação semântica, cota, índice ou Gemini estiverem indisponíveis.
+Este documento é o contrato operacional da camada semântica do Fichário Virtual antes do primeiro deploy. A semântica melhora recuperação e cobertura, mas **não é requisito para o produto funcionar**: busca textual/fuzzy permanece como fallback completo quando cota, índice ou Gemini estiverem indisponíveis.
 
 ## Contrato de primeira produção
 
@@ -13,8 +13,7 @@ Como ainda não houve deploy, existe um único contrato canônico, sem compatibi
 - índice ANN: HNSW com `m = 16`, `ef_construction = 64` e `hnsw.ef_search = 80` nas consultas;
 - similaridade mínima da busca global: `0.46`;
 - similaridade mínima da cobertura: `0.50`;
-- fusão lexical + vetorial: Reciprocal Rank Fusion (RRF), sem somar diretamente rank FTS e cosine;
-- marcador interno de compatibilidade da ativação semântica: versão `1`.
+- fusão lexical + vetorial: Reciprocal Rank Fusion (RRF), sem somar diretamente rank FTS e cosine.
 
 Os valores compartilhados ficam em `supabase/functions/_shared/semantic-config.ts`. Trocar modelo ou dimensionalidade exige migração e reindexação deliberadas; não existe override de `SEMANTIC_EMBEDDING_MODEL` em runtime.
 
@@ -178,28 +177,28 @@ A tabela é privada. `semantic_retrieval_stats` é um RPC `SECURITY DEFINER` com
 
 ## Banco e migrações
 
-Migrações relevantes:
+Migrações relevantes para a evolução histórica e para o schema resultante:
 
 - `202608101410_semantic_coverage.sql` — chunks e RPCs base;
-- `202608101411_semantic_coverage_consent.sql`;
+- `202608101411_semantic_coverage_consent.sql` — etapa histórica pré-lançamento;
 - `202608101412_semantic_coverage_hardening.sql`;
-- `202608101413_semantic_coverage_consent_hardening.sql`;
+- `202608101413_semantic_coverage_consent_hardening.sql` — etapa histórica pré-lançamento;
 - `202608101414_semantic_coverage_vector_index.sql` — HNSW;
 - `202608101444_semantic_provider_telemetry.sql`;
 - `202608102000_semantic_production_ready.sql` — cache, telemetria de recuperação, limpeza canônica e `ef_search`;
-- `202608102001_semantic_index_retry_hardening.sql` — quarentena/backoff e fronteira segura dos agregados.
+- `202608102001_semantic_index_retry_hardening.sql` — quarentena/backoff e fronteira segura dos agregados;
+- `202608111345_remove_prelaunch_compatibility.sql` — remove do schema final os RPCs/colunas de consentimento e outras superfícies nunca usadas em produção.
 
-Tabelas operacionais privadas não concedem leitura direta a `authenticated`.
+As migrations antigas permanecem no histórico para permitir reconstruir o banco em ordem; elas não definem o contrato público final. Tabelas operacionais privadas não concedem leitura direta a `authenticated`.
 
-## Ativação privada e fallback
+## Execução privada e fallback
 
-No uso privado do Fichário, OCR e semântica são ativados automaticamente somente quando a operação precisa deles. A interface não exige confirmação recorrente por arquivo, pesquisa ou análise. Os nomes históricos de RPCs, colunas e migrations que contêm `consent` permanecem como marcadores internos de compatibilidade do backend; eles não representam um checkbox manual no fluxo atual.
+No uso privado do Fichário, OCR e semântica são executados diretamente quando uma funcionalidade precisa deles. **Não existe marcador de consentimento ou ativação semântica no contrato de lançamento, nem RPC/coluna de compatibilidade que o frontend precise gravar antes da chamada.**
 
-A cobertura tenta registrar esse marcador interno antes da primeira execução semântica. Se a ativação automática não puder ser concluída, nenhum trecho precisa ser enviado ao Gemini para aquela tentativa e o modo textual/fuzzy continua disponível. OCR só é acionado para imagens ou páginas visuais que realmente precisem de leitura automática.
+`semantic-search`, `semantic-coverage` e `semantic-index` fazem autenticação/allowlist e seguem para a operação semântica. Se a camada semântica não puder executar com segurança, o fluxo degrada para o mecanismo textual/fuzzy aplicável. OCR só é acionado para imagens ou páginas visuais que realmente precisem de leitura automática.
 
 Fallbacks esperados:
 
-- ativação semântica indisponível → lexical;
 - sem chave/configuração → lexical;
 - quota/rate limit → lexical;
 - Gemini indisponível → lexical;
