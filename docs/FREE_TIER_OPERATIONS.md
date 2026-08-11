@@ -1,303 +1,141 @@
 # Operação 100% gratuita
 
-**Última verificação externa registrada:** 6 de agosto de 2026  
-**Implementação OCR atualizada:** 6 de agosto de 2026
+Este documento registra os guardrails usados para manter o Fichário sem cobrança automática. Limites externos mudam; o runtime deve tratar a resposta real do provedor como autoridade e preservar o trabalho quando uma quota fica indisponível.
 
-Este documento define as regras para manter o Fichário Virtual em R$ 0. Franquias externas podem mudar; a aplicação deve falhar de forma segura quando um serviço deixa de aceitar uso e nunca migrar automaticamente para cobrança.
+## Política
 
-## 1. Política obrigatória
+- não habilitar billing para aumentar quota de OCR;
+- não trocar automaticamente para API ou tier pago;
+- manter originais permanentes no Google Drive;
+- usar Supabase para Auth, PostgreSQL, RLS, fila, telemetria e derivados temporários;
+- hospedar no Cloudflare Pages somente frontend/artefatos públicos;
+- preservar páginas concluídas e pendentes diante de rate limit, quota, timeout ou interrupção;
+- não impor uma franquia diária artificial abaixo da quota do provedor;
+- limitar RPM no backend distribuído para evitar desperdiçar requests com `429` evitável.
 
-1. Não vincular faturamento ao projeto da Gemini Developer API.
-2. Manter Supabase no plano Free.
-3. Manter Cloudflare Pages no plano Free.
-4. Não ativar Cloudflare R2 por padrão.
-5. Não iniciar teste gratuito de plano pago.
-6. Não cadastrar cartão apenas para aumentar limites.
-7. Não implementar fallback automático para API paga.
-8. Preservar arquivo, páginas concluídas e estado quando uma quota real termina.
-9. Não impor franquia diária artificial de OCR.
-10. Tratar contadores locais apenas como telemetria.
-11. Não enviar conteúdo privado para Cloudflare Pages ou host público de modelos.
-12. Não obrigar tablet ou celular a baixar modelos destinados ao computador.
-13. Permitir que trabalhos aguardem serviço externo ou computador sem perda.
-14. Revisar franquias e billing antes de cada implantação relevante.
+## Gemini OCR
 
-## 2. Autoridades de armazenamento e processamento
-
-### Google Drive
-
-- armazena os originais permanentes;
-- usa somente `drive.file` no MVP;
-- arquivos são criados ou escolhidos conscientemente;
-- falta de espaço pausa upload e preserva fila;
-- o Fichário não compra Google One nem migra automaticamente para storage pago.
-
-### Supabase
-
-- Auth, PostgreSQL, RLS, filas, resultados, busca e sincronização;
-- Storage privado somente para derivados temporários, fallback e migração;
-- Edge Functions orquestram autenticação, validação, rede e banco;
-- OCR pesado não roda localmente dentro da Edge Function;
-- indisponibilidade ou projeto pausado não apagam trabalho pendente.
-
-### Cloudflare Pages
-
-- hospeda somente frontend estático e artefatos públicos;
-- não recebe documentos, OCR, tokens, sessões ou metadados privados;
-- um projeto separado pode distribuir partes públicas de modelos;
-- R2 permanece desativado enquanto o caminho Pages atender ao volume.
-
-### Computador confiável
-
-- rota futura de inferência local sem custo de API;
-- conexão HTTPS somente de saída;
-- nenhuma porta pública;
-- CPU como fallback obrigatório;
-- cache e spool temporários;
-- sem service-role, chave Gemini ou refresh token do Drive.
-
-O worker desktop continua aprovado em arquitetura, mas não faz parte da implementação de lotes Gemini concluída nesta etapa.
-
-## 3. Gemini Developer API
-
-Referências oficiais operacionais permanecem registradas em `docs/DEPLOYMENT.md` e `docs/OCR_STAGING.md`.
-
-Configuração obrigatória:
+Configuração esperada:
 
 ```text
 APP_ORIGIN
 GEMINI_API_KEY
-OCR_MODEL_PRIMARY
-OCR_PROMPT_VERSION
-```
-
-Controles técnicos opcionais:
-
-```text
-OCR_BATCH_MAX_PAGES=40
+OCR_MODEL_PRIMARY=gemini-3.1-flash-lite
+OCR_MODEL_FALLBACK=gemini-3.5-flash-lite
+OCR_PROMPT_VERSION=2
+OCR_MODEL_PRIMARY_RPM=12
+OCR_MODEL_FALLBACK_RPM=12
+OCR_PROVIDER_MAX_QUEUE_WAIT_MS=20000
+OCR_BATCH_MAX_PAGES=28
 OCR_BATCH_MAX_BYTES=12582912
 OCR_REQUEST_TIMEOUT_MS=120000
 ```
 
-Esses valores controlam páginas por chamada, memória e duração. Eles não representam franquia diária.
+O 3.1 Flash-Lite é o caminho principal. O 3.5 Flash-Lite é reserva de capacidade e só entra quando a chamada primária chega ao provedor e recebe limitação compatível com fallback. Fila local/RPM interno não deve consumir o fallback.
 
-### Política de quota
+O limiter é global no Supabase, por modelo. O alvo de 12 RPM mantém margem abaixo do limite nominal observado da conta e impede que abas/instâncias independentes multipliquem a concorrência.
 
-A quota real do Gemini é a única autoridade para capacidade do provedor.
+## Economia de requests
 
-O Fichário pode registrar:
+Antes de chamar Gemini:
 
-- páginas;
-- lotes;
-- chamadas;
-- tentativas;
-- erros temporários;
-- bloqueios reais de quota;
-- média de páginas por chamada.
+- PDF com texto nativo usa a extração local;
+- PDF misto envia somente páginas realmente visuais;
+- páginas renderizadas são agrupadas;
+- páginas válidas de uma resposta parcial são persistidas imediatamente;
+- somente o subconjunto omitido/duplicado/truncado é dividido e repetido.
 
-Esses contadores não podem impedir uma chamada que ainda seria aceita.
+O planner atual limita cada lote por quatro dimensões:
 
-Estados relevantes:
+```text
+páginas normais: até 28
+lote com página densa: até 14
+imagens derivadas: até 12 MiB
+saída estimada: até 48.000 tokens
+```
 
-- `retryable`: falha curta, timeout ou rate limit temporário;
+A estimativa inicial reserva aproximadamente 900 tokens para página esparsa, 1.700 para normal e 3.000 para densa. O teto de 48 mil é deliberadamente inferior aos 65.536 tokens máximos de saída usados na chamada para absorver erro de classificação e páginas excepcionalmente densas.
+
+Exemplo: 45 páginas normais pequenas são planejadas como `28 + 17`, isto é, duas chamadas em vez de 45. Um documento pode gerar lotes menores por bytes ou densidade.
+
+## Geometria espacial sem desperdiçar tokens
+
+O Gemini não devolve mais uma string `coordenadas|palavra` para cada termo. Em lote ele devolve apenas uma caixa compacta por linha não vazia, em `0..1000`, sem repetir o texto da linha.
+
+O backend usa a própria transcrição para derivar localmente caixas por palavra em `0..10000`, que continuam atendendo ao overlay e ao fuzzy search. Isso remove a maior redundância do payload de saída.
+
+Se a geometria estiver malformada mas a transcrição estiver íntegra, o texto é aceito e a geometria é descartada. Não se gasta uma nova chamada apenas para recuperar um overlay.
+
+## Tokens e pensamento
+
+As chamadas batch reservam até 65.536 tokens de saída e usam `thinkingLevel=minimal`. OCR literal não precisa do orçamento de raciocínio de tarefas analíticas complexas; a prioridade aqui é fidelidade, throughput e espaço para a transcrição.
+
+A telemetria registra, quando fornecido pelo Gemini:
+
+- tokens de entrada;
+- tokens de saída;
+- tokens de pensamento;
+- total de tokens;
+- páginas e bytes por chamada;
+- modelo efetivamente usado;
+- latência, status e fallback;
+- classe de conteúdo e avisos por página.
+
+Ela nunca deve persistir prompt, texto OCR, bytes de imagem, chave ou corpo bruto de erro do provedor.
+
+## Retomada e páginas grandes
+
+O original nunca é recomprimido. Somente derivados temporários podem receber uma segunda renderização conservadora quando excedem o limite técnico.
+
+Quando o tamanho real de uma página não está disponível durante retomada, o planner usa uma estimativa conservadora de 1 MiB e trata a página normal como densa. Isso evita montar um lote enorme a partir do antigo sentinela de um byte.
+
+Se os blobs reais excederem o limite agregado no backend, o maior prefixo seguro é processado e o restante volta como `splitRequiredPageIds`. Páginas já concluídas não são reenviadas.
+
+## Estados operacionais
+
+- `retryable`: falha temporária, timeout ou rate limit recuperável;
 - `blocked_quota`: quota real indisponível;
-- `waiting_desktop`: trabalho aguardando computador, quando essa rota existir;
-- `needs_review`: resultado incerto;
-- `failed`: erro permanente de arquivo, segurança ou configuração.
+- `needs_review`: transcrição que exige conferência;
+- `failed`: erro permanente de arquivo/configuração/segurança;
+- pendente: trabalho ainda não executado ou devolvido à fila.
 
 Nenhum estado ativa billing.
 
-## 4. OCR por lotes implementado
+## Storage e privacidade
 
-A implementação ativa inclui:
+### Google Drive
 
-- assinatura de claim sem argumento diário local;
-- remoção da assinatura antiga por migration;
-- manifestos em `ocr_batches`;
-- vínculo ordenado de páginas em `ocr_jobs`;
-- uma chamada Gemini para várias páginas;
-- resultado persistido por página;
-- telemetria separada de páginas, lotes, chamadas e tentativas;
-- RLS e escrita de manifestos apenas por RPC;
-- transições terminais idempotentes;
-- rate limit temporário separado de quota diária real.
-
-O segredo diário antigo não é lido pelo código atual e deve ser removido do painel depois do rollout:
-
-```bash
-supabase secrets unset OCR_DAILY_HARD_LIMIT
-```
-
-A ausência de teto interno está implementada, mas só recebe `PASS` operacional depois de migrations, CI e staging no mesmo SHA.
-
-## 5. Economia de chamadas
-
-- PDF com texto nativo não chama Gemini.
-- PDF misto envia somente páginas necessárias.
-- Classificação e transcrição preliminar não exigem chamadas separadas.
-- PDF visual usa páginas renderizadas em lotes adaptativos.
-- Lotes normais começam em até 40 páginas.
-- Conteúdo denso começa em até 20 páginas.
-- Resultado continua persistido por página.
-- Páginas válidas não são repetidas quando outra página falha.
-
-O número do lote é ajustável e não é quota.
-
-## 6. PDFs grandes
-
-Na verificação externa registrada em 6 de agosto de 2026, a documentação da Gemini indicava limite de 50 MB ou 1.000 páginas por PDF enviado. Esse é um limite do artefato de uma chamada, não do documento lógico armazenado no Drive.
-
-Regras implementadas:
-
-- teto artificial de 20 MB removido da importação local;
-- original permanece único e intacto no Drive;
-- texto nativo é extraído antes do OCR;
-- somente páginas visuais recebem derivados;
-- bytes acumulados limitam cada chamada;
-- página derivada acima de 12 MiB recebe uma segunda renderização conservadora;
-- omissão, duplicação ou JSON truncado provocam divisão do subconjunto afetado;
-- uma página isolada que continua falhando permanece pendente, sem loop;
-- cancelamento preserva páginas concluídas;
-- retomada usa o mesmo executor adaptativo.
-
-Fragmentar não elimina RPM, TPM, RPD, limite de saída ou tempo de inferência.
-
-### Google Picker
-
-O download direto pelo navegador aceita até 50 MiB e verifica tamanho antes de transferir o arquivo.
-
-Esse valor:
-
-- não é limite do documento lógico;
-- não é limite dos lotes de OCR;
-- não impede upload local retomável ao Drive;
-- ainda exige conclusão do fluxo por referência ou cópia para arquivos externos maiores que 50 MiB.
-
-## 7. Compressão segura
-
-O Fichário não recomprime o original.
-
-“Compressão” nesta implementação significa produzir uma segunda imagem temporária da página quando a primeira ultrapassa o limite técnico seguro. A transformação:
-
-- afeta somente a página derivada;
-- reduz dimensão e qualidade de forma conservadora;
-- preserva o arquivo original e seu hash;
-- não é aplicada a páginas que já cabem;
-- não autoriza degradação agressiva de manuscritos, fórmulas ou cores relevantes.
-
-## 8. Cloudflare Pages e R2
-
-Cloudflare Pages continua sendo o host estático preferencial.
-
-Regras:
-
-- integração Git com `main`;
-- output `build/`;
-- somente variáveis públicas;
-- sem Pages Functions para OCR;
-- sem conteúdo autenticado em cache;
-- sem upload de documentos;
-- previews sem dados reais.
-
-R2 permanece fora do MVP por envolver assinatura e cobrança por uso. Só pode ser ativado por decisão explícita com necessidade, estimativa, risco, alertas e procedimento de desligamento.
-
-## 9. Painel de uso
-
-A tela de Configurações mostra:
-
-- páginas analisadas;
-- lotes;
-- chamadas Gemini;
-- tentativas;
-- tamanho médio de lote;
-- bloqueios reais de quota;
-- pendências, revisão e falhas;
-- trabalhos futuros do computador, quando implementados;
-- data da última revisão operacional.
-
-Não apresentar contador local como “páginas restantes”.
-
-## 10. Variáveis e segredos
-
-### Frontend
-
-```text
-PUBLIC_SUPABASE_URL
-PUBLIC_SUPABASE_PUBLISHABLE_KEY
-PUBLIC_GOOGLE_CLIENT_ID
-PUBLIC_GOOGLE_PICKER_API_KEY
-PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER
-```
+Mantém o original permanente. O app usa `drive.file`; falta de espaço ou indisponibilidade pausa o fluxo sem comprar armazenamento automaticamente.
 
 ### Supabase
 
-```text
-APP_ORIGIN
-GEMINI_API_KEY
-OCR_MODEL_PRIMARY
-OCR_MODEL_QUALITY
-OCR_PROMPT_VERSION
-OCR_BATCH_MAX_PAGES
-OCR_BATCH_MAX_BYTES
-OCR_REQUEST_TIMEOUT_MS
-GOOGLE_CLIENT_ID
-GOOGLE_CLIENT_SECRET
-GOOGLE_DRIVE_REDIRECT_URI
-```
+Mantém metadados, resultados, fila, telemetria e derivados privados temporários. RLS e RPCs controlam as transições. Service-role e `GEMINI_API_KEY` nunca chegam ao frontend.
 
-`OCR_MODEL_QUALITY` continua opcional e não cria fallback automático.
+### Cloudflare Pages
 
-Nunca expor:
+Hospeda somente o frontend estático. Documentos, OCR, sessões e tokens não devem ser enviados ao host público.
+
+## Gates mínimos
+
+Antes de promover mudanças de OCR, no mesmo SHA:
 
 ```text
-SUPABASE_SERVICE_ROLE_KEY
-DRIVE_REFRESH_TOKEN
-GEMINI_API_KEY
-OCR_WORKER_DEVICE_TOKEN
-```
-
-## 11. Gates antes de release
-
-No mesmo SHA:
-
-```bash
-pnpm format:check
-pnpm check
-pnpm lint
-pnpm test:unit
-pnpm check:edge
-pnpm check:offline
-pnpm test:db
-pnpm build
+pnpm verify
+pnpm test:source:offline
+pnpm test:functions:check
+pnpm test:db:local
 pnpm test:e2e
 ```
 
-Também são obrigatórios:
+Além disso, staging precisa provar:
 
-- migrations em Supabase limpo;
-- smoke Gemini real;
-- lote multipágina real;
-- PDF textual com zero chamadas;
-- fixtures acima de 50 MB e 1.000 páginas;
-- hash do original inalterado;
-- cancelamento e retomada;
-- celular e tablet;
-- confirmação de billing desativado.
+- OCR real com imagem sintética;
+- PDF textual com zero chamadas Gemini;
+- lote multipágina com menos chamadas que páginas;
+- limites de página/bytes/output;
+- omissão e truncamento sem perda de páginas;
+- cancelamento e retomada sem repetir páginas concluídas;
+- rate limiter distribuído e fallback 3.1 -> 3.5;
+- ausência de cobrança/fallback pago.
 
-Os procedimentos estão em:
-
-- `docs/DEPLOYMENT.md`;
-- `docs/OCR_STAGING.md`;
-- `docs/checkpoints/2026-08-06-provider-only-ocr-large-pdf-implementation.md`.
-
-## 12. Plano de saída
-
-Se um serviço deixar de atender gratuitamente:
-
-- **Cloudflare Pages:** mover frontend e artefatos públicos para host estático gratuito compatível;
-- **Supabase:** exportar PostgreSQL e temporários;
-- **Gemini:** pausar fila, usar correção manual ou rota desktop explicitamente aprovada;
-- **Google Drive:** exportar originais e metadados sem migração paga automática;
-- **projeto de modelos:** usar host público autorizado ou instalação manual com checksum.
-
-Nenhuma migração é automática e nenhum fallback ativa cobrança.
+Consulte também `docs/OCR_STAGING.md`, `docs/OCR_WORD_GEOMETRY.md` e `docs/DEPLOYMENT.md`.
