@@ -37,7 +37,7 @@ jobs:
         )
       }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     environment: staging-deploy
     env:
       TARGET_ENVIRONMENT: staging
@@ -48,6 +48,8 @@ jobs:
       WRANGLER_SEND_METRICS: 'false'
       WRANGLER_VERSION: '4.120.0'
       WRANGLER_OUTPUT_FILE_PATH: /tmp/wrangler-pages-output.jsonl
+      PLAYWRIGHT_VERSION: '1.62.1'
+      PLAYWRIGHT_BROWSERS_PATH: /tmp/fichario-playwright-browsers
 
     steps:
       - name: Validate immutable deployment inputs
@@ -91,7 +93,7 @@ jobs:
             artifact_root="$artifact_root/fichario-deploy"
           fi
 
-          for required in DEPLOYMENT-MANIFEST.txt SHA256SUMS source/package.json source/pnpm-lock.yaml checks/check-deployed-site.mjs checks/check-deployment-artifact.mjs checks/deployment-contract.mjs checks/validate-pages-deploy-output.mjs site/_headers site/200.html site/manifest.webmanifest site/sw.js site/registerSW.js; do
+          for required in DEPLOYMENT-MANIFEST.txt SHA256SUMS source/package.json source/pnpm-lock.yaml checks/check-deployed-site.mjs checks/check-deployed-ui.mjs checks/check-deployment-artifact.mjs checks/deployment-contract.mjs checks/validate-pages-deploy-output.mjs site/_headers site/200.html site/manifest.webmanifest site/sw.js site/registerSW.js; do
             if [[ ! -f "$artifact_root/$required" ]]; then
               echo "deployment artifact is missing $required" >&2
               exit 1
@@ -170,6 +172,30 @@ jobs:
           set -euo pipefail
           node "$ARTIFACT_ROOT/checks/check-deployed-site.mjs" "$DEPLOYMENT_URL"
 
+      - name: Verify rendered UI in Chromium
+        shell: bash
+        env:
+          ARTIFACT_ROOT: ${{ steps.artifact.outputs.root }}
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
+          DEPLOYMENT_UI_EVIDENCE_DIR: ${{ github.workspace }}/deployment-ui-evidence
+        run: |
+          set -euo pipefail
+          cd "$ARTIFACT_ROOT"
+          printf '%s\n' '{"private":true,"type":"module"}' > package.json
+          npm install --no-save --package-lock=false --ignore-scripts "playwright@${PLAYWRIGHT_VERSION}"
+          npx playwright install --with-deps chromium
+          node checks/check-deployed-ui.mjs "$DEPLOYMENT_URL"
+
+      - name: Upload rendered UI evidence
+        if: ${{ always() && steps.deploy.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: deployed-ui-${{ env.EXPECTED_SOURCE_COMMIT }}
+          path: deployment-ui-evidence/
+          if-no-files-found: warn
+          compression-level: 6
+          retention-days: 7
+
       - name: Record verified deployment target
         shell: bash
         env:
@@ -188,6 +214,7 @@ jobs:
             if [[ -n "$DEPLOYMENT_ALIAS" ]]; then
               echo "- Alias reported by Wrangler: \`$DEPLOYMENT_ALIAS\`"
             fi
+            echo '- Chromium UI smoke: `PASS` (home rendered + navigation to Biblioteca)'
             echo
-            echo 'Artifact checksum verification and the HTTP/CSP deployment contract both passed for the exact staging deployment URL.'
+            echo 'Artifact checksums, HTTP/CSP contract and a real rendered-browser smoke all passed for the exact staging deployment URL.'
           } >> "$GITHUB_STEP_SUMMARY"
