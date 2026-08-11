@@ -122,13 +122,13 @@ select is(
 );
 
 update public.notebooks
-set parent_notebook_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+set parent_notebook_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbbb'
 where id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
 select is(
   (select count(*) from public.drive_sync_jobs where operation = 'move_folder'),
   1::bigint,
-  'moving a notebook enqueues one folder move'
+ 'moving a notebook enqueues one folder move'
 );
 select results_eq(
   $$
@@ -144,24 +144,40 @@ select results_eq(
 );
 
 select *
-from public.create_drive_image_import(
-  'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-  'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
-  'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
-  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-  'Fotossíntese',
-  'fotossintese.webp',
-  '1DriveDocumentFileId_123456789',
-  '0ABiologyFolderId_123456789',
-  'image/webp',
-  '2026-08-06T12:40:00Z',
-  '1',
-  'd41d8cd98f00b204e9800998ecf8427e',
-  '11111111-1111-4111-8111-111111111111/cccccccc-cccc-4ccc-8ccc-cccccccccccc/thumbnail.jpg',
-  repeat('a', 64),
-  null,
-  1
-);
+from public.create_drive_image_import_v2(
+      'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      'Fotossíntese',
+      'fotossintese.webp',
+      '1DriveDocumentFileId_123456789',
+      '0ABiologyFolderId_123456789',
+      'image/webp',
+      '2026-08-06T12:40:00Z',
+      '1',
+      'd41d8cd98f00b204e9800998ecf8427e',
+      auth.uid()::text || '/' || 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' || '/ocr.webp',
+      '11111111-1111-4111-8111-111111111111/cccccccc-cccc-4ccc-8ccc-cccccccccccc/thumbnail.jpg',
+      repeat('a', 64),
+      repeat('a', 64),
+      'ocr_clean_v1',
+      1,
+      false,
+      1000,
+      0,
+      true,
+      true,
+      false,
+      1600,
+      1200,
+      1600,
+      1200,
+      500000,
+      250000,
+      null,
+      1
+    );
 
 select is(
   (select count(*) from public.drive_sync_jobs where document_id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'),
@@ -170,13 +186,13 @@ select is(
 );
 
 update public.documents
-set notebook_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+set notebook_id = 'bbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbbb'
 where id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 
 select is(
   (select count(*) from public.drive_sync_jobs where operation = 'update_file'),
   1::bigint,
-  'moving a local document enqueues one Drive file update'
+ 'moving a local document enqueues one Drive file update'
 );
 select results_eq(
   $$
@@ -233,7 +249,7 @@ select is(
 select is(
   (select payload ->> 'targetKind' from public.drive_sync_jobs where operation = 'delete_permanently' and drive_file_id = '1DriveDocumentFileId_123456789'),
   'file',
-  'file deletion job identifies its physical target kind'
+ 'file deletion job identifies its physical target kind'
 );
 
 insert into public.notebooks (
@@ -245,7 +261,7 @@ insert into public.notebooks (
   drive_version,
   drive_sync_status
 ) values (
-  'ffffffff-ffff-4fff-8fff-ffffffffffff',
+  'ffffffff-ffff-4fff-8fff-fffffffffff',
   '11111111-1111-4111-8111-111111111111',
   'Descartável',
   '0ADeleteFolderId_123456789',

@@ -42,24 +42,40 @@ insert into public.notebooks (
 );
 
 select *
-from public.create_drive_image_import(
-  'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-  'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-  'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
-  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-  'Fotossíntese',
-  'fotossintese.webp',
-  '1OldDriveFileId_123456789',
-  '0ABiologyFolderId_123456789',
-  'image/webp',
-  '2026-08-06T09:00:00Z',
-  '3',
-  'd41d8cd98f00b204e9800998ecf8427e',
-  '11111111-1111-4111-8111-111111111111/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/thumbnail.jpg',
-  repeat('a', 64),
-  null,
-  1
-);
+from public.create_drive_image_import_v2(
+      'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      'Fotossíntese',
+      'fotossintese.webp',
+      '1OldDriveFileId_123456789',
+      '0ABiologyFolderId_123456789',
+      'image/webp',
+      '2026-08-06T09:00:00Z',
+      '3',
+      'd41d8cd98f00b204e9800998ecf8427e',
+      auth.uid()::text || '/' || 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' || '/ocr.webp',
+      '11111111-1111-4111-8111-111111111111/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/thumbnail.jpg',
+      repeat('a', 64),
+      repeat('a', 64),
+      'ocr_clean_v1',
+      1,
+      false,
+      1000,
+      0,
+      true,
+      true,
+      false,
+      1600,
+      1200,
+      1600,
+      1200,
+      500000,
+      250000,
+      null,
+      1
+    );
 
 select is(
   public.mark_drive_file_missing('1OldDriveFileId_123456789'),
@@ -131,7 +147,7 @@ select results_eq(
       physical_state::text,
       drive_sync_status::text
     from public.documents
-    where id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+    where id = 'bbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbbb'
   $$,
   $$
     values (
@@ -148,7 +164,7 @@ select results_eq(
 );
 
 select is(
-  (select count(*) from public.pages where document_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'),
+  (select count(*) from public.pages where document_id = 'bbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbbb'),
   1::bigint,
   'existing pages survive reconnection'
 );

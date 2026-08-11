@@ -41,15 +41,14 @@ select public.stage_drive_pdf_reference(
   '2026-08-05T12:00:00Z'
 );
 
--- The browser-facing direct finalizer is revoked after the renewable lease
--- migration. Run these payload-hardening assertions as the database owner so
--- they continue validating the hardened implementation itself, while the
--- descriptor privilege gate separately proves authenticated cannot bypass it.
+-- The launch contract exposes only the renewable lease finalizer. Run payload-hardening
+-- assertions against the owner-only private publication implementation; authenticated
+-- callers cannot invoke this helper directly.
 reset role;
 
 select throws_ok(
   $$
-    select public.finalize_drive_pdf_reference_import(
+    select private.finalize_drive_pdf_reference_import(
       'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
       jsonb_build_array(
         jsonb_build_object(
@@ -72,7 +71,7 @@ select throws_ok(
 
 select throws_ok(
   $$
-    select public.finalize_drive_pdf_reference_import(
+    select private.finalize_drive_pdf_reference_import(
       'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
       jsonb_build_array(
         jsonb_build_object(
@@ -94,7 +93,7 @@ select throws_ok(
 
 select throws_ok(
   $$
-    select public.finalize_drive_pdf_reference_import(
+    select private.finalize_drive_pdf_reference_import(
       'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
       jsonb_build_array(
         jsonb_build_object(
@@ -124,7 +123,7 @@ select throws_ok(
 
 select throws_ok(
   $$
-    select public.finalize_drive_pdf_reference_import(
+    select private.finalize_drive_pdf_reference_import(
       'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
       jsonb_build_array(
         jsonb_build_object(
