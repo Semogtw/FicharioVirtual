@@ -109,13 +109,12 @@ export function parseDesktopWorkerRequest(value: unknown): DesktopWorkerRequest 
 		'contentType',
 		'warnings',
 		'needsReview',
-		'timingMs'
+		'timingMs',
+		'wordGeometry'
 	] as const;
-	const hasLegacyCompleteShape = hasExactKeys(record, completeKeys);
-	const hasGeometryCompleteShape = hasExactKeys(record, [...completeKeys, 'wordGeometry']);
 	if (
 		record.action !== 'complete' ||
-		(!hasLegacyCompleteShape && !hasGeometryCompleteShape) ||
+		!hasExactKeys(record, completeKeys) ||
 		typeof record.jobId !== 'string' ||
 		!UUID.test(record.jobId) ||
 		typeof record.leaseId !== 'string' ||
@@ -141,23 +140,16 @@ export function parseDesktopWorkerRequest(value: unknown): DesktopWorkerRequest 
 		typeof record.timingMs !== 'number' ||
 		!Number.isInteger(record.timingMs) ||
 		record.timingMs < 0 ||
-		record.timingMs > MAX_TIMING_MS
+		record.timingMs > MAX_TIMING_MS ||
+		!Array.isArray(record.wordGeometry)
 	) {
 		return null;
 	}
 
 	const warnings = parseWarnings(record.warnings);
 	if (warnings === null) return null;
-	const wordGeometry = hasGeometryCompleteShape
-		? parseStoredWordGeometry(record.wordGeometry)
-		: Object.freeze([]);
-	if (
-		hasGeometryCompleteShape &&
-		(!Array.isArray(record.wordGeometry) ||
-			(record.wordGeometry.length > 0 && wordGeometry.length === 0))
-	) {
-		return null;
-	}
+	const wordGeometry = parseStoredWordGeometry(record.wordGeometry);
+	if (record.wordGeometry.length > 0 && wordGeometry.length === 0) return null;
 
 	return Object.freeze({
 		action: 'complete',
