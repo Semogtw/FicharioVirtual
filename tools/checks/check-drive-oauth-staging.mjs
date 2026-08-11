@@ -136,7 +136,8 @@ async function main() {
 	try {
 		const { data, error } = await client.auth.signInWithPassword({ email, password });
 		if (error) throw new Error(`Drive OAuth staging sign-in failed: ${error.message}`);
-		if (!data.session?.access_token) throw new Error('Drive OAuth staging sign-in returned no session');
+		if (!data.session?.access_token)
+			throw new Error('Drive OAuth staging sign-in returned no session');
 		signedIn = true;
 
 		const response = await fetch(functionUrl, {

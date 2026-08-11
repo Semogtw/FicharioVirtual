@@ -49,9 +49,7 @@ describe('Supabase staging migration deploy workflow', () => {
 		expect(source).toContain(
 			'"GOOGLE_DRIVE_REDIRECT_URI=https://$STAGING_SUPABASE_PROJECT_REF.supabase.co/functions/v1/drive-oauth-callback"'
 		);
-		expect(source).toContain(
-			'"GOOGLE_DRIVE_SCOPE=https://www.googleapis.com/auth/drive.file"'
-		);
+		expect(source).toContain('"GOOGLE_DRIVE_SCOPE=https://www.googleapis.com/auth/drive.file"');
 		expect(source).toContain('"GOOGLE_DRIVE_ROOT_FOLDER_NAME=Fichário Digital"');
 	});
 
