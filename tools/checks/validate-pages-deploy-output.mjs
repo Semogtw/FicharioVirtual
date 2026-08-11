@@ -2,6 +2,8 @@ import { appendFileSync, readFileSync } from 'node:fs';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
+const STAGING_ALIAS = 'https://staging.fichario-virtual.pages.dev';
+
 /**
  * @typedef {Readonly<{
  *   project: 'fichario-virtual';
@@ -91,16 +93,9 @@ export function validatePagesDeployOutput(source, expected) {
 		fail('deployment URL is outside the expected Pages project');
 	}
 
-	let alias = '';
-	if (deployment.alias !== undefined && deployment.alias !== null && deployment.alias !== '') {
-		alias = cleanHttpsOrigin(deployment.alias, 'deployment alias');
-		const aliasHostname = new URL(alias).hostname;
-		if (
-			aliasHostname !== 'fichario-virtual.pages.dev' &&
-			!aliasHostname.endsWith('.fichario-virtual.pages.dev')
-		) {
-			fail('deployment alias is outside the expected Pages project');
-		}
+	const alias = cleanHttpsOrigin(deployment.alias, 'deployment alias');
+	if (alias !== STAGING_ALIAS) {
+		fail(`deployment alias must be ${STAGING_ALIAS}`);
 	}
 
 	return Object.freeze({
@@ -130,7 +125,7 @@ function runCli() {
 		`url=${result.url}\ndeployment_id=${result.deploymentId}\nalias=${result.alias}\n`
 	);
 	console.log(
-		`Cloudflare Pages deployment identity: PASS (${result.deploymentId}, ${result.url}, ${commitHash})`
+		`Cloudflare Pages deployment identity: PASS (${result.deploymentId}, ${result.url}, ${result.alias}, ${commitHash})`
 	);
 }
 
