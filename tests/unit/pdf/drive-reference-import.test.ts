@@ -118,25 +118,22 @@ describe('importStagedDrivePdfReference', () => {
 		});
 	});
 
-	it('keeps the staged reference resumable when OCR consent is missing', async () => {
+	it('processes required OCR without a per-import confirmation', async () => {
 		const deps = dependencies();
 
-		await expect(
-			importStagedDrivePdfReference({
-				staged,
-				consentGranted: false,
-				client: {} as never,
-				dependencies: deps
-			})
-		).rejects.toMatchObject({ name: 'PdfConsentRequiredError' });
+		const result = await importStagedDrivePdfReference({
+			staged,
+			client: {} as never,
+			dependencies: deps
+		});
 
 		expect(deps.verifyIdentity).toHaveBeenCalledOnce();
-		expect(deps.recordOcrConsent).not.toHaveBeenCalled();
-		expect(deps.renderPage).not.toHaveBeenCalled();
-		expect(deps.upload).not.toHaveBeenCalled();
-		expect(deps.finalize).not.toHaveBeenCalled();
-		expect(deps.remove).not.toHaveBeenCalled();
+		expect(deps.recordOcrConsent).toHaveBeenCalledOnce();
+		expect(deps.renderPage).toHaveBeenCalledOnce();
+		expect(deps.upload).toHaveBeenCalledOnce();
+		expect(deps.finalize).toHaveBeenCalledOnce();
 		expect(deps.destroy).toHaveBeenCalledOnce();
+		expect(result.ocrCompleted).toBe(1);
 	});
 
 	it('removes uploaded derivatives when finalization fails but preserves the Drive reference', async () => {
