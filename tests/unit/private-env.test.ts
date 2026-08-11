@@ -61,9 +61,9 @@ describe('private OCR environment', () => {
 		expect(() => parsePrivateEnv({ ...required, OCR_MODEL_PRIMARY_RPM: '61' })).toThrow(
 			'Invalid private environment'
 		);
-		expect(() =>
-			parsePrivateEnv({ ...required, OCR_PROVIDER_MAX_QUEUE_WAIT_MS: '60001' })
-		).toThrow('Invalid private environment');
+		expect(() => parsePrivateEnv({ ...required, OCR_PROVIDER_MAX_QUEUE_WAIT_MS: '60001' })).toThrow(
+			'Invalid private environment'
+		);
 		expect(() => parsePrivateEnv({ ...required, OCR_BATCH_MAX_PAGES: '101' })).toThrow(
 			'Invalid private environment'
 		);
