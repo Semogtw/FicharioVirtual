@@ -4,9 +4,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const ERROR_CODE = /^[a-z][a-z0-9_]{1,63}$/;
 const MAX_BATCH_PAGES = 100;
 
-export type OcrRunResult =
-	| { state: 'complete'; needsReview: boolean }
-	| { state: 'retry_later' };
+export type OcrRunResult = { state: 'complete'; needsReview: boolean } | { state: 'retry_later' };
 
 export type OcrBatchRunResult = {
 	state: 'complete' | 'partial';
