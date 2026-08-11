@@ -5,7 +5,7 @@ on:
     branches: [feature/ocr-geometry-output-budget]
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: validate-ocr-optimization
@@ -19,7 +19,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          persist-credentials: false
+          persist-credentials: true
 
       - name: Set up pnpm
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
@@ -35,6 +35,17 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Normalize formatting
+        run: |
+          pnpm exec prettier --write .
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git commit -m "style: normalize formatting before OCR validation"
+            git push
+          fi
 
       - name: Run frontend verification
         run: pnpm verify
