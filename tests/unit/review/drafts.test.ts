@@ -10,9 +10,9 @@ const otherUserId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const pageId = '11111111-1111-4111-8111-111111111111';
 
 describe('correction drafts', () => {
-	it('uses a user- and page-scoped key without document text', () => {
+	it('uses a user- and page-scoped launch key without document text', () => {
 		expect(correctionDraftKey(userId, pageId)).toBe(
-			`fichario:correction-draft:v2:${userId}:${pageId}`
+			`fichario:correction-draft:v1:${userId}:${pageId}`
 		);
 	});
 
@@ -31,7 +31,7 @@ describe('correction drafts', () => {
 		expect(parseCorrectionDraft(serialized, otherUserId, pageId)).toBeNull();
 	});
 
-	it('rejects another page, legacy records, malformed JSON and oversized text', () => {
+	it('rejects another page, malformed records and oversized text', () => {
 		expect(parseCorrectionDraft('{', userId, pageId)).toBeNull();
 		expect(
 			parseCorrectionDraft(
@@ -49,7 +49,7 @@ describe('correction drafts', () => {
 				JSON.stringify({
 					version: 1,
 					pageId,
-					text: 'texto legado',
+					text: 'sem proprietário',
 					updatedAt: '2026-08-02T03:00:00.000Z'
 				}),
 				userId,
@@ -73,7 +73,7 @@ describe('correction drafts', () => {
 		expect(
 			parseCorrectionDraft(
 				JSON.stringify({
-					version: 2,
+					version: 1,
 					userId,
 					pageId,
 					text: 'texto',
