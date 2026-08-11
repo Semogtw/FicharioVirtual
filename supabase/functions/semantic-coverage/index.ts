@@ -7,7 +7,6 @@ import {
 	type CoverageVerificationVerdict
 } from '../_shared/gemini-coverage-verifier.ts';
 import {
-	SEMANTIC_CONSENT_VERSION,
 	SEMANTIC_COVERAGE_MIN_SIMILARITY,
 	SEMANTIC_EMBEDDING_MODEL,
 	SEMANTIC_INDEX_BATCH_PAGES
@@ -411,33 +410,23 @@ Deno.serve(async (request) => {
 	const startedAt = performance.now();
 
 	try {
-		const { data: consent, error: consentError } = await supabase.rpc(
-			'has_coverage_semantic_consent',
-			{
-				consent_version: SEMANTIC_CONSENT_VERSION
-			}
-		);
 		const apiKey = Deno.env.get('GEMINI_API_KEY');
 		const verifyModel =
 			Deno.env.get('COVERAGE_VERIFY_MODEL') ?? Deno.env.get('OCR_MODEL_PRIMARY') ?? null;
 
-		if (consentError || consent !== true || !apiKey) {
+		if (!apiKey) {
 			const topics = await lexicalTopics(supabase, parsed);
-			const reason =
-				consentError || (consent === true && !apiKey)
-					? 'semantic_not_configured'
-					: 'consent_required';
 			await recordSemanticRetrievalEvent(supabase, {
 				surface: 'topic_coverage',
 				mode: 'fallback',
 				model: null,
 				resultCount: topics.reduce((sum, topic) => sum + topic.candidates.length, 0),
 				durationMs: performance.now() - startedAt,
-				fallbackReason: reason
+				fallbackReason: 'semantic_not_configured'
 			});
 			return respond(200, {
 				mode: 'lexical',
-				reason,
+				reason: 'semantic_not_configured',
 				embeddingModel: null,
 				index: null,
 				verification: 'disabled',
