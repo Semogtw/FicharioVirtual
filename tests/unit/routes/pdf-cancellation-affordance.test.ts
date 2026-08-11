@@ -1,15 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const pageSource = readFileSync(
-	new URL('../../../src/routes/import/pdf/+page.svelte', import.meta.url),
-	'utf8'
-);
+const source = readFileSync('src/lib/components/ImportQueueTray.svelte', 'utf8');
 
 describe('PDF cancellation affordance', () => {
-	it('keeps cancellation available while OCR pages are being read', () => {
-		expect(pageSource).toMatch(
-			/\['queued', 'inspecting', 'uploading', 'rendering', 'reading'\]\.includes\(item\.status\)/
+	it('keeps cancellation through publication but does not cancel durable background OCR', () => {
+		expect(source).toContain(
+			": ['queued', 'inspecting', 'uploading', 'rendering', 'publishing'].includes("
 		);
+		expect(source).toContain('cancelPdfImport(entry.item.id);');
+		expect(source).not.toContain("'publishing', 'reading'");
 	});
 });

@@ -12,7 +12,7 @@ function deferred<T>() {
 const pageId = '11111111-1111-4111-8111-111111111111';
 
 describe('OCR request cancellation', () => {
-	it('forwards the AbortSignal and rejects a result that completed after cancellation', async () => {
+	it('forwards the AbortSignal through the batch contract and rejects a late result', async () => {
 		const request = deferred<{
 			data: unknown;
 			error: null | { context?: unknown; message?: string };
@@ -23,25 +23,31 @@ describe('OCR request cancellation', () => {
 
 		const processing = processPageOcr(pageId, client, { signal: controller.signal });
 		expect(invoke).toHaveBeenCalledWith('process-ocr', {
-			body: { pageId },
+			body: { pageIds: [pageId] },
 			signal: controller.signal
 		});
 
 		controller.abort();
 		request.resolve({
-			data: { state: 'complete', needsReview: false, warningCount: 0 },
+			data: {
+				state: 'complete',
+				completedPageIds: [pageId],
+				reviewPageIds: [],
+				pendingPageIds: [],
+				failedPageIds: [],
+				splitRequiredPageIds: [],
+				unexpectedResultPageIds: []
+			},
 			error: null
 		});
-
 		await expect(processing).rejects.toMatchObject({ name: 'AbortError' });
 	});
 
-	it('does not invoke the Edge Function when the request is already cancelled', async () => {
+	it('does not invoke the Edge Function when already cancelled', async () => {
 		const invoke = vi.fn();
 		const client = { functions: { invoke } } as unknown as OcrFunctionClient;
 		const controller = new AbortController();
 		controller.abort();
-
 		await expect(
 			processPageOcr(pageId, client, { signal: controller.signal })
 		).rejects.toMatchObject({ name: 'AbortError' });

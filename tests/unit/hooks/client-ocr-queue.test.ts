@@ -6,10 +6,12 @@ const hook = readFileSync(new URL('src/hooks.client.ts', repositoryRoot), 'utf8'
 const session = readFileSync(new URL('src/lib/stores/session.svelte.ts', repositoryRoot), 'utf8');
 
 describe('client OCR queue lifecycle', () => {
-	it('restores imports, resumes after authorization and pauses after session loss', () => {
-		expect(hook).toContain("import { pauseQueue, resumeQueue } from '$lib/import/job-runner';");
+	it('restores imports and controls the server-backed queue through authorization lifecycle', () => {
 		expect(hook).toContain(
 			"import { createOcrQueueLifecycle } from '$lib/import/job-runner-lifecycle';"
+		);
+		expect(hook).toContain(
+			"import { kickOcrQueueBestEffort } from '$lib/services/ocr-background';"
 		);
 		expect(hook).toContain(
 			"import { restoreImageImports } from '$lib/stores/import-queue.svelte';"
@@ -19,14 +21,14 @@ describe('client OCR queue lifecycle', () => {
 		);
 		expect(hook).toContain('subscribeSessionAuthorization((authorized) => {');
 		expect(hook).toContain(
-			'const ocrQueueLifecycle = createOcrQueueLifecycle(() => void resumeQueue());'
+			'const ocrQueueLifecycle = createOcrQueueLifecycle(() => kickOcrQueueBestEffort());'
 		);
 		expect(hook).toContain('if (authorized) ocrQueueLifecycle.start();');
-		expect(hook).toContain('ocrQueueLifecycle.stop();');
-		expect(hook).toContain('pauseQueue();');
+		expect(hook).toContain('else ocrQueueLifecycle.stop();');
 		expect(hook).toContain('void restoreImageImports(sessionState.user.id);');
 		expect(hook).toContain('void restorePdfImports(sessionState.user.id);');
+		expect(hook).not.toContain('pauseQueue();');
+		expect(hook).not.toContain('resumeQueue();');
 		expect(session).toContain('export function subscribeSessionAuthorization(');
-		expect(session).toContain('authorizationListeners');
 	});
 });

@@ -2,15 +2,18 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const imageUpload = readFileSync(
-	new URL('../../../src/lib/import/upload.ts', import.meta.url),
+	new URL('../../../src/lib/import/drive-upload.ts', import.meta.url),
 	'utf8'
 );
-const pdfUpload = readFileSync(new URL('../../../src/lib/pdf/upload.ts', import.meta.url), 'utf8');
+const pdfUpload = readFileSync(
+	new URL('../../../src/lib/pdf/drive-upload.ts', import.meta.url),
+	'utf8'
+);
 
 describe('duplicate response consumers', () => {
 	it('uses the strict parser for image imports', () => {
-		expect(imageUpload).toContain('parseDuplicateDocumentId(duplicateResult.data)');
-		expect(imageUpload).not.toContain('new DuplicateImageError(duplicate.id)');
+		expect(imageUpload).toContain('parseDuplicateDocumentId(data)');
+		expect(imageUpload).not.toContain('return data?.id ?? null');
 	});
 
 	it('uses the strict parser for PDF imports', () => {

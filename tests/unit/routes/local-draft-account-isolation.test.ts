@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const draftsRoute = readFileSync('src/routes/review/drafts/+page.svelte', 'utf8');
+const draftContract = readFileSync('src/lib/review/drafts.ts', 'utf8');
 const clientHook = readFileSync('src/hooks.client.ts', 'utf8');
 
 describe('local correction draft account isolation', () => {
@@ -11,18 +12,12 @@ describe('local correction draft account isolation', () => {
 		expect(draftsRoute).toContain('drafts = listCorrectionDrafts(userId);');
 		expect(draftsRoute).toContain('discardCorrectionDraft(userId, pageId);');
 		expect(draftsRoute).not.toContain('drafts = listCorrectionDrafts();');
-		expect(draftsRoute).not.toContain('discardCorrectionDraft(pageId);');
 	});
 
-	it('purges legacy unscoped drafts before session-backed application work starts', () => {
-		expect(clientHook).toContain(
-			"import { purgeLegacyCorrectionDrafts } from '$lib/review/draft-index';"
-		);
-		const theme = clientHook.indexOf('initializeTheme();');
-		const purge = clientHook.indexOf('purgeLegacyCorrectionDrafts();');
-		const initializeSession = clientHook.indexOf('void initializeSession();');
-		expect(theme).toBeGreaterThan(-1);
-		expect(purge).toBeGreaterThan(theme);
-		expect(initializeSession).toBeGreaterThan(purge);
+	it('uses only the account-scoped v2 draft contract with no prelaunch purge path', () => {
+		expect(draftContract).toContain("const PREFIX = 'fichario:correction-draft:v2:';");
+		expect(draftContract).toContain('version: 2');
+		expect(draftContract).toContain('userId: ownerUserId');
+		expect(clientHook).not.toContain('purgeLegacyCorrectionDrafts');
 	});
 });
