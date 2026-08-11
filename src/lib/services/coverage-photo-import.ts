@@ -163,14 +163,11 @@ function defaultDependencies(): CoveragePhotoImportDependencies {
 }
 
 function processResultNeedsReview(result: OcrRunResult) {
-	return (result.state === 'complete' || result.state === 'already_complete') && result.needsReview;
+	return result.state === 'complete' && result.needsReview;
 }
 
 function ensureProcessCompleted(result: OcrRunResult) {
-	if (result.state === 'complete' || result.state === 'already_complete') return;
-	if (result.state === 'quota_exhausted') {
-		throw new CoveragePhotoImportError('quota_exhausted');
-	}
+	if (result.state === 'complete') return;
 	throw new CoveragePhotoImportError('ocr_pending');
 }
 
