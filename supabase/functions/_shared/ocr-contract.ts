@@ -169,10 +169,6 @@ export type GeminiFailure = {
 	safeMessage: string;
 };
 
-export type GeminiFailureResponse =
-	| { status: 202; body: { state: 'quota_exhausted' | 'retry_later' } }
-	| { status: number; body: { code: GeminiFailure['code']; retryable: false } };
-
 export type GeminiProviderErrorMetadata = Readonly<{
 	status:
 		| 'INVALID_ARGUMENT'
@@ -286,23 +282,6 @@ export function claimStateHttpStatus(state: unknown): number {
 	if (state === 'not_authorized') return 403;
 	if (state === 'not_found') return 404;
 	return 409;
-}
-
-export function geminiFailureResponse(
-	failure: GeminiFailure,
-	providerStatus: number
-): GeminiFailureResponse {
-	if (failure.quotaExhausted) {
-		return Object.freeze({ status: 202, body: Object.freeze({ state: 'quota_exhausted' }) });
-	}
-	if (failure.retryable) {
-		return Object.freeze({ status: 202, body: Object.freeze({ state: 'retry_later' }) });
-	}
-	const status = providerStatus >= 400 && providerStatus <= 599 ? providerStatus : 502;
-	return Object.freeze({
-		status,
-		body: Object.freeze({ code: failure.code, retryable: false })
-	});
 }
 
 export function classifyGeminiFailure(status: number, responseBody: string): GeminiFailure {
