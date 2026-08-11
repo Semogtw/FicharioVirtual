@@ -24,10 +24,15 @@ const requiredOcrMigrations = [
 
 describe('Edge Function deployment contract', () => {
 	it('keeps every versioned application Edge Function covered by config and the all-functions deploy flow', () => {
-		expect(versionedFunctions).toHaveLength(10);
+		expect(versionedFunctions).toContain('semantic-coverage');
+		expect(versionedFunctions).toContain('semantic-search');
+		expect(versionedFunctions).toContain('semantic-index');
 		for (const functionName of versionedFunctions) {
 			expect(config).toContain(`[functions.${functionName}]`);
 		}
+		expect(config).toContain('[functions.semantic-coverage]\nverify_jwt = true');
+		expect(config).toContain('[functions.semantic-search]\nverify_jwt = true');
+		expect(config).toContain('[functions.semantic-index]\nverify_jwt = true');
 		expect(staging).toContain(
 			'supabase functions deploy --project-ref "$STAGING_SUPABASE_PROJECT_REF"'
 		);
@@ -48,6 +53,9 @@ describe('Edge Function deployment contract', () => {
 		expect(config).toContain('[functions.desktop-ocr-pair]\nverify_jwt = false');
 		expect(config).toContain('[functions.desktop-ocr-worker]\nverify_jwt = false');
 		expect(config).toContain('[functions.process-ocr]\nverify_jwt = true');
+		expect(config).toContain('[functions.semantic-coverage]\nverify_jwt = true');
+		expect(config).toContain('[functions.semantic-search]\nverify_jwt = true');
+		expect(config).toContain('[functions.semantic-index]\nverify_jwt = true');
 		expect(config).toContain('[functions.delete-document]\nverify_jwt = true');
 		expect(staging).toContain('Não use `--no-verify-jwt` global');
 		expect(driveSetup).toContain('drive-oauth-callback');

@@ -7,6 +7,7 @@
 		{ href: '/library/', label: 'Biblioteca', icon: 'library' },
 		{ href: '/import/', label: 'Importar', icon: 'import' },
 		{ href: '/review/', label: 'Revisar', icon: 'review' },
+		{ href: '/coverage/', label: 'Cobertura', icon: 'coverage' },
 		{ href: '/drive/', label: 'Drive', icon: 'drive' }
 	] as const;
 
@@ -44,10 +45,10 @@
 		z-index: 20;
 		inset: auto 0 0;
 		display: grid;
-		grid-template-columns: repeat(5, 1fr);
+		grid-template-columns: repeat(6, minmax(0, 1fr));
 		min-height: var(--mobile-nav-height);
-		padding: 0.4rem max(0.5rem, env(safe-area-inset-right)) max(0.4rem, env(safe-area-inset-bottom))
-			max(0.5rem, env(safe-area-inset-left));
+		padding: 0.4rem max(0.35rem, env(safe-area-inset-right))
+			max(0.4rem, env(safe-area-inset-bottom)) max(0.35rem, env(safe-area-inset-left));
 		border-top: 1px solid var(--line);
 		background: rgb(var(--surface-rgb) / 96%);
 		backdrop-filter: blur(0.75rem);
@@ -58,7 +59,7 @@
 		place-items: center;
 		align-content: center;
 		gap: 0.15rem;
-		min-width: 3rem;
+		min-width: 0;
 		min-height: 3.5rem;
 		border-radius: var(--radius-sm);
 		color: var(--muted);
@@ -75,8 +76,12 @@
 	}
 
 	small {
-		font-size: 0.7rem;
+		max-width: 100%;
+		overflow: hidden;
+		font-size: 0.66rem;
 		font-weight: 720;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	@media (min-width: 768px) {

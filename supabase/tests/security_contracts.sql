@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(47);
+select plan(57);
 
 select has_table('public', 'app_users', 'allowlist table exists');
 select has_table('public', 'notebooks', 'notebooks table exists');
@@ -11,6 +11,7 @@ select has_table('public', 'ocr_jobs', 'OCR jobs table exists');
 select has_table('public', 'usage_daily', 'daily usage table exists');
 select has_table('public', 'tags', 'tags table exists');
 select has_table('public', 'document_tags', 'document tags table exists');
+select has_table('public', 'page_semantic_chunks', 'semantic chunk index exists');
 select has_column('public', 'tags', 'updated_at', 'tags expose an update timestamp');
 select ok(
   (
@@ -51,6 +52,10 @@ select ok(
   (select relrowsecurity from pg_class where oid = 'public.document_tags'::regclass),
   'RLS enabled on document tags'
 );
+select ok(
+  (select relrowsecurity from pg_class where oid = 'public.page_semantic_chunks'::regclass),
+  'RLS enabled on semantic chunks'
+);
 
 select is(
   (select public from storage.buckets where id = 'documents'),
@@ -74,6 +79,24 @@ select has_function(
   array['uuid','timestamp with time zone'],
   'retry-aware document OCR selection exists'
 );
+select has_function(
+  'public',
+  'search_pages_semantic',
+  array['text','text','uuid','integer'],
+  'semantic page search exists'
+);
+select has_function(
+  'public',
+  'replace_page_semantic_chunks',
+  array['uuid','text','text','jsonb'],
+  'semantic chunk replacement exists'
+);
+select has_function(
+  'public',
+  'record_coverage_semantic_consent',
+  array['integer'],
+  'semantic coverage consent exists'
+);
 
 select ok(
   not has_function_privilege('anon', 'public.export_portable_manifest()', 'execute'),
@@ -94,6 +117,14 @@ select ok(
 select ok(
   has_function_privilege('authenticated', 'public.export_portable_manifest()', 'execute'),
   'authenticated role may call portable export under RLS'
+);
+select ok(
+  not has_function_privilege('anon', 'public.search_pages_semantic(text,text,uuid,integer)', 'execute'),
+  'anon cannot query semantic embeddings'
+);
+select ok(
+  not has_function_privilege('anon', 'public.replace_page_semantic_chunks(uuid,text,text,jsonb)', 'execute'),
+  'anon cannot mutate semantic embeddings'
 );
 
 select ok(
@@ -137,6 +168,21 @@ select ok(
 select ok(
   (select prosecdef from pg_proc where oid = 'public.record_ocr_consent(integer)'::regprocedure),
   'OCR consent remains an explicit privileged allowlist capability'
+);
+select ok(
+  (select prosecdef from pg_proc where oid = 'public.record_coverage_semantic_consent(integer)'::regprocedure),
+  'semantic consent remains an explicit privileged allowlist capability'
+);
+select ok(
+  (select prosecdef from pg_proc where oid = 'public.replace_page_semantic_chunks(uuid,text,text,jsonb)'::regprocedure),
+  'semantic chunk replacement uses a narrow privileged write boundary'
+);
+select ok(
+  not has_table_privilege('authenticated', 'public.page_semantic_chunks', 'INSERT')
+    and not has_table_privilege('authenticated', 'public.page_semantic_chunks', 'UPDATE')
+    and not has_table_privilege('authenticated', 'public.page_semantic_chunks', 'DELETE')
+    and has_table_privilege('authenticated', 'public.page_semantic_chunks', 'SELECT'),
+  'semantic embeddings remain read-only to authenticated clients outside the validated RPC'
 );
 
 select ok(

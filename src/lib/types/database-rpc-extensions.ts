@@ -79,6 +79,14 @@ export type DatabaseRpcExtensions = {
 				};
 				Returns: Array<{ document_id: string; page_id: string; ocr_job_id: string }>;
 			};
+			has_coverage_semantic_consent: {
+				Args: { consent_version?: number };
+				Returns: boolean;
+			};
+			has_search_semantic_consent: {
+				Args: { consent_version?: number };
+				Returns: boolean;
+			};
 			list_gemini_ocr_candidates: {
 				Args: Record<string, never>;
 				Returns: Array<{
@@ -91,6 +99,14 @@ export type DatabaseRpcExtensions = {
 					created_at: string;
 					updated_at: string;
 				}>;
+			};
+			record_coverage_semantic_consent: {
+				Args: { consent_version?: number };
+				Returns: boolean;
+			};
+			record_search_semantic_consent: {
+				Args: { consent_version?: number };
+				Returns: boolean;
 			};
 		};
 		Enums: Record<string, never>;

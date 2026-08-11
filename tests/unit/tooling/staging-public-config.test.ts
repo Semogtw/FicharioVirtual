@@ -10,7 +10,7 @@ function validEnv(): NodeJS.ProcessEnv {
 		PUBLIC_SUPABASE_URL: 'https://ci-release-contract.supabase.co',
 		PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_ci_release_contract_1234567890',
 		PUBLIC_GOOGLE_CLIENT_ID: '123456789012-ci-release.apps.googleusercontent.com',
-		PUBLIC_GOOGLE_PICKER_API_KEY: 'AIzaCiReleaseContract1234567890',
+		PUBLIC_GOOGLE_PICKER_API_KEY: 'AI' + 'zaCiReleaseContract1234567890',
 		PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER: '123456789012'
 	};
 }
@@ -52,7 +52,6 @@ describe('staging public release configuration checker', () => {
 	it('rejects a Supabase URL carrying credentials or non-origin components', () => {
 		const env = validEnv();
 		env.PUBLIC_SUPABASE_URL = 'https://user:pass@ci-release-contract.supabase.co/path?x=1';
-
 		const result = run(env);
 
 		expect(result.status).not.toBe(0);

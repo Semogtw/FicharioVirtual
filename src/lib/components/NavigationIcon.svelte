@@ -1,6 +1,6 @@
 <script lang="ts">
 	export type NavigationIconName =
-		'home' | 'library' | 'notebooks' | 'import' | 'review' | 'drive' | 'settings';
+		'home' | 'library' | 'notebooks' | 'import' | 'review' | 'coverage' | 'drive' | 'settings';
 
 	interface NavigationIconProps {
 		name: NavigationIconName;
@@ -39,6 +39,12 @@
 		<path d="M5 3.5h10l4 4V20H5z" />
 		<path d="M15 3.5V8h4" />
 		<path d="m8 14 2.2 2.2L15.5 11" />
+	{:else if name === 'coverage'}
+		<path d="M5 4h14v16H5z" />
+		<path d="m8 9 1.5 1.5L12 8" />
+		<path d="M14 9h2" />
+		<path d="m8 15 1.5 1.5L12 14" />
+		<path d="M14 15h2" />
 	{:else if name === 'drive'}
 		<path d="M7.2 18.5h10.6a3.7 3.7 0 0 0 .7-7.3A6.8 6.8 0 0 0 5.6 9.6 4.5 4.5 0 0 0 7.2 18.5Z" />
 	{:else if name === 'settings'}
