@@ -8,7 +8,6 @@ import { getSupabaseClient } from './supabase';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MODEL = /^[A-Za-z0-9._-]{3,128}$/;
 const REASON = /^[a-z][a-z0-9_]{1,63}$/;
-const CONSENT_VERSION = 1;
 const MAX_CANDIDATES_PER_TOPIC = 8;
 
 type FunctionError = { context?: unknown; message?: string };
@@ -22,13 +21,6 @@ type SemanticCoverageFunctionClient = {
 			}
 		): Promise<{ data: unknown; error: FunctionError | null }>;
 	};
-};
-
-type SemanticConsentClient = {
-	rpc(
-		name: 'record_coverage_semantic_consent',
-		args: { consent_version: number }
-	): PromiseLike<{ data: unknown; error: unknown }>;
 };
 
 export type SemanticCoverageResponse = Readonly<{
@@ -48,10 +40,6 @@ export class SemanticCoverageServiceError extends Error {
 
 function defaultFunctionClient(): SemanticCoverageFunctionClient {
 	return getSupabaseClient() as unknown as SemanticCoverageFunctionClient;
-}
-
-function defaultConsentClient(): SemanticConsentClient {
-	return getSupabaseClient() as unknown as SemanticConsentClient;
 }
 
 function exactKeys(record: Record<string, unknown>, expected: readonly string[]) {
@@ -227,20 +215,6 @@ function validateTopics(topics: readonly string[]) {
 		topics.some((topic) => topic.trim().length < 1 || topic.length > MAX_TOPIC_LENGTH)
 	) {
 		throw new TypeError('Invalid semantic coverage topics');
-	}
-}
-
-export async function recordSemanticCoverageConsent(
-	client: SemanticConsentClient = defaultConsentClient()
-): Promise<void> {
-	try {
-		const { data, error } = await client.rpc('record_coverage_semantic_consent', {
-			consent_version: CONSENT_VERSION
-		});
-		if (error || data !== true) throw new SemanticCoverageServiceError();
-	} catch (error) {
-		if (error instanceof SemanticCoverageServiceError) throw error;
-		throw new SemanticCoverageServiceError('Não foi possível registrar o consentimento semântico.');
 	}
 }
 
