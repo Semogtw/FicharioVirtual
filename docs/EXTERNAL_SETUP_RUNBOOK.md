@@ -1,6 +1,6 @@
 # Runbook de configuração externa
 
-_Atualizado: 2026-08-10_
+_Atualizado: 2026-08-11_
 
 Este documento concentra, em ordem operacional, o trabalho que não pode ser concluído apenas pelo código do repositório. O fluxo atual é deliberadamente **staging-only**: produção continua bloqueada até existir um backend Supabase de produção isolado, com credenciais e configuração próprias.
 
@@ -36,8 +36,8 @@ Regras obrigatórias:
 - `GEMINI_API_KEY` fica nos secrets das Edge Functions do Supabase, não em GitHub Actions nem no frontend;
 - não use `--no-verify-jwt` ao implantar Edge Functions;
 - não torne o bucket `documents` público;
-- não habilite fallback pago ou troca silenciosa de modelo;
-- não recrie `OCR_DAILY_HARD_LIMIT`: o fluxo atual não usa uma quota diária artificial. Os limites `OCR_BATCH_*` e `OCR_REQUEST_TIMEOUT_MS` são apenas controles técnicos por request/batch;
+- não habilite fallback pago nem troca silenciosa de modelo. O fallback gratuito `gemini-3.1-flash-lite` → `gemini-3.5-flash-lite` é explícito, versionado e restrito a erro real `429` do provedor;
+- não recrie `OCR_DAILY_HARD_LIMIT`: o fluxo atual não usa uma quota diária artificial. Os limites `OCR_BATCH_*`, `OCR_REQUEST_TIMEOUT_MS` e o limitador compartilhado de RPM são somente controles técnicos de segurança;
 - migrations aplicadas são forward-only. Se o histórico remoto divergir, identifique a causa e reconcilie apenas depois de provar que o schema correspondente é o esperado.
 
 ## 1. Projeto Supabase de staging
@@ -147,8 +147,12 @@ Os secrets de runtime ficam no projeto Supabase de staging. O conjunto atual inc
 APP_ORIGIN
 GEMINI_API_KEY
 OCR_MODEL_PRIMARY
+OCR_MODEL_FALLBACK
 OCR_MODEL_QUALITY
 OCR_PROMPT_VERSION
+OCR_MODEL_PRIMARY_RPM
+OCR_MODEL_FALLBACK_RPM
+OCR_PROVIDER_MAX_QUEUE_WAIT_MS
 OCR_BATCH_MAX_PAGES
 OCR_BATCH_MAX_BYTES
 OCR_REQUEST_TIMEOUT_MS
@@ -159,21 +163,26 @@ GOOGLE_DRIVE_SCOPE
 GOOGLE_DRIVE_ROOT_FOLDER_NAME
 ```
 
-Valores padrão/versionados de referência estão em `.env.example`. Para OCR, o modelo principal atual é `gemini-3.6-flash` e o prompt versionado começa em `1`.
+Valores padrão/versionados de referência estão em `.env.example`. O roteamento OCR atual usa `gemini-3.1-flash-lite` como modelo principal e `gemini-3.5-flash-lite` como fallback explícito quando uma chamada ao principal recebe `429`. O prompt versionado começa em `1`.
 
-Os controles opcionais de segurança do request têm os defaults atuais:
+Os controles técnicos têm os defaults atuais:
 
 ```text
+OCR_MODEL_PRIMARY_RPM=12
+OCR_MODEL_FALLBACK_RPM=12
+OCR_PROVIDER_MAX_QUEUE_WAIT_MS=20000
 OCR_BATCH_MAX_PAGES=40
 OCR_BATCH_MAX_BYTES=12582912
 OCR_REQUEST_TIMEOUT_MS=120000
 ```
 
-Eles limitam tamanho/tempo de uma chamada; **não** representam quota diária de uso e não devem ser usados para simular o limite gratuito do provedor.
+O teto operacional observado dos dois Flash-Lite é maior que o valor configurado; o Fichário usa 12 RPM para preservar margem. A reserva de chamadas é global por modelo no banco e serializa Edge Function isolates concorrentes. Pressão criada pelo próprio limitador aguarda uma vaga por até 20 segundos e, se necessário, devolve o trabalho à fila sem gastar o fallback. Somente um `429` real retornado pela Gemini depois dessa proteção autoriza a tentativa no `gemini-3.5-flash-lite`.
 
-`GEMINI_API_KEY` deve existir somente nos secrets do Supabase. Não use alias de modelo que possa trocar silenciosamente quando a intenção for uma versão explicitamente validada. Qualquer mudança para modelo de menor custo/qualidade deve passar pelo mesmo smoke OCR e ser registrada conscientemente.
+Esses valores limitam cadência, tamanho e duração de chamadas; **não** representam quota diária de uso e não devem ser usados para simular RPD restante do provedor.
 
-O workflow `Deploy Supabase staging` implanta as Edge Functions versionadas do repositório com verificação JWT mantida.
+`GEMINI_API_KEY` deve existir somente nos secrets do Supabase. Não use alias de modelo que possa trocar silenciosamente quando a intenção for uma versão explicitamente validada. Qualquer mudança de modelo deve passar pelo mesmo smoke OCR e ser registrada conscientemente.
+
+O workflow `Deploy Supabase staging` alinha os valores canônicos de roteamento/RPM, implanta as Edge Functions versionadas do repositório e mantém verificação JWT.
 
 ## 6. Gate remoto do Supabase
 
@@ -272,7 +281,7 @@ Somente depois de Supabase, Edge Functions e host estarem alinhados:
 4. valide o fluxo normal de importação/OCR e a limpeza da sentinela;
 5. execute o smoke Google Drive com credenciais reais de staging, incluindo OAuth, picker/listagem permitida e uma operação real no escopo `drive.file`.
 
-Falhas de provedor devem ser investigadas pelos estados persistidos e códigos seguros. Não habilite fallback pago ou troque de modelo silenciosamente para obter um gate verde.
+Falhas de provedor devem ser investigadas pelos estados persistidos e códigos seguros. Não habilite fallback pago nem altere silenciosamente o roteamento para obter um gate verde; o único fallback automático atual é o secundário gratuito, versionado e telemetrado após `429` real do principal.
 
 ## 11. Matriz manual em dispositivos físicos
 
