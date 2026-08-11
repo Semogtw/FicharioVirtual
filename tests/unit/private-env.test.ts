@@ -17,19 +17,27 @@ describe('private OCR environment', () => {
 		).toEqual({
 			GEMINI_API_KEY: required.GEMINI_API_KEY,
 			OCR_MODEL_PRIMARY: required.OCR_MODEL_PRIMARY,
+			OCR_MODEL_FALLBACK: undefined,
 			OCR_MODEL_QUALITY: undefined,
 			OCR_PROMPT_VERSION: 1,
+			OCR_MODEL_PRIMARY_RPM: undefined,
+			OCR_MODEL_FALLBACK_RPM: undefined,
+			OCR_PROVIDER_MAX_QUEUE_WAIT_MS: undefined,
 			OCR_BATCH_MAX_PAGES: undefined,
 			OCR_BATCH_MAX_BYTES: undefined,
 			OCR_REQUEST_TIMEOUT_MS: undefined
 		});
 	});
 
-	it('accepts only bounded technical batch controls', () => {
+	it('accepts bounded fallback and technical rate controls', () => {
 		expect(
 			parsePrivateEnv({
 				...required,
+				OCR_MODEL_FALLBACK: 'gemini-fallback',
 				OCR_MODEL_QUALITY: 'gemini-quality',
+				OCR_MODEL_PRIMARY_RPM: '12',
+				OCR_MODEL_FALLBACK_RPM: '12',
+				OCR_PROVIDER_MAX_QUEUE_WAIT_MS: '20000',
 				OCR_BATCH_MAX_PAGES: '32',
 				OCR_BATCH_MAX_BYTES: String(10 * 1024 * 1024),
 				OCR_REQUEST_TIMEOUT_MS: '90000'
@@ -37,15 +45,25 @@ describe('private OCR environment', () => {
 		).toEqual({
 			GEMINI_API_KEY: required.GEMINI_API_KEY,
 			OCR_MODEL_PRIMARY: required.OCR_MODEL_PRIMARY,
+			OCR_MODEL_FALLBACK: 'gemini-fallback',
 			OCR_MODEL_QUALITY: 'gemini-quality',
 			OCR_PROMPT_VERSION: 1,
+			OCR_MODEL_PRIMARY_RPM: 12,
+			OCR_MODEL_FALLBACK_RPM: 12,
+			OCR_PROVIDER_MAX_QUEUE_WAIT_MS: 20_000,
 			OCR_BATCH_MAX_PAGES: 32,
 			OCR_BATCH_MAX_BYTES: 10 * 1024 * 1024,
 			OCR_REQUEST_TIMEOUT_MS: 90000
 		});
 	});
 
-	it('rejects controls that exceed the Edge Function and Gemini inline safety envelope', () => {
+	it('rejects controls that exceed provider and request safety envelopes', () => {
+		expect(() => parsePrivateEnv({ ...required, OCR_MODEL_PRIMARY_RPM: '61' })).toThrow(
+			'Invalid private environment'
+		);
+		expect(() =>
+			parsePrivateEnv({ ...required, OCR_PROVIDER_MAX_QUEUE_WAIT_MS: '60001' })
+		).toThrow('Invalid private environment');
 		expect(() => parsePrivateEnv({ ...required, OCR_BATCH_MAX_PAGES: '101' })).toThrow(
 			'Invalid private environment'
 		);
