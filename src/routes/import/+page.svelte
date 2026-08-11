@@ -6,6 +6,7 @@
 	import NativeSelect from '$lib/components/ui/native-select/NativeSelect.svelte';
 	import type { NotebookSummary } from '$lib/domain/notebook';
 	import {
+		importHref,
 		importSelectionUrl,
 		parseRequestedNotebookId,
 		resolveImportNotebookSelection
@@ -22,8 +23,10 @@
 		retryImport,
 		type ImportQueueItem
 	} from '$lib/stores/import-queue.svelte';
+	import { addPdfs, pdfImportQueue } from '$lib/stores/pdf-import-queue.svelte';
 
 	const notebookRequests = new RequestVersion();
+	const acceptedImageTypes = ['image/jpeg', 'image/png', 'image/webp'] as const;
 	let notebooks = $state<readonly NotebookSummary[]>([]);
 	let notebookOptionsReady = $state(false);
 	let notebookLoading = $state(true);
@@ -38,6 +41,7 @@
 		resolveImportNotebookSelection(requestedNotebookId, notebooks, notebookOptionsReady)
 	);
 	let notebookId = $derived(notebookSelection.notebookId);
+	let pdfHref = $derived(importHref('/import/pdf/', notebookId || null));
 	let requestedNotebookUnavailable = $derived(
 		requestedNotebookId !== null && notebookOptionsReady && notebookSelection.requiresResolution
 	);
@@ -61,23 +65,46 @@
 		return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 	}
 
+	function isImageFile(file: File) {
+		return (
+			acceptedImageTypes.includes(file.type as (typeof acceptedImageTypes)[number]) ||
+			/\.(jpe?g|png|webp)$/i.test(file.name)
+		);
+	}
+
+	function isPdfFile(file: File) {
+		return file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+	}
+
 	function queue(files: readonly File[]) {
 		selectionError = null;
 		if (notebookSelection.requiresResolution) {
 			selectionError = 'O caderno solicitado precisa ser confirmado antes da importação.';
 			return;
 		}
+
+		const images = files.filter(isImageFile);
+		const pdfs = files.filter(isPdfFile);
+		const unsupported = files.filter((file) => !isImageFile(file) && !isPdfFile(file));
+
+		if (unsupported.length > 0) {
+			selectionError = 'Alguns arquivos não foram adicionados. Use PDF, JPG, PNG ou WebP.';
+		}
+
+		if (pdfs.length > 0) {
+			addPdfs(pdfs, { notebookId: notebookId || null, consentGranted: consent });
+		}
+
+		if (images.length === 0) return;
 		if (!consent) {
-			selectionError = 'Confirme o aviso de privacidade antes de enviar imagens para leitura.';
+			selectionError =
+				pdfs.length > 0
+					? 'Os PDFs foram adicionados. Para adicionar também as imagens, confirme o aviso de privacidade.'
+					: 'Confirme o aviso de privacidade antes de enviar imagens para leitura.';
 			return;
 		}
-		const images = files.filter((file) =>
-			['image/jpeg', 'image/png', 'image/webp'].includes(file.type)
-		);
-		if (images.length !== files.length) {
-			selectionError = 'Nesta etapa, selecione somente imagens JPG, PNG ou WebP.';
-		}
-		if (images.length > 0) addImages(images, { mode, notebookId: notebookId || null });
+
+		addImages(images, { mode, notebookId: notebookId || null });
 	}
 
 	function selectFiles(event: Event) {
@@ -152,10 +179,10 @@
 	<header>
 		<div>
 			<p class="eyebrow">Entrada do arquivo</p>
-			<h1 id="page-title">Importar imagens</h1>
+			<h1 id="page-title">Importar arquivos</h1>
 			<p>
-				A preparação e a miniatura acontecem no dispositivo. O arquivo privado permanece salvo mesmo
-				quando a leitura precisa ser retomada mais tarde.
+				Imagens são preparadas no dispositivo antes da leitura. PDFs mantêm o original intacto e
+				seguem automaticamente para o fluxo adequado de texto ou OCR.
 			</p>
 		</div>
 		{#if importQueue.items.some( (item) => ['complete', 'needs_review', 'duplicate', 'cancelled'].includes(item.status) )}
@@ -178,7 +205,7 @@
 			</NativeSelect>
 		</label>
 		<fieldset>
-			<legend>Definição</legend>
+			<legend>Definição da imagem</legend>
 			<label class="choice">
 				<input type="radio" bind:group={mode} value="standard" />
 				<span><strong>Padrão</strong><small>Até 2.560 px · recomendado</small></span>
@@ -206,16 +233,17 @@
 	<label class="consent">
 		<input type="checkbox" bind:checked={consent} />
 		<span>
-			<strong>Autorizo a leitura automática destas imagens.</strong>
+			<strong>Autorizo OCR quando o arquivo precisar de leitura automática.</strong>
 			<small>
-				No nível gratuito do provedor, o conteúdo pode ser usado para melhorar produtos. A chave
-				nunca fica neste navegador e nenhuma cobrança é ativada automaticamente.
+				PDFs com texto nativo não precisam do provedor. Para imagens e páginas digitalizadas, no
+				nível gratuito o conteúdo pode ser usado para melhorar produtos. A chave nunca fica neste
+				navegador e nenhuma cobrança é ativada automaticamente.
 			</small>
 		</span>
 	</label>
 
 	<section
-		aria-label="Área para importar imagens"
+		aria-label="Área para importar arquivos"
 		class:dragging
 		class="drop-zone"
 		ondragenter={(event) => {
@@ -227,14 +255,14 @@
 		ondrop={drop}
 	>
 		<div aria-hidden="true" class="drop-icon">＋</div>
-		<h2>Solte fotos ou capturas aqui</h2>
-		<p>JPG, PNG ou WebP, até 12 MB cada.</p>
+		<h2>Solte imagens ou PDFs aqui</h2>
+		<p>PDF, JPG, PNG ou WebP. Imagens: até 12 MB cada.</p>
 		<div class="picker-actions">
 			<label class="file-button">
-				Selecionar imagens
+				Selecionar arquivos
 				<input
 					type="file"
-					accept="image/jpeg,image/png,image/webp"
+					accept=".pdf,application/pdf,image/jpeg,image/png,image/webp"
 					multiple
 					onchange={selectFiles}
 				/>
@@ -248,6 +276,18 @@
 
 	{#if selectionError}
 		<p class="selection-error" role="alert">{selectionError}</p>
+	{/if}
+
+	{#if pdfImportQueue.items.length > 0}
+		<section class="pdf-summary" aria-label="Fila de PDFs">
+			<div>
+				<strong>
+					{pdfImportQueue.items.length} {pdfImportQueue.items.length === 1 ? 'PDF adicionado' : 'PDFs adicionados'}
+				</strong>
+				<small>O processamento continua na fila específica de PDFs.</small>
+			</div>
+			<a href={pdfHref}>Acompanhar PDFs</a>
+		</section>
 	{/if}
 
 	{#if importQueue.items.length > 0}
@@ -525,7 +565,8 @@
 		opacity: 0;
 	}
 
-	.notebook-warning {
+	.notebook-warning,
+	.pdf-summary {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
@@ -533,6 +574,9 @@
 		padding: 0.8rem 1rem;
 		border-left: 0.3rem solid var(--accent);
 		background: rgb(166 94 67 / 7%);
+	}
+
+	.notebook-warning {
 		color: var(--accent-strong);
 	}
 
@@ -540,7 +584,8 @@
 		margin: 0;
 	}
 
-	.notebook-warning button {
+	.notebook-warning button,
+	.pdf-summary a {
 		min-height: 2.35rem;
 		padding: 0.5rem 0.7rem;
 		border: 1px solid var(--line-strong);
@@ -549,6 +594,15 @@
 		color: var(--ink);
 		font-weight: 720;
 		cursor: pointer;
+	}
+
+	.pdf-summary div {
+		display: grid;
+		gap: 0.2rem;
+	}
+
+	.pdf-summary small {
+		color: var(--muted);
 	}
 
 	.selection-error {
@@ -671,7 +725,8 @@
 	}
 
 	@media (max-width: 600px) {
-		header {
+		header,
+		.pdf-summary {
 			align-items: flex-start;
 			flex-direction: column;
 		}
