@@ -1,7 +1,10 @@
-import { readFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { readdir, readFile } from 'node:fs/promises';
+import { join, relative, resolve } from 'node:path';
 import process from 'node:process';
-import { assertSecurityHeaders } from './deployment-contract.mjs';
+import {
+	assertInlineScriptsAllowedByCsp,
+	assertSecurityHeaders
+} from './deployment-contract.mjs';
 
 const root = resolve(new URL('../..', import.meta.url).pathname);
 const build = join(root, 'build');
@@ -18,6 +21,19 @@ async function requiredFile(name) {
 		fail(`${name} is missing from the static build`);
 		return '';
 	}
+}
+
+async function listHtmlFiles(directory) {
+	const files = [];
+	for (const entry of await readdir(directory, { withFileTypes: true })) {
+		const path = join(directory, entry.name);
+		if (entry.isDirectory()) {
+			files.push(...(await listHtmlFiles(path)));
+		} else if (entry.isFile() && entry.name.endsWith('.html')) {
+			files.push(path);
+		}
+	}
+	return files;
 }
 
 function parseRootStaticHeaders(source) {
@@ -97,13 +113,27 @@ if (serviceWorker) {
 	}
 }
 
+let parsedStaticHeaders;
 if (staticHeaders) {
 	try {
-		assertSecurityHeaders(parseRootStaticHeaders(staticHeaders));
+		parsedStaticHeaders = parseRootStaticHeaders(staticHeaders);
+		assertSecurityHeaders(parsedStaticHeaders);
 	} catch (error) {
 		fail(
 			`_headers root security contract is invalid: ${error instanceof Error ? error.message : String(error)}`
 		);
+	}
+}
+
+if (parsedStaticHeaders) {
+	for (const htmlFile of await listHtmlFiles(build)) {
+		try {
+			assertInlineScriptsAllowedByCsp(parsedStaticHeaders, await readFile(htmlFile, 'utf8'));
+		} catch (error) {
+			fail(
+				`${relative(build, htmlFile)} bootstrap is blocked by CSP: ${error instanceof Error ? error.message : String(error)}`
+			);
+		}
 	}
 }
 
