@@ -19,7 +19,6 @@ const dependencies = vi.hoisted(() => ({
 		storagePath: '11111111-1111-4111-8111-111111111111/document/original.webp',
 		thumbnailPath: '11111111-1111-4111-8111-111111111111/document/thumbnail.webp'
 	})),
-	recordOcrConsent: vi.fn(async () => undefined),
 	processPageOcr: vi.fn(async () => ({
 		state: 'complete' as const,
 		needsReview: false,
@@ -35,10 +34,6 @@ vi.mock('$lib/import/upload', async (importOriginal) => {
 	const original = await importOriginal<typeof import('$lib/import/upload')>();
 	return { ...original, uploadPreparedImage: dependencies.uploadPreparedImage };
 });
-
-vi.mock('$lib/services/ocr-consent', () => ({
-	recordOcrConsent: dependencies.recordOcrConsent
-}));
 
 vi.mock('$lib/services/ocr', async (importOriginal) => {
 	const original = await importOriginal<typeof import('$lib/services/ocr')>();

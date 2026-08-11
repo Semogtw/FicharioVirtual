@@ -241,7 +241,7 @@
 			}
 
 			if (selected.file.type === 'application/pdf') {
-				addPdfs([selected.file], { notebookId: notebookId || null, consentGranted: true });
+				addPdfs([selected.file], { notebookId: notebookId || null });
 				message = `“${selected.file.name}” foi encaminhado à fila de PDFs.`;
 			} else if (['image/jpeg', 'image/png', 'image/webp'].includes(selected.file.type)) {
 				addImages([selected.file], { mode: 'standard', notebookId: notebookId || null });

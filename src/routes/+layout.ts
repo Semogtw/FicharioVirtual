@@ -18,7 +18,7 @@ export const load: LayoutLoad = async ({ url }) => {
 	try {
 		session = await loadAuthorizedSession();
 	} catch {
-		let persistedSession = null;
+		let persistedSession: Awaited<ReturnType<typeof loadPersistedSession>> = null;
 		try {
 			persistedSession = await loadPersistedSession();
 		} catch {
