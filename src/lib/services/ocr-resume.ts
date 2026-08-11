@@ -124,7 +124,7 @@ async function resumePageByPage(
 			if (!page) return;
 			try {
 				const result = await processor(page.id);
-				if (result.state === 'complete' || result.state === 'already_complete') {
+				if (result.state === 'complete') {
 					if (result.needsReview) needsReview += 1;
 					else completed += 1;
 				} else pending += 1;
