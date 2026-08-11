@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { mkdir } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { chromium } from 'playwright';
 
@@ -20,22 +20,15 @@ const context = await browser.newContext({
 });
 const page = await context.newPage();
 const pageErrors = [];
-const policyErrors = [];
+const consoleErrors = [];
 const failedCriticalRequests = [];
+const criticalResponses = [];
 
 page.on('pageerror', (error) => {
 	pageErrors.push(error.message);
 });
 page.on('console', (message) => {
-	if (message.type() !== 'error') return;
-	const text = message.text();
-	if (
-		/content security policy|refused to execute inline|refused to load|failed to load module script/i.test(
-			text
-		)
-	) {
-		policyErrors.push(text);
-	}
+	if (message.type() === 'error') consoleErrors.push(message.text());
 });
 page.on('requestfailed', (request) => {
 	const type = request.resourceType();
@@ -46,9 +39,47 @@ page.on('requestfailed', (request) => {
 		`${type} ${url.pathname}: ${request.failure()?.errorText ?? 'failed'}`
 	);
 });
+page.on('response', (response) => {
+	const request = response.request();
+	const type = request.resourceType();
+	if (!['document', 'script', 'stylesheet'].includes(type)) return;
+	const url = new URL(response.url());
+	if (url.origin !== baseUrl.origin) return;
+	criticalResponses.push(
+		`${response.status()} ${type} ${url.pathname} ${response.headers()['content-type'] ?? '(no content-type)'}`
+	);
+});
+
+async function captureEvidence(label) {
+	const screenshotPath = `${evidenceDir}/${label}.png`;
+	const statePath = `${evidenceDir}/${label}.txt`;
+	await page.screenshot({ path: screenshotPath, fullPage: true }).catch(() => {});
+	const bodyText = await page
+		.locator('body')
+		.innerText()
+		.catch(() => '');
+	const bodyHtml = await page
+		.locator('body')
+		.innerHTML()
+		.catch(() => '');
+	const state = [
+		`url=${page.url()}`,
+		`title=${await page.title().catch(() => '')}`,
+		`body_text=${JSON.stringify(bodyText.slice(0, 4000))}`,
+		`body_html=${JSON.stringify(bodyHtml.slice(0, 8000))}`,
+		`page_errors=${JSON.stringify(pageErrors)}`,
+		`console_errors=${JSON.stringify(consoleErrors)}`,
+		`failed_critical_requests=${JSON.stringify(failedCriticalRequests)}`,
+		`critical_responses=${JSON.stringify(criticalResponses)}`
+	].join('\n');
+	await writeFile(statePath, `${state}\n`, 'utf8');
+	console.log(state);
+}
 
 try {
 	await page.goto(baseUrl.href, { waitUntil: 'domcontentloaded', timeout: REQUEST_TIMEOUT_MS });
+	await captureEvidence('home-initial');
+
 	const homeHeading = page.locator('h1#page-title');
 	await homeHeading.waitFor({ state: 'visible', timeout: REQUEST_TIMEOUT_MS });
 	const homeText = (await homeHeading.textContent())?.trim();
@@ -75,8 +106,8 @@ try {
 	if (pageErrors.length > 0) {
 		throw new Error(`Browser page errors: ${pageErrors.join(' | ')}`);
 	}
-	if (policyErrors.length > 0) {
-		throw new Error(`Browser CSP/resource errors: ${policyErrors.join(' | ')}`);
+	if (consoleErrors.length > 0) {
+		throw new Error(`Browser console errors: ${consoleErrors.join(' | ')}`);
 	}
 	if (failedCriticalRequests.length > 0) {
 		throw new Error(`Critical same-origin requests failed: ${failedCriticalRequests.join(' | ')}`);
@@ -84,6 +115,9 @@ try {
 
 	console.log(`Deployed browser UI: PASS (${baseUrl.origin} -> /library/)`);
 	console.log(`Screenshots: ${evidenceDir}/home.png, ${evidenceDir}/library.png`);
+} catch (error) {
+	await captureEvidence('failure');
+	throw error;
 } finally {
 	await context.close();
 	await browser.close();
