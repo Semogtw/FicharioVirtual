@@ -32,7 +32,7 @@ begin
     or prepared_sha256 !~ '^[0-9a-f]{64}$'
     or prompt_version not between 1 and 10000
     or image_storage_path not like current_user_id::text || '/staging-probes/%'
-    or image_storage_path !~ '^[A-Za-z0-9_./-]+\.png$'
+    or image_storage_path !~ '^[A-Za-z0-9_./-]+[.]png$'
   then
     raise exception 'invalid OCR staging probe' using errcode = '22023';
   end if;
