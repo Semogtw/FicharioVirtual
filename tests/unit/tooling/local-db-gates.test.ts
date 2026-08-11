@@ -25,7 +25,7 @@ describe('local database gate runner', () => {
 		);
 	});
 
-	it('runs every local database contract after rebuilding the schema', () => {
+	it('runs every local database contract after rebuilding the launch schema', () => {
 		const runner = read('tools/checks/run-local-db-gates.sh');
 		const fixture = read('tools/checks/fixtures/ocr-concurrency-fixture.sql');
 		const claimContractGate = read('tools/checks/test-ocr-claim-contracts.sh');
@@ -39,9 +39,9 @@ describe('local database gate runner', () => {
 		expect(runner).toContain('tools/checks/test-ocr-claim-concurrency.sh');
 		expect(runner).toContain('tools/checks/test-ocr-idempotency.sh');
 		expect(fixture).toContain('insert into public.ocr_jobs');
-		expect(fixture).toContain('ocr_consent_version');
+		expect(fixture).not.toContain('ocr_consent_');
 		expect(claimContractGate).toContain('not-authorized claim contract drifted');
-		expect(claimContractGate).toContain('consent-required claim contract drifted');
+		expect(claimContractGate).not.toContain('consent-required claim contract drifted');
 		expect(claimContractGate).toContain('busy claim contract drifted');
 		expect(claimContractGate).toContain('not-retryable claim contract drifted');
 		expect(concurrencyGate).toContain('validate_claim_shape');
