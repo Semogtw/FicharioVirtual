@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
 	claimStateHttpStatus,
 	classifyGeminiFailure,
-	geminiFailureResponse,
 	parseGeminiProviderErrorMetadata,
 	parseOcrClaimState,
 	parseOcrPayload
@@ -18,7 +17,6 @@ describe('OCR response contract', () => {
 						{ code: 'uncertain_text', message: 'Uma palavra na margem está pouco legível.' }
 					]
 				})
-			)
 		).toEqual({
 			text: 'Mitose e meiose',
 			warnings: [{ code: 'uncertain_text', message: 'Uma palavra na margem está pouco legível.' }],
@@ -44,7 +42,6 @@ describe('OCR claim HTTP mapping', () => {
 			'busy',
 			'retry_later',
 			'quota_exhausted',
-			'consent_required',
 			'not_authorized',
 			'not_found',
 			'invalid_configuration',
@@ -53,15 +50,15 @@ describe('OCR claim HTTP mapping', () => {
 			expect(parseOcrClaimState(state)).toBe(state);
 		});
 
-		it.each([undefined, null, 1, '', 'unknown', 'CLAIMED'])(
-			'rejects malformed claim state %s',
+		it.each([undefined, null, 1, '', 'unknown', 'CLAIMED', 'consent_required'])(
+			'rejects malformed or removed claim state %s',
 			(state) => {
 				expect(parseOcrClaimState(state)).toBeNull();
 			}
 		);
 	});
 
-	it('keeps expected deferred states in successful function responses', () => {
+	it('keeps expected internal deferred states in successful function responses', () => {
 		expect(claimStateHttpStatus('already_complete')).toBe(200);
 		expect(claimStateHttpStatus('busy')).toBe(202);
 		expect(claimStateHttpStatus('retry_later')).toBe(202);
@@ -69,7 +66,6 @@ describe('OCR claim HTTP mapping', () => {
 	});
 
 	it('uses authorization and lookup errors only for rejected claims', () => {
-		expect(claimStateHttpStatus('consent_required')).toBe(403);
 		expect(claimStateHttpStatus('not_authorized')).toBe(403);
 		expect(claimStateHttpStatus('not_found')).toBe(404);
 		expect(claimStateHttpStatus('invalid_configuration')).toBe(409);
@@ -146,26 +142,6 @@ describe('Gemini failure classification', () => {
 		expect(classifyGeminiFailure(404, 'model not found')).toEqual(
 			expect.objectContaining({ code: 'gemini_model_unavailable', retryable: false })
 		);
-	});
-
-	it('returns persisted deferred states as 202 instead of SDK exceptions', () => {
-		expect(
-			geminiFailureResponse(classifyGeminiFailure(429, 'Requests per day quota exceeded'), 429)
-		).toEqual({
-			status: 202,
-			body: { state: 'quota_exhausted' }
-		});
-		expect(geminiFailureResponse(classifyGeminiFailure(503, 'unavailable'), 503)).toEqual({
-			status: 202,
-			body: { state: 'retry_later' }
-		});
-	});
-
-	it('preserves permanent provider failures as HTTP errors', () => {
-		expect(geminiFailureResponse(classifyGeminiFailure(403, 'permission denied'), 403)).toEqual({
-			status: 403,
-			body: { code: 'gemini_authentication_failed', retryable: false }
-		});
 	});
 
 	it('pins every provider status to its persisted retry and quota policy', () => {
