@@ -9,7 +9,7 @@
 	},
 	"scripts": {
 		"dev": "vite dev",
-		"build": "vite build && node tools/checks/check-built-pwa.mjs",
+		"build": "vite build && node tools/deploy/finalize-static-csp.mjs && node tools/checks/check-built-pwa.mjs",
 		"preview": "vite preview",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"lint": "prettier --check . && eslint .",
