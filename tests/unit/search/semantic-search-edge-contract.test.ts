@@ -4,10 +4,6 @@ import { describe, expect, it } from 'vitest';
 const edge = readFileSync('supabase/functions/semantic-search/index.ts', 'utf8');
 const indexer = readFileSync('supabase/functions/_shared/semantic-indexer.ts', 'utf8');
 const queryCache = readFileSync('supabase/functions/_shared/semantic-query-cache.ts', 'utf8');
-const migration = readFileSync(
-	'supabase/migrations/202608101501_global_semantic_search_consent.sql',
-	'utf8'
-);
 
 describe('global semantic search edge contract', () => {
 	it('retrieves with embeddings instead of only classifying lexical candidates', () => {
@@ -30,19 +26,12 @@ describe('global semantic search edge contract', () => {
 		expect(edge).toContain("surface: 'search'");
 	});
 
-	it('requires dedicated consent before sending query or page text to Gemini', () => {
-		const consentCheck = edge.indexOf("'has_search_semantic_consent'");
-		const documentEmbedding = edge.indexOf('indexNextSemanticBatch({');
-		const queryEmbedding = edge.indexOf('getSemanticQueryEmbedding({');
-		expect(consentCheck).toBeGreaterThan(0);
-		expect(documentEmbedding).toBeGreaterThan(consentCheck);
-		expect(queryEmbedding).toBeGreaterThan(consentCheck);
-		expect(migration).toContain('security definer');
-		expect(migration).toContain('record_search_semantic_consent');
-		expect(migration).toContain('has_search_semantic_consent');
-		expect(migration).toContain(
-			'revoke execute on function public.record_search_semantic_consent(integer) from public, anon;'
-		);
+	it('does not retain a pre-launch semantic consent gate', () => {
+		expect(edge).not.toContain('has_search_semantic_consent');
+		expect(edge).not.toContain('consent_required');
+		expect(edge).not.toContain('record_search_semantic_consent');
+		expect(edge.indexOf('indexNextSemanticBatch({')).toBeGreaterThan(0);
+		expect(edge.indexOf('getSemanticQueryEmbedding({')).toBeGreaterThan(0);
 	});
 
 	it('keeps textual fallback for short queries, quota and provider failures', () => {
