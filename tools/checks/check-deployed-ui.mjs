@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 
 import { mkdir, writeFile } from 'node:fs/promises';
+import { performance } from 'node:perf_hooks';
 import { resolve } from 'node:path';
 import { chromium } from 'playwright';
 
 const REQUEST_TIMEOUT_MS = 20_000;
+const VISIBLE_TIMEOUT_MS = 5_000;
 const baseUrl = new URL(process.argv[2] ?? process.env.DEPLOYMENT_URL ?? '');
 if (baseUrl.protocol !== 'https:' || (baseUrl.pathname !== '/' && baseUrl.pathname !== '')) {
 	throw new Error('Deployed UI check requires a clean HTTPS origin');
@@ -76,33 +78,32 @@ async function captureEvidence(label) {
 	console.log(state);
 }
 
-try {
-	await page.goto(baseUrl.href, { waitUntil: 'domcontentloaded', timeout: REQUEST_TIMEOUT_MS });
-	await captureEvidence('home-initial');
-
-	const homeHeading = page.locator('h1#page-title');
-	await homeHeading.waitFor({ state: 'visible', timeout: REQUEST_TIMEOUT_MS });
-	const homeText = (await homeHeading.textContent())?.trim();
-	if (homeText !== 'Encontre a página certa.') {
-		throw new Error(`Unexpected home heading: ${homeText ?? '(missing)'}`);
+async function assertLoginVisible(label, startedAt) {
+	const heading = page.getByRole('heading', { name: 'Acesse seu fichário', exact: true });
+	await heading.waitFor({ state: 'visible', timeout: VISIBLE_TIMEOUT_MS });
+	const visibleMs = Math.round(performance.now() - startedAt);
+	const currentUrl = new URL(page.url());
+	if (currentUrl.pathname !== '/login/') {
+		throw new Error(`Anonymous root must settle on /login/, got ${currentUrl.pathname}`);
 	}
-	if ((await page.title()) !== 'Início — Fichário Virtual') {
-		throw new Error(`Unexpected home title: ${await page.title()}`);
+	if ((await page.title()) !== 'Entrar — Fichário Virtual') {
+		throw new Error(`Unexpected login title: ${await page.title()}`);
+	}
+	for (const locator of [
+		page.locator('input[type="email"]'),
+		page.locator('input[type="password"]'),
+		page.getByRole('button', { name: 'Entrar', exact: true })
+	]) {
+		await locator.waitFor({ state: 'visible', timeout: VISIBLE_TIMEOUT_MS });
 	}
 	const bodyText = (await page.locator('body').innerText()).trim();
-	if (bodyText.length < 40) throw new Error('Rendered home page is effectively blank');
-	await page.screenshot({ path: `${evidenceDir}/home.png`, fullPage: true });
+	if (bodyText.length < 80) throw new Error('Rendered login page is effectively blank');
+	await captureEvidence(label);
+	console.log(`PASS ${label} visible in ${visibleMs}ms`);
+	return visibleMs;
+}
 
-	const libraryLink = page.locator('a[href="/library/"]').filter({ hasText: 'Biblioteca' }).first();
-	await libraryLink.click({ timeout: REQUEST_TIMEOUT_MS });
-	await page.waitForURL((url) => url.pathname === '/library/', { timeout: REQUEST_TIMEOUT_MS });
-	const libraryHeading = page.locator('h1#page-title');
-	await libraryHeading.waitFor({ state: 'visible', timeout: REQUEST_TIMEOUT_MS });
-	if ((await libraryHeading.textContent())?.trim() !== 'Biblioteca') {
-		throw new Error('Library route did not render its expected heading');
-	}
-	await page.screenshot({ path: `${evidenceDir}/library.png`, fullPage: true });
-
+function assertNoBrowserErrors() {
 	if (pageErrors.length > 0) {
 		throw new Error(`Browser page errors: ${pageErrors.join(' | ')}`);
 	}
@@ -112,9 +113,35 @@ try {
 	if (failedCriticalRequests.length > 0) {
 		throw new Error(`Critical same-origin requests failed: ${failedCriticalRequests.join(' | ')}`);
 	}
+}
 
-	console.log(`Deployed browser UI: PASS (${baseUrl.origin} -> /library/)`);
-	console.log(`Screenshots: ${evidenceDir}/home.png, ${evidenceDir}/library.png`);
+try {
+	const firstNavigationStarted = performance.now();
+	await page.goto(baseUrl.href, { waitUntil: 'domcontentloaded', timeout: REQUEST_TIMEOUT_MS });
+	const firstVisibleMs = await assertLoginVisible('login', firstNavigationStarted);
+
+	await page.evaluate(async (timeoutMs) => {
+		if (!('serviceWorker' in navigator)) throw new Error('Service Worker API is unavailable');
+		await Promise.race([
+			navigator.serviceWorker.ready,
+			new Promise((_, reject) => {
+				setTimeout(() => reject(new Error('Service Worker did not become ready')), timeoutMs);
+			})
+		]);
+	}, REQUEST_TIMEOUT_MS);
+
+	const reloadStarted = performance.now();
+	await page.reload({ waitUntil: 'domcontentloaded', timeout: REQUEST_TIMEOUT_MS });
+	const reloadVisibleMs = await assertLoginVisible('login-after-sw-reload', reloadStarted);
+	const serviceWorkerControlsPage = await page.evaluate(() => Boolean(navigator.serviceWorker.controller));
+	if (!serviceWorkerControlsPage) {
+		throw new Error('Reloaded login page is not controlled by the active service worker');
+	}
+
+	assertNoBrowserErrors();
+	console.log(
+		`Deployed browser UI: PASS (${baseUrl.origin}, first=${firstVisibleMs}ms, service-worker reload=${reloadVisibleMs}ms)`
+	);
 } catch (error) {
 	await captureEvidence('failure');
 	throw error;
