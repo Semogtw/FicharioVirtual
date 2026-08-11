@@ -22,7 +22,6 @@
 	let notebookLoading = $state(true);
 	let notebookError = $state<string | null>(null);
 	let mode = $state<ImagePreparationMode>('standard');
-	let consent = $state(false);
 	let dragging = $state(false);
 	let selectionMessage = $state<string | null>(null);
 	let selectionError = $state<string | null>(null);
@@ -50,15 +49,12 @@
 		let queued = 0;
 
 		if (pdfs.length > 0) {
-			addPdfs(pdfs, { notebookId: notebookId || null, consentGranted: consent });
+			addPdfs(pdfs, { notebookId: notebookId || null, consentGranted: true });
 			queued += pdfs.length;
 		}
-		if (images.length > 0 && consent) {
+		if (images.length > 0) {
 			addImages(images, { mode, notebookId: notebookId || null });
 			queued += images.length;
-		} else if (images.length > 0) {
-			selectionError =
-				'As imagens não foram adicionadas: confirme a leitura automática e selecione-as novamente.';
 		}
 
 		if (unsupported > 0) {
@@ -145,8 +141,7 @@
 			</label>
 			<label class="choice">
 				<input type="radio" bind:group={mode} value="high-definition" />
-				<span><strong>Alta definição</strong><small>Até 3.200 px · texto muito pequeno</small></span
-				>
+				<span><strong>Alta definição</strong><small>Até 3.200 px · texto muito pequeno</small></span>
 			</label>
 		</fieldset>
 	</section>
@@ -162,17 +157,6 @@
 			<button type="button" onclick={clearRequestedNotebook}>Continuar sem caderno</button>
 		</div>
 	{/if}
-
-	<label class="consent">
-		<input type="checkbox" bind:checked={consent} />
-		<span>
-			<strong>Permitir OCR quando o material precisar de leitura automática</strong>
-			<small>
-				PDFs com texto nativo não precisam do provedor. Imagens e páginas digitalizadas usam OCR; a
-				chave do provedor nunca fica no navegador.
-			</small>
-		</span>
-	</label>
 
 	<section
 		class="drop-zone"
@@ -305,31 +289,14 @@
 		background: var(--surface-strong);
 	}
 
-	.choice span,
-	.consent span {
+	.choice span {
 		display: grid;
 		gap: 0.15rem;
 	}
 
-	.choice small,
-	.consent small {
+	.choice small {
 		color: var(--muted);
 		line-height: 1.4;
-	}
-
-	.consent {
-		display: flex;
-		align-items: flex-start;
-		gap: 0.7rem;
-		padding: 0.9rem 1rem;
-		border-left: 0.3rem solid var(--accent);
-		background: rgb(166 94 67 / 7%);
-	}
-
-	.consent input {
-		width: 1.1rem;
-		height: 1.1rem;
-		margin-top: 0.2rem;
 	}
 
 	.drop-zone {
