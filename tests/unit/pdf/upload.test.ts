@@ -28,6 +28,34 @@ function mixedInspection(): PdfInspection {
 	};
 }
 
+function scannedInspection(pageCount: number): PdfInspection {
+	return {
+		type: 'Scanned',
+		pageCount,
+		nativePages: [],
+		pagesNeedingOcr: Array.from({ length: pageCount }, (_, index) => index + 1),
+		ocrReasonsByPage: [],
+		markdown: null,
+		title: 'Digitalizado',
+		confidence: 0.9,
+		processingTimeMs: 10,
+		layout: { isComplex: false, pagesWithTables: [], pagesWithColumns: [] },
+		hasEncodingIssues: false
+	};
+}
+
+function complete(pageIds: readonly string[], reviewPageIds: readonly string[] = []) {
+	return {
+		state: 'complete' as const,
+		completedPageIds: pageIds,
+		reviewPageIds,
+		pendingPageIds: [],
+		failedPageIds: [],
+		splitRequiredPageIds: [],
+		unexpectedResultPageIds: []
+	};
+}
+
 function gatewayFixture({ failMetadata = false } = {}) {
 	const uploads: Array<{ path: string; type: string }> = [];
 	const removed: string[][] = [];
@@ -53,7 +81,7 @@ function gatewayFixture({ failMetadata = false } = {}) {
 				pageCount: input.pages.length,
 				ocrPageCount: input.pages.filter((page) => page.needsOcr).length,
 				reviewPageCount: 0,
-				status: 'partially_ready'
+				status: input.pages.every((page) => page.needsOcr) ? 'processing' : 'partially_ready'
 			};
 		}
 	};
@@ -69,8 +97,7 @@ function gatewayFixture({ failMetadata = false } = {}) {
 
 function dependencies() {
 	const rendered: number[] = [];
-	const processed: string[] = [];
-	let consentCalls = 0;
+	const processed: string[][] = [];
 	const values: PdfUploadDependencies = {
 		async inspectPdf() {
 			return mixedInspection();
@@ -82,22 +109,12 @@ function dependencies() {
 		async calculateSha256() {
 			return 'a'.repeat(64);
 		},
-		async recordOcrConsent() {
-			consentCalls += 1;
-		},
-		async processPageOcr(pageId) {
-			processed.push(pageId);
-			return { state: 'complete', needsReview: false, warningCount: 0 };
+		async processOcrBatch(pageIds) {
+			processed.push([...pageIds]);
+			return complete(pageIds);
 		}
 	};
-	return {
-		values,
-		rendered,
-		processed,
-		get consentCalls() {
-			return consentCalls;
-		}
-	};
+	return { values, rendered, processed };
 }
 
 function pdf() {
@@ -115,8 +132,8 @@ describe('uploadPdfWithGateway', () => {
 		const result = await uploadPdfWithGateway(pdf(), {}, fixture.gateway, deps.values);
 
 		expect(deps.rendered).toEqual([2]);
-		expect(deps.consentCalls).toBe(1);
 		expect(deps.processed).toHaveLength(1);
+		expect(deps.processed[0]).toHaveLength(1);
 		expect(fixture.uploads.map((item) => item.path)).toEqual([
 			expect.stringMatching(new RegExp(`^${userId}/[^/]+/original\\.pdf$`)),
 			expect.stringMatching(new RegExp(`^${userId}/[^/]+/pages/2\\.webp$`))
@@ -131,13 +148,10 @@ describe('uploadPdfWithGateway', () => {
 		expect(result.ocrCompleted).toBe(1);
 	});
 
-	it('counts an already-complete page that needs review correctly', async () => {
+	it('counts a completed OCR page that needs review correctly', async () => {
 		const fixture = gatewayFixture();
 		const deps = dependencies();
-		deps.values.processPageOcr = async () => ({
-			state: 'already_complete',
-			needsReview: true
-		});
+		deps.values.processOcrBatch = async (pageIds) => complete(pageIds, pageIds);
 
 		const result = await uploadPdfWithGateway(pdf(), {}, fixture.gateway, deps.values);
 
@@ -149,7 +163,7 @@ describe('uploadPdfWithGateway', () => {
 	it('separates permanent OCR failures from retryable pending work', async () => {
 		const permanentFixture = gatewayFixture();
 		const permanentDeps = dependencies();
-		permanentDeps.values.processPageOcr = async () => {
+		permanentDeps.values.processOcrBatch = async () => {
 			throw new OcrProcessingError('ocr_not_retryable', false);
 		};
 
@@ -164,7 +178,7 @@ describe('uploadPdfWithGateway', () => {
 
 		const retryableFixture = gatewayFixture();
 		const retryableDeps = dependencies();
-		retryableDeps.values.processPageOcr = async () => {
+		retryableDeps.values.processOcrBatch = async () => {
 			throw new OcrProcessingError('ocr_transport_failed', true);
 		};
 
@@ -178,28 +192,18 @@ describe('uploadPdfWithGateway', () => {
 		expect(retryable.ocrFailed).toBe(0);
 	});
 
-	it('stops starting new OCR pages after post-publication cancellation', async () => {
+	it('stops starting new OCR batches after post-publication cancellation', async () => {
 		const fixture = gatewayFixture();
 		const deps = dependencies();
-		deps.values.inspectPdf = async () => ({
-			type: 'Scanned',
-			pageCount: 3,
-			nativePages: [],
-			pagesNeedingOcr: [1, 2, 3],
-			ocrReasonsByPage: [],
-			markdown: null,
-			title: 'Digitalizado',
-			confidence: 0.9,
-			processingTimeMs: 10,
-			layout: { isComplex: false, pagesWithTables: [], pagesWithColumns: [] },
-			hasEncodingIssues: false
-		});
+		deps.values.inspectPdf = async () => scannedInspection(45);
 		const releases: Array<() => void> = [];
 		let calls = 0;
-		deps.values.processPageOcr = async () => {
+		let firstBatchSize = 0;
+		deps.values.processOcrBatch = async (pageIds) => {
 			calls += 1;
+			if (calls === 1) firstBatchSize = pageIds.length;
 			await new Promise<void>((resolve) => releases.push(resolve));
-			return { state: 'complete', needsReview: false, warningCount: 0 };
+			return complete(pageIds);
 		};
 		const controller = new AbortController();
 
@@ -209,21 +213,20 @@ describe('uploadPdfWithGateway', () => {
 			fixture.gateway,
 			deps.values
 		);
-		await vi.waitFor(() => expect(releases).toHaveLength(2));
+		await vi.waitFor(() => expect(releases).toHaveLength(1));
 		controller.abort();
-		releases.splice(0).forEach((release) => release());
-		await Promise.resolve();
-		await Promise.resolve();
 		releases.splice(0).forEach((release) => release());
 
 		const result = await pending;
-		expect(calls).toBe(2);
-		expect(result.ocrCompleted).toBe(2);
-		expect(result.ocrPending).toBe(1);
+		expect(calls).toBe(1);
+		expect(firstBatchSize).toBeGreaterThan(0);
+		expect(firstBatchSize).toBeLessThan(45);
+		expect(result.ocrCompleted).toBe(firstBatchSize);
+		expect(result.ocrPending).toBe(45 - firstBatchSize);
 		expect(result.ocrFailed).toBe(0);
 	});
 
-	it('does not require OCR consent for a text-only PDF', async () => {
+	it('skips OCR entirely for a text-only PDF', async () => {
 		const fixture = gatewayFixture();
 		const deps = dependencies();
 		deps.values.inspectPdf = async () => ({
@@ -236,7 +239,6 @@ describe('uploadPdfWithGateway', () => {
 		await uploadPdfWithGateway(pdf(), {}, fixture.gateway, deps.values);
 
 		expect(deps.rendered).toEqual([]);
-		expect(deps.consentCalls).toBe(0);
 		expect(deps.processed).toEqual([]);
 	});
 
