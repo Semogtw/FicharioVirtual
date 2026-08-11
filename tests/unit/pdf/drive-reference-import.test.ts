@@ -24,45 +24,60 @@ function inspection() {
 	};
 }
 
+function complete(pageIds: readonly string[]) {
+	return {
+		state: 'complete' as const,
+		completedPageIds: [...pageIds],
+		reviewPageIds: [],
+		pendingPageIds: [],
+		failedPageIds: [],
+		splitRequiredPageIds: [],
+		unexpectedResultPageIds: []
+	};
+}
+
 function dependencies() {
 	const document = { numPages: 3 };
 	const destroy = vi.fn().mockResolvedValue(undefined);
-	return {
-		document,
-		destroy,
-		currentUserId: vi.fn().mockResolvedValue(userId),
-		verifyIdentity: vi.fn().mockResolvedValue({
-			driveVersion: '4',
-			sourceSizeBytes: staged.sourceSizeBytes
-		}),
-		openDocument: vi.fn().mockResolvedValue({ document, destroy }),
-		inspectDocument: vi.fn().mockResolvedValue(inspection()),
-		recordOcrConsent: vi.fn().mockResolvedValue(undefined),
-		renderPage: vi.fn().mockResolvedValue(new Blob([new Uint8Array(1024)], { type: 'image/webp' })),
-		upload: vi.fn().mockResolvedValue(undefined),
-		remove: vi.fn().mockResolvedValue(undefined),
-		finalize: vi.fn().mockImplementation(async ({ pages }) => ({
+	const lease = {
+		attemptId: '11111111-2222-4333-8444-555555555555',
+		renew: vi.fn().mockResolvedValue(undefined),
+		renewIfNeeded: vi.fn().mockResolvedValue(undefined),
+		abandon: vi.fn().mockResolvedValue(true),
+		stageAndFinalize: vi.fn().mockImplementation(async ({ pages }) => ({
 			documentId,
 			pageCount: pages.length,
 			ocrPageCount: pages.filter((page: { needsOcr: boolean }) => page.needsOcr).length,
 			reviewPageCount: 0,
 			status: 'partially_ready'
-		})),
+		}))
+	};
+	return {
+		document,
+		destroy,
+		lease,
+		currentUserId: vi.fn().mockResolvedValue(userId),
+		verifyIdentity: vi
+			.fn()
+			.mockResolvedValue({ driveVersion: '4', sourceSizeBytes: staged.sourceSizeBytes }),
+		openDocument: vi.fn().mockResolvedValue({ document, destroy }),
+		inspectDocument: vi.fn().mockResolvedValue(inspection()),
+		acquireDescriptorLease: vi.fn().mockResolvedValue(lease),
+		renderPage: vi.fn().mockResolvedValue(new Blob([new Uint8Array(1024)], { type: 'image/webp' })),
+		upload: vi.fn().mockResolvedValue(undefined),
+		remove: vi.fn().mockResolvedValue(undefined),
 		recoverPublication: vi.fn().mockResolvedValue(null),
-		referencePending: vi.fn().mockResolvedValue(true),
-		processPage: vi.fn().mockResolvedValue({ state: 'complete', needsReview: false })
+		processBatch: vi.fn(async (pageIds: readonly string[]) => complete(pageIds))
 	};
 }
 
 describe('importStagedDrivePdfReference', () => {
-	it('renders and uploads only OCR pages before atomically finalizing the staged reference', async () => {
+	it('renders only OCR pages, publishes atomically, then runs batch OCR', async () => {
 		const deps = dependencies();
-
 		const result = await importStagedDrivePdfReference({
 			staged,
-
 			client: {} as never,
-			dependencies: deps
+			dependencies: deps as never
 		});
 
 		expect(deps.verifyIdentity).toHaveBeenCalledOnce();
@@ -73,20 +88,18 @@ describe('importStagedDrivePdfReference', () => {
 				totalBytes: staged.sourceSizeBytes
 			})
 		);
-		expect(deps.inspectDocument).toHaveBeenCalledWith(deps.document, expect.anything());
-		expect(deps.recordOcrConsent).toHaveBeenCalledOnce();
 		expect(deps.renderPage).toHaveBeenCalledTimes(1);
 		expect(deps.renderPage).toHaveBeenCalledWith(
 			deps.document,
 			2,
 			expect.objectContaining({ maxDimension: 2400, quality: 0.88 })
 		);
-		expect(deps.upload).toHaveBeenCalledTimes(1);
-		const [path] = deps.upload.mock.calls[0] ?? [];
-		expect(path).toBe(`${userId}/${documentId}/pages/2.webp`);
-		expect(deps.finalize).toHaveBeenCalledTimes(1);
-		const finalized = deps.finalize.mock.calls[0]?.[0];
-		expect(finalized.documentId).toBe(documentId);
+		expect(deps.upload).toHaveBeenCalledWith(
+			`${userId}/${documentId}/pages/2.webp`,
+			expect.any(Blob)
+		);
+		expect(deps.lease.stageAndFinalize).toHaveBeenCalledOnce();
+		const finalized = deps.lease.stageAndFinalize.mock.calls[0]?.[0];
 		expect(finalized.promptVersion).toBe(1);
 		expect(finalized.pages).toHaveLength(3);
 		expect(finalized.pages[0]).toMatchObject({
@@ -102,11 +115,12 @@ describe('importStagedDrivePdfReference', () => {
 			needsOcr: true,
 			temporaryImagePath: `${userId}/${documentId}/pages/2.webp`
 		});
-		expect(deps.processPage).toHaveBeenCalledTimes(1);
-		expect(deps.processPage.mock.invocationCallOrder[0]).toBeGreaterThan(
-			deps.finalize.mock.invocationCallOrder[0] ?? 0
+		expect(deps.processBatch).toHaveBeenCalledOnce();
+		expect(deps.processBatch.mock.invocationCallOrder[0]).toBeGreaterThan(
+			deps.lease.stageAndFinalize.mock.invocationCallOrder[0] ?? 0
 		);
 		expect(deps.remove).not.toHaveBeenCalled();
+		expect(deps.lease.abandon).not.toHaveBeenCalled();
 		expect(deps.destroy).toHaveBeenCalledOnce();
 		expect(result).toMatchObject({
 			documentId,
@@ -118,55 +132,41 @@ describe('importStagedDrivePdfReference', () => {
 		});
 	});
 
-	it('processes required OCR without a per-import confirmation', async () => {
+	it('processes required OCR without a per-import consent dependency', async () => {
 		const deps = dependencies();
-
 		const result = await importStagedDrivePdfReference({
 			staged,
 			client: {} as never,
-			dependencies: deps
+			dependencies: deps as never
 		});
-
-		expect(deps.verifyIdentity).toHaveBeenCalledOnce();
-		expect(deps.recordOcrConsent).toHaveBeenCalledOnce();
+		expect('recordOcrConsent' in deps).toBe(false);
 		expect(deps.renderPage).toHaveBeenCalledOnce();
-		expect(deps.upload).toHaveBeenCalledOnce();
-		expect(deps.finalize).toHaveBeenCalledOnce();
-		expect(deps.destroy).toHaveBeenCalledOnce();
+		expect(deps.lease.stageAndFinalize).toHaveBeenCalledOnce();
+		expect(deps.processBatch).toHaveBeenCalledOnce();
 		expect(result.ocrCompleted).toBe(1);
 	});
 
-	it('removes uploaded derivatives when finalization fails but preserves the Drive reference', async () => {
+	it('cleans derivatives when descriptor finalization fails and recovery is unavailable', async () => {
 		const deps = dependencies();
-		deps.finalize.mockRejectedValue(new Error('rpc failed'));
-
+		deps.lease.stageAndFinalize.mockRejectedValue(new Error('rpc failed'));
 		await expect(
-			importStagedDrivePdfReference({
-				staged,
-
-				client: {} as never,
-				dependencies: deps
-			})
+			importStagedDrivePdfReference({ staged, client: {} as never, dependencies: deps as never })
 		).rejects.toThrow('Não foi possível concluir a importação do PDF grande.');
-
-		expect(deps.upload).toHaveBeenCalledOnce();
 		expect(deps.remove).toHaveBeenCalledWith([`${userId}/${documentId}/pages/2.webp`]);
-		expect(deps.processPage).not.toHaveBeenCalled();
-		expect(deps.destroy).toHaveBeenCalledOnce();
+		expect(deps.lease.abandon).toHaveBeenCalledOnce();
+		expect(deps.processBatch).not.toHaveBeenCalled();
 	});
 
-	it('keeps temporary pages after publication when provider processing is retryable', async () => {
+	it('keeps published derivatives when provider processing remains retryable', async () => {
 		const deps = dependencies();
-		deps.processPage.mockRejectedValue(new Error('provider unavailable'));
-
+		deps.processBatch.mockRejectedValue(new Error('provider unavailable'));
 		const result = await importStagedDrivePdfReference({
 			staged,
-
 			client: {} as never,
-			dependencies: deps
+			dependencies: deps as never
 		});
-
 		expect(deps.remove).not.toHaveBeenCalled();
+		expect(deps.lease.abandon).not.toHaveBeenCalled();
 		expect(result).toMatchObject({ ocrCompleted: 0, ocrPending: 1, ocrFailed: 0 });
 	});
 });
