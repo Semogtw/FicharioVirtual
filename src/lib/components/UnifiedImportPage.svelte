@@ -25,6 +25,7 @@
 	let dragging = $state(false);
 	let selectionMessage = $state<string | null>(null);
 	let selectionError = $state<string | null>(null);
+	let pendingFiles: readonly File[] | null = null;
 
 	let requestedNotebookId = $derived(parseRequestedNotebookId(page.url.searchParams));
 	let notebookSelection = $derived(
@@ -35,25 +36,18 @@
 		requestedNotebookId !== null && notebookOptionsReady && notebookSelection.requiresResolution
 	);
 
-	function queue(files: readonly File[]) {
-		selectionMessage = null;
-		selectionError = null;
-		if (notebookSelection.requiresResolution) {
-			selectionError = 'O caderno solicitado precisa ser confirmado antes da importação.';
-			return;
-		}
-
+	function enqueue(files: readonly File[], destinationNotebookId: string) {
 		const images = files.filter((file) => imageTypes.has(file.type));
 		const pdfs = files.filter((file) => file.type === 'application/pdf');
 		const unsupported = files.length - images.length - pdfs.length;
 		let queued = 0;
 
 		if (pdfs.length > 0) {
-			addPdfs(pdfs, { notebookId: notebookId || null });
+			addPdfs(pdfs, { notebookId: destinationNotebookId || null });
 			queued += pdfs.length;
 		}
 		if (images.length > 0) {
-			addImages(images, { mode, notebookId: notebookId || null });
+			addImages(images, { mode, notebookId: destinationNotebookId || null });
 			queued += images.length;
 		}
 
@@ -63,6 +57,22 @@
 		if (queued > 0) {
 			selectionMessage = `${queued} arquivo(s) adicionados à fila global. Você já pode navegar pelo Fichário.`;
 		}
+	}
+
+	function queue(files: readonly File[]) {
+		selectionMessage = null;
+		selectionError = null;
+		if (notebookSelection.requiresResolution) {
+			if (!notebookOptionsReady) {
+				pendingFiles = [...(pendingFiles ?? []), ...files];
+				selectionMessage = 'Confirmando o caderno antes de adicionar os arquivos…';
+				return;
+			}
+			selectionError = 'O caderno solicitado precisa ser confirmado antes da importação.';
+			return;
+		}
+
+		enqueue(files, notebookId);
 	}
 
 	function selected(event: Event) {
@@ -96,9 +106,22 @@
 			if (notebookRequests.isCurrent(version)) {
 				notebooks = items;
 				notebookOptionsReady = true;
+				const waiting = pendingFiles;
+				pendingFiles = null;
+				if (waiting && waiting.length > 0) {
+					const resolved = resolveImportNotebookSelection(requestedNotebookId, items, true);
+					selectionMessage = null;
+					selectionError = null;
+					if (resolved.requiresResolution) {
+						selectionError = 'O caderno solicitado precisa ser confirmado antes da importação.';
+					} else {
+						enqueue(waiting, resolved.notebookId);
+					}
+				}
 			}
 		} catch {
 			if (notebookRequests.isCurrent(version)) {
+				pendingFiles = null;
 				notebookError = 'Não foi possível carregar os cadernos agora.';
 				notebookOptionsReady = false;
 			}
@@ -121,6 +144,7 @@
 	});
 
 	onDestroy(() => {
+		pendingFiles = null;
 		notebookRequests.next();
 	});
 </script>
