@@ -49,7 +49,7 @@
 				if (!signOutRequests.isCurrent(version)) return;
 			} catch {
 				if (!signOutRequests.isCurrent(version)) return;
-				error = sessionState.error ?? 'Não foi possível sair agora.';
+				error = sessionState.error ?? 'Não foi possível encerrar a sessão agora.';
 				return;
 			}
 			signedOut = true;
@@ -57,7 +57,7 @@
 				await goto('/login/');
 			} catch {
 				if (!signOutRequests.isCurrent(version)) return;
-				error = 'Você saiu da conta, mas a tela de acesso não abriu automaticamente.';
+				error = 'Sessão encerrada, mas não foi possível abrir a tela de acesso.';
 			}
 		} finally {
 			if (signOutRequests.isCurrent(version)) signingOut = false;

@@ -13,11 +13,10 @@ describe('theme picker', () => {
 		expect(picker).toContain('selectTheme(theme.id)');
 	});
 
-	it('places appearance controls in Settings', () => {
+	it('places appearance controls near the top of Settings', () => {
 		expect(settings).toContain("import ThemePicker from '$lib/components/ThemePicker.svelte';");
 		expect(settings).toContain('<ThemePicker />');
-		expect(settings.indexOf('<ThemePicker />')).toBeLessThan(
-			settings.indexOf('Exportação portátil')
-		);
+		expect(settings).toContain('Baixar meus dados');
+		expect(settings.indexOf('<ThemePicker />')).toBeLessThan(settings.indexOf('Baixar meus dados'));
 	});
 });

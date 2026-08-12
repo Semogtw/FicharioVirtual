@@ -14,11 +14,11 @@ describe('Drive synchronization settings UI', () => {
 		expect(source).toContain('await refresh()');
 	});
 
-	it('presents a sanitized receipt and never persists Drive credentials', () => {
+	it('presents a user-facing sync receipt and never persists Drive credentials', () => {
 		const source = readFileSync(path, 'utf8');
 
-		expect(source).toContain('alterações aplicadas');
-		expect(source).toContain('conflitos isolados');
+		expect(source).toContain('Sincronização concluída.');
+		expect(source).toContain('Google Drive atualizado.');
 		expect(source).toContain('role="status"');
 		expect(source).not.toContain('localStorage');
 		expect(source).not.toContain('sessionStorage');
