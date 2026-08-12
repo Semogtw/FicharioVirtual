@@ -40,8 +40,9 @@ const indexSchema = z
 		if (
 			value.indexedPages > value.totalPages ||
 			value.remainingPages !== value.totalPages - value.indexedPages ||
-			Math.abs(value.coverage - (value.totalPages === 0 ? 1 : value.indexedPages / value.totalPages)) >
-				1e-9
+			Math.abs(
+				value.coverage - (value.totalPages === 0 ? 1 : value.indexedPages / value.totalPages)
+			) > 1e-9
 		) {
 			context.addIssue({ code: 'custom', message: 'Invalid semantic search index state' });
 		}
