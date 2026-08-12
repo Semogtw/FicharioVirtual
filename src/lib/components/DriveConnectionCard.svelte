@@ -25,7 +25,11 @@
 		const value = url.searchParams.get('drive');
 		if (value !== 'authorized' && value !== 'cancelled' && value !== 'error') return null;
 		url.searchParams.delete('drive');
-		window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+		window.history.replaceState(
+			window.history.state,
+			'',
+			`${url.pathname}${url.search}${url.hash}`
+		);
 		return value;
 	}
 
@@ -46,7 +50,8 @@
 		for (let attempt = 0; attempt < 4; attempt += 1) {
 			await refresh();
 			if (connection?.status === 'connected' || connection?.status === 'syncing') return true;
-			if (attempt < 3) await new Promise((resolve) => window.setTimeout(resolve, 350 * (attempt + 1)));
+			if (attempt < 3)
+				await new Promise((resolve) => window.setTimeout(resolve, 350 * (attempt + 1)));
 		}
 		return false;
 	}
@@ -97,14 +102,17 @@
 				const connected = await refreshAfterAuthorization();
 				if (disposed) return;
 				if (connected) syncMessage = 'Google Drive conectado.';
-				else error = 'A conta foi autorizada, mas a conexão não ficou pronta. Tente conectar novamente.';
+				else
+					error =
+						'A conta foi autorizada, mas a conexão não ficou pronta. Tente conectar novamente.';
 				return;
 			}
 
 			await refresh();
 			if (disposed) return;
 			if (oauthResult === 'cancelled') syncMessage = 'Conexão cancelada.';
-			if (oauthResult === 'error') error = 'Não foi possível concluir a conexão com o Google Drive.';
+			if (oauthResult === 'error')
+				error = 'Não foi possível concluir a conexão com o Google Drive.';
 		})();
 
 		const refreshWhenVisible = () => {

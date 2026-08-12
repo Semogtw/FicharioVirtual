@@ -97,7 +97,9 @@
 		<section class="settings-card" id="privacy" aria-labelledby="privacy-title">
 			<div>
 				<h2 id="privacy-title">Privacidade</h2>
-				<p>Seus arquivos e informações ficam vinculados à sua conta e continuam sob seu controle.</p>
+				<p>
+					Seus arquivos e informações ficam vinculados à sua conta e continuam sob seu controle.
+				</p>
 			</div>
 			<a class="secondary-link" href="/library/">Ver meus arquivos</a>
 		</section>
@@ -117,7 +119,9 @@
 		<section class="settings-card" aria-labelledby="originals-title">
 			<div>
 				<h2 id="originals-title">Arquivos originais</h2>
-				<p>Quando o Google Drive está conectado, seus arquivos originais ficam disponíveis por lá.</p>
+				<p>
+					Quando o Google Drive está conectado, seus arquivos originais ficam disponíveis por lá.
+				</p>
 			</div>
 			<a class="secondary-link" href="/library/">Abrir biblioteca</a>
 		</section>
