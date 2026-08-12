@@ -15,7 +15,9 @@ describe('real deployed app flow workflow', () => {
 	it('uses protected real credentials without checking out the repository', () => {
 		expect(source).toContain('environment: staging');
 		expect(source).toContain('STAGING_AUTHORIZED_EMAIL: ${{ secrets.STAGING_AUTHORIZED_EMAIL }}');
-		expect(source).toContain('STAGING_AUTHORIZED_PASSWORD: ${{ secrets.STAGING_AUTHORIZED_PASSWORD }}');
+		expect(source).toContain(
+			'STAGING_AUTHORIZED_PASSWORD: ${{ secrets.STAGING_AUTHORIZED_PASSWORD }}'
+		);
 		expect(source).toContain('STAGING_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}');
 		expect(source).toContain(
 			'STAGING_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}'
