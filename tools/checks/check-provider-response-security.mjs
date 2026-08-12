@@ -39,10 +39,7 @@ if (!gemini.includes('maxOutputTokens: 16_384')) {
 // Launch OCR returns compact line geometry and derives word boxes locally. The
 // reviewed batch ceiling reserves enough output for large academic pages while
 // the bounded 4 MiB response reader above remains the hard response-size limit.
-for (const required of [
-	'const MAX_OUTPUT_TOKENS = 65_536',
-	'maxOutputTokens: MAX_OUTPUT_TOKENS'
-]) {
+for (const required of ['const MAX_OUTPUT_TOKENS = 65_536', 'maxOutputTokens: MAX_OUTPUT_TOKENS']) {
 	if (!gemini.includes(required)) {
 		failures.push(`Gemini batch output token ceiling changed without security review: ${required}`);
 	}
