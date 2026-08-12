@@ -2,6 +2,7 @@
 
 import initPdfInspector, { processPdf } from '@firecrawl/pdf-inspector-wasm';
 import { MAX_LOCAL_PDF_BYTES } from './limits';
+import { safelyWipeBytes } from './safe-wipe';
 import {
 	routePdfProcessResult,
 	type PdfInspectorProcessResult,
@@ -62,7 +63,7 @@ worker.onmessage = async (event: MessageEvent<PdfWorkerRequest>) => {
 			code: failureCode(error)
 		} satisfies PdfWorkerFailure);
 	} finally {
-		bytes?.fill(0);
+		safelyWipeBytes(bytes);
 	}
 };
 
