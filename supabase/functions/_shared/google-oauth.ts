@@ -1,6 +1,8 @@
 export const GOOGLE_DRIVE_FILE_SCOPE = 'https://www.googleapis.com/auth/drive.file' as const;
 
+const GOOGLE_EMAIL_SCOPE_ALIAS = 'https://www.googleapis.com/auth/userinfo.email' as const;
 const REQUIRED_SCOPES = Object.freeze(['openid', 'email', GOOGLE_DRIVE_FILE_SCOPE] as const);
+const ALLOWED_SCOPES = new Set<string>([...REQUIRED_SCOPES, GOOGLE_EMAIL_SCOPE_ALIAS]);
 const CLIENT_ID = /^\d+-[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$/;
 const OPAQUE = /^[A-Za-z0-9_-]{43,128}$/;
 const PKCE_CHALLENGE = /^[A-Za-z0-9_-]{43}$/;
@@ -37,10 +39,12 @@ function nonEmptySecret(value: unknown): value is string {
 function parseScopes(value: unknown): readonly string[] | null {
 	if (typeof value !== 'string') return null;
 	const scopes = value.split(/\s+/).filter(Boolean);
-	if (scopes.length !== REQUIRED_SCOPES.length || new Set(scopes).size !== scopes.length) {
+	if (scopes.length < 3 || scopes.length > 4 || new Set(scopes).size !== scopes.length) {
 		return null;
 	}
-	if (!REQUIRED_SCOPES.every((scope) => scopes.includes(scope))) return null;
+	if (!scopes.every((scope) => ALLOWED_SCOPES.has(scope))) return null;
+	if (!scopes.includes('openid') || !scopes.includes(GOOGLE_DRIVE_FILE_SCOPE)) return null;
+	if (!scopes.includes('email') && !scopes.includes(GOOGLE_EMAIL_SCOPE_ALIAS)) return null;
 	return Object.freeze([...REQUIRED_SCOPES]);
 }
 
