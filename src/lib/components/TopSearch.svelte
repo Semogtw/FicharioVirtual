@@ -36,7 +36,9 @@
 
 <style>
 	form {
-		width: min(100%, 48rem);
+		width: 100%;
+		min-width: 0;
+		flex: 1 1 36rem;
 		display: grid;
 		grid-template-columns: auto minmax(0, 1fr) auto;
 		align-items: center;

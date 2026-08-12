@@ -27,10 +27,10 @@
 			const manifest = await createPortableExport();
 			if (!exportRequests.isCurrent(version)) return;
 			downloadPortableExport(manifest);
-			message = `${manifest.documents.length} documentos e ${manifest.notebooks.length} cadernos exportados.`;
+			message = 'Sua cópia de dados foi baixada.';
 		} catch (caught) {
 			if (!exportRequests.isCurrent(version)) return;
-			error = caught instanceof Error ? caught.message : 'Não foi possível gerar a exportação.';
+			error = caught instanceof Error ? caught.message : 'Não foi possível baixar seus dados.';
 		} finally {
 			if (exportRequests.isCurrent(version)) exporting = false;
 		}
@@ -76,18 +76,16 @@
 
 <div class="page" aria-labelledby="page-title">
 	<header>
-		<p class="eyebrow">Conta e propriedade dos dados</p>
+		<p class="eyebrow">Seu Fichário</p>
 		<h1 id="page-title">Configurações</h1>
-		<p>
-			Controle Google Drive, exportação, instalação e sessão sem expor tokens ou caminhos privados.
-		</p>
+		<p>Personalize o Fichário, conecte seus arquivos e gerencie sua conta.</p>
 	</header>
 
 	{#if signedOut}
 		<div class="signed-out" role="status">
 			<p>Sessão encerrada.</p>
 			{#if error}<p class="signed-out-error">{error}</p>{/if}
-			<a href="/login/">Abrir tela de acesso</a>
+			<a href="/login/">Entrar novamente</a>
 		</div>
 	{:else}
 		{#if error}<p class="error" role="alert">{error}</p>{/if}
@@ -98,32 +96,21 @@
 
 		<section class="settings-card" id="privacy" aria-labelledby="privacy-title">
 			<div>
-				<h2 id="privacy-title">Privacidade e dados</h2>
+				<h2 id="privacy-title">Privacidade</h2>
 				<p>
-					Este Fichário é configurado para uso privado. OCR, busca por significado e análise de
-					cobertura podem enviar somente o conteúdo necessário aos provedores configurados quando
-					você usa uma função que precisa deles. Não há confirmações repetidas a cada arquivo ou
-					pesquisa.
-				</p>
-				<p>
-					PDFs com texto aproveitam o conteúdo nativo; páginas visuais e imagens usam OCR quando
-					necessário. Recursos semânticos podem processar consultas e pequenos trechos. A telemetria
-					técnica acompanha funcionamento, cota e qualidade do processamento.
+					Seus arquivos e informações ficam vinculados à sua conta e continuam sob seu controle.
 				</p>
 			</div>
-			<a class="secondary-link" href="/library/">Gerenciar arquivos</a>
+			<a class="secondary-link" href="/library/">Ver meus arquivos</a>
 		</section>
 
 		<section class="settings-card" aria-labelledby="export-title">
 			<div>
-				<h2 id="export-title">Exportação portátil</h2>
-				<p>
-					Baixe um JSON versionado com cadernos, metadados, tags, fontes de texto, correções e
-					avisos. IDs internos sensíveis, tokens e URLs temporárias não entram no arquivo.
-				</p>
+				<h2 id="export-title">Baixar meus dados</h2>
+				<p>Salve uma cópia dos seus cadernos e informações do Fichário.</p>
 			</div>
 			<Button
-				label={exporting ? 'Gerando…' : 'Exportar catálogo JSON'}
+				label={exporting ? 'Preparando…' : 'Baixar cópia'}
 				disabled={exporting || signingOut}
 				onclick={() => void exportData()}
 			/>
@@ -133,8 +120,7 @@
 			<div>
 				<h2 id="originals-title">Arquivos originais</h2>
 				<p>
-					O Google Drive será a fonte permanente dos originais. Durante a migração, cópias no
-					Supabase permanecem como fallback até a confirmação de ID, integridade e rollback.
+					Quando o Google Drive está conectado, seus arquivos originais ficam disponíveis por lá.
 				</p>
 			</div>
 			<a class="secondary-link" href="/library/">Abrir biblioteca</a>
@@ -145,27 +131,10 @@
 			<InstallAppButton />
 		</section>
 
-		<section class="policy" aria-labelledby="policy-title">
-			<h2 id="policy-title">Política operacional</h2>
-			<ul>
-				<li>Nenhuma cobrança é ativada automaticamente.</li>
-				<li>O Drive usa somente o escopo <code>drive.file</code> no MVP.</li>
-				<li>Refresh token fica apenas no backend; o navegador recebe acesso efêmero.</li>
-				<li>
-					A leitura externa ocorre somente ao usar recursos que precisam dela e respeita o limite
-					diário configurado no backend.
-				</li>
-				<li>
-					Quando a cota termina, páginas ficam pendentes em vez de trocar silenciosamente de modelo.
-				</li>
-				<li>O service worker não guarda respostas autenticadas, documentos ou transcrições.</li>
-			</ul>
-		</section>
-
 		<section class="danger-zone" aria-labelledby="session-title">
 			<div>
-				<h2 id="session-title">Sessão atual</h2>
-				<p>Encerre o acesso neste navegador. Arquivos e metadados permanecem preservados.</p>
+				<h2 id="session-title">Sua conta</h2>
+				<p>Saia do Fichário neste navegador.</p>
 			</div>
 			<button type="button" disabled={signingOut || exporting} onclick={() => void signOut()}>
 				{signingOut ? 'Saindo…' : 'Sair'}
@@ -220,8 +189,7 @@
 	}
 
 	.settings-card h2,
-	.danger-zone h2,
-	.policy h2 {
+	.danger-zone h2 {
 		margin-bottom: 0.35rem;
 		font-size: 1.35rem;
 	}
@@ -245,28 +213,6 @@
 		background: var(--surface-strong);
 		color: var(--ink);
 		font-weight: 720;
-	}
-
-	.policy {
-		padding: 1rem;
-		border-left: 0.3rem solid var(--archive);
-		background: var(--archive-soft);
-	}
-
-	.policy ul {
-		display: grid;
-		gap: 0.4rem;
-		margin: 0;
-		padding-left: 1.2rem;
-		color: var(--muted-strong);
-		line-height: 1.5;
-	}
-
-	.policy code {
-		padding: 0.1rem 0.25rem;
-		border-radius: 0.3rem;
-		background: var(--surface-strong);
-		color: var(--ink);
 	}
 
 	.danger-zone {

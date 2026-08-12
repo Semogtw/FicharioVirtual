@@ -126,6 +126,27 @@ describe('Google Drive OAuth contracts', () => {
 		).toThrow('Invalid Google token response');
 	});
 
+	it('accepts the Google userinfo.email alias while preserving the canonical minimal scope set', () => {
+		const alias = 'https://www.googleapis.com/auth/userinfo.email';
+		for (const scope of [
+			`openid email ${alias} ${GOOGLE_DRIVE_FILE_SCOPE}`,
+			`openid ${alias} ${GOOGLE_DRIVE_FILE_SCOPE}`
+		]) {
+			const parsed = parseGoogleTokenResponse(
+				{
+					access_token: 'access-token-value',
+					expires_in: 3599,
+					refresh_token: 'refresh-token-value',
+					scope,
+					token_type: 'Bearer',
+					id_token: 'header.payload.signature'
+				},
+				{ requireRefreshToken: true, requireIdToken: true }
+			);
+			expect(parsed.scopes).toEqual(['openid', 'email', GOOGLE_DRIVE_FILE_SCOPE]);
+		}
+	});
+
 	it('parses verified tokeninfo identity and checks audience, issuer, nonce and expiry', () => {
 		const nowSeconds = 1_786_000_000;
 		const parsed = parseGoogleIdentity(
