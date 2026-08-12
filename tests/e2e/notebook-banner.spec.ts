@@ -34,6 +34,7 @@ test('adds, repositions and removes a private notebook banner', async ({ page })
 	let bannerPositionX = 50;
 	let bannerPositionY = 50;
 	let uploadedPath: string | null = null;
+	let signedUrlRequests = 0;
 	const patchBodies: Record<string, unknown>[] = [];
 
 	await page.addInitScript(
@@ -87,6 +88,8 @@ test('adds, repositions and removes a private notebook banner', async ({ page })
 			return json(route, []);
 		}
 		if (path.startsWith('/storage/v1/object/sign/documents/') && request.method() === 'POST') {
+			signedUrlRequests += 1;
+			if (signedUrlRequests === 1) await new Promise((resolve) => setTimeout(resolve, 900));
 			return json(route, {
 				signedURL: `${path.replace('/storage/v1', '')}?token=e2e-banner`
 			});
@@ -118,6 +121,8 @@ test('adds, repositions and removes a private notebook banner', async ({ page })
 	await page.getByLabel(/Posição vertical/).fill('64');
 	await page.getByRole('button', { name: 'Salvar banner' }).click();
 
+	await expect(page.getByRole('button', { name: 'Salvando…' })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Personalizar banner' })).toHaveCount(0);
 	await expect(page.getByRole('button', { name: 'Personalizar banner' })).toBeVisible();
 	await expect(page.locator('.banner img')).toBeVisible();
 	await expect
