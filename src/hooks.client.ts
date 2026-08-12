@@ -2,6 +2,7 @@ import { invalidateAll } from '$app/navigation';
 import type { ClientInit } from '@sveltejs/kit';
 import { startImageImportCrossTabYield } from '$lib/import/image-import-cross-tab-yield';
 import { createOcrQueueLifecycle } from '$lib/import/job-runner-lifecycle';
+import { installServiceWorkerUpdateReload } from '$lib/pwa/service-worker-update';
 import { kickOcrQueueBestEffort } from '$lib/services/ocr-background';
 import { restoreImageImports } from '$lib/stores/import-queue.svelte';
 import { restorePdfImports } from '$lib/stores/pdf-import-queue.svelte';
@@ -14,6 +15,7 @@ import {
 import { initializeTheme } from '$lib/theme/theme';
 
 export const init: ClientInit = () => {
+	installServiceWorkerUpdateReload();
 	initializeTheme();
 	startImageImportCrossTabYield();
 	const ocrQueueLifecycle = createOcrQueueLifecycle(() => kickOcrQueueBestEffort());
