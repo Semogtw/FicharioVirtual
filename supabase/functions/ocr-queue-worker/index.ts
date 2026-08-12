@@ -20,6 +20,7 @@ declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void };
 const MODEL = /^[A-Za-z0-9._-]{3,128}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_INLINE_IMAGE_BYTES = 14 * 1024 * 1024;
+const WORKER_MODE_HEADER = 'X-Fichario-Worker-Mode';
 
 type Candidate = Readonly<{
 	userId: string;
@@ -325,9 +326,10 @@ async function drainOnce(settings: WorkerConfig) {
 			pageId: candidate.pageId,
 			model: settings.primaryModel,
 			claimedAt: new Date().toISOString()
-		}).catch(() => null);
-		const claim = value ? parseOcrClaimResult(value) : null;
-		if (claim?.state === 'claimed') {
+		});
+		const claim = parseOcrClaimResult(value);
+		if (!claim) throw new Error('Invalid background OCR claim response');
+		if (claim.state === 'claimed') {
 			claimed.push(Object.freeze({ candidate, attemptCount: claim.attemptCount }));
 		}
 	}
@@ -601,6 +603,22 @@ async function drainOnce(settings: WorkerConfig) {
 	return (await candidates(admin, 1)).length > 0;
 }
 
+function workerFailureCode(error: unknown) {
+	if (!(error instanceof Error)) return 'unknown';
+	if (error.message === 'Background OCR candidate lookup failed') return 'candidate_lookup_failed';
+	if (error.message === 'Invalid background OCR candidate response') return 'candidate_response_invalid';
+	if (error.message === 'Invalid background OCR claim response') return 'claim_response_invalid';
+	if (error.message.startsWith('Background OCR operation failed: ')) return 'operation_failed';
+	if (error.message.startsWith('Background OCR operation rejected: ')) return 'operation_rejected';
+	return 'execution_failed';
+}
+
+function reportWorkerFailure(error: unknown) {
+	const failure = workerFailureCode(error);
+	console.error(`ocr_background_worker_failed:${failure}`);
+	return failure;
+}
+
 async function runAndChain(settings: WorkerConfig) {
 	try {
 		const hasMore = await drainOnce(settings);
@@ -613,8 +631,8 @@ async function runAndChain(settings: WorkerConfig) {
 			},
 			body: JSON.stringify({ source: 'chain' })
 		});
-	} catch {
-		// A later authenticated kick, app lifecycle event, or scheduled invocation resumes the queue.
+	} catch (error) {
+		reportWorkerFailure(error);
 	}
 }
 
@@ -625,6 +643,21 @@ Deno.serve(async (request) => {
 	if (!(await secretMatches(request.headers.get('X-Fichario-Worker-Key'), settings.workerKey))) {
 		return response(401, { code: 'worker_authentication_required' });
 	}
+
+	const mode = request.headers.get(WORKER_MODE_HEADER);
+	if (mode === 'sync') {
+		try {
+			const hasMore = await drainOnce(settings);
+			return response(200, { completed: true, hasMore });
+		} catch (error) {
+			return response(500, {
+				code: 'ocr_background_execution_failed',
+				failure: reportWorkerFailure(error)
+			});
+		}
+	}
+	if (mode !== null) return response(400, { code: 'invalid_worker_mode' });
+
 	EdgeRuntime.waitUntil(runAndChain(settings));
 	return response(202, { accepted: true });
 });
