@@ -15,7 +15,10 @@ function forbidText(text, detail) {
 	if (source.includes(text)) failures.push(detail);
 }
 
-requireText('on:\n  workflow_dispatch:', 'workflow must retain an explicit manual recovery trigger');
+requireText(
+	'on:\n  workflow_dispatch:',
+	'workflow must retain an explicit manual recovery trigger'
+);
 requireText(
 	'  workflow_run:\n    workflows:\n      - Build deployable Fichário staging artifact\n    types:\n      - completed',
 	'automatic deploys must be triggered only by completion of the reviewed artifact workflow'
@@ -118,7 +121,10 @@ requireText(
 	'wrangler pages deploy "$ARTIFACT_ROOT/site"',
 	'only the validated site directory may be deployed'
 );
-requireText('--project-name=fichario-virtual', 'deployments must remain scoped to fichario-virtual');
+requireText(
+	'--project-name=fichario-virtual',
+	'deployments must remain scoped to fichario-virtual'
+);
 requireText(
 	'--commit-hash="$EXPECTED_SOURCE_COMMIT"',
 	'deployment metadata must preserve the validated SHA'
