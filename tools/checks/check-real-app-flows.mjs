@@ -62,18 +62,6 @@ async function persistReport() {
 	await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
 }
 
-async function snapshotIds(client, table) {
-	const { data, error } = await client.from(table).select('id').limit(10_000);
-	if (error || !Array.isArray(data)) throw new Error(`Could not snapshot ${table}`);
-	return new Set(data.map((row) => row.id));
-}
-
-async function newlyCreatedIds(client, table, before) {
-	const { data, error } = await client.from(table).select('id').limit(10_000);
-	if (error || !Array.isArray(data)) throw new Error(`Could not enumerate ${table} during cleanup`);
-	return data.map((row) => row.id).filter((id) => !before.has(id));
-}
-
 async function waitForRow(client, table, filters, { timeoutMs = 90_000, intervalMs = 1_500 } = {}) {
 	const deadline = Date.now() + timeoutMs;
 	while (Date.now() < deadline) {
@@ -215,32 +203,68 @@ async function searchFor(page, text, expectedDocumentText) {
 	await assertNoVisibleFailure(page, 'search');
 }
 
-async function cleanupDocuments(client, beforeIds) {
-	const documentIds = beforeIds ? await newlyCreatedIds(client, 'documents', beforeIds) : [];
-	report.created.documents = [...new Set([...report.created.documents, ...documentIds])];
-	for (const documentId of documentIds) {
-		const { error } = await client.functions.invoke('delete-document', { body: { documentId } });
-		if (error) throw error;
+async function cleanupDocuments(client) {
+	const { data, error } = await client
+		.from('documents')
+		.select('id')
+		.in('original_filename', [pdfFilename, imageFilename]);
+	if (error) throw error;
+	const ids = [...new Set([...(data ?? []).map((row) => row.id), ...report.created.documents])];
+	report.created.documents = ids;
+	for (const documentId of ids) {
+		const { error: deleteError } = await client.functions.invoke('delete-document', {
+			body: { documentId }
+		});
+		if (deleteError) throw deleteError;
 	}
 }
 
-async function cleanupNotebooks(client, beforeIds) {
-	const notebookIds = beforeIds ? await newlyCreatedIds(client, 'notebooks', beforeIds) : [];
-	report.created.notebooks = [...new Set([...report.created.notebooks, ...notebookIds])];
-	for (const notebookId of notebookIds) {
-		const { data, error } = await client.rpc('delete_notebook', {
+async function cleanupNotebooks(client) {
+	const { data, error } = await client.from('notebooks').select('id').eq('name', notebookName);
+	if (error) throw error;
+	const ids = [...new Set([...(data ?? []).map((row) => row.id), ...report.created.notebooks])];
+	report.created.notebooks = ids;
+	for (const notebookId of ids) {
+		const { data: deleted, error: deleteError } = await client.rpc('delete_notebook', {
 			target_notebook_id: notebookId
 		});
-		if (error || data !== true) throw error ?? new Error('delete_notebook rejected cleanup');
+		if (deleteError || deleted !== true) {
+			throw deleteError ?? new Error('delete_notebook rejected cleanup');
+		}
 	}
 }
 
-async function cleanupImportSessions(client, beforeIds) {
-	const sessionIds = beforeIds ? await newlyCreatedIds(client, 'import_sessions', beforeIds) : [];
-	report.created.importSessions = sessionIds;
-	if (sessionIds.length === 0) return;
-	const { error } = await client.from('import_sessions').delete().in('id', sessionIds);
+async function cleanupImportSessions(client, resumeKeys) {
+	if (resumeKeys.size === 0) return;
+	const { data, error } = await client
+		.from('import_sessions')
+		.select('id')
+		.in('local_resume_key', [...resumeKeys]);
 	if (error) throw error;
+	const ids = [...new Set((data ?? []).map((row) => row.id))];
+	report.created.importSessions = ids;
+	if (ids.length === 0) return;
+	const { error: deleteError } = await client.from('import_sessions').delete().in('id', ids);
+	if (deleteError) throw deleteError;
+}
+
+function captureImportResumeKey(request, resumeKeys) {
+	if (request.method() !== 'POST') return;
+	const url = new URL(request.url());
+	if (url.origin !== new URL(supabaseUrl).origin || !url.pathname.endsWith('/rest/v1/import_sessions')) {
+		return;
+	}
+	try {
+		const payload = request.postDataJSON();
+		const rows = Array.isArray(payload) ? payload : [payload];
+		for (const row of rows) {
+			if (row && typeof row === 'object' && typeof row.local_resume_key === 'string') {
+				resumeKeys.add(row.local_resume_key);
+			}
+		}
+	} catch {
+		// Cleanup still has deterministic document/notebook selectors if request parsing is unavailable.
+	}
 }
 
 function recordCleanupFailure(kind, error, message) {
@@ -255,9 +279,9 @@ function recordCleanupFailure(kind, error, message) {
 const client = createClient(supabaseUrl, publishableKey, {
 	auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
 });
+const importResumeKeys = new Set();
 let browser = null;
 let context = null;
-const before = {};
 
 try {
 	stage('backend-auth', 'running');
@@ -267,10 +291,6 @@ try {
 	});
 	if (signInError || !signIn.session) throw new Error('Staging credentials could not authenticate');
 	stage('backend-auth', 'pass');
-
-	for (const table of ['documents', 'notebooks', 'import_sessions']) {
-		before[table] = await snapshotIds(client, table);
-	}
 
 	const { data: driveConnection, error: driveError } = await client
 		.from('drive_connections')
@@ -288,6 +308,7 @@ try {
 		serviceWorkers: 'allow'
 	});
 	const page = await context.newPage();
+	page.on('request', (request) => captureImportResumeKey(request, importResumeKeys));
 	page.on('pageerror', (error) => report.browser.pageErrors.push(safeError(error)));
 	page.on('console', (message) => {
 		if (message.type() === 'error') report.browser.consoleErrors.push(message.text().slice(0, 800));
@@ -453,21 +474,21 @@ try {
 	process.exitCode = 1;
 } finally {
 	try {
-		await cleanupDocuments(client, before.documents);
+		await cleanupDocuments(client);
 		report.cleanup.documents = 'pass';
 	} catch (error) {
 		recordCleanupFailure('documents', error, 'Synthetic document cleanup failed');
 	}
 
 	try {
-		await cleanupNotebooks(client, before.notebooks);
+		await cleanupNotebooks(client);
 		report.cleanup.notebooks = 'pass';
 	} catch (error) {
 		recordCleanupFailure('notebooks', error, 'Synthetic notebook cleanup failed');
 	}
 
 	try {
-		await cleanupImportSessions(client, before.import_sessions);
+		await cleanupImportSessions(client, importResumeKeys);
 		report.cleanup.importSessions = 'pass';
 	} catch (error) {
 		recordCleanupFailure('importSessions', error, 'Synthetic import-session cleanup failed');
