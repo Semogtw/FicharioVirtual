@@ -12,6 +12,9 @@ import { getSupabaseClient } from './supabase';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_TEXT_LENGTH = 1_000_000;
+const BACKGROUND_OCR_POLL_INTERVAL_MS = 1_500;
+const BACKGROUND_OCR_POLL_ATTEMPTS = 100;
+const BACKGROUND_OCR_REKICK_EVERY = 8;
 
 const pageSourceSchema = z
 	.object({
@@ -77,6 +80,7 @@ export interface CoveragePhotoImportDependencies {
 	loadPage(pageId: string): Promise<CoveragePhotoSourcePage | null>;
 	loadFirstPage(documentId: string): Promise<CoveragePhotoSourcePage | null>;
 	deleteTemporaryDocument(documentId: string): Promise<void>;
+	wait(delayMs: number, signal?: AbortSignal): Promise<void>;
 }
 
 export type CoveragePhotoImportOptions = Readonly<{
@@ -86,6 +90,24 @@ export type CoveragePhotoImportOptions = Readonly<{
 
 function abortError() {
 	return new DOMException('Coverage photo import was cancelled', 'AbortError');
+}
+
+function wait(delayMs: number, signal?: AbortSignal) {
+	return new Promise<void>((resolve, reject) => {
+		if (signal?.aborted) {
+			reject(abortError());
+			return;
+		}
+		const onAbort = () => {
+			clearTimeout(timer);
+			reject(abortError());
+		};
+		const timer = setTimeout(() => {
+			signal?.removeEventListener('abort', onAbort);
+			resolve();
+		}, delayMs);
+		signal?.addEventListener('abort', onAbort, { once: true });
+	});
 }
 
 function validateId(value: string, label: string) {
@@ -158,17 +180,13 @@ function defaultDependencies(): CoveragePhotoImportDependencies {
 		process: (pageId, signal) => processPageOcr(pageId, undefined, { signal }),
 		loadPage: (pageId) => sourceGateway.loadPage(pageId),
 		loadFirstPage: (documentId) => sourceGateway.loadFirstPage(documentId),
-		deleteTemporaryDocument: (documentId) => deleteDocument(documentId)
+		deleteTemporaryDocument: (documentId) => deleteDocument(documentId),
+		wait
 	};
 }
 
 function processResultNeedsReview(result: OcrRunResult) {
 	return result.state === 'complete' && result.needsReview;
-}
-
-function ensureProcessCompleted(result: OcrRunResult) {
-	if (result.state === 'complete') return;
-	throw new CoveragePhotoImportError('ocr_pending');
 }
 
 function importMessage(error: unknown): never {
@@ -183,6 +201,44 @@ function importMessage(error: unknown): never {
 	}
 	if (error instanceof Error) throw error;
 	throw new CoveragePhotoImportError('ocr_failed');
+}
+
+function completedBackgroundPage(page: CoveragePhotoSourcePage | null) {
+	if (!page) return null;
+	if (page.status === 'blocked_quota') throw new CoveragePhotoImportError('quota_exhausted');
+	if (page.status === 'failed') throw new CoveragePhotoImportError('ocr_failed');
+	if (page.status !== 'ready' && page.status !== 'needs_review') return null;
+	if (!page.text.trim()) throw new CoveragePhotoImportError('page_unavailable');
+	return page;
+}
+
+async function waitForBackgroundOcr(
+	pageId: string,
+	dependencies: CoveragePhotoImportDependencies,
+	signal?: AbortSignal
+) {
+	for (let attempt = 0; attempt < BACKGROUND_OCR_POLL_ATTEMPTS; attempt += 1) {
+		if (signal?.aborted) throw abortError();
+		const completed = completedBackgroundPage(await dependencies.loadPage(pageId));
+		if (completed) return completed;
+		if (attempt === BACKGROUND_OCR_POLL_ATTEMPTS - 1) break;
+
+		if (attempt > 0 && attempt % BACKGROUND_OCR_REKICK_EVERY === 0) {
+			try {
+				const result = await dependencies.process(pageId, signal);
+				if (result.state === 'complete') {
+					const afterKick = completedBackgroundPage(await dependencies.loadPage(pageId));
+					if (afterKick) return afterKick;
+				}
+			} catch (error) {
+				if (error instanceof DOMException && error.name === 'AbortError') throw error;
+				if (!(error instanceof OcrProcessingError) || !error.retryable) importMessage(error);
+			}
+		}
+
+		await dependencies.wait(BACKGROUND_OCR_POLL_INTERVAL_MS, signal);
+	}
+	throw new CoveragePhotoImportError('ocr_pending');
 }
 
 export async function extractTopicsFromPhotoWithDependencies(
@@ -220,10 +276,12 @@ export async function extractTopicsFromPhotoWithDependencies(
 		if (options.signal?.aborted) throw abortError();
 		options.onStage?.('reading');
 		const runResult = await dependencies.process(pageId, options.signal);
-		ensureProcessCompleted(runResult);
 		if (options.signal?.aborted) throw abortError();
 
-		const sourcePage = await dependencies.loadPage(pageId);
+		const sourcePage =
+			runResult.state === 'complete'
+				? await dependencies.loadPage(pageId)
+				: await waitForBackgroundOcr(pageId, dependencies, options.signal);
 		if (!sourcePage || !sourcePage.text.trim()) {
 			throw new CoveragePhotoImportError('page_unavailable');
 		}
