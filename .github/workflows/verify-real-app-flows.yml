@@ -21,7 +21,7 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 35
     environment: staging
     env:
       TARGET_URL: https://fichario-virtual.pages.dev
@@ -32,6 +32,8 @@ jobs:
       STAGING_AUTHORIZED_PASSWORD: ${{ secrets.STAGING_AUTHORIZED_PASSWORD }}
       REAL_APP_REPORT_PATH: /tmp/real-app-flow-report.json
       REAL_APP_EVIDENCE_DIR: /tmp/real-app-flow-evidence
+      REAL_APP_ACTION_REPORT_PATH: /tmp/real-app-action-report.json
+      REAL_APP_ACTION_EVIDENCE_DIR: /tmp/real-app-action-evidence
       PLAYWRIGHT_BROWSERS_PATH: /tmp/fichario-real-flow-browsers
 
     steps:
@@ -45,15 +47,17 @@ jobs:
           test -n "$STAGING_AUTHORIZED_EMAIL"
           test -n "$STAGING_AUTHORIZED_PASSWORD"
 
-      - name: Fetch exact-SHA real-flow verifier without repository checkout
+      - name: Fetch exact-SHA real-flow verifiers without repository checkout
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p /tmp/fichario-real-flow
-          curl --fail --silent --show-error --location \
-            "https://raw.githubusercontent.com/Semogtw/FicharioVirtual/${TARGET_SHA}/tools/checks/check-real-app-flows.mjs" \
-            --output /tmp/fichario-real-flow/check-real-app-flows.mjs
-          test -s /tmp/fichario-real-flow/check-real-app-flows.mjs
+          for verifier in check-real-app-flows.mjs check-real-app-actions.mjs; do
+            curl --fail --silent --show-error --location \
+              "https://raw.githubusercontent.com/Semogtw/FicharioVirtual/${TARGET_SHA}/tools/checks/${verifier}" \
+              --output "/tmp/fichario-real-flow/${verifier}"
+            test -s "/tmp/fichario-real-flow/${verifier}"
+          done
           printf '%s\n' '{"private":true,"type":"module"}' > /tmp/fichario-real-flow/package.json
 
       - name: Set up Node.js
@@ -73,9 +77,17 @@ jobs:
         working-directory: /tmp/fichario-real-flow
         run: npx playwright install --with-deps chromium
 
-      - name: Exercise real deployed user flows
+      - name: Exercise real deployed core flows
+        id: core-flows
+        continue-on-error: true
         working-directory: /tmp/fichario-real-flow
         run: node check-real-app-flows.mjs
+
+      - name: Exercise real deployed feature actions
+        id: feature-actions
+        continue-on-error: true
+        working-directory: /tmp/fichario-real-flow
+        run: node check-real-app-actions.mjs
 
       - name: Upload sanitized real-flow evidence
         if: always()
@@ -85,6 +97,19 @@ jobs:
           path: |
             /tmp/real-app-flow-report.json
             /tmp/real-app-flow-evidence/
+            /tmp/real-app-action-report.json
+            /tmp/real-app-action-evidence/
           if-no-files-found: error
           compression-level: 6
           retention-days: 7
+
+      - name: Reject any real-flow failure
+        if: always()
+        shell: bash
+        env:
+          CORE_OUTCOME: ${{ steps.core-flows.outcome }}
+          ACTION_OUTCOME: ${{ steps.feature-actions.outcome }}
+        run: |
+          set -euo pipefail
+          test "$CORE_OUTCOME" = success
+          test "$ACTION_OUTCOME" = success
