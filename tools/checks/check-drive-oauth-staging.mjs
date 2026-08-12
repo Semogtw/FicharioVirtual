@@ -6,6 +6,7 @@ const GOOGLE_DRIVE_FILE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const GOOGLE_CLIENT_ID = /^\d+-[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$/;
 const OPAQUE = /^[A-Za-z0-9_-]{43,128}$/;
 const PKCE_CHALLENGE = /^[A-Za-z0-9_-]{43}$/;
+const PREFLIGHT_HEADERS = 'authorization,apikey,content-type,x-client-info,x-supabase-api-version';
 
 function requireEnv(name) {
 	const value = process.env[name]?.trim();
@@ -29,6 +30,24 @@ function assertCors(response, expectedOrigin, label) {
 		throw new Error(
 			`${label} CORS mismatch: expected ${expectedOrigin}, received ${allowedOrigin ?? '(missing)'}`
 		);
+	}
+	const allowedHeaders = new Set(
+		(response.headers.get('access-control-allow-headers') ?? '')
+			.split(',')
+			.map((header) => header.trim().toLowerCase())
+			.filter(Boolean)
+	);
+	for (const header of PREFLIGHT_HEADERS.split(',')) {
+		if (!allowedHeaders.has(header)) {
+			throw new Error(`${label} CORS is missing allowed header ${header}`);
+		}
+	}
+}
+
+function assertNoCors(response, label) {
+	const allowedOrigin = response.headers.get('access-control-allow-origin');
+	if (allowedOrigin !== null) {
+		throw new Error(`${label} unexpectedly allowed origin ${allowedOrigin}`);
 	}
 }
 
@@ -81,6 +100,9 @@ function assertAuthorizationUrl(value, supabaseUrl) {
 	if (!OPAQUE.test(state) || !OPAQUE.test(nonce) || !PKCE_CHALLENGE.test(codeChallenge)) {
 		throw new Error('Drive OAuth state, nonce, or PKCE challenge is malformed');
 	}
+	if (state.length <= 43) {
+		throw new Error('Drive OAuth state did not bind the initiating application origin');
+	}
 
 	const expected = {
 		response_type: 'code',
@@ -107,29 +129,50 @@ async function readJson(response) {
 	}
 }
 
+async function preflight(functionUrl, origin) {
+	return fetch(functionUrl, {
+		method: 'OPTIONS',
+		headers: {
+			Origin: origin,
+			'Access-Control-Request-Method': 'POST',
+			'Access-Control-Request-Headers': PREFLIGHT_HEADERS
+		},
+		signal: AbortSignal.timeout(15_000)
+	});
+}
+
 async function main() {
 	const supabaseUrl = requireEnv('STAGING_SUPABASE_URL');
 	const publishableKey = requireEnv('STAGING_SUPABASE_PUBLISHABLE_KEY');
 	const email = requireEnv('STAGING_AUTHORIZED_EMAIL');
 	const password = requireEnv('STAGING_AUTHORIZED_PASSWORD');
-	const appOrigin = requireEnv('STAGING_APP_ORIGIN');
+	const canonicalOrigin = requireEnv('STAGING_APP_ORIGIN');
+	const configuredAllowlist = requireEnv('STAGING_APP_ORIGIN_ALLOWLIST');
+	const rootOrigin = 'https://fichario-virtual.pages.dev';
+	const immutableProbeOrigin = 'https://deadbeef.fichario-virtual.pages.dev';
+	const rejectedOrigin = 'https://fichario-virtual.pages.dev.evil.test';
 	const functionUrl = `${supabaseUrl.replace(/\/$/, '')}/functions/v1/drive-oauth-start`;
 
-	const preflight = await fetch(functionUrl, {
-		method: 'OPTIONS',
-		headers: {
-			Origin: appOrigin,
-			'Access-Control-Request-Method': 'POST',
-			'Access-Control-Request-Headers': 'authorization,apikey,content-type'
-		},
-		signal: AbortSignal.timeout(15_000)
-	});
-	if (preflight.status !== 204) {
-		const body = await readJson(preflight);
-		const code = body && typeof body.code === 'string' ? body.code : 'unknown';
-		throw new Error(`Drive OAuth preflight failed with HTTP ${preflight.status} (${code})`);
+	for (const expected of [canonicalOrigin, rootOrigin, 'https://*.fichario-virtual.pages.dev']) {
+		if (!configuredAllowlist.split(',').includes(expected)) {
+			throw new Error(`Staging origin allowlist is missing ${expected}`);
+		}
 	}
-	assertCors(preflight, appOrigin, 'Drive OAuth preflight');
+
+	for (const origin of [canonicalOrigin, rootOrigin, immutableProbeOrigin]) {
+		const response = await preflight(functionUrl, origin);
+		if (response.status !== 204) {
+			const body = await readJson(response);
+			const code = body && typeof body.code === 'string' ? body.code : 'unknown';
+			throw new Error(
+				`Drive OAuth preflight for ${origin} failed with HTTP ${response.status} (${code})`
+			);
+		}
+		assertCors(response, origin, `Drive OAuth preflight for ${origin}`);
+	}
+
+	const rejected = await preflight(functionUrl, rejectedOrigin);
+	assertNoCors(rejected, 'Drive OAuth rejected-origin preflight');
 
 	const client = createStagingClient(supabaseUrl, publishableKey);
 	let signedIn = false;
@@ -144,15 +187,17 @@ async function main() {
 		const response = await fetch(functionUrl, {
 			method: 'POST',
 			headers: {
-				Origin: appOrigin,
+				Origin: rootOrigin,
 				Authorization: `Bearer ${data.session.access_token}`,
 				apikey: publishableKey,
-				'Content-Type': 'application/json'
+				'Content-Type': 'application/json',
+				'x-client-info': 'fichario-staging-cors-probe',
+				'x-supabase-api-version': '2024-01-01'
 			},
 			body: '{}',
 			signal: AbortSignal.timeout(15_000)
 		});
-		assertCors(response, appOrigin, 'Drive OAuth start');
+		assertCors(response, rootOrigin, 'Drive OAuth start from root Pages alias');
 		const body = await readJson(response);
 		if (!response.ok) {
 			const code = body && typeof body.code === 'string' ? body.code : 'unknown';
@@ -160,7 +205,7 @@ async function main() {
 		}
 
 		assertAuthorizationUrl(body?.authorizationUrl, supabaseUrl);
-		console.log('Google Drive OAuth staging bootstrap: PASS');
+		console.log('Google Drive OAuth staging browser-origin bootstrap: PASS');
 	} catch (error) {
 		operationError = error;
 	}

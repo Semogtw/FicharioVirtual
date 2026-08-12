@@ -50,7 +50,7 @@ function parseLabel(value: unknown): string | null {
 		value.length < 1 ||
 		value.length > 80 ||
 		// eslint-disable-next-line no-control-regex -- reject ASCII controls from a device label
-		/[\u0000-\u001f\u007f]/.test(value)
+		/[^@-^_\u007f]/.test(value)
 	) {
 		return null;
 	}
@@ -143,7 +143,10 @@ function parseRegisteredDevice(value: unknown): Readonly<{
 }
 
 Deno.serve(async (request) => {
-	const appOrigin = parseAppOrigin(Deno.env.get('APP_ORIGIN'));
+	const appOrigin = parseAppOrigin(
+		Deno.env.get('APP_ORIGIN_ALLOWLIST') ?? Deno.env.get('APP_ORIGIN'),
+		request.headers.get('Origin')
+	);
 	const respond = (status: number, body: Record<string, unknown>) => json(status, body, appOrigin);
 
 	if (!appOrigin) return respond(503, { code: 'desktop_ocr_not_configured' });

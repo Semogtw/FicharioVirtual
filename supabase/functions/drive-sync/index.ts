@@ -34,13 +34,16 @@ async function remoteEventKey(pageToken: string, change: GoogleDriveChange): Pro
 	const marker = change.removed
 		? 'removed'
 		: `${change.file.version}:${change.file.modifiedTime}:${change.file.trashed}`;
-	const payload = new TextEncoder().encode(`${pageToken}\u0000${change.fileId}\u0000${marker}`);
+	const payload = new TextEncoder().encode(`${pageToken}^@${change.fileId}^@${marker}`);
 	const digest = await crypto.subtle.digest('SHA-256', payload);
 	return `remote:${base64Url(new Uint8Array(digest))}`;
 }
 
 Deno.serve(async (request) => {
-	const appOrigin = parseAppOrigin(Deno.env.get('APP_ORIGIN'));
+	const appOrigin = parseAppOrigin(
+		Deno.env.get('APP_ORIGIN_ALLOWLIST') ?? Deno.env.get('APP_ORIGIN'),
+		request.headers.get('Origin')
+	);
 	const respond = (status: number, body: Record<string, unknown>) => json(status, body, appOrigin);
 	if (!appOrigin) return respond(503, { code: 'drive_not_configured' });
 	if (request.method === 'OPTIONS') return empty(204, appOrigin);

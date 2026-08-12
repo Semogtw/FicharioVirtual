@@ -44,8 +44,12 @@ describe('Supabase staging migration deploy workflow', () => {
 
 	it('pins the canonical staging origin and derived Drive callback before deploying functions', () => {
 		expect(source).toContain('STAGING_APP_ORIGIN: https://staging.fichario-virtual.pages.dev');
+		expect(source).toContain(
+			'STAGING_APP_ORIGIN_ALLOWLIST: https://staging.fichario-virtual.pages.dev,https://fichario-virtual.pages.dev,https://*.fichario-virtual.pages.dev'
+		);
 		expect(source).toContain('Align canonical staging Edge Function configuration');
 		expect(source).toContain('"APP_ORIGIN=$STAGING_APP_ORIGIN"');
+		expect(source).toContain('"APP_ORIGIN_ALLOWLIST=$STAGING_APP_ORIGIN_ALLOWLIST"');
 		expect(source).toContain(
 			'"GOOGLE_DRIVE_REDIRECT_URI=https://$STAGING_SUPABASE_PROJECT_REF.supabase.co/functions/v1/drive-oauth-callback"'
 		);

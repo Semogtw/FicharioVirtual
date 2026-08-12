@@ -2,8 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import {
 	createOAuthPkceChallenge,
 	generateOAuthOpaqueValue,
+	generateOAuthStateForOrigin,
 	hashOAuthState,
 	isOAuthPkceVerifier,
+	readOAuthStateOrigin,
 	refreshGoogleAccessToken,
 	requestInitialGoogleTokens,
 	verifyGoogleIdToken
@@ -37,6 +39,21 @@ describe('Google OAuth HTTP helpers', () => {
 		await expect(createOAuthPkceChallenge('short')).rejects.toThrow('Invalid OAuth PKCE verifier');
 		await expect(hashOAuthState(state)).resolves.toMatch(/^[A-Za-z0-9_-]{43}$/);
 		await expect(hashOAuthState('short')).rejects.toThrow('Invalid OAuth opaque value');
+	});
+
+	it('binds an allowed application origin into OAuth state without weakening state entropy', () => {
+		const bytes = new Uint8Array(Array.from({ length: 32 }, (_, index) => index));
+		const origin = 'https://9c0556ff.fichario-virtual.pages.dev';
+		const state = generateOAuthStateForOrigin(origin, bytes);
+
+		expect(state).toMatch(/^[A-Za-z0-9_-]{44,128}$/);
+		expect(state.endsWith(generateOAuthOpaqueValue(bytes))).toBe(true);
+		expect(readOAuthStateOrigin(state)).toBe(origin);
+		expect(readOAuthStateOrigin(generateOAuthOpaqueValue(bytes))).toBeNull();
+		expect(readOAuthStateOrigin('x'.repeat(44))).toBeNull();
+		expect(() =>
+			generateOAuthStateForOrigin(`https://${'a'.repeat(63)}.fichario-virtual.pages.dev`, bytes)
+		).toThrow('Invalid OAuth opaque value');
 	});
 
 	it('exchanges the authorization code with the exact PKCE form fields and strict tokens', async () => {

@@ -89,7 +89,7 @@ supabase secrets set \
   GOOGLE_DRIVE_ROOT_FOLDER_NAME="Fichário Digital"
 ```
 
-Também preserve o `APP_ORIGIN` HTTPS já usado pelas demais funções.
+Também preserve `APP_ORIGIN` como a origem canônica HTTPS e configure `APP_ORIGIN_ALLOWLIST` com os aliases oficiais que podem executar o PWA. A política continua fail-closed: não use `*` global. Em Cloudflare Pages, o staging aceita a origem canônica, o alias raiz do mesmo projeto e um único subdomínio de preview/deploy. O `state` OAuth vincula a origem permitida que iniciou a conexão, então a callback retorna ao mesmo alias em vez de trocar de origem no meio do fluxo.
 
 Esses valores não entram em `.env` público. O client ID poderá ser exposto somente quando uma integração de Picker no navegador realmente exigir, nunca como substituto do fluxo backend. O `code_verifier` não é secret de ambiente: ele é efêmero, único por tentativa e fica vinculado ao state privado até a callback consumi-lo.
 

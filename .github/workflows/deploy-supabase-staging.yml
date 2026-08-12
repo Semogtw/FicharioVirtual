@@ -103,6 +103,7 @@ jobs:
       SUPABASE_DB_PASSWORD: ${{ secrets.STAGING_SUPABASE_DB_PASSWORD }}
       STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
       STAGING_APP_ORIGIN: https://staging.fichario-virtual.pages.dev
+      STAGING_APP_ORIGIN_ALLOWLIST: https://staging.fichario-virtual.pages.dev,https://fichario-virtual.pages.dev,https://*.fichario-virtual.pages.dev
 
     steps:
       - name: Checkout validated repository
@@ -131,6 +132,7 @@ jobs:
           set -euo pipefail
           supabase secrets set --project-ref "$STAGING_SUPABASE_PROJECT_REF" \
             "APP_ORIGIN=$STAGING_APP_ORIGIN" \
+            "APP_ORIGIN_ALLOWLIST=$STAGING_APP_ORIGIN_ALLOWLIST" \
             "OCR_MODEL_PRIMARY=gemini-3.1-flash-lite" \
             "OCR_MODEL_FALLBACK=gemini-3.5-flash-lite" \
             "OCR_MODEL_PRIMARY_RPM=12" \
@@ -210,6 +212,7 @@ jobs:
           STAGING_AUTHORIZED_EMAIL: ${{ secrets.STAGING_AUTHORIZED_EMAIL }}
           STAGING_AUTHORIZED_PASSWORD: ${{ secrets.STAGING_AUTHORIZED_PASSWORD }}
           STAGING_APP_ORIGIN: https://staging.fichario-virtual.pages.dev
+          STAGING_APP_ORIGIN_ALLOWLIST: https://staging.fichario-virtual.pages.dev,https://fichario-virtual.pages.dev,https://*.fichario-virtual.pages.dev
         run: node tools/checks/check-drive-oauth-staging.mjs
 
       - name: Verify desktop OCR one-time pairing

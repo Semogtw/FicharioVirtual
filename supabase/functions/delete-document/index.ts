@@ -19,7 +19,10 @@ function response(status: number, appOrigin: string | null, code?: string) {
 }
 
 Deno.serve(async (request) => {
-	const appOrigin = parseAppOrigin(Deno.env.get('APP_ORIGIN'));
+	const appOrigin = parseAppOrigin(
+		Deno.env.get('APP_ORIGIN_ALLOWLIST') ?? Deno.env.get('APP_ORIGIN'),
+		request.headers.get('Origin')
+	);
 	const respond = (status: number, code?: string) => response(status, appOrigin, code);
 
 	if (!appOrigin) return respond(503, 'backend_not_configured');

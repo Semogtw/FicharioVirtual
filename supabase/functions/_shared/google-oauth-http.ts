@@ -6,6 +6,7 @@ import {
 	type GoogleIdentity,
 	type GoogleTokenResponse
 } from './google-oauth.ts';
+import { parseAppOrigin } from './cors.ts';
 
 export type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
@@ -72,6 +73,46 @@ export function generateOAuthOpaqueValue(bytes?: Uint8Array): string {
 		throw new TypeError('Invalid OAuth random source');
 	}
 	return validateOAuthOpaqueValue(base64Url(source));
+}
+
+function decodeBase64Url(value: string): Uint8Array | null {
+	if (!/^[A-Za-z0-9_-]+$/u.test(value)) return null;
+	const padded =
+		value.replaceAll('-', '+').replaceAll('_', '/') + '='.repeat((4 - (value.length % 4)) % 4);
+	try {
+		const binary = atob(padded);
+		const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+		return base64Url(bytes) === value ? bytes : null;
+	} catch {
+		return null;
+	}
+}
+
+export function generateOAuthStateForOrigin(origin: string, bytes?: Uint8Array): string {
+	const safeOrigin = parseAppOrigin(origin, origin);
+	if (!safeOrigin) throw new TypeError('Invalid OAuth application origin');
+	const encodedOrigin = base64Url(new TextEncoder().encode(safeOrigin));
+	return validateOAuthOpaqueValue(`${encodedOrigin}${generateOAuthOpaqueValue(bytes)}`);
+}
+
+export function readOAuthStateOrigin(state: string): string | null {
+	let validated: string;
+	try {
+		validated = validateOAuthOpaqueValue(state);
+	} catch {
+		return null;
+	}
+	if (validated.length <= 43) return null;
+	const encodedOrigin = validated.slice(0, -43);
+	const bytes = decodeBase64Url(encodedOrigin);
+	if (!bytes) return null;
+	let decoded: string;
+	try {
+		decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+	} catch {
+		return null;
+	}
+	return parseAppOrigin(decoded, decoded);
 }
 
 export async function hashOAuthState(state: string): Promise<string> {

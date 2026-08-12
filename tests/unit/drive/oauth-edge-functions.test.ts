@@ -21,6 +21,9 @@ describe('Drive OAuth Edge Function boundaries', () => {
 		const source = readFileSync(startPath, 'utf8');
 
 		expect(source).toContain('generateOAuthOpaqueValue');
+		expect(source).toContain('generateOAuthStateForOrigin(appOrigin)');
+		expect(source).toContain("request.headers.get('Origin')");
+		expect(source).toContain("Deno.env.get('APP_ORIGIN_ALLOWLIST')");
 		expect(source).toContain('hashOAuthState');
 		expect(source).toContain('createOAuthPkceChallenge');
 		expect(source).toMatch(rpc('store_drive_oauth_state_pkce'));
@@ -45,7 +48,15 @@ describe('Drive OAuth Edge Function boundaries', () => {
 		expect(source).not.toMatch(rpc('consume_drive_oauth_state'));
 		expect(source).toContain('Object.keys(record).length !== 3');
 		expect(source).toContain('isOAuthPkceVerifier(record.code_verifier)');
-		expect(exchangeIndex).toBeGreaterThan(consumeIndex);
+		expect(source).toContain('readOAuthStateOrigin(state)');
+		expect(source).toContain('parseAppOrigin(originAllowlist, stateReturnOrigin)');
+		expect(source).toContain('verifiedReturnOrigin = allowedReturnOrigin');
+		const returnOriginIndex = source.indexOf(
+			'verifiedReturnOrigin = allowedReturnOrigin',
+			consumeIndex
+		);
+		expect(returnOriginIndex).toBeGreaterThan(consumeIndex);
+		expect(exchangeIndex).toBeGreaterThan(returnOriginIndex);
 		expect(source).toContain('codeVerifier: verifiedState.codeVerifier');
 		expect(source).toMatch(rpc('store_drive_credential'));
 		expect(source).toContain('verifyGoogleIdToken');
