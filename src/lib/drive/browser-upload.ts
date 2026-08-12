@@ -23,7 +23,7 @@ export type BrowserFetchLike = (
 ) => Promise<Response>;
 
 const DRIVE_ID = /^[A-Za-z0-9_-]{10,256}$/;
-const DRIVE_TOKEN_RETRY_DELAY_MS = 150;
+const DRIVE_TOKEN_RETRY_DELAYS_MS = [250, 750, 1_500] as const;
 const tokenSchema = z
 	.object({
 		accessToken: z.string().min(8).max(8192),
@@ -118,29 +118,34 @@ function retryableTokenFunctionError(error: unknown): boolean {
 	);
 }
 
-function waitForTokenRetry() {
-	return new Promise<void>((resolve) => setTimeout(resolve, DRIVE_TOKEN_RETRY_DELAY_MS));
+function waitForTokenRetry(attempt: number) {
+	const delay = DRIVE_TOKEN_RETRY_DELAYS_MS[attempt];
+	if (delay === undefined) return Promise.resolve();
+	return new Promise<void>((resolve) => setTimeout(resolve, delay));
 }
 
 export async function requestDriveAccessToken(
 	client: DriveTokenClientLike
 ): Promise<Readonly<EphemeralDriveAccess>> {
 	try {
-		for (let attempt = 0; attempt < 2; attempt += 1) {
+		for (let attempt = 0; attempt <= DRIVE_TOKEN_RETRY_DELAYS_MS.length; attempt += 1) {
 			let result: { data: unknown; error: unknown };
 			try {
 				result = await client.functions.invoke('drive-access-token', { body: {} });
 			} catch (error) {
-				if (attempt === 0) {
-					await waitForTokenRetry();
+				if (attempt < DRIVE_TOKEN_RETRY_DELAYS_MS.length) {
+					await waitForTokenRetry(attempt);
 					continue;
 				}
 				throw error;
 			}
 
 			if (result.error) {
-				if (attempt === 0 && retryableTokenFunctionError(result.error)) {
-					await waitForTokenRetry();
+				if (
+					attempt < DRIVE_TOKEN_RETRY_DELAYS_MS.length &&
+					retryableTokenFunctionError(result.error)
+				) {
+					await waitForTokenRetry(attempt);
 					continue;
 				}
 				throw result.error;
