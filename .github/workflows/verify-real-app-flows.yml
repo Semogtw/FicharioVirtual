@@ -1,0 +1,88 @@
+name: Verify real deployed app flows
+
+on:
+  workflow_run:
+    workflows: [Deploy validated Fichário artifact to Cloudflare Pages]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-deployed-app-flows
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: staging
+    env:
+      TARGET_URL: https://fichario-virtual.pages.dev
+      TARGET_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      STAGING_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+      STAGING_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
+      STAGING_AUTHORIZED_EMAIL: ${{ secrets.STAGING_AUTHORIZED_EMAIL }}
+      STAGING_AUTHORIZED_PASSWORD: ${{ secrets.STAGING_AUTHORIZED_PASSWORD }}
+      REAL_APP_REPORT_PATH: /tmp/real-app-flow-report.json
+      REAL_APP_EVIDENCE_DIR: /tmp/real-app-flow-evidence
+      PLAYWRIGHT_BROWSERS_PATH: /tmp/fichario-real-flow-browsers
+
+    steps:
+      - name: Validate immutable test target
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test -n "$STAGING_SUPABASE_URL"
+          test -n "$STAGING_SUPABASE_PUBLISHABLE_KEY"
+          test -n "$STAGING_AUTHORIZED_EMAIL"
+          test -n "$STAGING_AUTHORIZED_PASSWORD"
+
+      - name: Fetch exact-SHA real-flow verifier without repository checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/fichario-real-flow
+          curl --fail --silent --show-error --location \
+            "https://raw.githubusercontent.com/Semogtw/FicharioVirtual/${TARGET_SHA}/tools/checks/check-real-app-flows.mjs" \
+            --output /tmp/fichario-real-flow/check-real-app-flows.mjs
+          test -s /tmp/fichario-real-flow/check-real-app-flows.mjs
+          printf '%s\n' '{"private":true,"type":"module"}' > /tmp/fichario-real-flow/package.json
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22.16.0
+
+      - name: Install pinned real-flow runtime
+        working-directory: /tmp/fichario-real-flow
+        run: >-
+          npm install --no-save --package-lock=false
+          playwright@1.62.1
+          @supabase/supabase-js@2.57.4
+          pdf-lib@1.17.1
+
+      - name: Install Chromium
+        working-directory: /tmp/fichario-real-flow
+        run: npx playwright install --with-deps chromium
+
+      - name: Exercise real deployed user flows
+        working-directory: /tmp/fichario-real-flow
+        run: node check-real-app-flows.mjs
+
+      - name: Upload sanitized real-flow evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: real-app-flow-${{ env.TARGET_SHA }}
+          path: |
+            /tmp/real-app-flow-report.json
+            /tmp/real-app-flow-evidence/
+          if-no-files-found: error
+          compression-level: 6
+          retention-days: 7
