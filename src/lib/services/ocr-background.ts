@@ -20,15 +20,19 @@ function acceptedResponse(value: unknown) {
 	);
 }
 
-async function performKick(client: SupabaseClient<Database>) {
+async function invokeKick(client: SupabaseClient<Database>) {
 	try {
 		const { data, error } = await client.functions.invoke('ocr-queue-kick', { body: {} });
-		if (error || !acceptedResponse(data)) throw new OcrBackgroundKickError();
-		return true;
-	} catch (error) {
-		if (error instanceof OcrBackgroundKickError) throw error;
-		throw new OcrBackgroundKickError();
+		return error === null && acceptedResponse(data);
+	} catch {
+		return false;
 	}
+}
+
+async function performKick(client: SupabaseClient<Database>) {
+	if (await invokeKick(client)) return true;
+	if (await invokeKick(client)) return true;
+	throw new OcrBackgroundKickError();
 }
 
 export function kickOcrQueue(client?: SupabaseClient<Database>): Promise<boolean> {
