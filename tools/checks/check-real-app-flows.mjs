@@ -56,6 +56,25 @@ function safeError(error) {
 	return String(error).slice(0, 800);
 }
 
+function trackServerResponse(response) {
+	const url = new URL(response.url());
+	if (url.origin !== target.origin && url.origin !== new URL(supabaseUrl).origin) return;
+	const endpoint = `${url.origin}${url.pathname}`;
+	const status = response.status();
+	if (status >= 500) {
+		report.browser.serverErrors = report.browser.serverErrors.filter(
+			(value) => !value.endsWith(endpoint)
+		);
+		report.browser.serverErrors.push(`${status} ${endpoint}`);
+		return;
+	}
+	if (status >= 200 && status < 300) {
+		report.browser.serverErrors = report.browser.serverErrors.filter(
+			(value) => !value.endsWith(endpoint)
+		);
+	}
+}
+
 async function persistReport() {
 	report.finishedAt = new Date().toISOString();
 	await mkdir(evidenceDir, { recursive: true });
@@ -316,28 +335,7 @@ try {
 	page.on('console', (message) => {
 		if (message.type() === 'error') report.browser.consoleErrors.push(message.text().slice(0, 800));
 	});
-	page.on('response', (response) => {
-		const url = new URL(response.url());
-		const status = response.status();
-		const originAllowed =
-			url.origin === target.origin || url.origin === new URL(supabaseUrl).origin;
-		if (!originAllowed) return;
-		const endpoint = `${url.origin}${url.pathname}`;
-		if (url.origin === new URL(supabaseUrl).origin && url.pathname.endsWith('/ocr-queue-kick')) {
-			if (status >= 500) {
-				report.browser.serverErrors.push(`${status} ${endpoint}`);
-				return;
-			}
-			if (status >= 200 && status < 300) {
-				const recovered = report.browser.serverErrors.findIndex((value) =>
-					value.endsWith(endpoint)
-				);
-				if (recovered >= 0) report.browser.serverErrors.splice(recovered, 1);
-				return;
-			}
-		}
-		if (status >= 500) report.browser.serverErrors.push(`${status} ${endpoint}`);
-	});
+	page.on('response', trackServerResponse);
 
 	stage('real-login', 'running');
 	await page.goto(new URL('/login/', target).href, {
