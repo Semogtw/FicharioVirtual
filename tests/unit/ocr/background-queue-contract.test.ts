@@ -49,7 +49,10 @@ describe('background OCR queue contract', () => {
 		expect(worker).toContain("Deno.env.get('OCR_BACKGROUND_WORKER_KEY')");
 		expect(worker).toContain("'X-Fichario-Worker-Key': settings.workerKey");
 		expect(worker).not.toContain("'X-Fichario-Worker-Key': settings.serviceRoleKey");
-		expect(worker).toContain("await admin.rpc('recover_background_stale_ocr_jobs')");
+		expect(worker).toContain("await admin.rpc('recover_background_stale_ocr_jobs');");
+		expect(worker).not.toContain("admin.rpc('recover_background_stale_ocr_jobs').catch");
+		expect(worker).toContain("await admin.rpc('reconcile_background_ocr_batches', {");
+		expect(worker).toContain("if (!chained.ok) throw new Error('Background OCR chain request failed');");
 		expect(worker).toContain('requestGeminiOcrBatch({');
 		expect(worker).toContain("'complete_geometry'");
 		expect(providerGate).toContain("supabase.rpc('complete_ocr_job_with_geometry'");
