@@ -56,6 +56,25 @@ function safeError(error) {
 	return String(error).slice(0, 800);
 }
 
+function trackServerResponse(response) {
+	const url = new URL(response.url());
+	if (url.origin !== target.origin && url.origin !== new URL(supabaseUrl).origin) return;
+	const endpoint = `${url.origin}${url.pathname}`;
+	const status = response.status();
+	if (status >= 500) {
+		report.browser.serverErrors = report.browser.serverErrors.filter(
+			(value) => !value.endsWith(endpoint)
+		);
+		report.browser.serverErrors.push(`${status} ${endpoint}`);
+		return;
+	}
+	if (status >= 200 && status < 300) {
+		report.browser.serverErrors = report.browser.serverErrors.filter(
+			(value) => !value.endsWith(endpoint)
+		);
+	}
+}
+
 async function persistReport() {
 	report.finishedAt = new Date().toISOString();
 	await mkdir(evidenceDir, { recursive: true });
@@ -288,15 +307,7 @@ try {
 	const page = await context.newPage();
 	page.on('request', (request) => captureImportResumeKey(request, importResumeKeys));
 	page.on('pageerror', (error) => report.browser.pageErrors.push(safeError(error)));
-	page.on('response', (response) => {
-		const url = new URL(response.url());
-		if (
-			response.status() >= 500 &&
-			(url.origin === target.origin || url.origin === new URL(supabaseUrl).origin)
-		) {
-			report.browser.serverErrors.push(`${response.status()} ${url.origin}${url.pathname}`);
-		}
-	});
+	page.on('response', trackServerResponse);
 
 	stage('real-login', 'running');
 	await login(page);
@@ -462,7 +473,7 @@ try {
 		.locator('section.photo-card input[type="file"][accept="image/jpeg,image/png,image/webp"]')
 		.first();
 	await photoInput.setInputFiles({ name: photoFilename, mimeType: 'image/png', buffer: syllabus });
-	const photoNotice = page.locator('p.photo-notice');
+	const photoNotice = page.locator('section.photo-card p.photo-notice');
 	await photoNotice.waitFor({ state: 'visible', timeout: 180_000 });
 	if (!/[1-9]\d* conteúdo\(s\) extraído\(s\)/i.test(await photoNotice.innerText())) {
 		throw new Error('Coverage photo OCR did not produce editable topics');
