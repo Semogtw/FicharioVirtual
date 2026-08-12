@@ -33,14 +33,19 @@ for (const required of [
 if (/\bresponse\.(?:json|text)\s*\(/.test(gemini)) {
 	failures.push('Gemini client must not materialize unbounded provider responses');
 }
-if (!gemini.includes('maxOutputTokens: 8192')) {
+if (!gemini.includes('maxOutputTokens: 16_384')) {
 	failures.push('Gemini single-page output token ceiling changed without security review');
 }
-// Batch output also carries compact per-word geometry. The per-page allowance was
-// reviewed alongside that schema expansion; the 65,536-token cap and 4 MiB
-// response-body bound above remain the hard provider-response safety limits.
-if (!gemini.includes('Math.min(65_536, Math.max(8_192, request.pages.length * 4_096))')) {
-	failures.push('Gemini batch output token ceiling changed without security review');
+// Launch OCR returns compact line geometry and derives word boxes locally. The
+// reviewed batch ceiling reserves enough output for large academic pages while
+// the bounded 4 MiB response reader above remains the hard response-size limit.
+for (const required of [
+	'const MAX_OUTPUT_TOKENS = 65_536',
+	'maxOutputTokens: MAX_OUTPUT_TOKENS'
+]) {
+	if (!gemini.includes(required)) {
+		failures.push(`Gemini batch output token ceiling changed without security review: ${required}`);
+	}
 }
 
 if (failures.length > 0) {
