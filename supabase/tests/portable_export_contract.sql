@@ -11,9 +11,8 @@ select ok(
   'portable export keeps exportedAt as timestamptz instead of stripping its offset'
 );
 
-select like(
-  (jsonb_build_object('exportedAt', now())->>'exportedAt'),
-  '%+00:00',
+select ok(
+  (jsonb_build_object('exportedAt', now())->>'exportedAt') like '%+00:00',
   'timestamptz JSON serialization carries an RFC3339 UTC offset'
 );
 
