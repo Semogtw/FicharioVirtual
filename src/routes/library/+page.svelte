@@ -148,7 +148,12 @@
 		</label>
 		<label>
 			<span>De</span>
-			<input type="date" aria-label="De" bind:value={createdFrom} onchange={() => void load(true)} />
+			<input
+				type="date"
+				aria-label="De"
+				bind:value={createdFrom}
+				onchange={() => void load(true)}
+			/>
 		</label>
 		<label>
 			<span>Até</span>
