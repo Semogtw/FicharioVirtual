@@ -47,6 +47,34 @@ describe('browser Drive access token', () => {
 			'Não foi possível obter acesso temporário ao Google Drive.'
 		);
 	});
+
+	it('retries one transient Edge gateway failure before accepting a token', async () => {
+		const invoke = vi
+			.fn()
+			.mockResolvedValueOnce({
+				data: null,
+				error: { context: new Response(null, { status: 503 }) }
+			})
+			.mockResolvedValueOnce({ data: { accessToken, expiresAt }, error: null });
+
+		await expect(requestDriveAccessToken({ functions: { invoke } })).resolves.toEqual({
+			accessToken,
+			expiresAt
+		});
+		expect(invoke).toHaveBeenCalledTimes(2);
+	});
+
+	it('does not retry authorization failures', async () => {
+		const invoke = vi.fn().mockResolvedValue({
+			data: null,
+			error: { context: new Response(null, { status: 401 }) }
+		});
+
+		await expect(requestDriveAccessToken({ functions: { invoke } })).rejects.toThrow(
+			'Não foi possível obter acesso temporário ao Google Drive.'
+		);
+		expect(invoke).toHaveBeenCalledTimes(1);
+	});
 });
 
 describe('browser Drive resumable session', () => {
