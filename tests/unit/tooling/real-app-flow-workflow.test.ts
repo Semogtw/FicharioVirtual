@@ -32,10 +32,21 @@ describe('real deployed app flow workflow', () => {
 
 	it('fetches the exact deployed SHA and uses pinned browser dependencies', () => {
 		expect(source).toContain('raw.githubusercontent.com/Semogtw/FicharioVirtual/${TARGET_SHA}');
+		expect(source).toContain('check-real-app-flows.mjs');
+		expect(source).toContain('check-real-app-actions.mjs');
 		expect(source).toContain('playwright@1.62.1');
 		expect(source).toContain('@supabase/supabase-js@2.57.4');
 		expect(source).toContain('pdf-lib@1.17.1');
 		expect(source).toContain('npx playwright install --with-deps chromium');
+	});
+
+	it('runs core and action flows independently and rejects either failure', () => {
+		expect(source).toContain('continue-on-error: true');
 		expect(source).toContain('node check-real-app-flows.mjs');
+		expect(source).toContain('node check-real-app-actions.mjs');
+		expect(source).toContain('CORE_OUTCOME: ${{ steps.core-flows.outcome }}');
+		expect(source).toContain('ACTION_OUTCOME: ${{ steps.feature-actions.outcome }}');
+		expect(source).toContain('test "$CORE_OUTCOME" = success');
+		expect(source).toContain('test "$ACTION_OUTCOME" = success');
 	});
 });
