@@ -61,9 +61,13 @@ describe('background OCR queue contract', () => {
 		expect(worker).toContain('const hasMore = await drainOnce(settings);');
 		expect(worker).toContain('return response(200, { completed: true, hasMore });');
 		expect(worker).toContain("code: 'ocr_background_execution_failed'");
-		expect(worker).toContain("console.error(`ocr_background_worker_failed:${failure}`);");
-		expect(worker).toContain("if (!claim) throw new Error('Invalid background OCR claim response');");
-		expect(worker).not.toContain("}).catch(() => null);\n\t\tconst claim = value ? parseOcrClaimResult(value) : null;");
+		expect(worker).toContain('console.error(`ocr_background_worker_failed:${failure}`);');
+		expect(worker).toContain(
+			"if (!claim) throw new Error('Invalid background OCR claim response');"
+		);
+		expect(worker).not.toContain(
+			'}).catch(() => null);\n\t\tconst claim = value ? parseOcrClaimResult(value) : null;'
+		);
 	});
 
 	it('reuses the launch Gemini rate limiter and 429-only fallback routing', () => {
