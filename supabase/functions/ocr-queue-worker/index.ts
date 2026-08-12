@@ -606,7 +606,8 @@ async function drainOnce(settings: WorkerConfig) {
 function workerFailureCode(error: unknown) {
 	if (!(error instanceof Error)) return 'unknown';
 	if (error.message === 'Background OCR candidate lookup failed') return 'candidate_lookup_failed';
-	if (error.message === 'Invalid background OCR candidate response') return 'candidate_response_invalid';
+	if (error.message === 'Invalid background OCR candidate response')
+		return 'candidate_response_invalid';
 	if (error.message === 'Invalid background OCR claim response') return 'claim_response_invalid';
 	if (error.message.startsWith('Background OCR operation failed: ')) return 'operation_failed';
 	if (error.message.startsWith('Background OCR operation rejected: ')) return 'operation_rejected';
