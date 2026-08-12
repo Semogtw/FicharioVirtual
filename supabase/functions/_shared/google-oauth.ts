@@ -164,25 +164,12 @@ export function parseGoogleIdentity(
 	expected: { clientId: string; nonce: string; nowSeconds: number }
 ): GoogleIdentity {
 	const record = objectRecord(value);
-	const allowed = [
-		'aud',
-		'azp',
-		'iss',
-		'sub',
-		'email',
-		'email_verified',
-		'exp',
-		'iat',
-		'nonce',
-		'scope',
-		'expires_in',
-		'access_type'
-	];
+	const expectedClientId = validateClientId(expected.clientId);
 	const expiry = typeof record?.exp === 'string' ? Number(record.exp) : record?.exp;
 	if (
 		!record ||
-		!exactKeys(record, allowed) ||
-		record.aud !== validateClientId(expected.clientId) ||
+		record.aud !== expectedClientId ||
+		(record.azp !== undefined && record.azp !== expectedClientId) ||
 		(record.iss !== 'https://accounts.google.com' && record.iss !== 'accounts.google.com') ||
 		typeof record.sub !== 'string' ||
 		!SUBJECT.test(record.sub) ||
