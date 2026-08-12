@@ -1,10 +1,4 @@
-import {
-	closeSync,
-	constants,
-	fchmodSync,
-	fstatSync,
-	openSync
-} from 'node:fs';
+import { closeSync, constants, fchmodSync, fstatSync, openSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { requireCompletionRequest } from './contract.mjs';
 
