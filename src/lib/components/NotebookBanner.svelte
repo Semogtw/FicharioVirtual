@@ -56,6 +56,7 @@
 	}
 
 	function openEditor() {
+		if (saving || removing || editorOpen) return;
 		positionX = renderedPositionX;
 		positionY = renderedPositionY;
 		error = null;
@@ -169,7 +170,9 @@
 				<div class="banner-fallback" aria-hidden="true"></div>
 			{/if}
 			<div class="banner-shade" aria-hidden="true"></div>
-			<button class="edit-banner" type="button" onclick={openEditor}>Personalizar banner</button>
+			{#if !editorOpen}
+				<button class="edit-banner" type="button" onclick={openEditor}>Personalizar banner</button>
+			{/if}
 		</div>
 	{:else if !editorOpen}
 		<div class="add-banner-row">
