@@ -48,20 +48,21 @@ describe('browser Drive access token', () => {
 		);
 	});
 
-	it('retries one transient Edge gateway failure before accepting a token', async () => {
+	it('survives a short burst of transient Edge gateway failures before accepting a token', async () => {
 		const invoke = vi
 			.fn()
 			.mockResolvedValueOnce({
 				data: null,
 				error: { context: new Response(null, { status: 503 }) }
 			})
+			.mockRejectedValueOnce(new TypeError('Failed to fetch'))
 			.mockResolvedValueOnce({ data: { accessToken, expiresAt }, error: null });
 
 		await expect(requestDriveAccessToken({ functions: { invoke } })).resolves.toEqual({
 			accessToken,
 			expiresAt
 		});
-		expect(invoke).toHaveBeenCalledTimes(2);
+		expect(invoke).toHaveBeenCalledTimes(3);
 	});
 
 	it('does not retry authorization failures', async () => {
