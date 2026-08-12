@@ -41,7 +41,7 @@ describe('background OCR queue contract', () => {
 		expect(candidateGuard).not.toContain('ocr_consent_');
 	});
 
-	it('runs provider work after the worker response and self-chains bounded invocations', () => {
+	it('runs provider work after the default worker response and self-chains bounded invocations', () => {
 		expect(worker).toContain('EdgeRuntime.waitUntil(runAndChain(settings));');
 		expect(worker).toContain('return response(202, { accepted: true });');
 		expect(worker).toContain('OCR_BACKGROUND_MAX_PAGES');
@@ -53,6 +53,17 @@ describe('background OCR queue contract', () => {
 		expect(worker).toContain('requestGeminiOcrBatch({');
 		expect(worker).toContain("'complete_geometry'");
 		expect(providerGate).toContain("supabase.rpc('complete_ocr_job_with_geometry'");
+	});
+
+	it('offers a worker-key-only synchronous execution receipt without swallowing claim failures', () => {
+		expect(worker).toContain("const WORKER_MODE_HEADER = 'X-Fichario-Worker-Mode';");
+		expect(worker).toContain("if (mode === 'sync')");
+		expect(worker).toContain('const hasMore = await drainOnce(settings);');
+		expect(worker).toContain('return response(200, { completed: true, hasMore });');
+		expect(worker).toContain("code: 'ocr_background_execution_failed'");
+		expect(worker).toContain("console.error(`ocr_background_worker_failed:${failure}`);");
+		expect(worker).toContain("if (!claim) throw new Error('Invalid background OCR claim response');");
+		expect(worker).not.toContain("}).catch(() => null);\n\t\tconst claim = value ? parseOcrClaimResult(value) : null;");
 	});
 
 	it('reuses the launch Gemini rate limiter and 429-only fallback routing', () => {
