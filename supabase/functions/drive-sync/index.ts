@@ -34,7 +34,7 @@ async function remoteEventKey(pageToken: string, change: GoogleDriveChange): Pro
 	const marker = change.removed
 		? 'removed'
 		: `${change.file.version}:${change.file.modifiedTime}:${change.file.trashed}`;
-	const payload = new TextEncoder().encode(`${pageToken}^@${change.fileId}^@${marker}`);
+	const payload = new TextEncoder().encode(`${pageToken}\u0000${change.fileId}\u0000${marker}`);
 	const digest = await crypto.subtle.digest('SHA-256', payload);
 	return `remote:${base64Url(new Uint8Array(digest))}`;
 }

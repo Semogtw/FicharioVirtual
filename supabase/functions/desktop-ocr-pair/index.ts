@@ -50,7 +50,7 @@ function parseLabel(value: unknown): string | null {
 		value.length < 1 ||
 		value.length > 80 ||
 		// eslint-disable-next-line no-control-regex -- reject ASCII controls from a device label
-		/[^@-^_\u007f]/.test(value)
+		/[\u0000-\u001f\u007f]/.test(value)
 	) {
 		return null;
 	}
