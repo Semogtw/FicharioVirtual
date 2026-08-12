@@ -42,8 +42,8 @@ const documentRecordSchema = z
 	.strict();
 const documentFiltersSchema = z
 	.object({
-		notebookId: z.string().regex(UUID).optional(),
-		kind: z.enum(['image', 'pdf']).optional(),
+		notebookId: z.string().regex(UUID).nullable().optional(),
+		kind: z.enum(['image', 'pdf']).nullable().optional(),
 		status: z
 			.enum([
 				'uploading',
@@ -54,15 +54,16 @@ const documentFiltersSchema = z
 				'needs_review',
 				'failed'
 			])
+			.nullable()
 			.optional(),
-		createdFrom: timestamp.optional(),
-		createdTo: timestamp.optional()
+		createdFrom: timestamp.nullable().optional(),
+		createdTo: timestamp.nullable().optional()
 	})
 	.strict()
 	.superRefine((filters, context) => {
 		if (
-			filters.createdFrom !== undefined &&
-			filters.createdTo !== undefined &&
+			filters.createdFrom != null &&
+			filters.createdTo != null &&
 			Date.parse(filters.createdFrom) > Date.parse(filters.createdTo)
 		) {
 			context.addIssue({ code: 'custom', message: 'Invalid document date range' });
