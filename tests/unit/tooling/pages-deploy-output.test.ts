@@ -91,11 +91,13 @@ describe('Cloudflare Pages structured deployment output', () => {
 
 	it('rejects malformed or ambiguous structured output', () => {
 		expect(() => validatePagesDeployOutput('', expectedStaging)).toThrow(/empty/);
-		expect(() => validatePagesDeployOutput('{not-json}\n', expectedStaging)).toThrow(/not valid JSON/);
+		expect(() => validatePagesDeployOutput('{not-json}\n', expectedStaging)).toThrow(
+			/not valid JSON/
+		);
 		expect(() => validatePagesDeployOutput('{}\n', expectedStaging)).toThrow(/exactly one/);
-		expect(() =>
-			validatePagesDeployOutput(`${output()}${output()}`, expectedStaging)
-		).toThrow(/exactly one/);
+		expect(() => validatePagesDeployOutput(`${output()}${output()}`, expectedStaging)).toThrow(
+			/exactly one/
+		);
 	});
 
 	it('rejects URLs outside the expected Pages project, decorated URLs or invalid aliases', () => {
