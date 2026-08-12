@@ -99,7 +99,7 @@ async function waitForOcr(client, documentId, timeoutMs = 300_000) {
 			}
 			if (
 				(jobs ?? []).length > 0 &&
-				jobs.every((job) => ['complete', 'needs_review'].includes(job.status))
+				jobs.every((job) => ['ready', 'needs_review'].includes(job.status))
 			) {
 				return { pages, jobs };
 			}
