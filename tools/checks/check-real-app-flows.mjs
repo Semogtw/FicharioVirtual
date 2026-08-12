@@ -58,9 +58,7 @@ function safeError(error) {
 
 async function persistReport() {
 	report.finishedAt = new Date().toISOString();
-	await mkdir(new URL(`file://${evidenceDir.endsWith('/') ? evidenceDir : `${evidenceDir}/`}`), {
-		recursive: true
-	}).catch(() => undefined);
+	await mkdir(evidenceDir, { recursive: true });
 	await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
 }
 
@@ -144,7 +142,9 @@ async function makeOcrPng(context) {
 	const page = await context.newPage();
 	try {
 		await page.setViewportSize({ width: 1400, height: 900 });
-		await page.setContent(`<!doctype html><html><body style="margin:0;background:white;color:black;font-family:Arial,sans-serif"><main style="padding:100px"><h1 style="font-size:72px;margin:0 0 50px">${imageTextToken}</h1><p style="font-size:44px;line-height:1.45">Leitura real do Gemini para verificar OCR, fila em segundo plano e pesquisa textual.</p><p style="font-size:38px">Código ${runToken}</p></main></body></html>`);
+		await page.setContent(
+			`<!doctype html><html><body style="margin:0;background:white;color:black;font-family:Arial,sans-serif"><main style="padding:100px"><h1 style="font-size:72px;margin:0 0 50px">${imageTextToken}</h1><p style="font-size:44px;line-height:1.45">Leitura real do Gemini para verificar OCR, fila em segundo plano e pesquisa textual.</p><p style="font-size:38px">Código ${runToken}</p></main></body></html>`
+		);
 		return await page.screenshot({ type: 'png', fullPage: true });
 	} finally {
 		await page.close();
@@ -224,7 +224,10 @@ const before = {};
 
 try {
 	stage('backend-auth', 'running');
-	const { data: signIn, error: signInError } = await client.auth.signInWithPassword({ email, password });
+	const { data: signIn, error: signInError } = await client.auth.signInWithPassword({
+		email,
+		password
+	});
 	if (signInError || !signIn.session) throw new Error('Staging credentials could not authenticate');
 	stage('backend-auth', 'pass');
 
@@ -263,7 +266,10 @@ try {
 	});
 
 	stage('real-login', 'running');
-	await page.goto(new URL('/login/', target).href, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+	await page.goto(new URL('/login/', target).href, {
+		waitUntil: 'domcontentloaded',
+		timeout: 45_000
+	});
 	await page.locator('#email').fill(email);
 	await page.locator('#password').fill(password);
 	await page.getByRole('button', { name: 'Entrar', exact: true }).click();
@@ -291,9 +297,14 @@ try {
 	await page.goto(new URL('/notebooks/', target).href, { waitUntil: 'domcontentloaded' });
 	await page.getByRole('button', { name: 'Novo caderno', exact: true }).click();
 	await page.getByLabel('Nome', { exact: true }).fill(notebookName);
-	await page.getByLabel('Descrição opcional', { exact: true }).fill(`Criado pelo fluxo real ${runToken}`);
+	await page
+		.getByLabel('Descrição opcional', { exact: true })
+		.fill(`Criado pelo fluxo real ${runToken}`);
 	await page.getByRole('button', { name: 'Criar caderno', exact: true }).click();
-	await page.getByText(notebookName, { exact: true }).first().waitFor({ state: 'visible', timeout: 20_000 });
+	await page
+		.getByText(notebookName, { exact: true })
+		.first()
+		.waitFor({ state: 'visible', timeout: 20_000 });
 	const { data: notebook, error: notebookError } = await client
 		.from('notebooks')
 		.select('id,name')
@@ -309,13 +320,22 @@ try {
 		waitUntil: 'domcontentloaded'
 	});
 	const pdfInput = page.locator('input[type="file"][accept*="application/pdf"]').first();
-	await pdfInput.setInputFiles({ name: pdfFilename, mimeType: 'application/pdf', buffer: await makePdf() });
+	await pdfInput.setInputFiles({
+		name: pdfFilename,
+		mimeType: 'application/pdf',
+		buffer: await makePdf()
+	});
 	await page.getByText(/arquivo\(s\) adicionados à fila global/i).waitFor({
 		state: 'visible',
 		timeout: 20_000
 	});
 	const pdfQueueState = await waitForQueueEntry(page, pdfFilename, { timeoutMs: 180_000 });
-	const pdfDocument = await waitForRow(client, 'documents', { original_filename: pdfFilename }, { timeoutMs: 90_000 });
+	const pdfDocument = await waitForRow(
+		client,
+		'documents',
+		{ original_filename: pdfFilename },
+		{ timeoutMs: 90_000 }
+	);
 	report.created.documents.push(pdfDocument.id);
 	if (!['ready', 'partially_ready', 'needs_review', 'processing'].includes(pdfDocument.status)) {
 		throw new Error(`Unexpected PDF document status: ${pdfDocument.status}`);
@@ -332,7 +352,11 @@ try {
 		waitUntil: 'domcontentloaded'
 	});
 	const imageInput = page.locator('input[type="file"][accept*="image/jpeg"]').first();
-	await imageInput.setInputFiles({ name: imageFilename, mimeType: 'image/png', buffer: imageBuffer });
+	await imageInput.setInputFiles({
+		name: imageFilename,
+		mimeType: 'image/png',
+		buffer: imageBuffer
+	});
 	await page.getByText(/arquivo\(s\) adicionados à fila global/i).waitFor({
 		state: 'visible',
 		timeout: 20_000
@@ -368,7 +392,9 @@ try {
 	await navigateAndCheck(page, '/drive/', /Arquivos no Drive/i);
 	stage('post-import-routes', 'pass');
 
-	await page.screenshot({ path: `${evidenceDir}/final.png`, fullPage: true }).catch(() => undefined);
+	await page
+		.screenshot({ path: `${evidenceDir}/final.png`, fullPage: true })
+		.catch(() => undefined);
 	if (report.browser.pageErrors.length > 0) {
 		throw new Error(`Browser page errors detected: ${report.browser.pageErrors.join(' | ')}`);
 	}
@@ -383,7 +409,9 @@ try {
 	stage('failure', 'fail', report.error);
 	if (context) {
 		const pages = context.pages();
-		await pages[0]?.screenshot({ path: `${evidenceDir}/failure.png`, fullPage: true }).catch(() => undefined);
+		await pages[0]
+			?.screenshot({ path: `${evidenceDir}/failure.png`, fullPage: true })
+			.catch(() => undefined);
 	}
 	process.exitCode = 1;
 } finally {
@@ -412,7 +440,9 @@ try {
 			: [];
 		report.created.notebooks = [...new Set([...report.created.notebooks, ...notebookIds])];
 		for (const notebookId of notebookIds) {
-			const { data, error } = await client.rpc('delete_notebook', { target_notebook_id: notebookId });
+			const { data, error } = await client.rpc('delete_notebook', {
+				target_notebook_id: notebookId
+			});
 			if (error || data !== true) throw error ?? new Error('delete_notebook rejected cleanup');
 		}
 		report.cleanup.notebooks = 'pass';
