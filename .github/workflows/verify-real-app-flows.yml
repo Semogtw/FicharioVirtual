@@ -9,9 +9,11 @@ on:
 permissions:
   contents: read
 
+# These flows use the same protected staging account as the Supabase contract
+# verifiers. Serialize them so one run cannot globally revoke another session.
 concurrency:
-  group: real-deployed-app-flows
-  cancel-in-progress: true
+  group: staging-contract-verification
+  cancel-in-progress: false
 
 jobs:
   verify:
