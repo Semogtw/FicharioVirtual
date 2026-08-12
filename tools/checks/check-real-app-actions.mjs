@@ -168,25 +168,21 @@ async function login(page) {
 	await page.locator('h1').first().waitFor({ state: 'visible', timeout: 20_000 });
 }
 
-async function searchFor(page, text, expectedTitle, timeoutMs = 60_000) {
-	const deadline = Date.now() + timeoutMs;
-	while (Date.now() < deadline) {
-		await page.goto(new URL(`/search/?q=${encodeURIComponent(text)}`, target).href, {
-			waitUntil: 'domcontentloaded',
-			timeout: 45_000
-		});
-		const searchInput = page.locator('input[type="search"]');
-		await searchInput.waitFor({ state: 'visible', timeout: 20_000 });
-		await page.getByRole('button', { name: 'Pesquisar', exact: true }).click();
-		await page.waitForTimeout(800);
-		const results = page.locator('section.results');
-		if (await results.isVisible().catch(() => false)) {
-			const textContent = await results.innerText();
-			if (textContent.includes(expectedTitle)) return results;
-		}
-		await page.waitForTimeout(1_500);
+async function searchFor(page, text, expectedDocumentId, timeoutMs = 60_000) {
+	await page.goto(new URL(`/search/?q=${encodeURIComponent(text)}`, target).href, {
+		waitUntil: 'domcontentloaded',
+		timeout: 45_000
+	});
+	const searchInput = page.locator('input[type="search"]');
+	await searchInput.waitFor({ state: 'visible', timeout: 20_000 });
+	const results = page.locator('section.results');
+	const expectedLink = results.locator(`a[href*="/documents/${expectedDocumentId}/"]`).first();
+	try {
+		await expectedLink.waitFor({ state: 'visible', timeout: timeoutMs });
+		return results;
+	} catch {
+		throw new Error(`Search did not return the expected document for ${text}`);
 	}
-	throw new Error(`Search did not return the expected document for ${text}`);
 }
 
 async function cleanupDocuments(client) {
@@ -430,7 +426,7 @@ try {
 	stage('correction-save', 'pass');
 
 	stage('corrected-search-highlight', 'running');
-	const searchResults = await searchFor(page, correctedToken, pdfDocument.title);
+	const searchResults = await searchFor(page, correctedToken, pdfDocument.id);
 	const resultLink = searchResults.locator(`a[href*="/documents/${pdfDocument.id}/"]`).first();
 	await resultLink.click();
 	await page.waitForURL((url) => url.pathname.includes(`/documents/${pdfDocument.id}/`), {
