@@ -19,7 +19,7 @@ describe('background OCR worker secret provisioning workflow', () => {
 		expect(source).toContain("'ocr_background_worker_key'");
 		expect(source).toContain('vault.create_secret(');
 		expect(source).toContain('vault.update_secret(');
-		expect(source).toContain("printf 'OCR_BACKGROUND_WORKER_KEY=%s\\n' \"$worker_key\"");
+		expect(source).toContain('printf \'OCR_BACKGROUND_WORKER_KEY=%s\\n\' "$worker_key"');
 		expect(source).toContain('supabase secrets set --project-ref "$STAGING_SUPABASE_PROJECT_REF"');
 		expect(source).toContain("grep -q 'OCR_BACKGROUND_WORKER_KEY'");
 		expect(source).not.toContain('OCR_BACKGROUND_WORKER_KEY: ${{ secrets.');
