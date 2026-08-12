@@ -133,7 +133,10 @@ async function makePng(context, lines) {
 		await page.setViewportSize({ width: 1280, height: 720 });
 		await page.setContent(
 			`<!doctype html><html><body style="margin:0;background:white;color:#111;font-family:Arial,sans-serif"><main style="padding:70px">${lines
-				.map((line, index) => `<p style="font-size:${index === 0 ? 54 : 40}px;margin:0 0 28px">${line}</p>`)
+				.map(
+					(line, index) =>
+						`<p style="font-size:${index === 0 ? 54 : 40}px;margin:0 0 28px">${line}</p>`
+				)
 				.join('')}</main></body></html>`
 		);
 		return await page.screenshot({ type: 'png', fullPage: true });
@@ -154,7 +157,10 @@ async function assertNoVisibleFailure(page, context) {
 }
 
 async function login(page) {
-	await page.goto(new URL('/login/', target).href, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+	await page.goto(new URL('/login/', target).href, {
+		waitUntil: 'domcontentloaded',
+		timeout: 45_000
+	});
 	await page.locator('#email').fill(email);
 	await page.locator('#password').fill(password);
 	await page.getByRole('button', { name: 'Entrar', exact: true }).click();
@@ -269,7 +275,10 @@ let syntheticCleaned = false;
 
 try {
 	stage('backend-auth', 'running');
-	const { data: signIn, error: signInError } = await client.auth.signInWithPassword({ email, password });
+	const { data: signIn, error: signInError } = await client.auth.signInWithPassword({
+		email,
+		password
+	});
 	if (signInError || !signIn.session) throw new Error('Staging credentials could not authenticate');
 	stage('backend-auth', 'pass');
 
@@ -302,7 +311,8 @@ try {
 	const manifestHref = await page.locator('link[rel="manifest"]').getAttribute('href');
 	if (!manifestHref) throw new Error('Deployed app does not expose a web app manifest');
 	const manifestResponse = await context.request.get(new URL(manifestHref, target).href);
-	if (!manifestResponse.ok()) throw new Error(`Web app manifest returned ${manifestResponse.status()}`);
+	if (!manifestResponse.ok())
+		throw new Error(`Web app manifest returned ${manifestResponse.status()}`);
 	stage('pwa-shell', 'pass');
 
 	stage('notebook-create', 'running');
@@ -316,14 +326,20 @@ try {
 	await page.goto(new URL(`/notebooks/${notebook.id}/`, target).href, {
 		waitUntil: 'domcontentloaded'
 	});
-	await page.getByRole('heading', { name: notebookName, exact: true }).waitFor({ state: 'visible' });
+	await page
+		.getByRole('heading', { name: notebookName, exact: true })
+		.waitFor({ state: 'visible' });
 	stage('notebook-create', 'pass');
 
 	stage('notebook-banner', 'running');
 	const banner = await makePng(context, ['Banner de teste do Fichário', runToken]);
 	await page.getByRole('button', { name: '+ Adicionar banner', exact: true }).click();
 	const bannerInput = page.locator('input[type="file"][accept="image/jpeg,image/png,image/webp"]');
-	await bannerInput.setInputFiles({ name: `banner-${runToken}.png`, mimeType: 'image/png', buffer: banner });
+	await bannerInput.setInputFiles({
+		name: `banner-${runToken}.png`,
+		mimeType: 'image/png',
+		buffer: banner
+	});
 	await page.getByRole('button', { name: 'Salvar banner', exact: true }).click();
 	await page.getByRole('button', { name: 'Personalizar banner', exact: true }).waitFor({
 		state: 'visible',
@@ -347,11 +363,14 @@ try {
 	await page.goto(new URL(`/import/?notebook=${notebook.id}`, target).href, {
 		waitUntil: 'domcontentloaded'
 	});
-	await page.locator('input[type="file"][accept*="application/pdf"]').first().setInputFiles({
-		name: pdfFilename,
-		mimeType: 'application/pdf',
-		buffer: await makePdf()
-	});
+	await page
+		.locator('input[type="file"][accept*="application/pdf"]')
+		.first()
+		.setInputFiles({
+			name: pdfFilename,
+			mimeType: 'application/pdf',
+			buffer: await makePdf()
+		});
 	await page.getByText(/arquivo\(s\) adicionados à fila global/i).waitFor({
 		state: 'visible',
 		timeout: 20_000
@@ -417,7 +436,9 @@ try {
 	await page.waitForURL((url) => url.pathname.includes(`/documents/${pdfDocument.id}/`), {
 		timeout: 20_000
 	});
-	await page.getByText(/Aberto a partir da busca por/i).waitFor({ state: 'visible', timeout: 20_000 });
+	await page
+		.getByText(/Aberto a partir da busca por/i)
+		.waitFor({ state: 'visible', timeout: 20_000 });
 	stage('corrected-search-highlight', 'pass');
 
 	stage('coverage-semantic', 'running');
@@ -458,10 +479,13 @@ try {
 	const refreshDrive = page.getByRole('button', { name: 'Atualizar', exact: true });
 	await refreshDrive.waitFor({ state: 'visible', timeout: 20_000 });
 	await refreshDrive.click();
-	await page.getByText(/Está tudo certo por aqui|encontrado em/i).first().waitFor({
-		state: 'visible',
-		timeout: 45_000
-	});
+	await page
+		.getByText(/Está tudo certo por aqui|encontrado em/i)
+		.first()
+		.waitFor({
+			state: 'visible',
+			timeout: 45_000
+		});
 	await assertNoVisibleFailure(page, 'Drive refresh');
 	stage('drive-refresh', 'pass');
 
@@ -471,7 +495,8 @@ try {
 	const alternativeTheme = page.locator('[role="radio"][aria-checked="false"]').first();
 	await alternativeTheme.click();
 	const changedTheme = await page.evaluate(() => document.documentElement.dataset.theme ?? '');
-	if (!changedTheme || changedTheme === originalTheme) throw new Error('Theme selection did not apply');
+	if (!changedTheme || changedTheme === originalTheme)
+		throw new Error('Theme selection did not apply');
 	if (originalTheme) {
 		const originalOption = page.locator(`[data-theme-option="${originalTheme}"]`);
 		if (await originalOption.count()) await originalOption.click();
@@ -479,7 +504,8 @@ try {
 	const downloadPromise = page.waitForEvent('download', { timeout: 45_000 });
 	await page.getByRole('button', { name: 'Baixar cópia', exact: true }).click();
 	const download = await downloadPromise;
-	if (!download.suggestedFilename().endsWith('.json')) throw new Error('Portable export is not JSON');
+	if (!download.suggestedFilename().endsWith('.json'))
+		throw new Error('Portable export is not JSON');
 	const downloadedPath = await download.path();
 	if (!downloadedPath) throw new Error('Portable export did not create a file');
 	const exported = JSON.parse(await readFile(downloadedPath, 'utf8'));
@@ -527,7 +553,8 @@ try {
 		.select('id')
 		.eq('id', pdfDocument.id)
 		.maybeSingle();
-	if (deletedError || deletedDocument !== null) throw new Error('UI document deletion was not persisted');
+	if (deletedError || deletedDocument !== null)
+		throw new Error('UI document deletion was not persisted');
 	report.created.documents = report.created.documents.filter((id) => id !== pdfDocument.id);
 	stage('document-delete-ui', 'pass');
 
@@ -547,7 +574,9 @@ try {
 	await page.waitForURL((url) => url.pathname.startsWith('/login'), { timeout: 30_000 });
 	stage('logout', 'pass');
 
-	await page.screenshot({ path: `${evidenceDir}/final.png`, fullPage: true }).catch(() => undefined);
+	await page
+		.screenshot({ path: `${evidenceDir}/final.png`, fullPage: true })
+		.catch(() => undefined);
 	if (report.browser.pageErrors.length > 0) {
 		throw new Error(`Browser page errors detected: ${report.browser.pageErrors.join(' | ')}`);
 	}
