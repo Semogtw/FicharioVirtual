@@ -14,7 +14,14 @@ function hybridResponse() {
 		mode: 'hybrid',
 		reason: null,
 		embeddingModel: 'gemini-embedding-2',
-		index: { totalPages: 12, indexedPages: 8, indexedThisRun: 2, complete: false },
+		index: {
+			totalPages: 12,
+			indexedPages: 8,
+			remainingPages: 4,
+			coverage: 8 / 12,
+			indexedThisRun: 2
+		},
+		queryEmbeddingCacheHit: true,
 		hasMore: false,
 		results: [
 			{
@@ -52,7 +59,7 @@ function functionClient(data: unknown): FunctionClient {
 }
 
 describe('searchPagesHybrid', () => {
-	it('accepts semantic and hybrid matches without requiring literal overlap', async () => {
+	it('accepts the deployed hybrid response, including cache metadata and index progress', async () => {
 		const response = await searchPagesHybrid(
 			' conservação de energia ',
 			{ limit: 20 },
@@ -63,7 +70,13 @@ describe('searchPagesHybrid', () => {
 			mode: 'hybrid',
 			reason: null,
 			embeddingModel: 'gemini-embedding-2',
-			index: { totalPages: 12, indexedPages: 8, indexedThisRun: 2, complete: false }
+			index: {
+				totalPages: 12,
+				indexedPages: 8,
+				remainingPages: 4,
+				coverage: 8 / 12,
+				indexedThisRun: 2
+			}
 		});
 		expect(response.results[0]).toEqual(
 			expect.objectContaining({
@@ -88,6 +101,14 @@ describe('searchPagesHybrid', () => {
 			expect.objectContaining({ results: [], hasMore: false })
 		);
 		expect(called).toBe(false);
+	});
+
+	it('rejects inconsistent semantic index progress', async () => {
+		const response = hybridResponse();
+		response.index = { ...response.index, remainingPages: 3 };
+		await expect(
+			searchPagesHybrid('conservação de energia', { limit: 20 }, functionClient(response))
+		).rejects.toBeInstanceOf(SemanticSearchServiceError);
 	});
 
 	it('rejects malformed provider responses instead of trusting extra private fields', async () => {
