@@ -31,14 +31,17 @@ const indexSchema = z
 	.object({
 		totalPages: z.number().int().nonnegative(),
 		indexedPages: z.number().int().nonnegative(),
-		indexedThisRun: z.number().int().nonnegative().max(16),
-		complete: z.boolean()
+		remainingPages: z.number().int().nonnegative(),
+		coverage: z.number().finite().min(0).max(1),
+		indexedThisRun: z.number().int().nonnegative().max(16).optional()
 	})
 	.strict()
 	.superRefine((value, context) => {
 		if (
 			value.indexedPages > value.totalPages ||
-			value.complete !== (value.indexedPages === value.totalPages)
+			value.remainingPages !== value.totalPages - value.indexedPages ||
+			Math.abs(value.coverage - (value.totalPages === 0 ? 1 : value.indexedPages / value.totalPages)) >
+				1e-9
 		) {
 			context.addIssue({ code: 'custom', message: 'Invalid semantic search index state' });
 		}
@@ -50,6 +53,7 @@ const responseSchema = z
 		reason: z.string().regex(REASON).nullable(),
 		embeddingModel: z.string().regex(MODEL).nullable(),
 		index: indexSchema.nullable(),
+		queryEmbeddingCacheHit: z.boolean().optional(),
 		hasMore: z.boolean(),
 		results: z.array(resultSchema).max(50)
 	})
@@ -58,7 +62,13 @@ const responseSchema = z
 type FunctionError = { context?: unknown; message?: string };
 
 export type SemanticSearchResult = z.infer<typeof resultSchema>;
-export type SemanticSearchIndex = z.infer<typeof indexSchema>;
+export type SemanticSearchIndex = Readonly<{
+	totalPages: number;
+	indexedPages: number;
+	remainingPages: number;
+	coverage: number;
+	indexedThisRun: number;
+}>;
 export type SemanticSearchAnalysis = Readonly<{
 	mode: 'hybrid' | 'lexical';
 	reason: string | null;
@@ -136,7 +146,15 @@ function parseResponse(value: unknown): SemanticSearchResponse {
 			mode: parsed.mode,
 			reason: parsed.reason,
 			embeddingModel: parsed.embeddingModel,
-			index: parsed.index ? Object.freeze(parsed.index) : null
+			index: parsed.index
+				? Object.freeze({
+						totalPages: parsed.index.totalPages,
+						indexedPages: parsed.index.indexedPages,
+						remainingPages: parsed.index.remainingPages,
+						coverage: parsed.index.coverage,
+						indexedThisRun: parsed.index.indexedThisRun ?? 0
+					})
+				: null
 		})
 	});
 }
