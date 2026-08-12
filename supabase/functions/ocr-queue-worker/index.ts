@@ -259,7 +259,7 @@ async function cleanupTemporaryImage(
 }
 
 async function candidates(admin: ReturnType<typeof createClient>, limit: number) {
-	await admin.rpc('recover_background_stale_ocr_jobs').catch(() => undefined);
+	await admin.rpc('recover_background_stale_ocr_jobs');
 	const { data, error } = await admin.rpc('list_background_gemini_ocr_candidates', {
 		result_limit: limit
 	});
@@ -271,12 +271,10 @@ async function candidates(admin: ReturnType<typeof createClient>, limit: number)
 
 async function reconcile(admin: ReturnType<typeof createClient>, batchIds: readonly string[]) {
 	if (batchIds.length === 0) return;
-	await admin
-		.rpc('reconcile_background_ocr_batches', {
-			target_batch_ids: [...new Set(batchIds)],
-			reconciled_at: new Date().toISOString()
-		})
-		.catch(() => undefined);
+	await admin.rpc('reconcile_background_ocr_batches', {
+		target_batch_ids: [...new Set(batchIds)],
+		reconciled_at: new Date().toISOString()
+	});
 }
 
 async function reserveProviderSlot(
@@ -624,7 +622,7 @@ async function runAndChain(settings: WorkerConfig) {
 	try {
 		const hasMore = await drainOnce(settings);
 		if (!hasMore) return;
-		await fetch(`${settings.supabaseUrl}/functions/v1/ocr-queue-worker`, {
+		const chained = await fetch(`${settings.supabaseUrl}/functions/v1/ocr-queue-worker`, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
@@ -632,6 +630,7 @@ async function runAndChain(settings: WorkerConfig) {
 			},
 			body: JSON.stringify({ source: 'chain' })
 		});
+		if (!chained.ok) throw new Error('Background OCR chain request failed');
 	} catch (error) {
 		reportWorkerFailure(error);
 	}
