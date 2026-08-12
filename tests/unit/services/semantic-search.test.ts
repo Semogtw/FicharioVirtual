@@ -75,7 +75,8 @@ describe('searchPagesHybrid', () => {
 				indexedPages: 8,
 				remainingPages: 4,
 				coverage: 8 / 12,
-				indexedThisRun: 2
+				indexedThisRun: 2,
+				complete: false
 			}
 		});
 		expect(response.results[0]).toEqual(
@@ -83,6 +84,25 @@ describe('searchPagesHybrid', () => {
 				pageId,
 				matchMode: 'hybrid',
 				semanticSimilarity: 0.82
+			})
+		);
+	});
+
+	it('derives completion when the deployed response has no remaining pages', async () => {
+		const response = hybridResponse();
+		response.index = {
+			...response.index,
+			indexedPages: 12,
+			remainingPages: 0,
+			coverage: 1
+		};
+		await expect(
+			searchPagesHybrid('conservação de energia', { limit: 20 }, functionClient(response))
+		).resolves.toEqual(
+			expect.objectContaining({
+				analysis: expect.objectContaining({
+					index: expect.objectContaining({ complete: true })
+				})
 			})
 		);
 	});
