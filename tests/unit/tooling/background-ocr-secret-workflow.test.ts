@@ -25,10 +25,13 @@ describe('background OCR worker secret provisioning workflow', () => {
 		expect(source).not.toContain('OCR_BACKGROUND_WORKER_KEY: ${{ secrets.');
 	});
 
-	it('proves the synchronized credential against the real worker endpoint without checking out source', () => {
-		expect(source).toContain('Verify real worker wake-up');
+	it('proves the synchronized credential through a completed real worker execution', () => {
+		expect(source).toContain('Verify real worker execution');
 		expect(source).toContain('--header "X-Fichario-Worker-Key: $WORKER_KEY"');
-		expect(source).toContain('if [ "$status" != \'202\' ]');
+		expect(source).toContain("--header 'X-Fichario-Worker-Mode: sync'");
+		expect(source).toContain('if [ "$status" != \'200\' ]');
+		expect(source).toContain('.completed == true');
+		expect(source).toContain('(.hasMore | type == "boolean")');
 		expect(source).not.toContain('actions/checkout@');
 	});
 });
