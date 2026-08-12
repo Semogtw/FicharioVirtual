@@ -179,7 +179,8 @@ describe('Google Drive OAuth contracts', () => {
 					nonce
 				},
 				{ clientId, nonce, nowSeconds }
-			).toThrow('Invalid Google identity response');
+			)
+		).toThrow('Invalid Google identity response');
 		expect(() =>
 			parseGoogleIdentity(
 				{
@@ -192,6 +193,7 @@ describe('Google Drive OAuth contracts', () => {
 					nonce
 				},
 				{ clientId, nonce, nowSeconds }
-			).toThrow('Invalid Google identity response');
+			)
+		).toThrow('Invalid Google identity response');
 	});
 });

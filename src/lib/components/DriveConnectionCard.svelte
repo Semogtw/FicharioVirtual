@@ -9,6 +9,8 @@
 	} from '$lib/services/drive';
 	import Button from './Button.svelte';
 
+	type DriveOAuthResult = 'authorized' | 'cancelled' | 'error';
+
 	const configured = isDriveOAuthConfigured();
 	let connection = $state<DriveConnection | null>(null);
 	let loading = $state(true);
@@ -18,20 +20,35 @@
 	let syncMessage = $state<string | null>(null);
 	let presentation = $derived(driveConnectionPresentation({ configured, connection }));
 
+	function consumeOAuthResult(): DriveOAuthResult | null {
+		const url = new URL(window.location.href);
+		const value = url.searchParams.get('drive');
+		if (value !== 'authorized' && value !== 'cancelled' && value !== 'error') return null;
+		url.searchParams.delete('drive');
+		window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+		return value;
+	}
+
 	async function refresh() {
 		if (connecting || synchronizing) return;
 		loading = true;
 		error = null;
 		try {
 			connection = await loadDriveConnection();
-		} catch (caught) {
-			error =
-				caught instanceof Error
-					? caught.message
-					: 'Não foi possível carregar a conexão com o Google Drive.';
+		} catch {
+			error = 'Não foi possível verificar o Google Drive agora.';
 		} finally {
 			loading = false;
 		}
+	}
+
+	async function refreshAfterAuthorization(): Promise<boolean> {
+		for (let attempt = 0; attempt < 4; attempt += 1) {
+			await refresh();
+			if (connection?.status === 'connected' || connection?.status === 'syncing') return true;
+			if (attempt < 3) await new Promise((resolve) => window.setTimeout(resolve, 350 * (attempt + 1)));
+		}
+		return false;
 	}
 
 	async function connect() {
@@ -42,11 +59,8 @@
 		try {
 			const authorizationUrl = await beginDriveConnection();
 			window.location.assign(authorizationUrl);
-		} catch (caught) {
-			error =
-				caught instanceof Error
-					? caught.message
-					: 'Não foi possível iniciar a conexão com o Google Drive.';
+		} catch {
+			error = 'Não foi possível abrir a conexão com o Google Drive. Tente novamente.';
 			connecting = false;
 		}
 	}
@@ -58,23 +72,51 @@
 		syncMessage = null;
 		try {
 			const receipt = await synchronizeDriveConnection();
-			const continuation =
-				receipt.status === 'partial'
-					? ' O limite desta rodada foi atingido; sincronize novamente para continuar.'
-					: '';
-			syncMessage = `${receipt.applied} alterações aplicadas, ${receipt.ignored} ignoradas e ${receipt.conflicts} conflitos isolados em ${receipt.pages} página${receipt.pages === 1 ? '' : 's'}.${continuation}`;
+			if (receipt.conflicts > 0) {
+				syncMessage = `Sincronização concluída. ${receipt.conflicts} item${receipt.conflicts === 1 ? '' : 's'} precisa${receipt.conflicts === 1 ? '' : 'm'} de atenção.`;
+			} else if (receipt.status === 'partial') {
+				syncMessage = 'Parte dos arquivos foi atualizada. Sincronize novamente para continuar.';
+			} else {
+				syncMessage = 'Google Drive atualizado.';
+			}
 			synchronizing = false;
 			await refresh();
-		} catch (caught) {
-			error =
-				caught instanceof Error ? caught.message : 'Não foi possível sincronizar o Google Drive.';
+		} catch {
+			error = 'Não foi possível sincronizar o Google Drive agora.';
 		} finally {
 			synchronizing = false;
 		}
 	}
 
 	onMount(() => {
-		void refresh();
+		let disposed = false;
+		const oauthResult = consumeOAuthResult();
+
+		void (async () => {
+			if (oauthResult === 'authorized') {
+				const connected = await refreshAfterAuthorization();
+				if (disposed) return;
+				if (connected) syncMessage = 'Google Drive conectado.';
+				else error = 'A conta foi autorizada, mas a conexão não ficou pronta. Tente conectar novamente.';
+				return;
+			}
+
+			await refresh();
+			if (disposed) return;
+			if (oauthResult === 'cancelled') syncMessage = 'Conexão cancelada.';
+			if (oauthResult === 'error') error = 'Não foi possível concluir a conexão com o Google Drive.';
+		})();
+
+		const refreshWhenVisible = () => {
+			if (document.visibilityState === 'visible') void refresh();
+		};
+		window.addEventListener('focus', refreshWhenVisible);
+		document.addEventListener('visibilitychange', refreshWhenVisible);
+		return () => {
+			disposed = true;
+			window.removeEventListener('focus', refreshWhenVisible);
+			document.removeEventListener('visibilitychange', refreshWhenVisible);
+		};
 	});
 </script>
 
@@ -82,19 +124,15 @@
 	<div class="drive-copy">
 		<div class="heading-row">
 			<div>
-				<p class="eyebrow">Armazenamento permanente</p>
-				<h2 id="drive-title">Google Drive</h2>
+				<p class="eyebrow">Google Drive</p>
+				<h2 id="drive-title">Seus arquivos na nuvem</h2>
 			</div>
 			<span class="status" aria-live="polite">
-				{loading ? 'Carregando…' : synchronizing ? 'Sincronizando…' : presentation.title}
+				{loading ? 'Verificando…' : synchronizing ? 'Sincronizando…' : presentation.title}
 			</span>
 		</div>
 
 		<p>{presentation.detail}</p>
-		<p class="privacy-note">
-			O Fichário usa somente <code>drive.file</code>. Refresh tokens ficam no backend; o navegador
-			não os armazena.
-		</p>
 		{#if syncMessage}<p class="sync-message" role="status">{syncMessage}</p>{/if}
 		{#if error}<p class="error" role="alert">{error}</p>{/if}
 	</div>
@@ -114,12 +152,6 @@
 				onclick={() => void synchronize()}
 			/>
 		{/if}
-		<Button
-			label={loading ? 'Atualizando…' : 'Atualizar estado'}
-			variant="secondary"
-			disabled={loading || connecting || synchronizing}
-			onclick={() => void refresh()}
-		/>
 	</div>
 </section>
 
@@ -187,17 +219,6 @@
 	.revoked .status {
 		background: rgb(var(--danger-rgb) / 8%);
 		color: var(--danger);
-	}
-
-	.privacy-note {
-		font-size: 0.88rem;
-	}
-
-	code {
-		padding: 0.1rem 0.25rem;
-		border-radius: 0.3rem;
-		background: var(--surface-strong);
-		color: var(--ink);
 	}
 
 	.actions {
