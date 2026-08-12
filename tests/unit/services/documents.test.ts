@@ -230,6 +230,24 @@ describe('document filter contract', () => {
 		expect(Object.isFrozen(filters)).toBe(true);
 	});
 
+	it('accepts nullable empty filters used by the library UI', () => {
+		const filters = parseDocumentFilters({
+			notebookId: null,
+			kind: null,
+			status: null,
+			createdFrom: null,
+			createdTo: null
+		});
+
+		expect(filters).toEqual({
+			notebookId: null,
+			kind: null,
+			status: null,
+			createdFrom: null,
+			createdTo: null
+		});
+	});
+
 	it('rejects invalid, extra or inverted filters', () => {
 		expect(() => parseDocumentFilters({ notebookId: 'bad-id' })).toThrow(
 			'Invalid document filters'
