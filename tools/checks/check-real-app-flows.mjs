@@ -215,6 +215,43 @@ async function searchFor(page, text, expectedDocumentText) {
 	await assertNoVisibleFailure(page, 'search');
 }
 
+async function cleanupDocuments(client, beforeIds) {
+	const documentIds = beforeIds ? await newlyCreatedIds(client, 'documents', beforeIds) : [];
+	report.created.documents = [...new Set([...report.created.documents, ...documentIds])];
+	for (const documentId of documentIds) {
+		const { error } = await client.functions.invoke('delete-document', { body: { documentId } });
+		if (error) throw error;
+	}
+}
+
+async function cleanupNotebooks(client, beforeIds) {
+	const notebookIds = beforeIds ? await newlyCreatedIds(client, 'notebooks', beforeIds) : [];
+	report.created.notebooks = [...new Set([...report.created.notebooks, ...notebookIds])];
+	for (const notebookId of notebookIds) {
+		const { data, error } = await client.rpc('delete_notebook', {
+			target_notebook_id: notebookId
+		});
+		if (error || data !== true) throw error ?? new Error('delete_notebook rejected cleanup');
+	}
+}
+
+async function cleanupImportSessions(client, beforeIds) {
+	const sessionIds = beforeIds ? await newlyCreatedIds(client, 'import_sessions', beforeIds) : [];
+	report.created.importSessions = sessionIds;
+	if (sessionIds.length === 0) return;
+	const { error } = await client.from('import_sessions').delete().in('id', sessionIds);
+	if (error) throw error;
+}
+
+function recordCleanupFailure(kind, error, message) {
+	report.cleanup[kind] = `fail: ${safeError(error)}`;
+	if (report.status === 'pass') {
+		report.status = 'fail';
+		report.error = message;
+		process.exitCode = 1;
+	}
+}
+
 const client = createClient(supabaseUrl, publishableKey, {
 	auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
 });
@@ -416,62 +453,24 @@ try {
 	process.exitCode = 1;
 } finally {
 	try {
-		const documentIds = before.documents
-			? await newlyCreatedIds(client, 'documents', before.documents)
-			: [];
-		report.created.documents = [...new Set([...report.created.documents, ...documentIds])];
-		for (const documentId of documentIds) {
-			const { error } = await client.functions.invoke('delete-document', { body: { documentId } });
-			if (error) throw error;
-		}
+		await cleanupDocuments(client, before.documents);
 		report.cleanup.documents = 'pass';
 	} catch (error) {
-		report.cleanup.documents = `fail: ${safeError(error)}`;
-		if (report.status === 'pass') {
-			report.status = 'fail';
-			report.error = 'Synthetic document cleanup failed';
-			process.exitCode = 1;
-		}
+		recordCleanupFailure('documents', error, 'Synthetic document cleanup failed');
 	}
 
 	try {
-		const notebookIds = before.notebooks
-			? await newlyCreatedIds(client, 'notebooks', before.notebooks)
-			: [];
-		report.created.notebooks = [...new Set([...report.created.notebooks, ...notebookIds])];
-		for (const notebookId of notebookIds) {
-			const { data, error } = await client.rpc('delete_notebook', {
-				target_notebook_id: notebookId
-			});
-			if (error || data !== true) throw error ?? new Error('delete_notebook rejected cleanup');
-		}
+		await cleanupNotebooks(client, before.notebooks);
 		report.cleanup.notebooks = 'pass';
 	} catch (error) {
-		report.cleanup.notebooks = `fail: ${safeError(error)}`;
-		if (report.status === 'pass') {
-			report.status = 'fail';
-			report.error = 'Synthetic notebook cleanup failed';
-			process.exitCode = 1;
-		}
+		recordCleanupFailure('notebooks', error, 'Synthetic notebook cleanup failed');
 	}
 
 	try {
-		const sessionIds = before.import_sessions
-			? await newlyCreatedIds(client, 'import_sessions', before.import_sessions)
-			: [];
-		report.created.importSessions = sessionIds;
-		if (sessionIds.length > 0) {
-			const { error } = await client.from('import_sessions').delete().in('id', sessionIds);
-			if (error) throw error;
-		}
+		await cleanupImportSessions(client, before.import_sessions);
 		report.cleanup.importSessions = 'pass';
 	} catch (error) {
-		report.cleanup.importSessions = `fail: ${safeError(error)}`;
-		if (report.status === 'pass') {
-			report.status = 'fail';
-			report.error = 'Synthetic import-session cleanup failed';
-			process.exitCode = 1;
-		}
+		recordCleanupFailure('importSessions', error, 'Synthetic import-session cleanup failed');
 	}
 
 	await client.auth.signOut().catch(() => undefined);
