@@ -109,7 +109,6 @@
 		summary = null;
 	}
 
-
 	function semanticResultNotice(result: AnalyzedUnitCoverageSummary) {
 		const analysis = result.analysis;
 		if (!analysis) return null;
@@ -406,7 +405,12 @@
 			</label>
 			<label>
 				<span>Buscar em</span>
-				<NativeSelect bind:value={notebookId} disabled={notebookLoading} onchange={invalidateCoverage}>
+				<NativeSelect
+					ariaLabel="Buscar em"
+					bind:value={notebookId}
+					disabled={notebookLoading}
+					onchange={invalidateCoverage}
+				>
 					<option value="">Todo o fichário</option>
 					{#each notebooks as notebook}
 						<option value={notebook.id}>{notebook.name}</option>
@@ -423,7 +427,12 @@
 				</div>
 				<label class="bulk-field">
 					<span>Conteúdos</span>
-					<textarea bind:value={bulkInput} rows="6" placeholder={bulkPlaceholder}></textarea>
+					<textarea
+						aria-label="Conteúdos"
+						bind:value={bulkInput}
+						rows="6"
+						placeholder={bulkPlaceholder}
+					></textarea>
 					<small>Uma linha por assunto. Numeração e marcadores são removidos ao converter.</small>
 				</label>
 				<div class="compact-actions">
