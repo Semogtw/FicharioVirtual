@@ -19,6 +19,19 @@ describe('import notebook query selection', () => {
 		expect(source).toContain('onDestroy(() =>');
 	});
 
+	it('keeps fast file selections until a requested notebook finishes resolving', () => {
+		const source = read('src/lib/components/UnifiedImportPage.svelte');
+		expect(source).toContain('let pendingFiles: readonly File[] | null = null;');
+		expect(source).toContain('pendingFiles = [...(pendingFiles ?? []), ...files];');
+		expect(source).toContain('Confirmando o caderno antes de adicionar os arquivos…');
+		expect(source).toContain('const waiting = pendingFiles;');
+		expect(source).toContain(
+			'const resolved = resolveImportNotebookSelection(requestedNotebookId, items, true);'
+		);
+		expect(source).toContain('enqueue(waiting, resolved.notebookId);');
+		expect(source).toContain('pendingFiles = null;');
+	});
+
 	it.each(['src/routes/import/+page.svelte', 'src/routes/import/pdf/+page.svelte'])(
 		'%s delegates selection behavior to the unified import page',
 		(path) => expect(read(path)).toContain('$lib/components/UnifiedImportPage.svelte')
