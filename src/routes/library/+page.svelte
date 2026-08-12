@@ -117,6 +117,7 @@
 		<label>
 			<span>Caderno</span>
 			<NativeSelect
+				ariaLabel="Caderno"
 				bind:value={notebookId}
 				disabled={notebookLoading}
 				onchange={() => void load(true)}
@@ -129,7 +130,7 @@
 		</label>
 		<label>
 			<span>Tipo</span>
-			<NativeSelect bind:value={kind} onchange={() => void load(true)}>
+			<NativeSelect ariaLabel="Tipo" bind:value={kind} onchange={() => void load(true)}>
 				<option value="">Todos</option>
 				<option value="image">Imagem</option>
 				<option value="pdf">PDF</option>
@@ -137,7 +138,7 @@
 		</label>
 		<label>
 			<span>Estado</span>
-			<NativeSelect bind:value={status} onchange={() => void load(true)}>
+			<NativeSelect ariaLabel="Estado" bind:value={status} onchange={() => void load(true)}>
 				<option value="">Todos</option>
 				<option value="ready">Pronto</option>
 				<option value="processing">Processando</option>
@@ -147,11 +148,11 @@
 		</label>
 		<label>
 			<span>De</span>
-			<input type="date" bind:value={createdFrom} onchange={() => void load(true)} />
+			<input type="date" aria-label="De" bind:value={createdFrom} onchange={() => void load(true)} />
 		</label>
 		<label>
 			<span>Até</span>
-			<input type="date" bind:value={createdTo} onchange={() => void load(true)} />
+			<input type="date" aria-label="Até" bind:value={createdTo} onchange={() => void load(true)} />
 		</label>
 	</form>
 
