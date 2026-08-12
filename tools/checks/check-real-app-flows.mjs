@@ -251,7 +251,10 @@ async function cleanupImportSessions(client, resumeKeys) {
 function captureImportResumeKey(request, resumeKeys) {
 	if (request.method() !== 'POST') return;
 	const url = new URL(request.url());
-	if (url.origin !== new URL(supabaseUrl).origin || !url.pathname.endsWith('/rest/v1/import_sessions')) {
+	if (
+		url.origin !== new URL(supabaseUrl).origin ||
+		!url.pathname.endsWith('/rest/v1/import_sessions')
+	) {
 		return;
 	}
 	try {
