@@ -69,6 +69,7 @@ export type SemanticSearchIndex = Readonly<{
 	remainingPages: number;
 	coverage: number;
 	indexedThisRun: number;
+	complete: boolean;
 }>;
 export type SemanticSearchAnalysis = Readonly<{
 	mode: 'hybrid' | 'lexical';
@@ -153,7 +154,8 @@ function parseResponse(value: unknown): SemanticSearchResponse {
 						indexedPages: parsed.index.indexedPages,
 						remainingPages: parsed.index.remainingPages,
 						coverage: parsed.index.coverage,
-						indexedThisRun: parsed.index.indexedThisRun ?? 0
+						indexedThisRun: parsed.index.indexedThisRun ?? 0,
+						complete: parsed.index.remainingPages === 0
 					})
 				: null
 		})
