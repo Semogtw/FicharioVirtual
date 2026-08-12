@@ -319,7 +319,8 @@ try {
 	page.on('response', (response) => {
 		const url = new URL(response.url());
 		const status = response.status();
-		const originAllowed = url.origin === target.origin || url.origin === new URL(supabaseUrl).origin;
+		const originAllowed =
+			url.origin === target.origin || url.origin === new URL(supabaseUrl).origin;
 		if (!originAllowed) return;
 		const endpoint = `${url.origin}${url.pathname}`;
 		if (url.origin === new URL(supabaseUrl).origin && url.pathname.endsWith('/ocr-queue-kick')) {
@@ -328,7 +329,9 @@ try {
 				return;
 			}
 			if (status >= 200 && status < 300) {
-				const recovered = report.browser.serverErrors.findIndex((value) => value.endsWith(endpoint));
+				const recovered = report.browser.serverErrors.findIndex((value) =>
+					value.endsWith(endpoint)
+				);
 				if (recovered >= 0) report.browser.serverErrors.splice(recovered, 1);
 				return;
 			}
