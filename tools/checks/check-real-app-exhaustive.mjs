@@ -277,12 +277,10 @@ try {
 
 	stage('batch-organize', 'running');
 	await openRoute(page, '/library/organize/', 'Organizar documentos');
-	const organizationRow = page
-		.locator('section.documents article')
-		.filter({ hasText: imported.title })
-		.first();
-	await organizationRow.waitFor({ state: 'visible', timeout: 20_000 });
-	await organizationRow.locator('input').fill(organizedTitle);
+	const organizationTitleInput = page.getByDisplayValue(imported.title, { exact: true }).first();
+	await organizationTitleInput.waitFor({ state: 'visible', timeout: 20_000 });
+	const organizationRow = organizationTitleInput.locator('xpath=ancestor::article[1]');
+	await organizationTitleInput.fill(organizedTitle);
 	await organizationRow.locator('select').selectOption(destinationNotebook.id);
 	await organizationRow.getByRole('button', { name: 'Salvar', exact: true }).click();
 	await organizationRow
