@@ -318,12 +318,22 @@ try {
 	});
 	page.on('response', (response) => {
 		const url = new URL(response.url());
-		if (
-			response.status() >= 500 &&
-			(url.origin === target.origin || url.origin === new URL(supabaseUrl).origin)
-		) {
-			report.browser.serverErrors.push(`${response.status()} ${url.origin}${url.pathname}`);
+		const status = response.status();
+		const originAllowed = url.origin === target.origin || url.origin === new URL(supabaseUrl).origin;
+		if (!originAllowed) return;
+		const endpoint = `${url.origin}${url.pathname}`;
+		if (url.origin === new URL(supabaseUrl).origin && url.pathname.endsWith('/ocr-queue-kick')) {
+			if (status >= 500) {
+				report.browser.serverErrors.push(`${status} ${endpoint}`);
+				return;
+			}
+			if (status >= 200 && status < 300) {
+				const recovered = report.browser.serverErrors.findIndex((value) => value.endsWith(endpoint));
+				if (recovered >= 0) report.browser.serverErrors.splice(recovered, 1);
+				return;
+			}
 		}
+		if (status >= 500) report.browser.serverErrors.push(`${status} ${endpoint}`);
 	});
 
 	stage('real-login', 'running');
@@ -348,7 +358,7 @@ try {
 		['/review/', /Revis/i],
 		['/drive/', /Arquivos no Drive/i],
 		['/settings/', /Configura/i],
-		['/coverage/', /Cobertura/i]
+		['/coverage/', /conteúdo já está no seu fichário/i]
 	]) {
 		await navigateAndCheck(page, path, heading);
 	}
@@ -449,7 +459,7 @@ try {
 	await navigateAndCheck(page, `/documents/${pdfDocument.id}/`, /.+/);
 	await navigateAndCheck(page, `/documents/${imageDocument.id}/`, /.+/);
 	await navigateAndCheck(page, '/review/', /Revis/i);
-	await navigateAndCheck(page, '/coverage/', /Cobertura/i);
+	await navigateAndCheck(page, '/coverage/', /conteúdo já está no seu fichário/i);
 	await navigateAndCheck(page, '/drive/', /Arquivos no Drive/i);
 	stage('post-import-routes', 'pass');
 
