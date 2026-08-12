@@ -10,11 +10,13 @@ describe('real deployed flow source contract', () => {
 		expect(core).not.toContain("['/coverage/', /Cobertura/i]");
 	});
 
-	it('keeps persistent 5xx failures fatal while allowing a recovered OCR kick retry', () => {
-		expect(core).toContain("url.pathname.endsWith('/ocr-queue-kick')");
+	it('keeps persistent 5xx failures fatal while clearing recovered endpoints generically', () => {
+		expect(core).toContain('function trackServerResponse(response) {');
 		expect(core).toContain('if (status >= 500) {');
 		expect(core).toContain('if (status >= 200 && status < 300) {');
-		expect(core).toContain('report.browser.serverErrors.splice(recovered, 1);');
+		expect(core).toContain('(value) => !value.endsWith(endpoint)');
+		expect(core).toContain("page.on('response', trackServerResponse);");
 		expect(core).toContain('Server 5xx responses detected:');
+		expect(core).not.toContain("url.pathname.endsWith('/ocr-queue-kick')");
 	});
 });
