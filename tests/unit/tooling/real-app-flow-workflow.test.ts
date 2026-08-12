@@ -12,6 +12,11 @@ describe('real deployed app flow workflow', () => {
 		expect(source).toContain('TARGET_URL: https://fichario-virtual.pages.dev');
 	});
 
+	it('serializes use of the shared protected staging account', () => {
+		expect(source).toContain('group: staging-contract-verification');
+		expect(source).toContain('cancel-in-progress: false');
+	});
+
 	it('uses protected real credentials without checking out the repository', () => {
 		expect(source).toContain('environment: staging');
 		expect(source).toContain('STAGING_AUTHORIZED_EMAIL: ${{ secrets.STAGING_AUTHORIZED_EMAIL }}');
