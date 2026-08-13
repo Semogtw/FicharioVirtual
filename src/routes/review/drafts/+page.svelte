@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
+	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import { discardCorrectionDraft, listCorrectionDrafts } from '$lib/review/draft-index';
 	import type { CorrectionDraft } from '$lib/review/drafts';
@@ -20,6 +21,7 @@
 	let locationsReady = $state(false);
 	let error = $state<string | null>(null);
 	let locationError = $state<string | null>(null);
+	let pendingDiscardPageId = $state<string | null>(null);
 
 	async function refresh(version = refreshRequests.next()) {
 		loading = true;
@@ -78,13 +80,12 @@
 	}
 
 	function discard(pageId: string) {
-		if (!window.confirm('Descartar somente este rascunho local? O texto remoto não será alterado.'))
-			return;
 		try {
 			const userId = sessionState.user?.id;
 			if (!userId) throw new Error('Sessão não disponível para os rascunhos locais.');
 			discardCorrectionDraft(userId, pageId);
 			rows = rows.filter((row) => row.draft.pageId !== pageId);
+			pendingDiscardPageId = null;
 		} catch (caught) {
 			error =
 				caught instanceof Error ? caught.message : 'Não foi possível descartar o rascunho local.';
@@ -171,7 +172,11 @@
 								Retomar no editor
 							</a>
 						{/if}
-						<button type="button" class="danger" onclick={() => discard(row.draft.pageId)}>
+						<button
+							type="button"
+							class="danger"
+							onclick={() => (pendingDiscardPageId = row.draft.pageId)}
+						>
 							Descartar local
 						</button>
 					</div>
@@ -180,6 +185,16 @@
 		</section>
 	{/if}
 </div>
+
+<ConfirmDialog
+	open={pendingDiscardPageId !== null}
+	title="Descartar rascunho local?"
+	description="Somente este rascunho salvo neste dispositivo será removido. O texto já salvo no servidor não será alterado."
+	confirmLabel="Descartar"
+	danger
+	onConfirm={() => pendingDiscardPageId && discard(pendingDiscardPageId)}
+	onCancel={() => (pendingDiscardPageId = null)}
+/>
 
 <style>
 	.page,
