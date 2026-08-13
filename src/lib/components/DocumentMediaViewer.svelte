@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
-	import SearchMatch from '$lib/components/SearchMatch.svelte';
 	import WordGeometryOverlay from '$lib/components/WordGeometryOverlay.svelte';
 	import { downloadBrowserDriveFile } from '$lib/drive/browser-download';
 	import type { PageDetail } from '$lib/domain/page';
@@ -203,24 +202,10 @@
 		<div class="status" role="status">
 			<p>{renderError ?? 'O original não pôde ser exibido aqui.'}</p>
 			{#if detail.originalReference.provider === 'google_drive'}
-				<a href={detail.originalReference.url} target="_blank" rel="noreferrer"
-					>Abrir no Google Drive</a
-				>
+				<a href={detail.originalReference.url} target="_blank" rel="noreferrer">Abrir no Google Drive</a>
 			{:else}
 				<a href={detail.originalReference.url} target="_blank" rel="noreferrer">Abrir original</a>
 			{/if}
-		</div>
-	{/if}
-
-	{#if query}
-		<div class="text-fallback">
-			<SearchMatch
-				text={page.text}
-				{query}
-				label={effectiveGeometry.length > 0 ? 'Trecho correspondente' : 'Encontrado nesta mídia'}
-				maximumLength={220}
-				compact
-			/>
 		</div>
 	{/if}
 </div>
@@ -228,7 +213,6 @@
 <style>
 	.media-viewer {
 		display: grid;
-		gap: 0.7rem;
 		min-height: 28rem;
 		align-content: start;
 		overflow: auto;
@@ -269,12 +253,5 @@
 	.status a {
 		color: var(--archive);
 		font-weight: 720;
-	}
-
-	.text-fallback {
-		position: sticky;
-		bottom: 0.7rem;
-		z-index: 3;
-		margin: -0.1rem 0.7rem 0.7rem;
 	}
 </style>
