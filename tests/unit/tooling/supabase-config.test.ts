@@ -35,7 +35,13 @@ describe('Supabase local configuration', () => {
 			(entry) => entry[1]
 		);
 		expect([...entries].sort()).toEqual(
-			['ocr-queue-worker', 'drive-oauth-callback', 'desktop-ocr-pair', 'desktop-ocr-worker'].sort()
+			[
+				'ocr-queue-worker',
+				'semantic-index-worker',
+				'drive-oauth-callback',
+				'desktop-ocr-pair',
+				'desktop-ocr-worker'
+			].sort()
 		);
 	});
 
