@@ -7,12 +7,14 @@
 	import {
 		cancelImport,
 		importQueue,
+		removeImport,
 		retryImport,
 		type ImportQueueItem
 	} from '$lib/stores/import-queue.svelte';
 	import {
 		cancelPdfImport,
 		pdfImportQueue,
+		removePdfImport,
 		retryPdfImport,
 		type PdfQueueItem
 	} from '$lib/stores/pdf-import-queue.svelte';
@@ -40,6 +42,7 @@
 			].includes(item.status)
 		).length
 	);
+	let failedCount = $derived(entries.filter(({ item }) => item.status === 'failed').length);
 
 	const labels: Record<string, string> = {
 		queued: 'Na fila',
@@ -77,6 +80,12 @@
 		return ['failed', 'cancelled'].includes(entry.item.status);
 	}
 
+	function canRemove(entry: QueueEntry) {
+		return ['failed', 'cancelled', 'complete', 'needs_review', 'duplicate'].includes(
+			entry.item.status
+		);
+	}
+
 	function cancel(entry: QueueEntry) {
 		if (entry.kind === 'image') cancelImport(entry.item.id);
 		else cancelPdfImport(entry.item.id);
@@ -85,6 +94,17 @@
 	function retry(entry: QueueEntry) {
 		if (entry.kind === 'image') retryImport(entry.item.id);
 		else void retryPdfImport(entry.item.id);
+	}
+
+	function remove(entry: QueueEntry) {
+		if (entry.kind === 'image') removeImport(entry.item.id);
+		else removePdfImport(entry.item.id);
+	}
+
+	function clearFailed() {
+		for (const entry of [...entries]) {
+			if (entry.item.status === 'failed') remove(entry);
+		}
 	}
 
 	async function finishImageImport(item: ImportQueueItem, summary: DocumentOcrSummary) {
@@ -209,7 +229,14 @@
 					<strong>Importações</strong>
 					<small>Você pode continuar usando o Fichário enquanto os itens são processados.</small>
 				</div>
-				<a href="/import/" onclick={() => (open = false)}>Adicionar</a>
+				<div class="header-actions">
+					{#if failedCount > 0}
+						<button type="button" class="clear-failed" onclick={clearFailed}>
+							Limpar falhos ({failedCount})
+						</button>
+					{/if}
+					<a href="/import/" onclick={() => (open = false)}>Adicionar</a>
+				</div>
 			</header>
 
 			{#if entries.length === 0}
@@ -236,6 +263,9 @@
 									<button type="button" onclick={() => cancel(entry)}>Cancelar</button>
 								{:else if canRetry(entry)}
 									<button type="button" onclick={() => retry(entry)}>Retomar</button>
+								{/if}
+								{#if canRemove(entry)}
+									<button type="button" class="remove" onclick={() => remove(entry)}>Remover</button>
 								{/if}
 								{#if documentId(entry)}
 									<a href={`/documents/${documentId(entry)}/`} onclick={() => (open = false)}
@@ -296,7 +326,7 @@
 		z-index: 40;
 		top: calc(100% + 0.7rem);
 		right: 0;
-		width: min(31rem, calc(100vw - 2rem));
+		width: min(35rem, calc(100vw - 2rem));
 		max-height: min(70vh, 38rem);
 		overflow: auto;
 		border: 1px solid var(--line-strong);
@@ -317,7 +347,7 @@
 		background: var(--surface-strong);
 	}
 
-	header > div {
+	header > div:first-child {
 		display: grid;
 		gap: 0.2rem;
 	}
@@ -341,12 +371,34 @@
 		line-height: 1.35;
 	}
 
+	.header-actions,
+	.actions {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
 	header a,
+	.header-actions button,
 	.actions a,
 	.actions button {
 		color: var(--archive);
 		font-size: 0.75rem;
 		font-weight: 760;
+	}
+
+	.header-actions button,
+	.actions button {
+		padding: 0;
+		border: 0;
+		background: transparent;
+		font-family: inherit;
+		cursor: pointer;
+	}
+
+	.header-actions .clear-failed,
+	.actions .remove {
+		color: var(--danger);
 	}
 
 	ul {
@@ -402,20 +454,6 @@
 		color: var(--danger);
 	}
 
-	.actions {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
-
-	.actions button {
-		padding: 0;
-		border: 0;
-		background: transparent;
-		font-family: inherit;
-		cursor: pointer;
-	}
-
 	.empty {
 		margin: 0;
 		padding: 1.5rem 1rem;
@@ -436,6 +474,15 @@
 			max-height: calc(100vh - var(--topbar-height) - var(--mobile-nav-height) - 1.5rem);
 		}
 
+		header {
+			align-items: flex-start;
+		}
+
+		.header-actions {
+			align-items: flex-end;
+			flex-direction: column-reverse;
+		}
+
 		li {
 			grid-template-columns: auto minmax(0, 1fr);
 		}
@@ -443,6 +490,7 @@
 		.actions {
 			grid-column: 2;
 			justify-content: flex-start;
+			flex-wrap: wrap;
 		}
 	}
 </style>
