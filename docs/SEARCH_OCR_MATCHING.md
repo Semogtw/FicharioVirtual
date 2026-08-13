@@ -32,13 +32,28 @@ A busca global reutiliza **o mesmo índice de páginas usado pela cobertura de c
 - tabela `page_semantic_chunks`;
 - embeddings de 768 dimensões;
 - modelo padrão `gemini-embedding-2`;
-- hash SHA-256 do texto efetivo para invalidação;
+- hash SHA-256 versionado do texto efetivo para invalidação;
 - índice HNSW com distância cosseno;
 - RPC `search_pages_semantic`.
 
 Não existe um segundo conjunto de vetores para a busca. Se uma página já foi indexada pela cobertura com o mesmo modelo e hash, a busca global a reutiliza sem nova chamada de embedding de documento. O inverso também vale: páginas indexadas durante uma pesquisa ficam disponíveis para a cobertura.
 
 A Edge Function `semantic-search` faz indexação oportunista de páginas ainda ausentes ou obsoletas, gera um embedding `RETRIEVAL_QUERY` para a consulta e recupera os chunks semanticamente mais próximos. Uma página só é persistida como atual quando todos os chunks dela cabem no lote da execução.
+
+### Normalização antes do embedding
+
+O texto canônico da página continua armazenado sem alterações. Antes de criar os chunks semânticos, uma cópia usada apenas pelo índice passa por uma normalização conservadora em `semantic-text.ts`:
+
+- Unicode é normalizado com NFKC, o que também resolve ligaturas de PDF/OCR como `ﬁ`;
+- soft hyphens e caracteres invisíveis de largura zero são removidos;
+- palavras quebradas por hifenização de fim de linha, como `fotossín-\ntese`, são reunidas antes do chunking;
+- espaços e quebras de linha artificiais são regularizados sem aplicar corretor ortográfico.
+
+A normalização **não tenta adivinhar a palavra correta**. Por exemplo, `ocitona` não é automaticamente transformada em `oxitona`; nomes próprios e termos técnicos também não são reescritos. O fuzzy continua responsável por tolerância ortográfica, enquanto o embedding recebe um texto menos contaminado por ruído de layout/OCR.
+
+O mesmo princípio vale para consultas: a forma usada para calcular a chave de cache é também a forma efetivamente enviada ao modelo. A versão do texto faz parte da chave de cache, evitando reutilizar um vetor criado por uma normalização antiga.
+
+Quando a política de normalização de documentos muda, `semantic_source_hash` é versionado. Isso torna os chunks anteriores obsoletos e permite que a indexação oportunista os regenere gradualmente com a versão nova, sem depender de uma edição manual da página.
 
 Exemplo de recuperação semântica:
 
@@ -141,6 +156,9 @@ A implementação inclui ou deve manter testes para:
 - erro OCR aproximado (`fotossintcse` para consulta `fotossíntese`);
 - proteção contra fuzzy em termos muito curtos;
 - recorte centrado no termo aproximado;
+- normalização semântica de ligaturas, soft hyphens e caracteres invisíveis;
+- junção de palavras quebradas por hifenização de fim de linha antes do chunking;
+- preservação de hífens normais dentro da linha;
 - contrato estrito do cliente `semantic-search`;
 - recuperação `semantic` e `hybrid` sem exigir overlap literal;
 - ausência das superfícies de consentimento pré-lançamento;
