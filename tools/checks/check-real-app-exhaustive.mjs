@@ -37,6 +37,7 @@ const pdfText = `Eletromagnetismo aplicado ao campo magnetico. Marcador ${runTok
 const organizedTitle = `Documento organizado ${runToken}`;
 const tagName = `Tag ${runToken}`;
 const renamedTagName = `Tag renomeada ${runToken}`;
+const draftText = `${pdfText}\nRascunho local ${runToken}`;
 
 const report = {
 	target: target.origin,
@@ -226,6 +227,14 @@ try {
 	}
 	stage('advanced-route-sweep', 'pass');
 
+	stage('usage-telemetry-ui', 'running');
+	await openRoute(page, '/settings/usage/', 'Uso');
+	await page
+		.getByRole('region', { name: 'Resumo do arquivo' })
+		.waitFor({ state: 'visible', timeout: 30_000 });
+	await page.getByText(/^Atualizado em /).waitFor({ state: 'visible', timeout: 20_000 });
+	stage('usage-telemetry-ui', 'pass');
+
 	stage('notebook-fixtures', 'running');
 	await createNotebookThroughUi(page, notebookName);
 	await createNotebookThroughUi(page, destinationNotebookName);
@@ -254,7 +263,7 @@ try {
 		.waitFor({ state: 'visible', timeout: 25_000 });
 	const imported = await waitForRow(client, 'documents', { original_filename: pdfFilename });
 	report.created.documents.push(imported.id);
-	await waitForNativeText(client, imported.id);
+	const importedPage = await waitForNativeText(client, imported.id);
 	stage('native-pdf-fixture', 'pass');
 
 	stage('library-date-filter', 'running');
@@ -351,6 +360,63 @@ try {
 		.getByText(/Aberto a partir da busca por/)
 		.waitFor({ state: 'visible', timeout: 20_000 });
 	stage('fuzzy-search', 'pass');
+
+	stage('local-draft-recovery-ui', 'running');
+	const correctionEndpoint = `${new URL(supabaseUrl).origin}/rest/v1/pages*`;
+	await page.route(correctionEndpoint, async (route) => {
+		if (route.request().method() === 'PATCH') {
+			await route.abort('failed');
+			return;
+		}
+		await route.continue();
+	});
+	const correctionEditor = page.getByLabel('Texto corrigido da página 1', { exact: true });
+	await correctionEditor.waitFor({ state: 'visible', timeout: 20_000 });
+	await correctionEditor.fill(draftText);
+	await page.getByRole('button', { name: 'Salvar agora', exact: true }).click();
+	await page
+		.getByRole('alert')
+		.filter({ hasText: 'A correção ficou salva neste dispositivo' })
+		.waitFor({ state: 'visible', timeout: 20_000 });
+	await page.unroute(correctionEndpoint);
+
+	await openRoute(page, '/review/drafts/', 'Rascunhos locais');
+	let draftRow = page
+		.locator('section.drafts article')
+		.filter({ hasText: `Rascunho local ${runToken}` })
+		.first();
+	await draftRow.waitFor({ state: 'visible', timeout: 30_000 });
+	await draftRow.getByRole('link', { name: 'Retomar no editor', exact: true }).click();
+	await page.waitForURL((url) => url.pathname === `/documents/${imported.id}/`, {
+		timeout: 30_000
+	});
+	const resumedEditor = page.getByLabel('Texto corrigido da página 1', { exact: true });
+	await resumedEditor.waitFor({ state: 'visible', timeout: 20_000 });
+	if ((await resumedEditor.inputValue()) !== draftText) {
+		throw new Error('Local correction draft was not restored in the editor');
+	}
+
+	await openRoute(page, '/review/drafts/', 'Rascunhos locais');
+	draftRow = page
+		.locator('section.drafts article')
+		.filter({ hasText: `Rascunho local ${runToken}` })
+		.first();
+	await draftRow.waitFor({ state: 'visible', timeout: 30_000 });
+	page.once('dialog', (dialog) => dialog.accept());
+	await draftRow.getByRole('button', { name: 'Descartar local', exact: true }).click();
+	await page
+		.getByText('Nenhum rascunho local', { exact: true })
+		.waitFor({ state: 'visible', timeout: 20_000 });
+	const { data: pageAfterDraft, error: pageAfterDraftError } = await client
+		.from('pages')
+		.select('corrected_text')
+		.eq('id', importedPage.id)
+		.single();
+	if (pageAfterDraftError) throw pageAfterDraftError;
+	if (pageAfterDraft.corrected_text === draftText) {
+		throw new Error('Failed correction unexpectedly reached the backend');
+	}
+	stage('local-draft-recovery-ui', 'pass');
 
 	stage('desktop-ocr-management-ui', 'running');
 	await openRoute(page, '/settings/computers/', 'Computadores');
