@@ -21,7 +21,8 @@ function staticPageRoutes(directory = routesRoot): string[] {
 	const isStatic = segments.every(
 		(segment) => !segment.startsWith('[') && !segment.startsWith('(')
 	);
-	const current = hasPage && isStatic ? [`/${segments.length > 0 ? `${segments.join('/')}/` : ''}`] : [];
+	const current =
+		hasPage && isStatic ? [`/${segments.length > 0 ? `${segments.join('/')}/` : ''}`] : [];
 	const children = entries
 		.filter((entry) => entry.isDirectory())
 		.flatMap((entry) => staticPageRoutes(join(directory, entry.name)));
@@ -33,9 +34,10 @@ describe('real deployed route coverage', () => {
 		const routes = staticPageRoutes().filter((route) => route !== '/');
 		expect(routes.length).toBeGreaterThan(0);
 		for (const route of routes) {
-			expect(verifierSources, `${route} is missing from the real deployed flow verifiers`).toContain(
-				route
-			);
+			expect(
+				verifierSources,
+				`${route} is missing from the real deployed flow verifiers`
+			).toContain(route);
 		}
 	});
 
