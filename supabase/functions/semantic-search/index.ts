@@ -6,7 +6,7 @@ import {
 	SEMANTIC_EMBEDDING_MODEL,
 	SEMANTIC_SEARCH_MIN_SIMILARITY
 } from '../_shared/semantic-config.ts';
-import { indexNextSemanticBatch, semanticIndexStats } from '../_shared/semantic-indexer.ts';
+import { semanticIndexStats } from '../_shared/semantic-index-stats.ts';
 import { getSemanticQueryEmbedding } from '../_shared/semantic-query-cache.ts';
 import { compareHybridRanked, hybridReciprocalRankScore } from '../_shared/semantic-ranking.ts';
 import { recordSemanticRetrievalEvent } from '../_shared/semantic-retrieval-telemetry.ts';
@@ -378,22 +378,6 @@ Deno.serve(async (request) => {
 			return respond(200, await fallbackResponse({ supabase, parsed, reason, startedAt }));
 		}
 
-		let indexedThisRun = 0;
-		try {
-			const indexBatch = await indexNextSemanticBatch({
-				supabase,
-				apiKey: apiKey!,
-				notebookId: parsed.notebookId,
-				batchPages: envInteger('SEMANTIC_SEARCH_INDEX_BATCH_PAGES', 4, 1, 12),
-				concurrency: 2,
-				surface: 'search',
-				signal: abort.signal
-			});
-			indexedThisRun = indexBatch.indexedPages;
-		} catch (error) {
-			if (error instanceof DOMException && error.name === 'AbortError') throw error;
-		}
-
 		let queryEmbedding: Awaited<ReturnType<typeof getSemanticQueryEmbedding>>;
 		try {
 			queryEmbedding = await getSemanticQueryEmbedding({
@@ -478,7 +462,7 @@ Deno.serve(async (request) => {
 			mode: 'hybrid',
 			reason: null,
 			embeddingModel: SEMANTIC_EMBEDDING_MODEL,
-			index: index ? { ...index, indexedThisRun } : null,
+			index,
 			queryEmbeddingCacheHit: queryEmbedding.cacheHit,
 			hasMore: ranked.length > end || lexical.length === candidateLimit,
 			results
