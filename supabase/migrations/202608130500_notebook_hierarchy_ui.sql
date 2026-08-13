@@ -1,6 +1,4 @@
-drop function if exists public.list_notebooks();
-
-create function public.list_notebooks()
+create or replace function public.list_notebooks_v2()
 returns table (
   id uuid,
   name text,
@@ -51,5 +49,5 @@ as $$
   order by n.updated_at desc, n.id desc;
 $$;
 
-revoke execute on function public.list_notebooks() from public, anon;
-grant execute on function public.list_notebooks() to authenticated;
+revoke execute on function public.list_notebooks_v2() from public, anon;
+grant execute on function public.list_notebooks_v2() to authenticated;
