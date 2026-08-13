@@ -5,10 +5,7 @@ import {
 	requestGeminiEmbeddings
 } from './gemini-embedding-client.ts';
 import { chunkSemanticText } from './semantic-chunks.ts';
-import {
-	SEMANTIC_EMBEDDING_DIMENSIONS,
-	SEMANTIC_EMBEDDING_MODEL
-} from './semantic-config.ts';
+import { SEMANTIC_EMBEDDING_DIMENSIONS, SEMANTIC_EMBEDDING_MODEL } from './semantic-config.ts';
 
 type PendingPage = Readonly<{
 	page_id: string;
@@ -50,13 +47,13 @@ function parsePages(value: unknown): PendingPage[] {
 		const row = record(item);
 		return Boolean(
 			row &&
-				typeof row.page_id === 'string' &&
-				typeof row.document_id === 'string' &&
-				typeof row.document_title === 'string' &&
-				typeof row.page_number === 'number' &&
-				Number.isInteger(row.page_number) &&
-				typeof row.source_text === 'string' &&
-				typeof row.source_hash === 'string'
+			typeof row.page_id === 'string' &&
+			typeof row.document_id === 'string' &&
+			typeof row.document_title === 'string' &&
+			typeof row.page_number === 'number' &&
+			Number.isInteger(row.page_number) &&
+			typeof row.source_text === 'string' &&
+			typeof row.source_hash === 'string'
 		);
 	});
 }
