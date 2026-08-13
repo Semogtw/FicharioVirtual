@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import CorrectionEditor from '$lib/components/CorrectionEditor.svelte';
 	import DocumentMediaViewer from '$lib/components/DocumentMediaViewer.svelte';
 	import type { PageDetail } from '$lib/domain/page';
@@ -15,6 +16,7 @@
 	let retrying = $state(false);
 	let deleting = $state(false);
 	let deleted = $state(false);
+	let confirmDelete = $state(false);
 	let error = $state<string | null>(null);
 	let highlightedQuery = $derived(page.url.searchParams.get('highlight')?.slice(0, 200) ?? '');
 	const refreshRequests = new RequestVersion();
@@ -78,7 +80,6 @@
 	async function removeDocument() {
 		if (!detail || deleting || retrying) return;
 		const documentId = detail.id;
-		if (!window.confirm(`Excluir “${detail.title}” e todos os arquivos associados?`)) return;
 		deleting = true;
 		error = null;
 		try {
@@ -87,10 +88,12 @@
 			if (page.params.id === documentId) {
 				error = 'Não foi possível excluir o documento agora.';
 				deleting = false;
+				confirmDelete = false;
 			}
 			return;
 		}
 		if (page.params.id !== documentId) return;
+		confirmDelete = false;
 		deleted = true;
 		detail = null;
 		try {
@@ -112,6 +115,7 @@
 		retrying = false;
 		deleting = false;
 		deleted = false;
+		confirmDelete = false;
 		void refresh(documentId, pageNumber);
 	});
 </script>
@@ -161,9 +165,9 @@
 					type="button"
 					class="danger"
 					disabled={deleting || retrying}
-					onclick={() => void removeDocument()}
+					onclick={() => (confirmDelete = true)}
 				>
-					{deleting ? 'Excluindo…' : 'Excluir'}
+					Excluir
 				</button>
 			</div>
 		</header>
@@ -216,6 +220,19 @@
 		{/if}
 	{/if}
 </div>
+
+<ConfirmDialog
+	open={confirmDelete && detail !== null}
+	title="Excluir documento?"
+	description={detail
+		? `“${detail.title}” e todos os arquivos associados serão removidos do Fichário.`
+		: ''}
+	confirmLabel="Excluir"
+	busy={deleting}
+	danger
+	onConfirm={() => void removeDocument()}
+	onCancel={() => (confirmDelete = false)}
+/>
 
 <style>
 	.page {
