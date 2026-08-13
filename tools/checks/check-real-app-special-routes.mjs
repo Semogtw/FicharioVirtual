@@ -166,7 +166,9 @@ try {
 		await new Promise((resolve) => setTimeout(resolve, 300));
 	}
 	if (await pickerButton.isDisabled()) {
-		throw new Error('Google Picker entry button remained disabled after asynchronous page data loaded');
+		throw new Error(
+			'Google Picker entry button remained disabled after asynchronous page data loaded'
+		);
 	}
 	await page.locator('section.options select').waitFor({ state: 'visible', timeout: 20_000 });
 	stage(
