@@ -19,7 +19,7 @@
 		"test:coverage": "vitest run --coverage",
 		"test:e2e": "playwright test",
 		"test:source:offline": "bash tools/checks/run-offline-source-gates.sh",
-		"test:functions:check": "bash tools/checks/check-edge-functions.sh",
+		"test:functions:check": "find supabase/functions -type f -name '*.ts' -print0 | sort -z | xargs -0 -n 1 deno check --no-config",
 		"test:db:local": "bash tools/checks/run-local-db-gates.sh",
 		"test:ocr:faults:local": "node tools/checks/check-ocr-fault-injection.mjs",
 		"test:deployment": "node tools/checks/check-deployed-site.mjs",
