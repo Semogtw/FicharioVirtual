@@ -63,7 +63,6 @@
 			<label>
 				<span>{label}</span>
 				<input
-					autofocus
 					maxlength={maximumLength}
 					{placeholder}
 					{value}
