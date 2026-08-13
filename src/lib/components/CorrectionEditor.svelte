@@ -1,7 +1,5 @@
 <script lang="ts">
-	import { page as appPage } from '$app/state';
 	import { onDestroy, onMount, untrack } from 'svelte';
-	import SearchMatch from '$lib/components/SearchMatch.svelte';
 	import type { PageDetail } from '$lib/domain/page';
 	import {
 		discardCorrectionDraft,
@@ -24,7 +22,6 @@
 	let error = $state<string | null>(null);
 	let timer: ReturnType<typeof setTimeout> | null = null;
 	let editVersion = 0;
-	let highlightedQuery = $derived(appPage.url.searchParams.get('highlight')?.slice(0, 200) ?? '');
 
 	type SaveRequest = {
 		version: number;
@@ -123,12 +120,12 @@
 	});
 </script>
 
-<section class="editor" aria-labelledby={`editor-title-${page.id}`}>
-	<div class="heading">
-		<div>
-			<p>Página {page.pageNumber}</p>
-			<h2 id={`editor-title-${page.id}`}>Transcrição e correção</h2>
-		</div>
+<details class="transcript-tool">
+	<summary>
+		<span>
+			<strong>Leitura automática e correções</strong>
+			<small>Ferramenta auxiliar para pesquisa e indexação</small>
+		</span>
 		<span class:problem={saveState === 'error'} role="status">
 			{saveState === 'saving'
 				? 'Salvando…'
@@ -140,50 +137,91 @@
 							? 'Pendente'
 							: ''}
 		</span>
-	</div>
+	</summary>
 
-	{#if page.warnings.length > 0}
-		<ul class="warnings" aria-label="Avisos da transcrição">
-			{#each page.warnings as warning}
-				<li>{warning.message}</li>
-			{/each}
-		</ul>
-	{/if}
-
-	{#if highlightedQuery}
-		<SearchMatch
-			{text}
-			query={highlightedQuery}
-			label="Trecho encontrado nesta página"
-			maximumLength={320}
-		/>
-	{/if}
-
-	<label>
-		<span class="visually-hidden">Texto corrigido da página {page.pageNumber}</span>
-		<textarea bind:value={text} oninput={changed} maxlength="1000000" spellcheck="true"></textarea>
-	</label>
-
-	<div class="footer">
-		<div>
-			<span>{text.length.toLocaleString('pt-BR')} caracteres</span>
-			{#if error}<p role="alert">{error}</p>{/if}
+	<section class="editor" aria-labelledby={`editor-title-${page.id}`}>
+		<div class="heading">
+			<div>
+				<p>Página {page.pageNumber}</p>
+				<h2 id={`editor-title-${page.id}`}>Revisar texto reconhecido</h2>
+			</div>
 		</div>
-		<button type="button" onclick={() => void save()} disabled={saveState === 'saving'}>
-			Salvar agora
-		</button>
-	</div>
-</section>
+
+		{#if page.warnings.length > 0}
+			<ul class="warnings" aria-label="Avisos da leitura automática">
+				{#each page.warnings as warning}
+					<li>{warning.message}</li>
+				{/each}
+			</ul>
+		{/if}
+
+		<label>
+			<span class="visually-hidden">Texto corrigido da página {page.pageNumber}</span>
+			<textarea bind:value={text} oninput={changed} maxlength="1000000" spellcheck="true"></textarea>
+		</label>
+
+		<div class="footer">
+			<div>
+				<span>{text.length.toLocaleString('pt-BR')} caracteres</span>
+				{#if error}<p role="alert">{error}</p>{/if}
+			</div>
+			<button type="button" onclick={() => void save()} disabled={saveState === 'saving'}>
+				Salvar agora
+			</button>
+		</div>
+	</section>
+</details>
 
 <style>
-	.editor {
-		display: grid;
-		gap: 0.8rem;
-		min-height: 34rem;
-		padding: 1rem;
+	:global(.reader) {
+		grid-template-columns: minmax(0, 1fr) !important;
+	}
+
+	.transcript-tool {
 		border: 1px solid var(--line);
 		border-radius: var(--radius-md);
 		background: var(--surface);
+	}
+
+	.transcript-tool > summary {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: 0.85rem 1rem;
+		cursor: pointer;
+		color: var(--muted);
+		list-style-position: inside;
+	}
+
+	.transcript-tool > summary > span:first-child {
+		display: grid;
+		gap: 0.15rem;
+	}
+
+	.transcript-tool summary strong {
+		color: var(--ink);
+		font-size: 0.9rem;
+	}
+
+	.transcript-tool summary small {
+		font-size: 0.75rem;
+	}
+
+	.transcript-tool summary > span:last-child {
+		color: var(--archive);
+		font-size: 0.76rem;
+		font-weight: 700;
+	}
+
+	.transcript-tool summary > span.problem {
+		color: var(--danger);
+	}
+
+	.editor {
+		display: grid;
+		gap: 0.8rem;
+		padding: 0 1rem 1rem;
 	}
 
 	.heading,
@@ -206,18 +244,8 @@
 	h2 {
 		margin: 0;
 		font-family: var(--font-heading);
-		font-size: 1.45rem;
+		font-size: 1.35rem;
 		font-weight: 560;
-	}
-
-	.heading > span {
-		color: var(--archive);
-		font-size: 0.76rem;
-		font-weight: 700;
-	}
-
-	.heading > span.problem {
-		color: var(--danger);
 	}
 
 	.warnings {
@@ -234,11 +262,10 @@
 	label,
 	textarea {
 		width: 100%;
-		height: 100%;
 	}
 
 	textarea {
-		min-height: 25rem;
+		min-height: 20rem;
 		padding: 1rem;
 		border: 1px solid var(--line-strong);
 		border-radius: var(--radius-sm);
