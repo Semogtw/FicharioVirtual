@@ -55,12 +55,7 @@
 				<button type="button" class="secondary" disabled={busy} onclick={onCancel}>
 					{cancelLabel}
 				</button>
-				<button
-					type="button"
-					class:danger
-					disabled={busy}
-					onclick={onConfirm}
-				>
+				<button type="button" class:danger disabled={busy} onclick={onConfirm}>
 					{busy ? 'Aguarde…' : confirmLabel}
 				</button>
 			</div>
