@@ -120,3 +120,9 @@
 	--danger-rgb: 156 76 98;
 	--focus: #70548e;
 }
+
+/* Search cards identify the matching document/page; OCR text remains indexing
+ * infrastructure and is revealed only in the document's auxiliary text tool. */
+.results[aria-labelledby='results-title'] > ol > li > a > p {
+	display: none;
+}
