@@ -2,7 +2,7 @@
 	import { onDestroy } from 'svelte';
 	import SearchMatch from '$lib/components/SearchMatch.svelte';
 	import WordGeometryOverlay from '$lib/components/WordGeometryOverlay.svelte';
-	import { downloadBrowserDriveFile } from '$lib/drive/browser-files';
+	import { downloadBrowserDriveFile } from '$lib/drive/browser-download';
 	import type { PageDetail } from '$lib/domain/page';
 	import type { WordGeometry } from '$lib/ocr/word-geometry';
 	import { openDrivePdfRangeDocument } from '$lib/pdf/drive-range-transport';
