@@ -15,8 +15,16 @@
 	let showForm = $state(false);
 	let name = $state('');
 	let description = $state('');
+	let parentNotebookId = $state('');
 	let loadError = $state<string | null>(null);
 	let createError = $state<string | null>(null);
+	let rootNotebooks = $derived(notebooks.filter((notebook) => notebook.parentNotebookId === null));
+	let subNotebooks = $derived(notebooks.filter((notebook) => notebook.parentNotebookId !== null));
+
+	function notebookName(notebookId: string | null) {
+		if (!notebookId) return null;
+		return notebooks.find((notebook) => notebook.id === notebookId)?.name ?? 'Caderno pai';
+	}
 
 	async function refresh(version = refreshRequests.next()) {
 		loading = true;
@@ -34,6 +42,18 @@
 		}
 	}
 
+	function resetForm() {
+		name = '';
+		description = '';
+		parentNotebookId = '';
+		createError = null;
+	}
+
+	function toggleForm() {
+		if (showForm) resetForm();
+		showForm = !showForm;
+	}
+
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
 		if (creating || name.trim().length === 0) return;
@@ -41,14 +61,17 @@
 		creating = true;
 		createError = null;
 		try {
-			const notebook = await createNotebook({ name, description });
+			const notebook = await createNotebook({
+				name,
+				description,
+				parentNotebookId: parentNotebookId || null
+			});
 			if (!createRequests.isCurrent(version)) return;
 			notebooks = Object.freeze([
 				notebook,
 				...notebooks.filter((candidate) => candidate.id !== notebook.id)
 			]);
-			name = '';
-			description = '';
+			resetForm();
 			showForm = false;
 			await refresh();
 		} catch {
@@ -79,30 +102,41 @@
 		<div>
 			<p class="eyebrow">Organização</p>
 			<h1 id="page-title">Cadernos</h1>
-			<p>Agrupe documentos sem duplicar arquivos ou transcrições.</p>
+			<p>Agrupe documentos em cadernos e sub-cadernos sem duplicar os arquivos.</p>
 		</div>
 		<Button
 			label={showForm ? 'Fechar' : 'Novo caderno'}
 			variant={showForm ? 'secondary' : 'primary'}
-			onclick={() => (showForm = !showForm)}
+			onclick={toggleForm}
 		/>
 	</header>
 
 	{#if showForm}
 		<form class="new-notebook" onsubmit={submit}>
-			<label>
-				<span>Nome</span>
-				<input bind:value={name} maxlength="120" required placeholder="Ex.: Biologia" />
-			</label>
-			<label>
-				<span>Descrição opcional</span>
-				<textarea
-					bind:value={description}
-					maxlength="1000"
-					rows="3"
-					placeholder="Conteúdo, semestre ou finalidade"
-				></textarea>
-			</label>
+			<div class="fields">
+				<label>
+					<span>Nome</span>
+					<input bind:value={name} maxlength="120" required placeholder="Ex.: Biologia" />
+				</label>
+				<label class="description-field">
+					<span>Descrição opcional</span>
+					<textarea
+						bind:value={description}
+						maxlength="1000"
+						rows="1"
+						placeholder="Conteúdo, semestre ou finalidade"
+					></textarea>
+				</label>
+				<label>
+					<span>Dentro de</span>
+					<select bind:value={parentNotebookId}>
+						<option value="">Nenhum — caderno principal</option>
+						{#each notebooks as candidate (candidate.id)}
+							<option value={candidate.id}>{candidate.name}</option>
+						{/each}
+					</select>
+				</label>
+			</div>
 			<div class="form-actions">
 				{#if createError}<p class="form-error" role="alert">{createError}</p>{/if}
 				<Button label={creating ? 'Criando…' : 'Criar caderno'} type="submit" disabled={creating} />
@@ -129,11 +163,33 @@
 			/>
 		{/if}
 	{:else}
-		<section class="grid" aria-label="Cadernos">
-			{#each notebooks as notebook (notebook.id)}
-				<NotebookCard {notebook} />
-			{/each}
-		</section>
+		{#if rootNotebooks.length > 0}
+			<section class="notebook-section" aria-labelledby="root-notebooks-title">
+				<div class="section-heading">
+					<h2 id="root-notebooks-title">Cadernos principais</h2>
+					<small>{rootNotebooks.length}</small>
+				</div>
+				<div class="grid">
+					{#each rootNotebooks as notebook (notebook.id)}
+						<NotebookCard {notebook} />
+					{/each}
+				</div>
+			</section>
+		{/if}
+
+		{#if subNotebooks.length > 0}
+			<section class="notebook-section" aria-labelledby="sub-notebooks-title">
+				<div class="section-heading">
+					<h2 id="sub-notebooks-title">Sub-cadernos</h2>
+					<small>{subNotebooks.length}</small>
+				</div>
+				<div class="grid">
+					{#each subNotebooks as notebook (notebook.id)}
+						<NotebookCard {notebook} parentName={notebookName(notebook.parentNotebookId)} />
+					{/each}
+				</div>
+			</section>
+		{/if}
 	{/if}
 </div>
 
@@ -159,12 +215,22 @@
 		text-transform: uppercase;
 	}
 
+	h1,
+	h2 {
+		font-family: var(--font-heading);
+		font-weight: 520;
+	}
+
 	h1 {
 		margin-bottom: 0.55rem;
-		font-family: var(--font-heading);
 		font-size: clamp(2.4rem, 6vw, 4.5rem);
-		font-weight: 520;
 		letter-spacing: -0.04em;
+	}
+
+	h2 {
+		margin: 0;
+		font-size: clamp(1.45rem, 3vw, 2rem);
+		letter-spacing: -0.025em;
 	}
 
 	header p:last-child {
@@ -174,16 +240,22 @@
 
 	.new-notebook {
 		display: grid;
-		grid-template-columns: minmax(12rem, 0.75fr) minmax(16rem, 1.25fr) auto;
-		align-items: end;
-		gap: 1rem;
+		gap: 0.9rem;
 		padding: 1rem;
 		border: 1px solid var(--line);
 		border-radius: var(--radius-md);
 		background: var(--surface);
 	}
 
+	.fields {
+		display: grid;
+		grid-template-columns: minmax(12rem, 0.9fr) minmax(16rem, 1.3fr) minmax(13rem, 1fr);
+		gap: 0.85rem;
+		align-items: end;
+	}
+
 	label {
+		min-width: 0;
 		display: grid;
 		gap: 0.35rem;
 	}
@@ -195,31 +267,59 @@
 	}
 
 	input,
-	textarea {
+	textarea,
+	select {
+		box-sizing: border-box;
 		width: 100%;
+		height: 2.85rem;
+		min-height: 2.85rem;
+		margin: 0;
 		padding: 0.65rem 0.75rem;
 		border: 1px solid var(--line-strong);
 		border-radius: var(--radius-sm);
 		background: var(--surface-strong);
 		color: var(--ink);
-		resize: vertical;
+		font: inherit;
+		line-height: 1.25;
 	}
 
-	input {
-		min-height: 2.75rem;
+	textarea {
+		overflow: auto;
+		resize: none;
+	}
+
+	select {
+		cursor: pointer;
 	}
 
 	.form-actions {
-		display: grid;
-		gap: 0.4rem;
-		align-items: end;
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 0.75rem;
 	}
 
 	.form-error {
-		max-width: 16rem;
-		margin: 0;
+		margin: 0 auto 0 0;
 		color: var(--danger);
 		font-size: 0.75rem;
+	}
+
+	.notebook-section {
+		display: grid;
+		gap: 0.85rem;
+	}
+
+	.section-heading {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 1rem;
+	}
+
+	.section-heading small {
+		color: var(--muted);
+		font-weight: 720;
 	}
 
 	.grid {
@@ -249,15 +349,34 @@
 		color: var(--danger);
 	}
 
-	@media (max-width: 820px) {
-		.new-notebook {
-			grid-template-columns: 1fr;
+	@media (max-width: 980px) {
+		.fields {
+			grid-template-columns: 1fr 1fr;
+		}
+
+		.description-field {
+			grid-column: span 2;
+			grid-row: 2;
 		}
 	}
 
-	@media (max-width: 560px) {
+	@media (max-width: 620px) {
 		header {
 			align-items: flex-start;
+			flex-direction: column;
+		}
+
+		.fields {
+			grid-template-columns: 1fr;
+		}
+
+		.description-field {
+			grid-column: auto;
+			grid-row: auto;
+		}
+
+		.form-actions {
+			align-items: stretch;
 			flex-direction: column;
 		}
 	}
