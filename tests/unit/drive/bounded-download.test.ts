@@ -46,11 +46,11 @@ describe('downloadBoundedBrowserDriveFile', () => {
 		expect(fetchImpl).toHaveBeenCalledWith(
 			'https://www.googleapis.com/drive/v3/files/abcdefghij?alt=media',
 			expect.objectContaining({
-				redirect: 'error',
 				cache: 'no-store',
 				headers: { Authorization: 'Bearer drive-token-12345' }
 			})
 		);
+		expect(fetchImpl.mock.calls[0]?.[1]?.redirect).toBeUndefined();
 	});
 
 	it('cancels a chunked response once cumulative bytes exceed the ceiling', async () => {
