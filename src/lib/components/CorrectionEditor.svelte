@@ -157,7 +157,8 @@
 
 		<label>
 			<span class="visually-hidden">Texto corrigido da página {page.pageNumber}</span>
-			<textarea bind:value={text} oninput={changed} maxlength="1000000" spellcheck="true"></textarea>
+			<textarea bind:value={text} oninput={changed} maxlength="1000000" spellcheck="true"
+			></textarea>
 		</label>
 
 		<div class="footer">
