@@ -1,14 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const migration = readFileSync(
-	'supabase/migrations/202608131210_background_semantic_index.sql',
-	'utf8'
-);
-const cronMigration = readFileSync(
-	'supabase/migrations/202608131215_background_semantic_cron.sql',
-	'utf8'
-);
+const migration = readFileSync('supabase/migrations/20260813154628_background_semantic_index.sql', 'utf8');
+const cronMigration = readFileSync('supabase/migrations/20260813154704_background_semantic_cron.sql', 'utf8');
 const worker = readFileSync('supabase/functions/semantic-index-worker/index.ts', 'utf8');
 const indexer = readFileSync(
 	'supabase/functions/_shared/background-semantic-indexer.ts',
