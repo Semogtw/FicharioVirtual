@@ -128,8 +128,8 @@ Preservar o cliente textual atual e adicionar entrada explícita:
 
 ```ts
 type GeminiVisualEmbeddingInput = {
-  mimeType: 'image/png' | 'image/jpeg';
-  bytes: Uint8Array;
+	mimeType: 'image/png' | 'image/jpeg';
+	bytes: Uint8Array;
 };
 ```
 
