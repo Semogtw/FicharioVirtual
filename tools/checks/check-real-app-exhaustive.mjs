@@ -330,9 +330,15 @@ try {
 		.first();
 	await documentMembershipRow.waitFor({ state: 'visible', timeout: 20_000 });
 	await documentMembershipRow.locator('input[type="checkbox"]').check();
-	const tagRows = await client.rpc('list_tags');
-	if (tagRows.error) throw tagRows.error;
-	const createdTag = (tagRows.data ?? []).find((item) => item.name === tagName);
+	const membershipDeadline = Date.now() + 20_000;
+	let createdTag = null;
+	while (Date.now() < membershipDeadline) {
+		const tagRows = await client.rpc('list_tags');
+		if (tagRows.error) throw tagRows.error;
+		createdTag = (tagRows.data ?? []).find((item) => item.name === tagName) ?? null;
+		if (createdTag?.document_count === 1) break;
+		await new Promise((resolve) => setTimeout(resolve, 300));
+	}
 	if (!createdTag || createdTag.document_count !== 1)
 		throw new Error('Tag membership was not persisted');
 	page.once('dialog', (dialog) => dialog.accept(renamedTagName));
