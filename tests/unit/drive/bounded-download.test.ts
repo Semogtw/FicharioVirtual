@@ -33,7 +33,10 @@ function chunkedResponse(chunks: readonly string[], contentType = 'image/jpeg') 
 
 describe('downloadBoundedBrowserDriveFile', () => {
 	it('streams a response without Content-Length inside the configured ceiling', async () => {
-		const fetchImpl = vi.fn(async () => chunkedResponse(['abc', 'def']));
+		const fetchImpl = vi.fn(
+			async (_input: string | URL | Request, _init?: RequestInit) =>
+				chunkedResponse(['abc', 'def'])
+		);
 		const result = await downloadBoundedBrowserDriveFile({
 			client: client(),
 			fileId: 'abcdefghij',
