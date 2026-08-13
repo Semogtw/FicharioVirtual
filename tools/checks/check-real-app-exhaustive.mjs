@@ -287,12 +287,19 @@ try {
 	stage('batch-organize', 'running');
 	await openRoute(page, '/library/organize/', 'Organizar documentos');
 	const organizationTitleInputs = page.getByRole('textbox', { name: 'Título', exact: true });
+	const organizationDeadline = Date.now() + 20_000;
 	let organizationTitleInput = null;
-	for (let index = 0; index < (await organizationTitleInputs.count()); index += 1) {
-		const candidate = organizationTitleInputs.nth(index);
-		if ((await candidate.inputValue()) === imported.title) {
-			organizationTitleInput = candidate;
-			break;
+	while (Date.now() < organizationDeadline && organizationTitleInput === null) {
+		const inputCount = await organizationTitleInputs.count();
+		for (let index = 0; index < inputCount; index += 1) {
+			const candidate = organizationTitleInputs.nth(index);
+			if ((await candidate.inputValue()) === imported.title) {
+				organizationTitleInput = candidate;
+				break;
+			}
+		}
+		if (organizationTitleInput === null) {
+			await new Promise((resolve) => setTimeout(resolve, 300));
 		}
 	}
 	if (!organizationTitleInput) {
