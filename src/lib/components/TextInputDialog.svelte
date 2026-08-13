@@ -66,7 +66,7 @@
 					autofocus
 					maxlength={maximumLength}
 					{placeholder}
-					value={value}
+					{value}
 					oninput={(event) => onValueChange(event.currentTarget.value)}
 				/>
 			</label>
