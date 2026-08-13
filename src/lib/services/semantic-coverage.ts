@@ -115,6 +115,7 @@ function parseResponse(value: unknown, requestedTopics: readonly string[]): Sema
 				item.candidates.map((candidate) =>
 					Object.freeze({ ...candidate, verification: null }) as SemanticCoverageCandidate
 				)
+			)
 		});
 	});
 
