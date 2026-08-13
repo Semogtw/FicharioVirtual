@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
 	import Button from '$lib/components/Button.svelte';
+	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import NativeSelect from '$lib/components/ui/native-select/NativeSelect.svelte';
 	import type { NotebookSummary } from '$lib/domain/notebook';
 	import { GOOGLE_PICKER_MIME_TYPES } from '$lib/drive/picker';
@@ -34,6 +35,7 @@
 	let referenceProgress = $state<DrivePdfReferenceImportProgress | null>(null);
 	let referenceAbortController: AbortController | null = null;
 	let deletingDocumentId = $state<string | null>(null);
+	let pendingDeleteReference = $state<ResumableDrivePdfReference | null>(null);
 	let selecting = $state(false);
 	let error = $state<string | null>(null);
 	let referenceError = $state<string | null>(null);
@@ -182,17 +184,13 @@
 
 	async function cancelReference(reference: ResumableDrivePdfReference) {
 		if (deletingDocumentId !== null || resumingDocumentId !== null || selecting) return;
-		if (
-			!globalThis.confirm(`Excluir a cópia preservada de “${reference.title}” do Google Drive?`)
-		) {
-			return;
-		}
 		error = null;
 		message = null;
 		deletingDocumentId = reference.documentId;
 		try {
 			await deleteDocument(reference.documentId);
 			message = `A cópia preservada de “${reference.title}” foi excluída.`;
+			pendingDeleteReference = null;
 		} catch (caught) {
 			error =
 				caught instanceof Error ? caught.message : 'Não foi possível excluir o PDF preservado.';
@@ -370,7 +368,7 @@
 										? 'Excluindo…'
 										: 'Excluir cópia'}
 									disabled={selecting || resumingDocumentId !== null || deletingDocumentId !== null}
-									onclick={() => void cancelReference(reference)}
+									onclick={() => (pendingDeleteReference = reference)}
 								/>
 							</div>
 							{#if resumingDocumentId === reference.documentId && referenceProgress}
@@ -399,6 +397,19 @@
 		</a>
 	</section>
 </div>
+
+<ConfirmDialog
+	open={pendingDeleteReference !== null}
+	title="Excluir cópia preservada?"
+	description={pendingDeleteReference
+		? `A cópia de “${pendingDeleteReference.title}” preservada no Google Drive será excluída.`
+		: ''}
+	confirmLabel="Excluir cópia"
+	busy={deletingDocumentId !== null}
+	danger
+	onConfirm={() => pendingDeleteReference && void cancelReference(pendingDeleteReference)}
+	onCancel={() => (pendingDeleteReference = null)}
+/>
 
 <style>
 	.page {
