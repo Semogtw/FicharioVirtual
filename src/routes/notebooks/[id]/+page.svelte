@@ -31,7 +31,10 @@
 		const normalizedQuery = libraryQuery.trim().toLocaleLowerCase('pt-BR');
 		return libraryDocuments.filter((document) => {
 			if (document.notebookId === notebookId) return false;
-			return normalizedQuery.length === 0 || document.title.toLocaleLowerCase('pt-BR').includes(normalizedQuery);
+			return (
+				normalizedQuery.length === 0 ||
+				document.title.toLocaleLowerCase('pt-BR').includes(normalizedQuery)
+			);
 		});
 	});
 
@@ -197,7 +200,10 @@
 					<div>
 						<p class="eyebrow">Biblioteca</p>
 						<h2 id="library-picker-title">Adicionar documento existente</h2>
-						<p>Escolha um arquivo que já está no Fichário. Se ele estiver em outro caderno, será movido para este.</p>
+						<p>
+							Escolha um arquivo que já está no Fichário. Se ele estiver em outro caderno, será
+							movido para este.
+						</p>
 					</div>
 					<button type="button" class="close-picker" onclick={() => (showLibraryPicker = false)}>
 						Fechar

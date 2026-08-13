@@ -1,4 +1,8 @@
-import { requestDriveAccessToken, type BrowserFetchLike, type DriveTokenClientLike } from './browser-upload';
+import {
+	requestDriveAccessToken,
+	type BrowserFetchLike,
+	type DriveTokenClientLike
+} from './browser-upload';
 
 const DRIVE_ID = /^[A-Za-z0-9_-]{10,256}$/;
 

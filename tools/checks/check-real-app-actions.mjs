@@ -376,7 +376,8 @@ try {
 	const manifestHref = await page.locator('link[rel="manifest"]').getAttribute('href');
 	if (!manifestHref) throw new Error('Deployed app does not expose a web app manifest');
 	const manifestResponse = await context.request.get(new URL(manifestHref, target).href);
-	if (!manifestResponse.ok()) throw new Error(`Web app manifest returned ${manifestResponse.status()}`);
+	if (!manifestResponse.ok())
+		throw new Error(`Web app manifest returned ${manifestResponse.status()}`);
 	stage('pwa-shell', 'pass');
 
 	stage('notebook-create-layout', 'running');
@@ -405,7 +406,9 @@ try {
 	stage('sub-notebook-create', 'running');
 	await page.getByRole('button', { name: 'Novo caderno', exact: true }).click();
 	await page.getByLabel('Nome', { exact: true }).fill(childNotebookName);
-	await page.getByLabel('Descrição opcional', { exact: true }).fill('Sub-caderno criado pelo fluxo real');
+	await page
+		.getByLabel('Descrição opcional', { exact: true })
+		.fill('Sub-caderno criado pelo fluxo real');
 	await page.getByLabel('Dentro de', { exact: true }).selectOption(notebook.id);
 	await page.getByRole('button', { name: 'Criar caderno', exact: true }).click();
 	const childNotebook = await waitForRow(client, 'notebooks', {
@@ -413,8 +416,13 @@ try {
 		parent_notebook_id: notebook.id
 	});
 	report.created.notebooks.push(childNotebook.id);
-	await page.getByRole('heading', { name: 'Sub-cadernos', exact: true }).waitFor({ state: 'visible' });
-	const childCard = page.locator('article.notebook-card').filter({ hasText: childNotebookName }).first();
+	await page
+		.getByRole('heading', { name: 'Sub-cadernos', exact: true })
+		.waitFor({ state: 'visible' });
+	const childCard = page
+		.locator('article.notebook-card')
+		.filter({ hasText: childNotebookName })
+		.first();
 	await childCard.waitFor({ state: 'visible' });
 	if (!new RegExp(notebookName, 'i').test(await childCard.innerText())) {
 		throw new Error('Sub-notebook UI does not identify its parent notebook');
@@ -422,8 +430,12 @@ try {
 	stage('sub-notebook-create', 'pass');
 
 	stage('notebook-banner', 'running');
-	await page.goto(new URL(`/notebooks/${notebook.id}/`, target).href, { waitUntil: 'domcontentloaded' });
-	await page.getByRole('heading', { name: notebookName, exact: true }).waitFor({ state: 'visible' });
+	await page.goto(new URL(`/notebooks/${notebook.id}/`, target).href, {
+		waitUntil: 'domcontentloaded'
+	});
+	await page
+		.getByRole('heading', { name: notebookName, exact: true })
+		.waitFor({ state: 'visible' });
 	const banner = await makePng(context, ['Banner de teste do Fichário', runToken]);
 	await page.getByRole('button', { name: '+ Adicionar banner', exact: true }).click();
 	const bannerInput = page.locator('input[type="file"][accept="image/jpeg,image/png,image/webp"]');
@@ -478,7 +490,9 @@ try {
 		driveDocument.physical_state !== 'available' ||
 		driveDocument.notebook_id !== null
 	) {
-		throw new Error('Medium PDF was not persisted as an available unassigned Google Drive original');
+		throw new Error(
+			'Medium PDF was not persisted as an available unassigned Google Drive original'
+		);
 	}
 	stage(
 		'pdf-multichunk-import',
@@ -487,7 +501,9 @@ try {
 	);
 
 	stage('library-document-to-notebook', 'running');
-	await page.goto(new URL(`/notebooks/${notebook.id}/`, target).href, { waitUntil: 'domcontentloaded' });
+	await page.goto(new URL(`/notebooks/${notebook.id}/`, target).href, {
+		waitUntil: 'domcontentloaded'
+	});
 	await page.getByRole('button', { name: 'Da biblioteca', exact: true }).click();
 	const picker = page.locator('section.library-picker');
 	await picker.waitFor({ state: 'visible', timeout: 20_000 });
@@ -564,7 +580,9 @@ try {
 	await page.waitForURL((url) => url.pathname.includes(`/documents/${pdfDocument.id}/`), {
 		timeout: 20_000
 	});
-	await page.getByText(/Aberto a partir da busca por/i).waitFor({ state: 'visible', timeout: 20_000 });
+	await page
+		.getByText(/Aberto a partir da busca por/i)
+		.waitFor({ state: 'visible', timeout: 20_000 });
 	stage('corrected-search-highlight', 'pass');
 
 	stage('coverage-semantic', 'running');
@@ -615,7 +633,9 @@ try {
 			buffer: await makePdf({ padded: false })
 		});
 	const failedRow = await waitForFailedQueueEntry(page, failedFilename);
-	await failedRow.getByRole('button', { name: 'Retomar', exact: true }).waitFor({ state: 'visible' });
+	await failedRow
+		.getByRole('button', { name: 'Retomar', exact: true })
+		.waitFor({ state: 'visible' });
 	await failedRow.getByRole('button', { name: 'Remover', exact: true }).click();
 	await failedRow.waitFor({ state: 'detached', timeout: 10_000 });
 	await page.unroute('https://www.googleapis.com/upload/drive/v3/files**');
@@ -626,10 +646,13 @@ try {
 	const refreshDrive = page.getByRole('button', { name: 'Atualizar', exact: true });
 	await refreshDrive.waitFor({ state: 'visible', timeout: 20_000 });
 	await refreshDrive.click();
-	await page.getByText(/Está tudo certo por aqui|encontrado em/i).first().waitFor({
-		state: 'visible',
-		timeout: 45_000
-	});
+	await page
+		.getByText(/Está tudo certo por aqui|encontrado em/i)
+		.first()
+		.waitFor({
+			state: 'visible',
+			timeout: 45_000
+		});
 	await assertNoVisibleFailure(page, 'Drive refresh');
 	stage('drive-refresh', 'pass');
 
@@ -639,7 +662,8 @@ try {
 	const alternativeTheme = page.locator('[role="radio"][aria-checked="false"]').first();
 	await alternativeTheme.click();
 	const changedTheme = await page.evaluate(() => document.documentElement.dataset.theme ?? '');
-	if (!changedTheme || changedTheme === originalTheme) throw new Error('Theme selection did not apply');
+	if (!changedTheme || changedTheme === originalTheme)
+		throw new Error('Theme selection did not apply');
 	if (originalTheme) {
 		const originalOption = page.locator(`[data-theme-option="${originalTheme}"]`);
 		if (await originalOption.count()) await originalOption.click();
@@ -647,7 +671,8 @@ try {
 	const downloadPromise = page.waitForEvent('download', { timeout: 45_000 });
 	await page.getByRole('button', { name: 'Baixar cópia', exact: true }).click();
 	const download = await downloadPromise;
-	if (!download.suggestedFilename().endsWith('.json')) throw new Error('Portable export is not JSON');
+	if (!download.suggestedFilename().endsWith('.json'))
+		throw new Error('Portable export is not JSON');
 	const downloadedPath = await download.path();
 	if (!downloadedPath) throw new Error('Portable export did not create a file');
 	const exported = JSON.parse(await readFile(downloadedPath, 'utf8'));
@@ -672,7 +697,9 @@ try {
 			timeout: 45_000
 		});
 		await mobile.locator('h1').first().waitFor({ state: 'visible', timeout: 20_000 });
-		const overflow = await mobile.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+		const overflow = await mobile.evaluate(
+			() => document.documentElement.scrollWidth - window.innerWidth
+		);
 		if (overflow > 2) throw new Error(`${path} overflows mobile viewport by ${overflow}px`);
 		await assertNoVisibleFailure(mobile, `mobile ${path}`);
 	}
@@ -717,7 +744,9 @@ try {
 	await page.waitForURL((url) => url.pathname.startsWith('/login'), { timeout: 30_000 });
 	stage('logout', 'pass');
 
-	await page.screenshot({ path: `${evidenceDir}/final.png`, fullPage: true }).catch(() => undefined);
+	await page
+		.screenshot({ path: `${evidenceDir}/final.png`, fullPage: true })
+		.catch(() => undefined);
 	if (report.browser.pageErrors.length > 0) {
 		throw new Error(`Browser page errors detected: ${report.browser.pageErrors.join(' | ')}`);
 	}

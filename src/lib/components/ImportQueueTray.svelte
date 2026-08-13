@@ -265,7 +265,8 @@
 									<button type="button" onclick={() => retry(entry)}>Retomar</button>
 								{/if}
 								{#if canRemove(entry)}
-									<button type="button" class="remove" onclick={() => remove(entry)}>Remover</button>
+									<button type="button" class="remove" onclick={() => remove(entry)}>Remover</button
+									>
 								{/if}
 								{#if documentId(entry)}
 									<a href={`/documents/${documentId(entry)}/`} onclick={() => (open = false)}
