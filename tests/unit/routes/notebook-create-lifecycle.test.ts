@@ -8,7 +8,7 @@ describe('notebook creation lifecycle', () => {
 		expect(source).toContain('const createRequests = new RequestVersion();');
 		expect(source).toContain('const version = createRequests.next();');
 		expect(source).toMatch(
-			/const notebook = await createNotebook\(\{ name, description \}\);[\s\S]*if \(!createRequests\.isCurrent\(version\)\) return;[\s\S]*notebooks = Object\.freeze/
+			/const notebook = await createNotebook\(\{[\s\S]*name,[\s\S]*description,[\s\S]*parentNotebookId: parentNotebookId \|\| null[\s\S]*\}\);[\s\S]*if \(!createRequests\.isCurrent\(version\)\) return;[\s\S]*notebooks = Object\.freeze/
 		);
 		expect(source).toMatch(
 			/catch \{[\s\S]*if \(createRequests\.isCurrent\(version\)\) \{[\s\S]*createError = 'Não foi possível criar o caderno\.';/
