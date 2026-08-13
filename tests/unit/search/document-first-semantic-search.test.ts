@@ -5,7 +5,7 @@ const viewer = readFileSync('src/lib/components/DocumentMediaViewer.svelte', 'ut
 const correctionEditor = readFileSync('src/lib/components/CorrectionEditor.svelte', 'utf8');
 const searchPage = readFileSync('src/routes/search/+page.svelte', 'utf8');
 const tokens = readFileSync('src/lib/design/tokens.css', 'utf8');
-const verifier = readFileSync('supabase/functions/_shared/gemini-coverage-verifier.ts', 'utf8');
+const coverageEdge = readFileSync('supabase/functions/semantic-coverage/index.ts', 'utf8');
 
 describe('document-first semantic search UX', () => {
 	it('opens the matching original page with media highlighting', () => {
@@ -24,8 +24,8 @@ describe('document-first semantic search UX', () => {
 		expect(tokens).toContain('display: none');
 	});
 
-	it('keeps structured output in the optional verifier', () => {
-		expect(verifier).toContain("responseMimeType: 'application/json'");
-		expect(verifier).toContain('responseSchema');
+	it('does not add a second generative verifier after semantic retrieval', () => {
+		expect(coverageEdge).not.toContain('requestGeminiCoverageVerification');
+		expect(coverageEdge).not.toContain('COVERAGE_VERIFY_MODEL');
 	});
 });

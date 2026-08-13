@@ -9,7 +9,10 @@ const recorder = readFileSync(
 	'supabase/functions/_shared/semantic-provider-telemetry.ts',
 	'utf8'
 );
-const indexer = readFileSync('supabase/functions/_shared/semantic-indexer.ts', 'utf8');
+const indexer = readFileSync(
+	'supabase/functions/_shared/background-semantic-indexer.ts',
+	'utf8'
+);
 const queryCache = readFileSync('supabase/functions/_shared/semantic-query-cache.ts', 'utf8');
 
 describe('semantic provider telemetry contract', () => {
@@ -37,12 +40,11 @@ describe('semantic provider telemetry contract', () => {
 		expect(recorder).toContain('target_input_bytes');
 	});
 
-	it('records document indexing and query embeddings as separate operations', () => {
-		expect(indexer).toContain("operation: 'document_embedding'");
+	it('keeps document embeddings background-only while query embeddings retain telemetry', () => {
 		expect(indexer).toContain("taskType: 'RETRIEVAL_DOCUMENT'");
 		expect(queryCache).toContain("operation: 'query_embedding'");
 		expect(queryCache).toContain("taskType: 'RETRIEVAL_QUERY'");
-		expect(indexer.match(/requestGeminiEmbeddingsWithTelemetry\(/g)).toHaveLength(1);
+		expect(indexer.match(/requestGeminiEmbeddings\(/g)).toHaveLength(1);
 		expect(queryCache.match(/requestGeminiEmbeddingsWithTelemetry\(/g)).toHaveLength(1);
 	});
 
