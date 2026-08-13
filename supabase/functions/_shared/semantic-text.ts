@@ -2,10 +2,7 @@ const INVISIBLE_SEMANTIC_ARTIFACTS = /[\u00ad\u200b-\u200d\u2060\ufeff]/gu;
 const OCR_HYPHENATED_LINE_BREAK = /(\p{L}{3,})[-\u2010\u2011][ \t]*\n[ \t]*(\p{Ll}{3,})/gu;
 
 function normalizeUnicodeArtifacts(value: string) {
-	return value
-		.normalize('NFKC')
-		.replace(INVISIBLE_SEMANTIC_ARTIFACTS, '')
-		.replace(/\r\n?/g, '\n');
+	return value.normalize('NFKC').replace(INVISIBLE_SEMANTIC_ARTIFACTS, '').replace(/\r\n?/g, '\n');
 }
 
 /**
@@ -30,8 +27,5 @@ export function normalizeSemanticDocumentText(value: string) {
  * equivalent spellings cannot share a cache key while embedding different text.
  */
 export function normalizeSemanticQueryText(value: string) {
-	return normalizeUnicodeArtifacts(value)
-		.replace(/\s+/gu, ' ')
-		.trim()
-		.toLocaleLowerCase('pt-BR');
+	return normalizeUnicodeArtifacts(value).replace(/\s+/gu, ' ').trim().toLocaleLowerCase('pt-BR');
 }
