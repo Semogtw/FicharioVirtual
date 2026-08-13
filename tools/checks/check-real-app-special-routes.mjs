@@ -156,8 +156,17 @@ try {
 		exact: true
 	});
 	await pickerButton.waitFor({ state: 'visible', timeout: 30_000 });
+	const pickerReadyDeadline = Date.now() + 30_000;
+	while ((await pickerButton.isDisabled()) && Date.now() < pickerReadyDeadline) {
+		const alert = page.locator('[role="alert"]:visible').first();
+		if (await alert.count()) {
+			const text = (await alert.innerText()).trim();
+			if (text) throw new Error(`/import/drive/ exposed an alert: ${text.slice(0, 300)}`);
+		}
+		await new Promise((resolve) => setTimeout(resolve, 300));
+	}
 	if (await pickerButton.isDisabled()) {
-		throw new Error('Google Picker entry button remained disabled after the page finished loading');
+		throw new Error('Google Picker entry button remained disabled after asynchronous page data loaded');
 	}
 	await page.locator('section.options select').waitFor({ state: 'visible', timeout: 20_000 });
 	stage(
