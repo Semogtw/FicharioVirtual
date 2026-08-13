@@ -24,8 +24,7 @@ const publishableKey = process.env.STAGING_SUPABASE_PUBLISHABLE_KEY;
 const email = process.env.STAGING_AUTHORIZED_EMAIL;
 const password = process.env.STAGING_AUTHORIZED_PASSWORD;
 const reportPath = process.env.REAL_APP_SPECIAL_REPORT_PATH ?? '/tmp/real-app-special-report.json';
-const evidenceDir =
-	process.env.REAL_APP_SPECIAL_EVIDENCE_DIR ?? '/tmp/real-app-special-evidence';
+const evidenceDir = process.env.REAL_APP_SPECIAL_EVIDENCE_DIR ?? '/tmp/real-app-special-evidence';
 
 const report = {
 	target: target.origin,
@@ -111,7 +110,10 @@ try {
 	stage('backend-auth', 'pass');
 
 	browser = await chromium.launch({ headless: true });
-	const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: 'pt-BR' });
+	const context = await browser.newContext({
+		viewport: { width: 1280, height: 900 },
+		locale: 'pt-BR'
+	});
 	page = await context.newPage();
 	page.on('pageerror', (error) => report.browser.pageErrors.push(safeError(error)));
 	page.on('response', (response) => {
@@ -137,9 +139,11 @@ try {
 	const originalMode = page.locator('input[name="image-mode"][value="original"]');
 	const standardMode = page.locator('input[name="image-mode"][value="standard"]');
 	await originalMode.check();
-	if (!(await originalMode.isChecked())) throw new Error('Original image mode could not be selected');
+	if (!(await originalMode.isChecked()))
+		throw new Error('Original image mode could not be selected');
 	await standardMode.check();
-	if (!(await standardMode.isChecked())) throw new Error('Standard image mode could not be restored');
+	if (!(await standardMode.isChecked()))
+		throw new Error('Standard image mode could not be restored');
 	stage('pdf-import-alias-ui', 'pass');
 
 	stage('drive-picker-entry-ui', 'running');
