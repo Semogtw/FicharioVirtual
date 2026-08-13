@@ -286,7 +286,18 @@ try {
 
 	stage('batch-organize', 'running');
 	await openRoute(page, '/library/organize/', 'Organizar documentos');
-	const organizationTitleInput = page.getByDisplayValue(imported.title, { exact: true }).first();
+	const organizationTitleInputs = page.getByRole('textbox', { name: 'Título', exact: true });
+	let organizationTitleInput = null;
+	for (let index = 0; index < (await organizationTitleInputs.count()); index += 1) {
+		const candidate = organizationTitleInputs.nth(index);
+		if ((await candidate.inputValue()) === imported.title) {
+			organizationTitleInput = candidate;
+			break;
+		}
+	}
+	if (!organizationTitleInput) {
+		throw new Error('Imported document was not available in the organization UI');
+	}
 	await organizationTitleInput.waitFor({ state: 'visible', timeout: 20_000 });
 	const organizationRow = organizationTitleInput.locator('xpath=ancestor::article[1]');
 	await organizationTitleInput.fill(organizedTitle);
