@@ -101,7 +101,6 @@ export async function downloadBoundedBrowserDriveFile({
 		const url = new URL(`https://www.googleapis.com/drive/v3/files/${safeFileId}`);
 		url.searchParams.set('alt', 'media');
 		const response = await fetchImpl(url.toString(), {
-			redirect: 'error',
 			cache: 'no-store',
 			headers: { Authorization: `Bearer ${access.accessToken}` }
 		});
