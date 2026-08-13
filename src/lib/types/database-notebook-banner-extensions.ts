@@ -1,6 +1,7 @@
 import type { Database } from './database';
 
-type NotebookBannerColumns = {
+type NotebookExtendedColumns = {
+	parent_notebook_id: string | null;
 	banner_path: string | null;
 	banner_position_x: number;
 	banner_position_y: number;
@@ -8,15 +9,15 @@ type NotebookBannerColumns = {
 
 type NotebookTable = Database['public']['Tables']['notebooks'];
 
-type NotebookBannerTable = {
-	Row: NotebookTable['Row'] & NotebookBannerColumns;
-	Insert: NotebookTable['Insert'] & Partial<NotebookBannerColumns>;
-	Update: NotebookTable['Update'] & Partial<NotebookBannerColumns>;
+type NotebookExtendedTable = {
+	Row: NotebookTable['Row'] & NotebookExtendedColumns;
+	Insert: NotebookTable['Insert'] & Partial<NotebookExtendedColumns>;
+	Update: NotebookTable['Update'] & Partial<NotebookExtendedColumns>;
 	Relationships: NotebookTable['Relationships'];
 };
 
 /**
- * Temporary schema bridge for the notebook banner migration.
+ * Temporary schema bridge for notebook hierarchy/banner migrations.
  *
  * Consolidate this into the generated Database type the next time the linked
  * Supabase schema is used to regenerate `database.ts`.
@@ -24,7 +25,7 @@ type NotebookBannerTable = {
 export type DatabaseWithNotebookBanners = Omit<Database, 'public'> & {
 	public: Omit<Database['public'], 'Tables'> & {
 		Tables: Omit<Database['public']['Tables'], 'notebooks'> & {
-			notebooks: NotebookBannerTable;
+			notebooks: NotebookExtendedTable;
 		};
 	};
 };
