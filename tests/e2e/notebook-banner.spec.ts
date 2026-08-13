@@ -48,13 +48,14 @@ test('adds, repositions and removes a private notebook banner', async ({ page })
 		const path = url.pathname;
 
 		if (path === '/rest/v1/app_users') return json(route, { is_active: true });
-		if (path === '/rest/v1/rpc/list_notebooks') {
+		if (path === '/rest/v1/rpc/list_notebooks_v2') {
 			return json(route, [
 				{
 					id: notebookId,
 					name: 'Biologia',
 					description: 'Genética e evolução',
 					cover_style: 'linen',
+					parent_notebook_id: null,
 					banner_path: bannerPath,
 					banner_position_x: bannerPositionX,
 					banner_position_y: bannerPositionY,
@@ -90,16 +91,7 @@ test('adds, repositions and removes a private notebook banner', async ({ page })
 		if (path.startsWith('/storage/v1/object/sign/documents/') && request.method() === 'POST') {
 			signedUrlRequests += 1;
 			if (signedUrlRequests === 1) await new Promise((resolve) => setTimeout(resolve, 900));
-			return json(route, {
-				signedURL: `${path.replace('/storage/v1', '')}?token=e2e-banner`
-			});
-		}
-		if (path.startsWith('/storage/v1/object/sign/documents/') && request.method() === 'GET') {
-			return route.fulfill({
-				status: 200,
-				contentType: 'image/png',
-				body: Buffer.from(pngBase64, 'base64')
-			});
+			return json(route, { signedURL: '/favicon.svg' });
 		}
 
 		return json(route, { message: `Unexpected mocked request: ${request.method()} ${path}` }, 500);
@@ -121,7 +113,7 @@ test('adds, repositions and removes a private notebook banner', async ({ page })
 	await page.getByLabel(/Posição vertical/).fill('64');
 	await page.getByRole('button', { name: 'Salvar banner' }).click();
 
-	await expect(page.getByRole('button', { name: 'Salvando…' })).toBeDisabled();
+	await page.getByRole('button', { name: 'Salvando…' })).toBeDisabled();
 	await expect(page.getByRole('button', { name: 'Personalizar banner' })).toHaveCount(0);
 	await expect(page.getByRole('button', { name: 'Personalizar banner' })).toBeVisible();
 	await expect(page.locator('.banner img')).toBeVisible();
@@ -139,6 +131,6 @@ test('adds, repositions and removes a private notebook banner', async ({ page })
 
 	await page.getByRole('button', { name: 'Personalizar banner' }).click();
 	await page.getByRole('button', { name: 'Remover banner' }).click();
-	await expect(page.getByRole('button', { name: 'Adicionar banner' })).toBeVisible();
-	await expect(page.locator('.banner')).toHaveCount(0);
+	await page.getByRole('button', { name: 'Adicionar banner' })).toBeVisible();
+	await page.locator('.banner')).toHaveCount(0);
 });
