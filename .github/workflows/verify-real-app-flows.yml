@@ -36,6 +36,8 @@ jobs:
       REAL_APP_ACTION_EVIDENCE_DIR: /tmp/real-app-action-evidence
       REAL_APP_EXHAUSTIVE_REPORT_PATH: /tmp/real-app-exhaustive-report.json
       REAL_APP_EXHAUSTIVE_EVIDENCE_DIR: /tmp/real-app-exhaustive-evidence
+      REAL_APP_SPECIAL_REPORT_PATH: /tmp/real-app-special-report.json
+      REAL_APP_SPECIAL_EVIDENCE_DIR: /tmp/real-app-special-evidence
       PLAYWRIGHT_BROWSERS_PATH: /tmp/fichario-real-flow-browsers
 
     steps:
@@ -54,7 +56,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/fichario-real-flow
-          for verifier in check-real-app-flows.mjs check-real-app-actions.mjs check-real-app-exhaustive.mjs; do
+          for verifier in check-real-app-flows.mjs check-real-app-actions.mjs check-real-app-exhaustive.mjs check-real-app-special-routes.mjs; do
             curl --fail --silent --show-error --location \
               "https://raw.githubusercontent.com/Semogtw/FicharioVirtual/${TARGET_SHA}/tools/checks/${verifier}" \
               --output "/tmp/fichario-real-flow/${verifier}"
@@ -97,6 +99,12 @@ jobs:
         working-directory: /tmp/fichario-real-flow
         run: node check-real-app-exhaustive.mjs
 
+      - name: Exercise special import entry routes
+        id: special-routes
+        continue-on-error: true
+        working-directory: /tmp/fichario-real-flow
+        run: node check-real-app-special-routes.mjs
+
       - name: Upload sanitized real-flow evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -109,6 +117,8 @@ jobs:
             /tmp/real-app-action-evidence/
             /tmp/real-app-exhaustive-report.json
             /tmp/real-app-exhaustive-evidence/
+            /tmp/real-app-special-report.json
+            /tmp/real-app-special-evidence/
           if-no-files-found: error
           compression-level: 6
           retention-days: 7
@@ -120,8 +130,10 @@ jobs:
           CORE_OUTCOME: ${{ steps.core-flows.outcome }}
           ACTION_OUTCOME: ${{ steps.feature-actions.outcome }}
           EXHAUSTIVE_OUTCOME: ${{ steps.exhaustive-flows.outcome }}
+          SPECIAL_OUTCOME: ${{ steps.special-routes.outcome }}
         run: |
           set -euo pipefail
           test "$CORE_OUTCOME" = success
           test "$ACTION_OUTCOME" = success
           test "$EXHAUSTIVE_OUTCOME" = success
+          test "$SPECIAL_OUTCOME" = success

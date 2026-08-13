@@ -6,7 +6,8 @@ const routesRoot = join(process.cwd(), 'src', 'routes');
 const verifierSources = [
 	'tools/checks/check-real-app-flows.mjs',
 	'tools/checks/check-real-app-actions.mjs',
-	'tools/checks/check-real-app-exhaustive.mjs'
+	'tools/checks/check-real-app-exhaustive.mjs',
+	'tools/checks/check-real-app-special-routes.mjs'
 ]
 	.map((file) => readFileSync(file, 'utf8'))
 	.join('\n');
