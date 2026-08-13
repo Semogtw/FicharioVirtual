@@ -17,6 +17,8 @@ Ao registrar progresso, prefira atualizar um desses arquivos em vez de adicionar
 - [`SEARCH_OCR_MATCHING.md`](SEARCH_OCR_MATCHING.md) — busca global híbrida: FTS/fuzzy, embeddings, pgvector, ranking, consentimento e fallback textual.
 - [`UNIT_TOPIC_COVERAGE.md`](UNIT_TOPIC_COVERAGE.md) — cobertura de assuntos por unidade, editor estruturado de conteúdos e importação de ementa por foto/OCR.
 - [`SEMANTIC_COVERAGE.md`](SEMANTIC_COVERAGE.md) — embeddings, índice pgvector compartilhado, score híbrido, consentimento e verificador Gemini da cobertura de conteúdos.
+- [`ADAPTIVE_MULTIMODAL_EMBEDDING.md`](ADAPTIVE_MULTIMODAL_EMBEDDING.md) — design proposto para embedding visual seletivo por página, roteamento por sinais do OCR e economia de cota.
+- [`ADAPTIVE_MULTIMODAL_EMBEDDING_IMPLEMENTATION.md`](ADAPTIVE_MULTIMODAL_EMBEDDING_IMPLEMENTATION.md) — plano de implementação, benchmark, schema, worker, shadow retrieval e rollout do canal visual.
 - [`superpowers/specs/`](superpowers/specs/) — designs e decisões técnicas detalhadas.
 - [`superpowers/plans/`](superpowers/plans/) — planos de implementação associados aos designs.
 
