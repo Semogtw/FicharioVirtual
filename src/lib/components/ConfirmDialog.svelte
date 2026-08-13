@@ -39,7 +39,7 @@
 
 {#if open}
 	<div class="backdrop" role="presentation" onclick={cancelFromBackdrop}>
-		<section
+		<div
 			class="dialog"
 			role="alertdialog"
 			aria-modal="true"
@@ -59,7 +59,7 @@
 					{busy ? 'Aguarde…' : confirmLabel}
 				</button>
 			</div>
-		</section>
+		</div>
 	</div>
 {/if}
 
