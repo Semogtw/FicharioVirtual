@@ -57,6 +57,11 @@ verify_jwt = true
 [functions.semantic-index]
 verify_jwt = true
 
+# Server-to-server semantic indexing. It reuses the internal worker credential
+# and applies page writes through a narrow service-role dispatcher.
+[functions.semantic-index-worker]
+verify_jwt = false
+
 [functions.delete-document]
 verify_jwt = true
 
