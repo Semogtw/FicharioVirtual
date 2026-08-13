@@ -76,12 +76,12 @@ select ok(
     'public.replace_page_semantic_chunks(uuid,text,text,jsonb)',
     'execute'
   )
-    and has_function_privilege(
+    and not has_function_privilege(
       'authenticated',
       'public.replace_page_semantic_chunks(uuid,text,text,jsonb)',
       'execute'
     ),
-  'semantic chunk replacement is executable only through the authenticated boundary'
+  'semantic chunk replacement is background-only'
 );
 
 select * from finish();
