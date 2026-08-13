@@ -20,6 +20,7 @@ deno check --no-config supabase/functions/_shared/gemini-coverage-verifier.ts
 deno check --no-config supabase/functions/_shared/semantic-config.ts
 deno check --no-config supabase/functions/_shared/semantic-chunks.ts
 deno check --no-config supabase/functions/_shared/semantic-indexer.ts
+deno check --no-config supabase/functions/_shared/background-semantic-indexer.ts
 deno check --no-config supabase/functions/_shared/semantic-query-cache.ts
 deno check --no-config supabase/functions/_shared/semantic-ranking.ts
 deno check --no-config supabase/functions/_shared/semantic-provider-telemetry.ts
@@ -36,6 +37,7 @@ deno check --no-config supabase/functions/process-ocr/index.ts
 deno check --no-config supabase/functions/semantic-coverage/index.ts
 deno check --no-config supabase/functions/semantic-search/index.ts
 deno check --no-config supabase/functions/semantic-index/index.ts
+deno check --no-config supabase/functions/semantic-index-worker/index.ts
 deno check --no-config supabase/functions/delete-document/index.ts
 deno check --no-config supabase/functions/drive-oauth-start/index.ts
 deno check --no-config supabase/functions/drive-oauth-callback/index.ts
