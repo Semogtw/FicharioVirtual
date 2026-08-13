@@ -1,3 +1,5 @@
+import { normalizeSemanticDocumentText } from './semantic-text.ts';
+
 export type SemanticTextChunk = Readonly<{
 	index: number;
 	text: string;
@@ -6,15 +8,6 @@ export type SemanticTextChunk = Readonly<{
 export const SEMANTIC_CHUNK_MAX_CHARS = 1_800;
 export const SEMANTIC_CHUNK_OVERLAP_CHARS = 220;
 export const SEMANTIC_MAX_CHUNKS_PER_PAGE = 16;
-
-function normalizedSource(value: string) {
-	return value
-		.replace(/\r\n?/g, '\n')
-		.replace(/[\t\f\v]+/g, ' ')
-		.replace(/[ ]{2,}/g, ' ')
-		.replace(/\n{3,}/g, '\n\n')
-		.trim();
-}
 
 function backwardBoundary(source: string, start: number, idealEnd: number) {
 	if (idealEnd >= source.length) return source.length;
@@ -48,7 +41,7 @@ function nextStart(source: string, start: number, end: number) {
 }
 
 export function chunkSemanticText(value: string): readonly SemanticTextChunk[] {
-	const source = normalizedSource(value);
+	const source = normalizeSemanticDocumentText(value);
 	if (!source) return Object.freeze([]);
 
 	const chunks: SemanticTextChunk[] = [];

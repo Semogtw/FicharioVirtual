@@ -6,6 +6,7 @@ import {
 	SEMANTIC_EMBEDDING_MODEL,
 	SEMANTIC_QUERY_CACHE_TTL_SECONDS
 } from './semantic-config.ts';
+import { normalizeSemanticQueryText } from './semantic-text.ts';
 
 export type SemanticQueryEmbedding = Readonly<{
 	vectorText: string;
@@ -13,9 +14,7 @@ export type SemanticQueryEmbedding = Readonly<{
 	queryHash: string;
 }>;
 
-function normalizeQuery(value: string) {
-	return value.normalize('NFKC').replace(/\s+/gu, ' ').trim().toLocaleLowerCase('pt-BR');
-}
+const SEMANTIC_QUERY_TEXT_VERSION = 'v2';
 
 async function sha256(value: string) {
 	const encoded = new TextEncoder().encode(value);
@@ -43,9 +42,12 @@ export async function getSemanticQueryEmbeddings(input: {
 
 	const entries = await Promise.all(
 		input.queries.map(async (query, index) => {
-			const normalized = normalizeQuery(query);
-			const queryHash = await sha256(`${SEMANTIC_EMBEDDING_MODEL}\n${normalized}`);
-			return { index, query, queryHash };
+			const embeddingText = normalizeSemanticQueryText(query);
+			if (!embeddingText) throw new Error('Semantic query is empty after normalization');
+			const queryHash = await sha256(
+				`${SEMANTIC_EMBEDDING_MODEL}\n${SEMANTIC_QUERY_TEXT_VERSION}\n${embeddingText}`
+			);
+			return { index, embeddingText, queryHash };
 		})
 	);
 	const unique = [...new Map(entries.map((entry) => [entry.queryHash, entry])).values()];
@@ -76,7 +78,7 @@ export async function getSemanticQueryEmbeddings(input: {
 			supabase: input.supabase,
 			apiKey: input.apiKey,
 			model: SEMANTIC_EMBEDDING_MODEL,
-			inputs: misses.map((entry) => ({ text: entry.query })),
+			inputs: misses.map((entry) => ({ text: entry.embeddingText })),
 			taskType: 'RETRIEVAL_QUERY',
 			outputDimensionality: SEMANTIC_EMBEDDING_DIMENSIONS,
 			operation: 'query_embedding',
