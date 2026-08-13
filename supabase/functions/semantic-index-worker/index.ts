@@ -34,7 +34,14 @@ function config(): WorkerConfig | null {
 	const apiKey = Deno.env.get('GEMINI_API_KEY');
 	const batchPages = envInteger('SEMANTIC_BACKGROUND_BATCH_PAGES', 6, 1, 12);
 	const timeoutMs = envInteger('SEMANTIC_BACKGROUND_TIMEOUT_MS', 90_000, 10_000, 120_000);
-	if (!supabaseUrl || !serviceRoleKey || !workerKey || !apiKey || batchPages === null || timeoutMs === null) {
+	if (
+		!supabaseUrl ||
+		!serviceRoleKey ||
+		!workerKey ||
+		!apiKey ||
+		batchPages === null ||
+		timeoutMs === null
+	) {
 		return null;
 	}
 	return Object.freeze({ supabaseUrl, serviceRoleKey, workerKey, apiKey, batchPages, timeoutMs });
@@ -84,7 +91,10 @@ async function runAndChain(settings: WorkerConfig) {
 		});
 		if (!chained.ok) console.error('semantic_background_chain_failed', chained.status);
 	} catch (error) {
-		console.error('semantic_background_execution_failed', error instanceof Error ? error.name : 'unknown');
+		console.error(
+			'semantic_background_execution_failed',
+			error instanceof Error ? error.name : 'unknown'
+		);
 	}
 }
 
@@ -103,9 +113,10 @@ Deno.serve(async (request) => {
 			return response(200, { completed: true, ...result });
 		} catch (error) {
 			return response(500, {
-				code: error instanceof DOMException && error.name === 'AbortError'
-					? 'semantic_background_timeout'
-					: 'semantic_background_execution_failed'
+				code:
+					error instanceof DOMException && error.name === 'AbortError'
+						? 'semantic_background_timeout'
+						: 'semantic_background_execution_failed'
 			});
 		}
 	}
