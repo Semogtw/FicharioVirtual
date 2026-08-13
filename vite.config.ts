@@ -42,6 +42,7 @@ export default defineConfig({
 			workbox: {
 				globPatterns: ['client/**/*.{js,css,svg,ico,woff,woff2,webmanifest}'],
 				globIgnores: ['**/*.map'],
+				additionalManifestEntries: [{ url: '_app/env.js', revision: null }],
 				navigateFallback: '/200.html',
 				cleanupOutdatedCaches: true,
 				skipWaiting: true,

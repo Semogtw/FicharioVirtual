@@ -56,13 +56,15 @@ function parseRootStaticHeaders(source) {
 	return headers;
 }
 
-const [manifestSource, serviceWorker, registerScript, fallback, staticHeaders] = await Promise.all([
-	requiredFile('manifest.webmanifest'),
-	requiredFile('sw.js'),
-	requiredFile('registerSW.js'),
-	requiredFile('200.html'),
-	requiredFile('_headers')
-]);
+const [manifestSource, serviceWorker, registerScript, fallback, staticHeaders, publicEnvironment] =
+	await Promise.all([
+		requiredFile('manifest.webmanifest'),
+		requiredFile('sw.js'),
+		requiredFile('registerSW.js'),
+		requiredFile('200.html'),
+		requiredFile('_headers'),
+		requiredFile('_app/env.js')
+	]);
 
 if (manifestSource) {
 	try {
@@ -96,6 +98,10 @@ if (registerScript && !/serviceWorker/.test(registerScript)) {
 	fail('registerSW.js does not register a service worker');
 }
 
+if (publicEnvironment && !/export\s+const\s+env\s*=/.test(publicEnvironment)) {
+	fail('_app/env.js does not expose the expected public runtime configuration');
+}
+
 if (serviceWorker) {
 	for (const forbidden of ['supabase.co', '/rest/v1', '/storage/v1', '/functions/v1', '/auth/v1']) {
 		if (serviceWorker.includes(forbidden)) fail(`sw.js must not contain ${forbidden}`);
@@ -107,6 +113,9 @@ if (serviceWorker) {
 	}
 	if (!serviceWorker.includes('200.html')) {
 		fail('sw.js must precache the static adapter fallback shell');
+	}
+	if (!serviceWorker.includes('_app/env.js')) {
+		fail('sw.js must precache _app/env.js so the application shell can boot offline');
 	}
 }
 
