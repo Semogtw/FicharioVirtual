@@ -3,9 +3,10 @@
 
 	interface NotebookCardProps {
 		notebook: NotebookSummary;
+		parentName?: string | null;
 	}
 
-	let { notebook }: NotebookCardProps = $props();
+	let { notebook, parentName = null }: NotebookCardProps = $props();
 </script>
 
 <article class={`notebook-card ${notebook.coverStyle}`}>
@@ -14,7 +15,7 @@
 			<span></span><span></span><span></span><span></span>
 		</div>
 		<div class="cover">
-			<p>Caderno</p>
+			<p>{parentName ? `Sub-caderno · ${parentName}` : 'Caderno'}</p>
 			<h2>{notebook.name}</h2>
 			{#if notebook.description}
 				<span>{notebook.description}</span>
@@ -86,11 +87,14 @@
 	}
 
 	p {
+		overflow: hidden;
 		margin-bottom: 1.1rem;
 		font-size: 0.72rem;
 		font-weight: 760;
-		letter-spacing: 0.14em;
+		letter-spacing: 0.12em;
+		text-overflow: ellipsis;
 		text-transform: uppercase;
+		white-space: nowrap;
 		opacity: 0.75;
 	}
 
