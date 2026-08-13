@@ -48,37 +48,10 @@ describe('semantic topic coverage', () => {
 		expect(coverage.status).toBe('missing');
 	});
 
-	it('lets a confident verifier reject a lexical false positive', () => {
-		const item = candidate({
-			lexicalRank: 1.2,
-			semanticSimilarity: 0.78,
-			verification: { coverage: 'none', confidence: 0.98 }
-		});
-		expect(scoreSemanticCoverageCandidate(item)).toBeLessThan(0.3);
-		expect(classifySemanticTopicCoverage('Calor', [item]).status).toBe('missing');
-	});
-
-	it('lets a confident verifier promote substantial conceptual evidence', () => {
-		const coverage = classifySemanticTopicCoverage('Primeira lei da termodinâmica', [
-			candidate({
-				semanticSimilarity: 0.58,
-				verification: { coverage: 'strong', confidence: 0.9 }
-			})
-		]);
-		expect(coverage.status).toBe('covered');
-		expect(coverage.strength).toBeGreaterThan(90);
-	});
-
-	it('never lets a verifier partial verdict become fully covered', () => {
-		const coverage = classifySemanticTopicCoverage('Calor específico', [
-			candidate({
-				lexicalRank: 1.4,
-				semanticSimilarity: 0.9,
-				verification: { coverage: 'partial', confidence: 1 }
-			})
-		]);
-		expect(coverage.status).toBe('partial');
-		expect(coverage.strength).toBeLessThan(78);
+	it('combines lexical and semantic evidence without a second model verdict', () => {
+		const item = candidate({ lexicalRank: 1.2, semanticSimilarity: 0.78 });
+		expect(scoreSemanticCoverageCandidate(item)).toBeGreaterThan(0.9);
+		expect(classifySemanticTopicCoverage('Calor', [item]).status).toBe('covered');
 	});
 
 	it('deduplicates evidence and preserves analysis metadata', () => {
@@ -94,12 +67,13 @@ describe('semantic topic coverage', () => {
 			index: {
 				totalPages: 10,
 				indexedPages: 8,
-				indexedThisRun: 3,
+				indexedThisRun: 0,
 				complete: false
 			},
-			verification: 'used'
+			verification: 'disabled'
 		});
 		expect(summary.analysis?.mode).toBe('hybrid');
 		expect(summary.analysis?.index?.indexedPages).toBe(8);
+		expect(summary.analysis?.verification).toBe('disabled');
 	});
 });

@@ -14,20 +14,18 @@ const candidate = {
 	pageNumber: 3,
 	excerpt: 'A variação da energia interna depende do calor e do trabalho.',
 	lexicalRank: 0.2,
-	semanticSimilarity: 0.84,
-	verification: { coverage: 'strong', confidence: 0.95 }
+	semanticSimilarity: 0.84
 } as const;
 
 describe('semantic coverage service', () => {
-	it('parses the strict hybrid response and forwards the abort signal', async () => {
+	it('parses the strict query-only hybrid response and forwards the abort signal', async () => {
 		const signal = new AbortController().signal;
 		const invoke = vi.fn().mockResolvedValue({
 			data: {
 				mode: 'hybrid',
 				reason: null,
 				embeddingModel: 'gemini-embedding-2',
-				index: { totalPages: 12, indexedPages: 9, indexedThisRun: 4, complete: false },
-				verification: 'used',
+				index: { totalPages: 12, indexedPages: 9, complete: false },
 				topics: [{ topic, candidates: [candidate] }]
 			},
 			error: null
@@ -39,7 +37,9 @@ describe('semantic coverage service', () => {
 		});
 		expect(result.analysis.mode).toBe('hybrid');
 		expect(result.analysis.index?.indexedPages).toBe(9);
-		expect(result.topics[0]?.candidates[0]?.verification?.coverage).toBe('strong');
+		expect(result.analysis.index?.indexedThisRun).toBe(0);
+		expect(result.analysis.verification).toBe('disabled');
+		expect(result.topics[0]?.candidates[0]?.verification).toBeNull();
 	});
 
 	it('accepts a provider lexical fallback response', async () => {
@@ -49,14 +49,14 @@ describe('semantic coverage service', () => {
 				reason: 'semantic_quota_or_rate_limit',
 				embeddingModel: 'gemini-embedding-2',
 				index: null,
-				verification: 'unavailable',
-				topics: [{ topic, candidates: [{ ...candidate, semanticSimilarity: 0, verification: null }] }]
+				topics: [{ topic, candidates: [{ ...candidate, semanticSimilarity: 0 }] }]
 			},
 			error: null
 		});
 		const result = await requestSemanticCoverage([topic], {}, { functions: { invoke } });
 		expect(result.analysis.mode).toBe('lexical');
 		expect(result.analysis.reason).toBe('semantic_quota_or_rate_limit');
+		expect(result.analysis.verification).toBe('disabled');
 	});
 
 	it('rejects response shape drift rather than trusting provider data', async () => {
@@ -66,7 +66,6 @@ describe('semantic coverage service', () => {
 				reason: null,
 				embeddingModel: 'gemini-embedding-2',
 				index: null,
-				verification: 'used',
 				topics: [{ topic, candidates: [{ ...candidate, surprise: true }] }]
 			},
 			error: null
