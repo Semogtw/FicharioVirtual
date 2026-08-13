@@ -10,6 +10,22 @@ import type { Json } from './database';
 export type DatabaseRpcExtensions = {
 	public: {
 		Functions: {
+			list_notebooks_v2: {
+				Args: Record<string, never>;
+				Returns: Array<{
+					id: string;
+					name: string;
+					description: string | null;
+					cover_style: string;
+					parent_notebook_id: string | null;
+					banner_path: string | null;
+					banner_position_x: number;
+					banner_position_y: number;
+					created_at: string;
+					updated_at: string;
+					document_count: number;
+				}>;
+			};
 			create_drive_image_import_v2: {
 				Args: {
 					target_document_id: string;
