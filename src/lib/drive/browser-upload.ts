@@ -237,7 +237,6 @@ export function createBrowserDriveUploadGateway({
 		}: Parameters<DriveResumableGateway['uploadChunk']>[0]) {
 			const response = await fetchImpl(validateDriveUploadSessionUrl(sessionUrl), {
 				method: 'PUT',
-				redirect: 'error',
 				headers: {
 					...headers,
 					'Content-Range': contentRange
@@ -252,7 +251,6 @@ export function createBrowserDriveUploadGateway({
 		}: Parameters<DriveResumableGateway['queryProgress']>[0]) {
 			const response = await fetchImpl(validateDriveUploadSessionUrl(sessionUrl), {
 				method: 'PUT',
-				redirect: 'error',
 				headers: {
 					...headers,
 					'Content-Range': `bytes */${validTotalBytes(totalBytes)}`
