@@ -4,7 +4,7 @@ import {
 	getDocument,
 	type PDFDocumentProxy
 } from 'pdfjs-dist/legacy/build/pdf.mjs';
-import { downloadBrowserDriveRange } from '$lib/drive/browser-files';
+import { downloadBrowserDriveRange } from '$lib/drive/browser-download';
 import type { DriveTokenClientLike } from '$lib/drive/browser-upload';
 
 const DRIVE_ID = /^[A-Za-z0-9_-]{10,256}$/;
