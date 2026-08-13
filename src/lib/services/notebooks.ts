@@ -116,7 +116,7 @@ export function parseNotebookRecord(data: unknown, expectedId?: string): Noteboo
 
 type RpcError = { message: string };
 type NotebookRpcClient = {
-	rpc(name: 'list_notebooks'): Promise<{ data: unknown; error: RpcError | null }>;
+	rpc(name: 'list_notebooks_v2'): Promise<{ data: unknown; error: RpcError | null }>;
 	rpc(
 		name: 'delete_notebook',
 		args: { target_notebook_id: string }
@@ -156,7 +156,7 @@ export async function listNotebooks(
 ): Promise<readonly NotebookSummary[]> {
 	try {
 		const rpc = clientOrDefault(client) as unknown as NotebookRpcClient;
-		const { data, error } = await rpc.rpc('list_notebooks');
+		const { data, error } = await rpc.rpc('list_notebooks_v2');
 		if (error) throw new NotebookServiceError();
 		return Object.freeze(parseNotebookRecords(data).map(mapNotebookRecord));
 	} catch {
