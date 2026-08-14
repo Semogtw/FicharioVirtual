@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 	import type { PDFDocumentProxy } from 'pdfjs-dist';
 	import WordGeometryOverlay from '$lib/components/WordGeometryOverlay.svelte';
 	import { downloadBrowserDriveFile } from '$lib/drive/browser-download';
@@ -274,7 +274,7 @@
 	$effect(() => {
 		const expectedRevision = mediaRevision;
 		generation += 1;
-		void refreshMedia(generation, expectedRevision);
+		untrack(() => void refreshMedia(generation, expectedRevision));
 	});
 
 	onDestroy(() => {
