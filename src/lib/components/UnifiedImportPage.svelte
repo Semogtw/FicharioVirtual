@@ -6,6 +6,11 @@
 	import type { NotebookSummary } from '$lib/domain/notebook';
 	import type { ImagePreparationMode } from '$lib/import/image-types';
 	import {
+		importPhotoDocument,
+		PartialPhotoDocumentImportError,
+		type PhotoDocumentProgress
+	} from '$lib/import/multipage-drive-upload';
+	import {
 		importSelectionUrl,
 		parseRequestedNotebookId,
 		resolveImportNotebookSelection
@@ -16,7 +21,12 @@
 	import { addPdfs } from '$lib/stores/pdf-import-queue.svelte';
 
 	const imageTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+	const MAX_PHOTO_DOCUMENT_PAGES = 100;
 	const notebookRequests = new RequestVersion();
+	type PhotoGrouping = 'document' | 'separate';
+	type DraftPhoto = { id: string; file: File; previewUrl: string };
+	type PendingSelection = { files: readonly File[]; draftImages: boolean };
+
 	let notebooks = $state<readonly NotebookSummary[]>([]);
 	let notebookOptionsReady = $state(false);
 	let notebookLoading = $state(true);
@@ -25,7 +35,12 @@
 	let dragging = $state(false);
 	let selectionMessage = $state<string | null>(null);
 	let selectionError = $state<string | null>(null);
-	let pendingFiles: readonly File[] | null = null;
+	let pendingSelections = $state<PendingSelection[]>([]);
+	let photoDraft = $state<DraftPhoto[]>([]);
+	let photoGrouping = $state<PhotoGrouping>('document');
+	let documentTitle = $state('');
+	let savingPhotoDraft = $state(false);
+	let photoProgress = $state<PhotoDocumentProgress | null>(null);
 
 	let requestedNotebookId = $derived(parseRequestedNotebookId(page.url.searchParams));
 	let notebookSelection = $derived(
@@ -36,7 +51,74 @@
 		requestedNotebookId !== null && notebookOptionsReady && notebookSelection.requiresResolution
 	);
 
-	function enqueue(files: readonly File[], destinationNotebookId: string) {
+	function localId() {
+		return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+	}
+
+	function defaultPhotoDocumentTitle(file: File) {
+		const value = file.name.replace(/\.[^.]+$/, '').trim();
+		return value.slice(0, 240) || 'Anotações';
+	}
+
+	function releaseDraftPhoto(photo: DraftPhoto) {
+		URL.revokeObjectURL(photo.previewUrl);
+	}
+
+	function clearPhotoDraft() {
+		for (const photo of photoDraft) releaseDraftPhoto(photo);
+		photoDraft = [];
+		documentTitle = '';
+		photoProgress = null;
+		photoGrouping = 'document';
+	}
+
+	function stageImages(files: readonly File[]) {
+		const remaining = MAX_PHOTO_DOCUMENT_PAGES - photoDraft.length;
+		const accepted = files.slice(0, Math.max(0, remaining));
+		if (accepted.length < files.length) {
+			selectionError = `Um documento de fotos pode ter até ${MAX_PHOTO_DOCUMENT_PAGES} páginas.`;
+		}
+		if (accepted.length === 0) return;
+		const staged = accepted.map((file) => ({
+			id: localId(),
+			file,
+			previewUrl: URL.createObjectURL(file)
+		}));
+		photoDraft = [...photoDraft, ...staged];
+		if (documentTitle.trim().length === 0 && photoDraft[0]) {
+			documentTitle = defaultPhotoDocumentTitle(photoDraft[0].file);
+		}
+		selectionMessage = `${photoDraft.length} foto(s) prontas. Revise a ordem e salve quando terminar.`;
+	}
+
+	function removeDraftPhoto(id: string) {
+		if (savingPhotoDraft) return;
+		const index = photoDraft.findIndex((photo) => photo.id === id);
+		if (index < 0) return;
+		const [removed] = photoDraft.splice(index, 1);
+		if (removed) releaseDraftPhoto(removed);
+		photoDraft = [...photoDraft];
+		if (photoDraft.length === 0) clearPhotoDraft();
+	}
+
+	function moveDraftPhoto(index: number, direction: -1 | 1) {
+		if (savingPhotoDraft) return;
+		const target = index + direction;
+		if (index < 0 || target < 0 || index >= photoDraft.length || target >= photoDraft.length) return;
+		const copy = [...photoDraft];
+		const current = copy[index];
+		const other = copy[target];
+		if (!current || !other) return;
+		copy[index] = other;
+		copy[target] = current;
+		photoDraft = copy;
+	}
+
+	function enqueue(
+		files: readonly File[],
+		destinationNotebookId: string,
+		options: { draftImages?: boolean } = {}
+	) {
 		const images = files.filter((file) => imageTypes.has(file.type));
 		const pdfs = files.filter((file) => file.type === 'application/pdf');
 		const unsupported = files.length - images.length - pdfs.length;
@@ -47,24 +129,33 @@
 			queued += pdfs.length;
 		}
 		if (images.length > 0) {
-			addImages(images, { mode, notebookId: destinationNotebookId || null });
-			queued += images.length;
+			const shouldDraft = options.draftImages || photoDraft.length > 0 || images.length > 1;
+			if (shouldDraft) stageImages(images);
+			else {
+				addImages(images, { mode, notebookId: destinationNotebookId || null });
+				queued += images.length;
+			}
 		}
 
 		if (unsupported > 0) {
 			selectionError = `${unsupported} arquivo(s) ignorado(s). Use PDF, JPG, PNG ou WebP.`;
 		}
-		if (queued > 0) {
+		if (queued > 0 && photoDraft.length === 0) {
 			selectionMessage = `${queued} arquivo(s) adicionados à fila global. Você já pode navegar pelo Fichário.`;
+		} else if (queued > 0 && photoDraft.length > 0) {
+			selectionMessage = `${queued} arquivo(s) já entraram na fila; ${photoDraft.length} foto(s) aguardam sua revisão.`;
 		}
 	}
 
-	function queue(files: readonly File[]) {
+	function queue(files: readonly File[], options: { draftImages?: boolean } = {}) {
 		selectionMessage = null;
 		selectionError = null;
 		if (notebookSelection.requiresResolution) {
 			if (!notebookOptionsReady) {
-				pendingFiles = [...(pendingFiles ?? []), ...files];
+				pendingSelections = [
+					...pendingSelections,
+					{ files: [...files], draftImages: options.draftImages ?? false }
+				];
 				selectionMessage = 'Confirmando o caderno antes de adicionar os arquivos…';
 				return;
 			}
@@ -72,12 +163,18 @@
 			return;
 		}
 
-		enqueue(files, notebookId);
+		enqueue(files, notebookId, options);
 	}
 
 	function selected(event: Event) {
 		const input = event.currentTarget as HTMLInputElement;
 		queue(Array.from(input.files ?? []));
+		input.value = '';
+	}
+
+	function captured(event: Event) {
+		const input = event.currentTarget as HTMLInputElement;
+		queue(Array.from(input.files ?? []), { draftImages: true });
 		input.value = '';
 	}
 
@@ -98,6 +195,48 @@
 		if (!(related instanceof Node) || !current.contains(related)) dragging = false;
 	}
 
+	async function savePhotoDraft() {
+		if (savingPhotoDraft || photoDraft.length === 0) return;
+		selectionError = null;
+		selectionMessage = null;
+		const photos = [...photoDraft];
+		const files = photos.map((photo) => photo.file);
+		const destinationNotebookId = notebookId || null;
+
+		if (photoGrouping === 'separate' || files.length === 1) {
+			addImages(files, { mode, notebookId: destinationNotebookId });
+			const count = files.length;
+			clearPhotoDraft();
+			selectionMessage = `${count} foto(s) adicionadas à fila como documento(s) separado(s).`;
+			return;
+		}
+
+		savingPhotoDraft = true;
+		try {
+			const result = await importPhotoDocument(files, {
+				mode,
+				notebookId: destinationNotebookId,
+				title: documentTitle,
+				onProgress(progress) {
+					photoProgress = progress;
+				}
+			});
+			const count = result.pageIds.length;
+			clearPhotoDraft();
+			selectionMessage = `Documento salvo com ${count} páginas. A leitura continua em segundo plano.`;
+		} catch (error) {
+			if (error instanceof PartialPhotoDocumentImportError) {
+				clearPhotoDraft();
+				selectionError = `${error.message} As páginas já salvas não serão reenviadas.`;
+			} else {
+				selectionError = error instanceof Error ? error.message : 'Não foi possível salvar o documento.';
+				photoProgress = null;
+			}
+		} finally {
+			savingPhotoDraft = false;
+		}
+	}
+
 	async function loadNotebookOptions(version = notebookRequests.next()) {
 		notebookLoading = true;
 		notebookError = null;
@@ -106,22 +245,24 @@
 			if (notebookRequests.isCurrent(version)) {
 				notebooks = items;
 				notebookOptionsReady = true;
-				const waiting = pendingFiles;
-				pendingFiles = null;
-				if (waiting && waiting.length > 0) {
+				const waiting = pendingSelections;
+				pendingSelections = [];
+				if (waiting.length > 0) {
 					const resolved = resolveImportNotebookSelection(requestedNotebookId, items, true);
 					selectionMessage = null;
 					selectionError = null;
 					if (resolved.requiresResolution) {
 						selectionError = 'O caderno solicitado precisa ser confirmado antes da importação.';
 					} else {
-						enqueue(waiting, resolved.notebookId);
+						for (const pending of waiting) {
+							enqueue(pending.files, resolved.notebookId, { draftImages: pending.draftImages });
+						}
 					}
 				}
 			}
 		} catch {
 			if (notebookRequests.isCurrent(version)) {
-				pendingFiles = null;
+				pendingSelections = [];
 				notebookError = 'Não foi possível carregar os cadernos agora.';
 				notebookOptionsReady = false;
 			}
@@ -144,8 +285,9 @@
 	});
 
 	onDestroy(() => {
-		pendingFiles = null;
+		pendingSelections = [];
 		notebookRequests.next();
+		for (const photo of photoDraft) releaseDraftPhoto(photo);
 	});
 </script>
 
@@ -154,8 +296,8 @@
 		<p class="eyebrow">Entrada unificada</p>
 		<h1>Adicionar ao fichário</h1>
 		<p>
-			Solte fotos e PDFs juntos. O dispositivo cuida só da preparação necessária e a leitura
-			automática continua em segundo plano depois que o material já está salvo.
+			Solte fotos e PDFs juntos. Para anotações fotografadas, você pode montar várias páginas
+			como um único documento antes de salvar.
 		</p>
 	</header>
 
@@ -176,8 +318,8 @@
 				<span><strong>Documento</strong><small>Limpa fundo e melhora legibilidade.</small></span>
 			</label>
 			<label class="choice">
-				<input type="radio" name="image-mode" value="original" bind:group={mode} />
-				<span><strong>Original</strong><small>Guarda a foto sem transformação.</small></span>
+				<input type="radio" name="image-mode" value="high-definition" bind:group={mode} />
+				<span><strong>Alta definição</strong><small>Preserva mais detalhe para letras pequenas.</small></span>
 			</label>
 		</fieldset>
 	</section>
@@ -199,8 +341,8 @@
 		ondrop={dropped}
 	>
 		<div class="drop-icon" aria-hidden="true">+</div>
-		<h2>Fotos e PDFs entram na mesma fila</h2>
-		<p>JPG, PNG, WebP e PDF. Você pode escolher vários de uma vez.</p>
+		<h2>Fotos e PDFs entram por aqui</h2>
+		<p>JPG, PNG, WebP e PDF. Várias fotos podem virar um único documento.</p>
 		<div class="actions">
 			<label class="file-button">
 				Escolher arquivos
@@ -212,11 +354,111 @@
 				/>
 			</label>
 			<label class="camera-button">
-				Usar câmera
-				<input type="file" accept="image/*" capture="environment" onchange={selected} />
+				{photoDraft.length > 0 ? 'Adicionar página' : 'Digitalizar páginas'}
+				<input type="file" accept="image/*" capture="environment" onchange={captured} />
 			</label>
 		</div>
 	</section>
+
+	{#if photoDraft.length > 0}
+		<section class="photo-builder" aria-labelledby="photo-builder-title">
+			<div class="builder-heading">
+				<div>
+					<p class="eyebrow">Documento de fotos</p>
+					<h2 id="photo-builder-title">{photoDraft.length} página(s)</h2>
+				</div>
+				{#if !savingPhotoDraft}
+					<button class="text-button" type="button" onclick={clearPhotoDraft}>Descartar</button>
+				{/if}
+			</div>
+
+			<label class="title-field">
+				<span>Título</span>
+				<input
+					type="text"
+					maxlength="240"
+					bind:value={documentTitle}
+					disabled={savingPhotoDraft}
+					placeholder="Ex.: Redes — aula 14/08"
+				/>
+			</label>
+
+			{#if photoDraft.length > 1}
+				<fieldset class="grouping">
+					<legend>Como salvar</legend>
+					<label class="choice compact">
+						<input
+							type="radio"
+							name="photo-grouping"
+							value="document"
+							bind:group={photoGrouping}
+							disabled={savingPhotoDraft}
+						/>
+						<span><strong>Um documento</strong><small>Cada foto vira uma página.</small></span>
+					</label>
+					<label class="choice compact">
+						<input
+							type="radio"
+							name="photo-grouping"
+							value="separate"
+							bind:group={photoGrouping}
+							disabled={savingPhotoDraft}
+						/>
+						<span><strong>Separadas</strong><small>Cria um documento por foto.</small></span>
+					</label>
+				</fieldset>
+			{/if}
+
+			<div class="photo-grid" aria-label="Ordem das páginas">
+				{#each photoDraft as photo, index (photo.id)}
+					<article class="photo-card">
+						<div class="photo-preview">
+							<img src={photo.previewUrl} alt={`Prévia da página ${index + 1}`} />
+							<span>{index + 1}</span>
+						</div>
+						<div class="photo-card-actions">
+							<button
+								type="button"
+								onclick={() => moveDraftPhoto(index, -1)}
+								disabled={savingPhotoDraft || index === 0}
+								aria-label={`Mover página ${index + 1} para antes`}
+							>←</button>
+							<button
+								type="button"
+								onclick={() => moveDraftPhoto(index, 1)}
+								disabled={savingPhotoDraft || index === photoDraft.length - 1}
+								aria-label={`Mover página ${index + 1} para depois`}
+							>→</button>
+							<button
+								type="button"
+								onclick={() => removeDraftPhoto(photo.id)}
+								disabled={savingPhotoDraft}
+								aria-label={`Remover página ${index + 1}`}
+							>Remover</button>
+						</div>
+					</article>
+				{/each}
+			</div>
+
+			<div class="builder-footer">
+				{#if photoProgress}
+					<p role="status" aria-live="polite">
+						{photoProgress.stage === 'preparing' ? 'Preparando' : 'Salvando'} página
+						{photoProgress.pageNumber} de {photoProgress.pageCount}…
+					</p>
+				{:else}
+					<p>Você pode adicionar mais fotos pela câmera antes de salvar.</p>
+				{/if}
+				<button class="save-button" type="button" onclick={savePhotoDraft} disabled={savingPhotoDraft}>
+					{savingPhotoDraft
+						? 'Salvando…'
+						: photoGrouping === 'document' && photoDraft.length > 1
+							? 'Salvar documento'
+							: 'Adicionar à fila'}
+				</button>
+			</div>
+		</section>
+	{/if}
 
 	{#if selectionMessage}
 		<p class="selection-message" role="status" aria-live="polite" aria-atomic="true">
@@ -230,10 +472,8 @@
 		<div>
 			<h2 id="background-title">Não precisa ficar nesta tela</h2>
 			<p>
-				Enquanto a fila mostrar <strong>Preparando</strong> ou <strong>Enviando</strong>, o
-				dispositivo ainda está garantindo o arquivo e, em PDFs digitalizados, preparando as páginas
-				necessárias. Depois de <strong>Leitura em segundo plano</strong>, o material já está salvo e
-				o OCR continua no servidor mesmo se você fechar o Fichário.
+				Depois que o material é salvo, a leitura automática continua em segundo plano. PDFs e fotos
+				separadas também continuam usando a fila global normalmente.
 			</p>
 		</div>
 	</section>
@@ -288,7 +528,8 @@
 	}
 
 	.options > label,
-	fieldset {
+	fieldset,
+	.title-field {
 		display: grid;
 		gap: 0.45rem;
 		margin: 0;
@@ -297,13 +538,15 @@
 	}
 
 	.options > label > span,
+	.title-field > span,
 	legend {
 		color: var(--muted);
 		font-size: 0.75rem;
 		font-weight: 740;
 	}
 
-	fieldset {
+	.options fieldset,
+	.grouping {
 		grid-template-columns: 1fr 1fr;
 	}
 
@@ -319,6 +562,10 @@
 		border: 1px solid var(--line);
 		border-radius: var(--radius-sm);
 		background: var(--surface-strong);
+	}
+
+	.choice.compact {
+		min-height: 100%;
 	}
 
 	.choice span {
@@ -377,14 +624,22 @@
 	}
 
 	.file-button,
+	.camera-button,
+	.save-button,
+	.text-button,
+	.photo-card-actions button {
+		border: 1px solid var(--line-strong);
+		border-radius: var(--radius-sm);
+		font: inherit;
+		font-weight: 760;
+		cursor: pointer;
+	}
+
+	.file-button,
 	.camera-button {
 		position: relative;
 		padding: 0.72rem 1rem;
-		border: 1px solid var(--line-strong);
-		border-radius: var(--radius-sm);
 		background: var(--surface-strong);
-		font-weight: 760;
-		cursor: pointer;
 	}
 
 	.file-button:focus-within,
@@ -402,6 +657,116 @@
 		clip: rect(0 0 0 0);
 		clip-path: inset(50%);
 		white-space: nowrap;
+	}
+
+	.photo-builder {
+		display: grid;
+		gap: 1rem;
+		padding: 1rem;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--radius-lg);
+		background: var(--surface);
+	}
+
+	.builder-heading,
+	.builder-footer {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+	}
+
+	.builder-heading .eyebrow,
+	.builder-heading h2,
+	.builder-footer p {
+		margin: 0;
+	}
+
+	.title-field input {
+		width: 100%;
+		padding: 0.75rem 0.85rem;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--radius-sm);
+		background: var(--surface-strong);
+		color: inherit;
+		font: inherit;
+	}
+
+	.grouping {
+		display: grid;
+		gap: 0.6rem;
+	}
+
+	.photo-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+		gap: 0.75rem;
+	}
+
+	.photo-card {
+		display: grid;
+		gap: 0.45rem;
+		min-width: 0;
+	}
+
+	.photo-preview {
+		position: relative;
+		aspect-ratio: 3 / 4;
+		overflow: hidden;
+		border: 1px solid var(--line);
+		border-radius: var(--radius-sm);
+		background: var(--surface-strong);
+	}
+
+	.photo-preview img {
+		width: 100%;
+		height: 100%;
+		display: block;
+		object-fit: cover;
+	}
+
+	.photo-preview span {
+		position: absolute;
+		top: 0.45rem;
+		left: 0.45rem;
+		min-width: 1.8rem;
+		height: 1.8rem;
+		display: grid;
+		place-items: center;
+		padding: 0 0.35rem;
+		border-radius: 999px;
+		background: var(--surface);
+		font-size: 0.8rem;
+		font-weight: 800;
+	}
+
+	.photo-card-actions {
+		display: grid;
+		grid-template-columns: auto auto 1fr;
+		gap: 0.35rem;
+	}
+
+	.photo-card-actions button,
+	.text-button {
+		padding: 0.5rem 0.6rem;
+		background: var(--surface-strong);
+		color: inherit;
+	}
+
+	.save-button {
+		padding: 0.72rem 1rem;
+		background: var(--archive);
+		color: white;
+	}
+
+	button:disabled {
+		cursor: not-allowed;
+		opacity: 0.5;
+	}
+
+	.builder-footer p {
+		color: var(--muted);
+		font-size: 0.9rem;
 	}
 
 	.selection-message,
@@ -425,22 +790,10 @@
 		display: grid;
 		grid-template-columns: auto 1fr;
 		gap: 0.9rem;
-		align-items: start;
 		padding: 1rem;
 		border: 1px solid var(--line);
 		border-radius: var(--radius-md);
 		background: var(--surface);
-	}
-
-	.background-note > div:first-child {
-		width: 2.2rem;
-		height: 2.2rem;
-		display: grid;
-		place-items: center;
-		border-radius: 50%;
-		background: var(--archive-soft);
-		color: var(--archive);
-		font-weight: 900;
 	}
 
 	.background-note h2 {
@@ -448,9 +801,26 @@
 		font-size: 1rem;
 	}
 
-	@media (max-width: 760px) {
+	@media (max-width: 720px) {
 		.options {
 			grid-template-columns: 1fr;
+		}
+	}
+
+	@media (max-width: 520px) {
+		.options fieldset,
+		.grouping {
+			grid-template-columns: 1fr;
+		}
+
+		.builder-heading,
+		.builder-footer {
+			align-items: stretch;
+			flex-direction: column;
+		}
+
+		.save-button {
+			width: 100%;
 		}
 	}
 </style>

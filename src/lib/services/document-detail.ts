@@ -34,6 +34,7 @@ const wordGeometrySchema = z
 		])
 	)
 	.max(20_000);
+const driveFileIdSchema = z.string().regex(/^[A-Za-z0-9_-]{10,256}$/);
 const pageRecordSchema = z
 	.object({
 		id: z.string().regex(UUID),
@@ -42,6 +43,7 @@ const pageRecordSchema = z
 		ocr_raw_text: z.string().max(MAX_CORRECTION_LENGTH).nullable(),
 		corrected_text: z.string().max(MAX_CORRECTION_LENGTH).nullable(),
 		extraction_source: z.enum(['native_pdf', 'ocr', 'manual']).nullable(),
+		source_drive_file_id: driveFileIdSchema.nullable().optional(),
 		ocr_word_geometry: wordGeometrySchema.optional().default([]),
 		warnings: z.array(warningSchema).max(100),
 		status: z.enum([
@@ -58,7 +60,6 @@ const pageRecordSchema = z
 	})
 	.strict();
 const pageRecordsSchema = z.array(pageRecordSchema).max(10_000);
-const driveFileIdSchema = z.string().regex(/^[A-Za-z0-9_-]{10,256}$/);
 const documentRecordSchema = z
 	.object({
 		id: z.string().regex(UUID),
@@ -294,7 +295,7 @@ class SupabaseDocumentGateway implements DocumentDetailGateway {
 		const { data, error } = await this.client
 			.from('pages')
 			.select(
-				'id,page_number,native_text,ocr_raw_text,corrected_text,extraction_source,ocr_word_geometry,warnings,status,was_manually_reviewed,updated_at'
+				'id,page_number,native_text,ocr_raw_text,corrected_text,extraction_source,source_drive_file_id,ocr_word_geometry,warnings,status,was_manually_reviewed,updated_at'
 			)
 			.eq('document_id', validId(documentId, 'document'))
 			.order('page_number', { ascending: true });
@@ -324,7 +325,7 @@ class SupabaseDocumentGateway implements DocumentDetailGateway {
 			})
 			.eq('id', validId(pageId, 'page'))
 			.select(
-				'id,page_number,native_text,ocr_raw_text,corrected_text,extraction_source,ocr_word_geometry,warnings,status,was_manually_reviewed,updated_at'
+				'id,page_number,native_text,ocr_raw_text,corrected_text,extraction_source,source_drive_file_id,ocr_word_geometry,warnings,status,was_manually_reviewed,updated_at'
 			)
 			.maybeSingle();
 		if (error) throw new DocumentDetailError('unavailable');

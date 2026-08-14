@@ -63,6 +63,39 @@ export type DatabaseRpcExtensions = {
 				};
 				Returns: Array<{ document_id: string; page_id: string; ocr_job_id: string }>;
 			};
+			append_drive_image_page_v1: {
+				Args: {
+					target_document_id: string;
+					target_page_id: string;
+					target_job_id: string;
+					target_page_number: number;
+					target_drive_file_id: string;
+					target_drive_parent_folder_id: string;
+					target_drive_mime_type: string;
+					target_drive_modified_time: string;
+					target_drive_version: string;
+					target_drive_md5_checksum: string | null;
+					ocr_storage_path: string;
+					prepared_sha256: string;
+					source_sha256: string;
+					preprocessing_profile: string;
+					preprocessing_version: number;
+					preprocessing_auto_crop: boolean;
+					preprocessing_retained_permille: number;
+					preprocessing_deskew_mdeg: number;
+					preprocessing_illumination: boolean;
+					preprocessing_contrast: boolean;
+					preprocessing_fallback: boolean;
+					preprocessing_source_width: number;
+					preprocessing_source_height: number;
+					preprocessing_prepared_width: number;
+					preprocessing_prepared_height: number;
+					preprocessing_original_bytes: number;
+					preprocessing_prepared_bytes: number;
+					prompt_version?: number;
+				};
+				Returns: Array<{ document_id: string; page_id: string; ocr_job_id: string }>;
+			};
 			get_document_ocr_summary: {
 				Args: { target_document_id: string };
 				Returns: Array<{
