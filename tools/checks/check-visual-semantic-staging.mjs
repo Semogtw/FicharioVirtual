@@ -258,11 +258,22 @@ async function searches(db, state, expectedMode) {
 	const rows = [];
 	for (const spec of QUERIES) {
 		const start = performance.now();
-		const result = await db.functions.invoke('semantic-search', {
-			body: { query: spec.query, notebookId: state.notebookId, limit: 10, offset: 0 }
-		});
-		if (result.error || !Array.isArray(result.data?.results))
-			throw new Error(`${spec.id} search failed: ${result.error?.message ?? 'invalid response'}`);
+		let result = null;
+		let retryCount = 0;
+		for (const delay of [0, 5_000, 15_000]) {
+			if (delay) {
+				retryCount += 1;
+				await sleep(delay);
+			}
+			result = await db.functions.invoke('semantic-search', {
+				body: { query: spec.query, notebookId: state.notebookId, limit: 10, offset: 0 }
+			});
+			if (!result.error && Array.isArray(result.data?.results)) break;
+		}
+		if (!result || result.error || !Array.isArray(result.data?.results))
+			throw new Error(
+				`${spec.id} search failed after retries: ${result?.error?.message ?? 'invalid response'}`
+			);
 		if (result.data.mode !== expectedMode)
 			throw new Error(`${spec.id} expected ${expectedMode}, got ${result.data.mode}`);
 		rows.push({
@@ -270,6 +281,7 @@ async function searches(db, state, expectedMode) {
 			kind: spec.kind,
 			expected: spec.expected,
 			latencyMs: Math.round(performance.now() - start),
+			retryCount,
 			resultLabels: result.data.results.map((r) => labels.get(r.documentId)).filter(Boolean),
 			reason: result.data.reason ?? null
 		});
@@ -293,6 +305,7 @@ function metric(rows) {
 		visualMrr: mrr(visual),
 		lexicalTop: rank(rows.find((r) => r.kind === 'lexical')) === 1,
 		negativeCount: rows.find((r) => r.kind === 'negative')?.resultLabels.length ?? 0,
+		searchRetries: rows.reduce((sum, row) => sum + (row.retryCount ?? 0), 0),
 		latencyMedianMs: times[Math.floor(times.length / 2)] ?? 0,
 		latencyP95Ms: times.at(-1) ?? 0
 	};
@@ -380,6 +393,7 @@ async function compare(shadowPath, activePath, reportPath) {
 		active = JSON.parse(await readFile(activePath, 'utf8'));
 	const gates = {
 		noQuotaSignal: !shadow.quotaSignalObserved && !active.quotaSignalObserved,
+		noSearchRetries: shadow.metrics.searchRetries === 0 && active.metrics.searchRetries === 0,
 		noRecallRegression: active.metrics.recallAt3 >= shadow.metrics.recallAt3,
 		visualImproved: active.metrics.visualMrr >= shadow.metrics.visualMrr + 0.05,
 		lexicalPreserved: active.metrics.lexicalTop,
