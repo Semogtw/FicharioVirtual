@@ -36,7 +36,8 @@ function empty(status: number, appOrigin: string | null) {
 }
 
 function media(bytes: Uint8Array, appOrigin: string | null) {
-	return new Response(bytes, {
+	const body = Uint8Array.from(bytes).buffer;
+	return new Response(body, {
 		status: 200,
 		headers: {
 			...corsHeaders(appOrigin),
