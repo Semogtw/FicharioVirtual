@@ -71,4 +71,49 @@ describe('redirect-safe browser Drive downloads', () => {
 			Range: 'bytes=1024-2047'
 		});
 	});
+
+	it('accepts a valid non-empty media response when the redirected host omits Content-Type', async () => {
+		const fetchImpl = vi.fn().mockResolvedValue(
+			new Response(new Uint8Array([37, 80, 68, 70]), {
+				status: 200,
+				headers: { 'Content-Length': '4' }
+			})
+		);
+
+		const blob = await downloadBrowserDriveFile({
+			client: client(),
+			fileId,
+			maximumBytes: 20,
+			fetchImpl
+		});
+
+		expect(blob.size).toBe(4);
+		expect(blob.type).toBe('');
+	});
+
+	it('retries a transient Drive media miss before returning the file', async () => {
+		vi.useFakeTimers();
+		try {
+			const fetchImpl = vi
+				.fn()
+				.mockResolvedValueOnce(new Response(null, { status: 404 }))
+				.mockResolvedValueOnce(
+					new Response(new Uint8Array([1, 2, 3]), {
+						status: 200,
+						headers: { 'Content-Type': 'application/pdf', 'Content-Length': '3' }
+					})
+				);
+			const result = downloadBrowserDriveFile({
+				client: client(),
+				fileId,
+				maximumBytes: 20,
+				fetchImpl
+			});
+			await vi.runAllTimersAsync();
+			await expect(result).resolves.toMatchObject({ size: 3 });
+			expect(fetchImpl).toHaveBeenCalledTimes(2);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
 });
