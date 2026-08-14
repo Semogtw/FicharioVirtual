@@ -116,7 +116,12 @@ async function makeScannedPdf(context) {
 	return Buffer.from(await pdf.save());
 }
 
-async function waitForRow(client, table, filters, { timeoutMs = 120_000, intervalMs = 1_500 } = {}) {
+async function waitForRow(
+	client,
+	table,
+	filters,
+	{ timeoutMs = 120_000, intervalMs = 1_500 } = {}
+) {
 	const deadline = Date.now() + timeoutMs;
 	while (Date.now() < deadline) {
 		let query = client.from(table).select('*');
@@ -182,7 +187,11 @@ async function waitForSemanticIndex(client, pageIds, timeoutMs = 180_000) {
 	throw new Error('Automatic semantic indexing did not materialize within three minutes');
 }
 
-async function waitForQueueEntry(page, expectedFilename, { timeoutMs = 240_000, final = false } = {}) {
+async function waitForQueueEntry(
+	page,
+	expectedFilename,
+	{ timeoutMs = 240_000, final = false } = {}
+) {
 	const trigger = page.locator('button[aria-controls="global-import-queue"]');
 	await trigger.waitFor({ state: 'visible', timeout: 20_000 });
 	if ((await trigger.getAttribute('aria-expanded')) !== 'true') await trigger.click();
@@ -221,7 +230,10 @@ async function searchFor(page, text, expectedDocumentText) {
 function captureImportResumeKey(request, resumeKeys) {
 	if (request.method() !== 'POST') return;
 	const url = new URL(request.url());
-	if (url.origin !== new URL(supabaseUrl).origin || !url.pathname.endsWith('/rest/v1/import_sessions')) {
+	if (
+		url.origin !== new URL(supabaseUrl).origin ||
+		!url.pathname.endsWith('/rest/v1/import_sessions')
+	) {
 		return;
 	}
 	try {
@@ -238,7 +250,10 @@ function captureImportResumeKey(request, resumeKeys) {
 }
 
 async function cleanupDocuments(client) {
-	const { data, error } = await client.from('documents').select('id').eq('original_filename', filename);
+	const { data, error } = await client
+		.from('documents')
+		.select('id')
+		.eq('original_filename', filename);
 	if (error) throw error;
 	const ids = [...new Set([...(data ?? []).map((row) => row.id), ...report.created.documents])];
 	report.created.documents = ids;
@@ -273,7 +288,10 @@ let context = null;
 
 try {
 	stage('backend-auth', 'running');
-	const { data: signIn, error: signInError } = await client.auth.signInWithPassword({ email, password });
+	const { data: signIn, error: signInError } = await client.auth.signInWithPassword({
+		email,
+		password
+	});
 	if (signInError || !signIn.session) throw new Error('Staging credentials could not authenticate');
 	stage('backend-auth', 'pass');
 
@@ -301,7 +319,10 @@ try {
 	page.on('response', trackServerResponse);
 
 	stage('real-login', 'running');
-	await page.goto(new URL('/login/', target).href, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+	await page.goto(new URL('/login/', target).href, {
+		waitUntil: 'domcontentloaded',
+		timeout: 45_000
+	});
 	await page.locator('#email').fill(email);
 	await page.locator('#password').fill(password);
 	await page.getByRole('button', { name: 'Entrar', exact: true }).click();
@@ -314,10 +335,15 @@ try {
 	stage('scanned-pdf-build', 'pass', `${pdfBuffer.byteLength} bytes`);
 
 	stage('scanned-pdf-import', 'running');
-	await page.goto(new URL('/import/', target).href, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+	await page.goto(new URL('/import/', target).href, {
+		waitUntil: 'domcontentloaded',
+		timeout: 45_000
+	});
 	const pdfInput = page.locator('input[type="file"][accept*="application/pdf"]').first();
 	await pdfInput.setInputFiles({ name: filename, mimeType: 'application/pdf', buffer: pdfBuffer });
-	await page.getByText(/arquivo\(s\) adicionados à fila global/i).waitFor({ state: 'visible', timeout: 20_000 });
+	await page
+		.getByText(/arquivo\(s\) adicionados à fila global/i)
+		.waitFor({ state: 'visible', timeout: 20_000 });
 	const initialQueue = await waitForQueueEntry(page, filename, { timeoutMs: 240_000 });
 	const documentRow = await waitForRow(client, 'documents', { original_filename: filename });
 	report.created.documents.push(documentRow.id);
@@ -363,7 +389,8 @@ try {
 	report.error = safeError(error);
 	stage('failure', 'fail', report.error);
 	if (context) {
-		await context.pages()[0]
+		await context
+			.pages()[0]
 			?.screenshot({ path: `${evidenceDir}/failure.png`, fullPage: true })
 			.catch(() => undefined);
 	}
