@@ -1,0 +1,83 @@
+diff --git a/supabase/functions/_shared/background-visual-indexer.ts b/supabase/functions/_shared/background-visual-indexer.ts
+index 4cc3fad..ea720ff 100644
+--- a/supabase/functions/_shared/background-visual-indexer.ts
++++ b/supabase/functions/_shared/background-visual-indexer.ts
+@@ -103,7 +103,9 @@ function parseJobs(value: unknown): VisualJob[] {
+ }
+ 
+ async function sha256Hex(bytes: Uint8Array) {
+-	const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
++	const digest = new Uint8Array(
++		await crypto.subtle.digest('SHA-256', Uint8Array.from(bytes).buffer)
++	);
+ 	return [...digest].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+ }
+ 
+@@ -117,8 +119,8 @@ async function recordEvent(
+ 	job: VisualJob,
+ 	input: { status: string; bytes: number; durationMs: number }
+ ) {
+-	await admin
+-		.rpc('record_semantic_visual_event_as_user', {
++	try {
++		await admin.rpc('record_semantic_visual_event_as_user', {
+ 			target_user_id: job.userId,
+ 			event_operation: 'index',
+ 			event_model: SEMANTIC_EMBEDDING_MODEL,
+@@ -129,8 +131,10 @@ async function recordEvent(
+ 			event_status: input.status,
+ 			event_routing_reason: job.routingReason,
+ 			event_routing_version: job.routingVersion
+-		})
+-		.catch(() => undefined);
++		});
++	} catch {
++		// Telemetry is best effort and must not fail visual indexing.
++	}
+ }
+ 
+ async function cleanupTemporary(admin: SupabaseClient, value: unknown) {
+@@ -149,13 +153,15 @@ async function cleanupTemporary(admin: SupabaseClient, value: unknown) {
+ 		.from('documents')
+ 		.remove([completion.mediaPath]);
+ 	if (removeError) return;
+-	await admin
+-		.rpc('clear_page_visual_embedding_temporary_media', {
++	try {
++		await admin.rpc('clear_page_visual_embedding_temporary_media', {
+ 			target_user_id: completion.userId,
+ 			target_page_id: completion.pageId,
+ 			expected_media_path: completion.mediaPath
+-		})
+-		.catch(() => undefined);
++		});
++	} catch {
++		// Cleanup metadata is best effort after object deletion.
++	}
+ }
+ 
+ async function reuseExistingEmbedding(admin: SupabaseClient, job: PreparedJob) {
+diff --git a/supabase/functions/semantic-search/index.ts b/supabase/functions/semantic-search/index.ts
+index 724fa2c..d4c12c2 100644
+--- a/supabase/functions/semantic-search/index.ts
++++ b/supabase/functions/semantic-search/index.ts
+@@ -544,15 +544,15 @@ Deno.serve(async (request) => {
+ 			Math.max(parsed.offset + parsed.limit + 20, parsed.limit * 2)
+ 		);
+ 		const visualMode = visualSearchMode();
+-		const visualRequest: Promise<RpcResponse> =
++		const visualRequest =
+ 			visualMode === 'off'
+-				? Promise.resolve({ data: [], error: null })
+-				: (supabase.rpc('search_pages_visual_semantic', {
++				? Promise.resolve<RpcResponse>({ data: [], error: null })
++				: supabase.rpc('search_pages_visual_semantic', {
+ 						query_embedding: queryEmbedding.vectorText,
+ 						target_model: SEMANTIC_EMBEDDING_MODEL,
+ 						notebook_filter: parsed.notebookId,
+ 						result_limit: Math.min(50, candidateLimit)
+-					}) as Promise<RpcResponse>);
++					});
+ 		const [lexical, semanticResponse, visualResponse] = await Promise.all([
+ 			lexicalRows(supabase, parsed, candidateLimit, 0),
+ 			supabase.rpc('search_pages_semantic', {
