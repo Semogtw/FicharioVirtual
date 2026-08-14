@@ -15,7 +15,7 @@ describe('document original reference rendering', () => {
 		expect(route).toContain("scrollIntoView({ behavior: 'smooth', block: 'start' })");
 		expect(route).not.toContain('<img src={detail.originalReference.url}');
 		expect(viewer).toContain("detail.originalReference.provider === 'supabase'");
-		expect(viewer).toContain("detail.originalReference.provider === 'google_drive'");
+		expect(viewer).toContain('openDrivePdfRangeDocument');
 		expect(viewer).toContain('downloadBrowserDriveFile');
 		expect(viewer).toContain('renderDrivePdf');
 		expect(viewer).toContain('{#each renderedPages as rendered (rendered.page.id)}');
