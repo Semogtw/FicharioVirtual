@@ -30,21 +30,24 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - name: Apply project formatter to calibration test
-        run: pnpm exec prettier --write tests/unit/search/visual-threshold-calibration.test.ts
+      - name: Format calibration and remove temporary workflow from verification tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec prettier --write tests/unit/search/visual-threshold-calibration.test.ts
+          rm .github/workflows/verify-visual-calibration-branch.yml
+          git diff --check
       - name: Verify frontend and unit suite
         run: pnpm verify
       - name: Verify Edge Function types
         run: pnpm test:functions:check
-      - name: Commit formatter repair when needed
+      - name: Commit clean calibrated implementation
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet -- tests/unit/search/visual-threshold-calibration.test.ts; then
-            exit 0
-          fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add tests/unit/search/visual-threshold-calibration.test.ts
-          git commit -m 'style(search): apply project formatter to visual calibration'
+          git add -A
+          git diff --cached --check
+          git commit -m 'test(search): finalize visual threshold calibration'
           git push origin HEAD:fix/visual-threshold-calibration
