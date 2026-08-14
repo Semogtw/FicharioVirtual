@@ -1,19 +1,9 @@
 name: Verify adaptive visual staging
 
 on:
-  push:
-    branches:
-      - feat/adaptive-visual-embeddings
-    paths:
-      - .github/workflows/verify-adaptive-visual-staging.yml
-      - tools/checks/check-visual-semantic-staging.mjs
-      - supabase/functions/_shared/background-visual-indexer.ts
-      - supabase/functions/_shared/gemini-embedding-client.ts
-      - supabase/functions/_shared/visual-embedding-enqueue.ts
-      - supabase/functions/semantic-search/index.ts
-      - supabase/functions/semantic-visual-worker/index.ts
-      - supabase/migrations/20260814113500_adaptive_visual_embeddings.sql
-      - supabase/migrations/20260814114500_visual_embedding_dispatch.sql
+  workflow_run:
+    workflows: [Deploy Supabase staging]
+    types: [completed]
 
 permissions:
   contents: read
@@ -23,51 +13,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    environment: staging-deploy
-    env:
-      SUPABASE_ACCESS_TOKEN: ${{ secrets.STAGING_SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_DB_PASSWORD: ${{ secrets.STAGING_SUPABASE_DB_PASSWORD }}
-      STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
-    steps:
-      - name: Checkout exact feature revision
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-
-      - name: Set up Supabase CLI
-        uses: supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf # v2
-        with:
-          version: 2.111.0
-
-      - name: Validate protected staging configuration
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "$SUPABASE_ACCESS_TOKEN"
-          test -n "$SUPABASE_DB_PASSWORD"
-          test -n "$STAGING_SUPABASE_PROJECT_REF"
-
-      - name: Link staging project
-        run: supabase link --project-ref "$STAGING_SUPABASE_PROJECT_REF"
-
-      - name: Force safe shadow mode before deployment
-        run: supabase secrets set --project-ref "$STAGING_SUPABASE_PROJECT_REF" "SEMANTIC_VISUAL_MODE=shadow"
-
-      - name: Preview pending migrations
-        run: supabase db push --linked --dry-run --include-all
-
-      - name: Apply pending migrations
-        run: supabase db push --linked --include-all
-
-      - name: Deploy feature Edge Functions to staging
-        run: supabase functions deploy --project-ref "$STAGING_SUPABASE_PROJECT_REF"
-
   shadow:
-    needs: deploy
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     environment: staging
@@ -80,10 +29,10 @@ jobs:
       STAGING_AUTHORIZED_EMAIL: ${{ secrets.STAGING_AUTHORIZED_EMAIL }}
       STAGING_AUTHORIZED_PASSWORD: ${{ secrets.STAGING_AUTHORIZED_PASSWORD }}
     steps:
-      - name: Checkout exact feature revision
+      - name: Checkout deployed main revision
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.workflow_run.head_sha }}
           persist-credentials: false
 
       - name: Set up pnpm
@@ -116,7 +65,7 @@ jobs:
           retention-days: 7
 
   activate:
-    needs: [deploy, shadow]
+    needs: shadow
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment: staging-deploy
@@ -132,7 +81,7 @@ jobs:
       - name: Temporarily enable active visual ranking
         run: |
           supabase secrets set --project-ref "$STAGING_SUPABASE_PROJECT_REF" "SEMANTIC_VISUAL_MODE=active"
-          sleep 8
+          sleep 20
 
   active:
     needs: [shadow, activate]
@@ -148,10 +97,10 @@ jobs:
       STAGING_AUTHORIZED_EMAIL: ${{ secrets.STAGING_AUTHORIZED_EMAIL }}
       STAGING_AUTHORIZED_PASSWORD: ${{ secrets.STAGING_AUTHORIZED_PASSWORD }}
     steps:
-      - name: Checkout exact feature revision
+      - name: Checkout deployed main revision
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.workflow_run.head_sha }}
           persist-credentials: false
 
       - name: Download shadow state
@@ -188,8 +137,8 @@ jobs:
           retention-days: 7
 
   restore-shadow:
-    needs: [deploy, shadow, activate, active]
-    if: always() && needs.deploy.result == 'success'
+    needs: [shadow, activate, active]
+    if: always() && needs.shadow.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment: staging-deploy
@@ -217,10 +166,10 @@ jobs:
       STAGING_AUTHORIZED_EMAIL: ${{ secrets.STAGING_AUTHORIZED_EMAIL }}
       STAGING_AUTHORIZED_PASSWORD: ${{ secrets.STAGING_AUTHORIZED_PASSWORD }}
     steps:
-      - name: Checkout exact feature revision
+      - name: Checkout deployed main revision
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.workflow_run.head_sha }}
           persist-credentials: false
 
       - name: Download shadow state and report
