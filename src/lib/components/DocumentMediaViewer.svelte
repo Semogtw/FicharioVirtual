@@ -28,6 +28,7 @@
 	};
 
 	const MAX_BROWSER_DRIVE_PDF_BYTES = 64 * 1024 * 1024;
+	const MAX_BROWSER_DRIVE_IMAGE_BYTES = 64 * 1024 * 1024;
 	const EMPTY_GEOMETRY = Object.freeze([]) as readonly WordGeometry[];
 
 	let { detail, pages, query }: DocumentMediaViewerProps = $props();
@@ -46,6 +47,7 @@
 			pages.map((page) => [
 				page.id,
 				page.pageNumber,
+				page.sourceDriveFileId,
 				page.wordGeometry.length,
 				shouldExtractNativeGeometry(page)
 			])
@@ -238,24 +240,53 @@
 		await renderDownloadedDrivePdf(fileId, expectedGeneration, expectedRevision);
 	}
 
+	async function renderImagePages(expectedGeneration: number, expectedRevision: string) {
+		const client = getSupabaseClient();
+		for (let index = 0; index < pages.length; index += 1) {
+			if (refreshIsStale(expectedGeneration, expectedRevision)) return;
+			const page = pages[index];
+			if (!page) continue;
+			try {
+				if (page.sourceDriveFileId) {
+					const blob = await downloadBrowserDriveFile({
+						client,
+						fileId: page.sourceDriveFileId,
+						maximumBytes: MAX_BROWSER_DRIVE_IMAGE_BYTES
+					});
+					publishPage(index, blob, EMPTY_GEOMETRY, expectedGeneration, expectedRevision);
+					continue;
+				}
+				if (index === 0 && detail.originalReference.provider === 'supabase') {
+					publishRemotePage(index, detail.originalReference.url, expectedGeneration, expectedRevision);
+					continue;
+				}
+				if (index === 0 && detail.originalReference.provider === 'google_drive') {
+					const blob = await downloadBrowserDriveFile({
+						client,
+						fileId: detail.originalReference.driveFileId,
+						maximumBytes: MAX_BROWSER_DRIVE_IMAGE_BYTES
+					});
+					publishPage(index, blob, EMPTY_GEOMETRY, expectedGeneration, expectedRevision);
+					continue;
+				}
+				failPage(index, `O original da página ${page.pageNumber} não está disponível.`);
+			} catch {
+				if (refreshIsStale(expectedGeneration, expectedRevision)) return;
+				failPage(index, `Não foi possível preparar a página ${page.pageNumber}.`);
+			}
+		}
+	}
+
 	async function refreshMedia(expectedGeneration: number, expectedRevision: string) {
 		resetRenderedPages();
-		if (pages.length === 0 || detail.originalReference.provider === 'missing') return;
+		if (pages.length === 0) return;
 		try {
 			if (detail.kind === 'image') {
-				if (detail.originalReference.provider === 'supabase') {
-					publishRemotePage(0, detail.originalReference.url, expectedGeneration, expectedRevision);
-					return;
-				}
-				const blob = await downloadBrowserDriveFile({
-					client: getSupabaseClient(),
-					fileId: detail.originalReference.driveFileId,
-					maximumBytes: 64 * 1024 * 1024
-				});
-				publishPage(0, blob, EMPTY_GEOMETRY, expectedGeneration, expectedRevision);
+				await renderImagePages(expectedGeneration, expectedRevision);
 				return;
 			}
 
+			if (detail.originalReference.provider === 'missing') return;
 			if (detail.originalReference.provider === 'supabase') {
 				await renderSupabasePdf(detail.originalReference.url, expectedGeneration, expectedRevision);
 			} else {
@@ -284,7 +315,7 @@
 </script>
 
 <div class="media-viewer">
-	{#if detail.originalReference.provider === 'missing'}
+	{#if detail.originalReference.provider === 'missing' && detail.kind !== 'image'}
 		<p class="status" role="status">O original não está disponível.</p>
 	{:else if renderedPages.length === 0}
 		<p class="status" role="status">Este documento ainda não tem páginas disponíveis.</p>
@@ -337,6 +368,8 @@
 
 	.image-pages {
 		display: grid;
+		gap: 2px;
+		padding: 2px;
 	}
 
 	.document-page {
@@ -383,7 +416,8 @@
 	}
 
 	@media (max-width: 620px) {
-		.document-pages {
+		.document-pages,
+		.image-pages {
 			gap: 1px;
 			padding: 1px;
 		}

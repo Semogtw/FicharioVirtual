@@ -17,6 +17,7 @@ export type PageDetail = PageTextSources & {
 	pageNumber: number;
 	text: string;
 	extractionSource: ExtractionSource | null;
+	sourceDriveFileId: string | null;
 	wordGeometry: readonly WordGeometry[];
 	warnings: readonly PageWarning[];
 	status: ProcessingStatus;
@@ -31,6 +32,7 @@ export type PageRecord = {
 	ocr_raw_text: string | null;
 	corrected_text: string | null;
 	extraction_source: ExtractionSource | null;
+	source_drive_file_id?: string | null;
 	ocr_word_geometry?: Json;
 	warnings: Json;
 	status: ProcessingStatus;
@@ -79,6 +81,7 @@ export function mapPageRecord(record: PageRecord): PageDetail {
 		...sources,
 		text: effectivePageText(sources),
 		extractionSource: record.extraction_source,
+		sourceDriveFileId: record.source_drive_file_id ?? null,
 		wordGeometry: parseWordGeometry(record.ocr_word_geometry ?? []),
 		warnings: safeWarnings(record.warnings),
 		status: record.status,
