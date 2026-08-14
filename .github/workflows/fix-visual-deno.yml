@@ -1,0 +1,156 @@
+name: Fix visual Deno typing
+
+on:
+  push:
+    branches: [feat/adaptive-visual-embeddings]
+    paths:
+      - .github/workflows/fix-visual-deno.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fix-visual-deno
+  cancel-in-progress: false
+
+jobs:
+  fix:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: feat/adaptive-visual-embeddings
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Apply type-only fixes
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('supabase/functions/_shared/background-visual-indexer.ts')
+          text = path.read_text()
+          text = text.replace(
+              "const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));",
+              "const digest = new Uint8Array(\n\t\tawait crypto.subtle.digest('SHA-256', Uint8Array.from(bytes).buffer)\n\t);",
+          )
+          old_event = """\tawait admin
+\t\t.rpc('record_semantic_visual_event_as_user', {
+\t\t\ttarget_user_id: job.userId,
+\t\t\tevent_operation: 'index',
+\t\t\tevent_model: SEMANTIC_EMBEDDING_MODEL,
+\t\t\tevent_item_count: 1,
+\t\t\tevent_overlap_count: 0,
+\t\t\tevent_bytes_total: Math.max(0, Math.round(input.bytes)),
+\t\t\tevent_duration_ms: Math.max(0, Math.round(input.durationMs)),
+\t\t\tevent_status: input.status,
+\t\t\tevent_routing_reason: job.routingReason,
+\t\t\tevent_routing_version: job.routingVersion
+\t\t})
+\t\t.catch(() => undefined);"""
+          new_event = """\ttry {
+\t\tawait admin.rpc('record_semantic_visual_event_as_user', {
+\t\t\ttarget_user_id: job.userId,
+\t\t\tevent_operation: 'index',
+\t\t\tevent_model: SEMANTIC_EMBEDDING_MODEL,
+\t\t\tevent_item_count: 1,
+\t\t\tevent_overlap_count: 0,
+\t\t\tevent_bytes_total: Math.max(0, Math.round(input.bytes)),
+\t\t\tevent_duration_ms: Math.max(0, Math.round(input.durationMs)),
+\t\t\tevent_status: input.status,
+\t\t\tevent_routing_reason: job.routingReason,
+\t\t\tevent_routing_version: job.routingVersion
+\t\t});
+\t} catch {
+\t\t// Telemetry is best effort and must not fail visual indexing.
+\t}"""
+          if old_event not in text:
+              raise SystemExit('recordEvent pattern not found')
+          text = text.replace(old_event, new_event)
+          old_cleanup = """\tawait admin
+\t\t.rpc('clear_page_visual_embedding_temporary_media', {
+\t\t\ttarget_user_id: completion.userId,
+\t\t\ttarget_page_id: completion.pageId,
+\t\t\texpected_media_path: completion.mediaPath
+\t\t})
+\t\t.catch(() => undefined);"""
+          new_cleanup = """\ttry {
+\t\tawait admin.rpc('clear_page_visual_embedding_temporary_media', {
+\t\t\ttarget_user_id: completion.userId,
+\t\t\ttarget_page_id: completion.pageId,
+\t\t\texpected_media_path: completion.mediaPath
+\t\t});
+\t} catch {
+\t\t// Cleanup metadata is best effort after object deletion.
+\t}"""
+          if old_cleanup not in text:
+              raise SystemExit('cleanup pattern not found')
+          path.write_text(text.replace(old_cleanup, new_cleanup))
+
+          path = Path('supabase/functions/semantic-search/index.ts')
+          text = path.read_text()
+          old = """\t\tconst visualRequest: Promise<RpcResponse> =
+\t\t\tvisualMode === 'off'
+\t\t\t\t? Promise.resolve({ data: [], error: null })
+\t\t\t\t: (supabase.rpc('search_pages_visual_semantic', {
+\t\t\t\t\t\tquery_embedding: queryEmbedding.vectorText,
+\t\t\t\t\t\ttarget_model: SEMANTIC_EMBEDDING_MODEL,
+\t\t\t\t\t\tnotebook_filter: parsed.notebookId,
+\t\t\t\t\t\tresult_limit: Math.min(50, candidateLimit)
+\t\t\t\t\t}) as Promise<RpcResponse>);"""
+          new = """\t\tconst visualRequest =
+\t\t\tvisualMode === 'off'
+\t\t\t\t? Promise.resolve<RpcResponse>({ data: [], error: null })
+\t\t\t\t: supabase.rpc('search_pages_visual_semantic', {
+\t\t\t\t\t\tquery_embedding: queryEmbedding.vectorText,
+\t\t\t\t\t\ttarget_model: SEMANTIC_EMBEDDING_MODEL,
+\t\t\t\t\t\tnotebook_filter: parsed.notebookId,
+\t\t\t\t\t\tresult_limit: Math.min(50, candidateLimit)
+\t\t\t\t\t});"""
+          if old not in text:
+              raise SystemExit('visual request pattern not found')
+          path.write_text(text.replace(old, new))
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.12.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@e95548e56dfa95d4e1a28d6f422fafe75c4c26fb # v2
+        with:
+          deno-version: v2.x
+
+      - name: Format and type check fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec prettier --write supabase/functions/_shared/background-visual-indexer.ts supabase/functions/semantic-search/index.ts
+          deno check --no-config supabase/functions/_shared/background-visual-indexer.ts
+          deno check --no-config supabase/functions/semantic-search/index.ts
+          deno check --no-config supabase/functions/semantic-visual-worker/index.ts
+          git diff --check
+
+      - name: Commit fixes and remove workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/fix-visual-deno.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'fix(search): satisfy Deno visual worker types'
+          git push origin HEAD:feat/adaptive-visual-embeddings
