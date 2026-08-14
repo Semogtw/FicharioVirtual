@@ -25,7 +25,10 @@ export class LocalOcrProviderRateLimitError extends Error {
 		);
 		this.name = 'LocalOcrProviderRateLimitError';
 		this.reason = reason;
-		this.retryAfterMs = Math.max(1_000, Math.min(MAX_GEMINI_OCR_DEFER_MS, Math.round(retryAfterMs)));
+		this.retryAfterMs = Math.max(
+			1_000,
+			Math.min(MAX_GEMINI_OCR_DEFER_MS, Math.round(retryAfterMs))
+		);
 	}
 }
 
