@@ -130,6 +130,14 @@ function config(): WorkerConfig | null {
 	});
 }
 
+function createAdminClient(settings: Pick<WorkerConfig, 'supabaseUrl' | 'serviceRoleKey'>) {
+	return createClient(settings.supabaseUrl, settings.serviceRoleKey, {
+		auth: { persistSession: false, autoRefreshToken: false }
+	});
+}
+
+type AdminClient = ReturnType<typeof createAdminClient>;
+
 async function sha256(value: string) {
 	return new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)));
 }
@@ -205,7 +213,7 @@ function retryAt(attemptCount: number, baseSeconds: number) {
 }
 
 async function runAsUser(
-	admin: ReturnType<typeof createClient>,
+	admin: AdminClient,
 	userId: string,
 	operation: string,
 	payload: Record<string, unknown>
@@ -224,7 +232,7 @@ async function runAsUser(
 }
 
 async function failClaim(
-	admin: ReturnType<typeof createClient>,
+	admin: AdminClient,
 	claimed: ClaimedCandidate,
 	failure: {
 		code: string;
@@ -245,7 +253,7 @@ async function failClaim(
 }
 
 async function cleanupTemporaryImage(
-	admin: ReturnType<typeof createClient>,
+	admin: AdminClient,
 	claimed: ClaimedCandidate
 ) {
 	const path = claimed.candidate.temporaryImagePath;
@@ -258,7 +266,7 @@ async function cleanupTemporaryImage(
 	}).catch(() => undefined);
 }
 
-async function candidates(admin: ReturnType<typeof createClient>, limit: number) {
+async function candidates(admin: AdminClient, limit: number) {
 	await admin.rpc('recover_background_stale_ocr_jobs');
 	const { data, error } = await admin.rpc('list_background_gemini_ocr_candidates', {
 		result_limit: limit
@@ -269,7 +277,7 @@ async function candidates(admin: ReturnType<typeof createClient>, limit: number)
 	return parsed;
 }
 
-async function reconcile(admin: ReturnType<typeof createClient>, batchIds: readonly string[]) {
+async function reconcile(admin: AdminClient, batchIds: readonly string[]) {
 	if (batchIds.length === 0) return;
 	await admin.rpc('reconcile_background_ocr_batches', {
 		target_batch_ids: [...new Set(batchIds)],
@@ -278,7 +286,7 @@ async function reconcile(admin: ReturnType<typeof createClient>, batchIds: reado
 }
 
 async function reserveProviderSlot(
-	admin: ReturnType<typeof createClient>,
+	admin: AdminClient,
 	model: string,
 	rpm: number,
 	maxQueueWaitMs: number
@@ -301,9 +309,7 @@ async function reserveProviderSlot(
 }
 
 async function drainOnce(settings: WorkerConfig) {
-	const admin = createClient(settings.supabaseUrl, settings.serviceRoleKey, {
-		auth: { persistSession: false, autoRefreshToken: false }
-	});
+	const admin = createAdminClient(settings);
 	const available = await candidates(admin, Math.min(100, settings.maxPages * 4));
 	const first = available[0];
 	if (!first) return false;
