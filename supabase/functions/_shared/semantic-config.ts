@@ -9,6 +9,7 @@ export const SEMANTIC_INDEX_PAGE_CONCURRENCY = 3;
 export const SEMANTIC_INDEX_MAX_CHUNKS_PER_REQUEST = 64;
 
 export const SEMANTIC_SEARCH_MIN_SIMILARITY = 0.46;
+export const SEMANTIC_VISUAL_SEARCH_MIN_SIMILARITY = 0.5;
 export const SEMANTIC_COVERAGE_MIN_SIMILARITY = 0.5;
 export const SEMANTIC_HNSW_EF_SEARCH = 80;
 
@@ -16,3 +17,6 @@ export const SEMANTIC_RRF_K = 28;
 export const SEMANTIC_RRF_LEXICAL_WEIGHT = 0.48;
 export const SEMANTIC_RRF_VECTOR_WEIGHT = 0.52;
 export const SEMANTIC_RRF_BOTH_BONUS = 0.012;
+// Visual enrichment starts deliberately weaker than text and is promoted only after benchmark evidence.
+export const SEMANTIC_RRF_VISUAL_WEIGHT = 0.12;
+export const SEMANTIC_RRF_VISUAL_BONUS = 0.002;
