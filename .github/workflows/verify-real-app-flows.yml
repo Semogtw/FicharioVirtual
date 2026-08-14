@@ -91,6 +91,36 @@ jobs:
               if actions.count(old) != 1:
                   raise SystemExit(f'unexpected real-app-actions contract for: {old}')
               actions = actions.replace(old, new)
+
+          old_failed_setup = """\tawait page.route('https://www.googleapis.com/upload/drive/v3/files**', async (route) => {
+          \t\tif (route.request().method() === 'POST') await route.abort('failed');
+          \t\telse await route.continue();
+          \t});
+          \tawait page
+          \t\t.locator('input[type=\"file\"][accept*=\"application/pdf\"]')
+          \t\t.first()
+          \t\t.setInputFiles({
+          \t\t\tname: failedFilename,
+          \t\t\tmimeType: 'application/pdf',
+          \t\t\tbuffer: await makePdf({ padded: false })
+          \t\t});
+          """
+          new_failed_setup = """\tawait page
+          \t\t.locator('input[type=\"file\"][accept*=\"application/pdf\"]')
+          \t\t.first()
+          \t\t.setInputFiles({
+          \t\t\tname: failedFilename,
+          \t\t\tmimeType: 'application/pdf',
+          \t\t\tbuffer: Buffer.from('%PDF-1.7\\n% intentionally truncated real-flow failure fixture\\n')
+          \t\t});
+          """
+          if actions.count(old_failed_setup) != 1:
+              raise SystemExit('unexpected real-app-actions failed-import setup contract')
+          actions = actions.replace(old_failed_setup, new_failed_setup)
+          old_unroute = "\tawait page.unroute('https://www.googleapis.com/upload/drive/v3/files**');\n"
+          if actions.count(old_unroute) != 1:
+              raise SystemExit('unexpected real-app-actions failed-import cleanup contract')
+          actions = actions.replace(old_unroute, '')
           actions_path.write_text(actions, encoding='utf-8')
 
           exhaustive_path = Path('/tmp/fichario-real-flow/check-real-app-exhaustive.mjs')
