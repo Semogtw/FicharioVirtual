@@ -24,6 +24,8 @@
 		geometry: readonly WordGeometry[];
 	}>;
 
+	const MAX_BROWSER_DRIVE_PDF_BYTES = 64 * 1024 * 1024;
+
 	let { detail, page, query }: DocumentMediaViewerProps = $props();
 	let renderedUrl = $state<string | null>(null);
 	let nativeGeometry = $state<readonly WordGeometry[]>([]);
@@ -102,25 +104,15 @@
 		return data.source_size_bytes;
 	}
 
-	async function renderDrivePdf(fileId: string, pageNumber: number): Promise<RenderedPdf> {
-		const client = getSupabaseClient();
-		const totalBytes = await drivePdfReferenceSize(detail.id);
-		if (totalBytes !== null) {
-			const opened = await openDrivePdfRangeDocument({ client, fileId, totalBytes });
-			try {
-				const [blob, geometry] = await Promise.all([
-					renderPdfDocumentPage(opened.document, pageNumber),
-					shouldExtractNativeGeometry()
-						? extractPdfDocumentWordGeometry(opened.document, pageNumber)
-						: Promise.resolve(Object.freeze([]) as readonly WordGeometry[])
-				]);
-				return Object.freeze({ blob, geometry });
-			} finally {
-				await opened.destroy();
-			}
-		}
-
-		const blob = await downloadBrowserDriveFile({ client, fileId, maximumBytes: 64 * 1024 * 1024 });
+	async function renderDownloadedDrivePdf(
+		fileId: string,
+		pageNumber: number
+	): Promise<RenderedPdf> {
+		const blob = await downloadBrowserDriveFile({
+			client: getSupabaseClient(),
+			fileId,
+			maximumBytes: MAX_BROWSER_DRIVE_PDF_BYTES
+		});
 		const file = new File([blob], detail.originalFilename, { type: 'application/pdf' });
 		const [rendered, geometry] = await Promise.all([
 			renderPdfPage(file, pageNumber),
@@ -129,6 +121,33 @@
 				: Promise.resolve(Object.freeze([]) as readonly WordGeometry[])
 		]);
 		return Object.freeze({ blob: rendered, geometry });
+	}
+
+	async function renderDrivePdf(fileId: string, pageNumber: number): Promise<RenderedPdf> {
+		const client = getSupabaseClient();
+		const totalBytes = await drivePdfReferenceSize(detail.id);
+		if (totalBytes !== null) {
+			try {
+				const opened = await openDrivePdfRangeDocument({ client, fileId, totalBytes });
+				try {
+					const [blob, geometry] = await Promise.all([
+						renderPdfDocumentPage(opened.document, pageNumber),
+						shouldExtractNativeGeometry()
+							? extractPdfDocumentWordGeometry(opened.document, pageNumber)
+							: Promise.resolve(Object.freeze([]) as readonly WordGeometry[])
+					]);
+					return Object.freeze({ blob, geometry });
+				} finally {
+					await opened.destroy();
+				}
+			} catch (error) {
+				if (totalBytes > MAX_BROWSER_DRIVE_PDF_BYTES) throw error;
+				// Range loading is an optimization. For ordinary-size PDFs, recover by
+				// downloading the original through the same authenticated media proxy.
+			}
+		}
+
+		return renderDownloadedDrivePdf(fileId, pageNumber);
 	}
 
 	function refreshIsStale(expectedGeneration: number, expectedRevision: string) {
