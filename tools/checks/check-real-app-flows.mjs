@@ -133,9 +133,31 @@ async function makePdf() {
 	pdf.setTitle(`Fluxo real ${runToken}`);
 	pdf.setSubject('Fichário deployed end-to-end verification');
 	const font = await pdf.embedFont(StandardFonts.Helvetica);
-	const page = pdf.addPage([612, 792]);
-	page.drawText(pdfTextToken, { x: 48, y: 680, size: 24, font, color: rgb(0, 0, 0) });
-	page.drawText('Texto nativo para validar importação, indexação e busca.', {
+	const firstPage = pdf.addPage([612, 792]);
+	firstPage.drawText(pdfTextToken, { x: 48, y: 680, size: 24, font, color: rgb(0, 0, 0) });
+	firstPage.drawText(`Repetição ${runToken}`, {
+		x: 48,
+		y: 635,
+		size: 15,
+		font,
+		color: rgb(0, 0, 0)
+	});
+	firstPage.drawText('Texto nativo para validar importação, indexação e busca.', {
+		x: 48,
+		y: 590,
+		size: 15,
+		font,
+		color: rgb(0, 0, 0)
+	});
+	const secondPage = pdf.addPage([612, 792]);
+	secondPage.drawText(`Continuação ${runToken}`, {
+		x: 48,
+		y: 680,
+		size: 22,
+		font,
+		color: rgb(0, 0, 0)
+	});
+	secondPage.drawText(`Mais uma ocorrência ${runToken}`, {
 		x: 48,
 		y: 635,
 		size: 15,
@@ -206,7 +228,11 @@ async function waitForQueueEntry(page, filename, { timeoutMs = 180_000, final = 
 	throw new Error(`Timed out waiting for import queue entry ${filename}; last state: ${last}`);
 }
 
-async function searchFor(page, text, expectedDocumentText) {
+async function searchFor(
+	page,
+	text,
+	{ documentId, documentTitle, expectedOccurrences = null }
+) {
 	await page.goto(new URL(`/search/?q=${encodeURIComponent(text)}`, target).href, {
 		waitUntil: 'domcontentloaded',
 		timeout: 45_000
@@ -216,8 +242,25 @@ async function searchFor(page, text, expectedDocumentText) {
 	await page.getByRole('button', { name: 'Pesquisar', exact: true }).click();
 	const results = page.locator('section.results');
 	await results.waitFor({ state: 'visible', timeout: 45_000 });
-	if (!(await results.innerText()).includes(expectedDocumentText)) {
-		throw new Error(`Search did not return the expected document for ${text}`);
+	const matchingLinks = results.locator(`a[href^="/documents/${documentId}/"]`);
+	await matchingLinks.first().waitFor({ state: 'visible', timeout: 45_000 });
+	if ((await matchingLinks.count()) !== 1) {
+		throw new Error(`Search rendered the same document more than once for ${text}`);
+	}
+	const matchingLink = matchingLinks.first();
+	await matchingLink.scrollIntoViewIfNeeded();
+	await matchingLink.locator('img').first().waitFor({ state: 'visible', timeout: 45_000 });
+	const visibleCardText = (await matchingLink.innerText()).trim();
+	if (visibleCardText.includes(documentTitle)) {
+		throw new Error('Search exposed the document title instead of keeping the original visible');
+	}
+	if (expectedOccurrences !== null) {
+		await matchingLink
+			.getByText(
+				expectedOccurrences === 1 ? '1 ocorrência' : `${expectedOccurrences} ocorrências`,
+				{ exact: true }
+			)
+			.waitFor({ state: 'visible', timeout: 20_000 });
 	}
 	await assertNoVisibleFailure(page, 'search');
 }
@@ -415,7 +458,11 @@ try {
 	stage('native-pdf-import', 'pass', pdfQueueState.replace(/\s+/g, ' ').slice(0, 240));
 
 	stage('native-pdf-search', 'running');
-	await searchFor(page, runToken, pdfDocument.title);
+	await searchFor(page, runToken, {
+		documentId: pdfDocument.id,
+		documentTitle: pdfDocument.title,
+		expectedOccurrences: 4
+	});
 	stage('native-pdf-search', 'pass');
 
 	stage('image-ocr-import', 'running');
@@ -453,7 +500,10 @@ try {
 	);
 
 	stage('ocr-search', 'running');
-	await searchFor(page, runToken, imageDocument.title);
+	await searchFor(page, runToken, {
+		documentId: imageDocument.id,
+		documentTitle: imageDocument.title
+	});
 	stage('ocr-search', 'pass');
 
 	stage('post-import-routes', 'running');
