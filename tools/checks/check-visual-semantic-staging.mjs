@@ -300,13 +300,11 @@ function metric(rows) {
 
 async function setup(db, user, statePath, reportPath) {
 	const notebookId = randomUUID();
-	const notebook = await db
-		.from('notebooks')
-		.insert({
-			id: notebookId,
-			user_id: user.id,
-			name: `__visual_benchmark_${notebookId.slice(0, 8)}`
-		});
+	const notebook = await db.from('notebooks').insert({
+		id: notebookId,
+		user_id: user.id,
+		name: `__visual_benchmark_${notebookId.slice(0, 8)}`
+	});
 	if (notebook.error) throw new Error(`Notebook failed: ${notebook.error.message}`);
 	const state = { notebookId, probes: [], jpegSmoke: null };
 	await writeFile(statePath, JSON.stringify(state));
@@ -328,13 +326,11 @@ async function setup(db, user, statePath, reportPath) {
 		createOcrProbePng(`jpeg-${randomUUID()}`),
 		'image/png'
 	);
-	const replaced = await db.storage
-		.from(BUCKET)
-		.update(jpegSeed.path, JPEG_BYTES, {
-			contentType: 'image/jpeg',
-			cacheControl: '0',
-			upsert: true
-		});
+	const replaced = await db.storage.from(BUCKET).update(jpegSeed.path, JPEG_BYTES, {
+		contentType: 'image/jpeg',
+		cacheControl: '0',
+		upsert: true
+	});
 	if (replaced.error) throw new Error(`JPEG replacement failed: ${replaced.error.message}`);
 	const jpeg = { ...jpegSeed, mimeType: 'image/jpeg', sha256: hash(JPEG_BYTES) };
 	state.jpegSmoke = jpeg;
