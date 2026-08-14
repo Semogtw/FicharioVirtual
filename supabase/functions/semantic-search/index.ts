@@ -204,7 +204,9 @@ function candidateKey(input: { documentId: string; pageNumber: number }) {
 	return `${input.documentId}:${String(input.pageNumber).padStart(8, '0')}`;
 }
 
-function matchMode(candidate: Pick<SearchCandidate, 'lexicalPosition' | 'semanticPosition' | 'visualPosition'>): MatchMode {
+function matchMode(
+	candidate: Pick<SearchCandidate, 'lexicalPosition' | 'semanticPosition' | 'visualPosition'>
+): MatchMode {
 	const lexical = candidate.lexicalPosition !== null;
 	const semantic = candidate.semanticPosition !== null;
 	const visual = candidate.visualPosition !== null;
@@ -377,7 +379,10 @@ async function recordVisualSearchEvent(input: {
 			event_item_count: input.visual.length,
 			event_overlap_count: overlapCount,
 			event_bytes_total: 0,
-			event_duration_ms: Math.max(0, Math.min(300_000, Math.round(performance.now() - input.startedAt))),
+			event_duration_ms: Math.max(
+				0,
+				Math.min(300_000, Math.round(performance.now() - input.startedAt))
+			),
 			event_status: input.visualRpcFailed ? 'search_error' : 'success',
 			event_routing_reason: null,
 			event_routing_version: null

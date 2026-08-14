@@ -9,10 +9,7 @@ const dispatch = readFileSync(
 	'supabase/migrations/20260814114500_visual_embedding_dispatch.sql',
 	'utf8'
 );
-const enqueue = readFileSync(
-	'supabase/functions/_shared/visual-embedding-enqueue.ts',
-	'utf8'
-);
+const enqueue = readFileSync('supabase/functions/_shared/visual-embedding-enqueue.ts', 'utf8');
 const processOcr = readFileSync('supabase/functions/process-ocr/index.ts', 'utf8');
 const backgroundOcr = readFileSync('supabase/functions/ocr-queue-worker/index.ts', 'utf8');
 const desktopOcr = readFileSync('supabase/functions/desktop-ocr-worker/index.ts', 'utf8');
@@ -79,7 +76,9 @@ describe('adaptive visual semantic implementation contract', () => {
 		expect(migration).toContain(
 			"status in ('queued', 'processing', 'retryable', 'blocked_quota', 'ready', 'failed')"
 		);
-		expect(migration).toContain("j.status = 'processing' and j.claimed_at < now() - interval '5 minutes'");
+		expect(migration).toContain(
+			"j.status = 'processing' and j.claimed_at < now() - interval '5 minutes'"
+		);
 		expect(indexer).toContain('target_source_hash: job.sourceHash');
 		expect(indexer).toContain('error.status === 429');
 		expect(indexer).toContain("status: 'blocked_quota'");

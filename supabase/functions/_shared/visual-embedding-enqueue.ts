@@ -27,9 +27,9 @@ function supportedMimeType(value: string | null | undefined): SupportedVisualMim
 function queuedFromRpc(value: unknown) {
 	return Boolean(
 		value &&
-			typeof value === 'object' &&
-			!Array.isArray(value) &&
-			(value as Record<string, unknown>).queued === true
+		typeof value === 'object' &&
+		!Array.isArray(value) &&
+		(value as Record<string, unknown>).queued === true
 	);
 }
 

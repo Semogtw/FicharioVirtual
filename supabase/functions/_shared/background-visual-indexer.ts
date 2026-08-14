@@ -215,7 +215,10 @@ async function prepareJob(admin: SupabaseClient, job: VisualJob): Promise<Prepar
 		return null;
 	}
 	const observedMime = blob.type || job.mimeType;
-	if (observedMime !== job.mimeType || (observedMime !== 'image/jpeg' && observedMime !== 'image/png')) {
+	if (
+		observedMime !== job.mimeType ||
+		(observedMime !== 'image/jpeg' && observedMime !== 'image/png')
+	) {
 		await finishFailure(admin, job, {
 			status: 'failed',
 			code: 'visual_source_mime_mismatch',

@@ -62,9 +62,10 @@ export function compareHybridRanked<T extends HybridRankingSignal & { stableKey:
 	return a.stableKey.localeCompare(b.stableKey);
 }
 
-export function compareMultimodalRanked<
-	T extends MultimodalRankingSignal & { stableKey: string }
->(a: T, b: T) {
+export function compareMultimodalRanked<T extends MultimodalRankingSignal & { stableKey: string }>(
+	a: T,
+	b: T
+) {
 	const scoreDelta = multimodalReciprocalRankScore(b) - multimodalReciprocalRankScore(a);
 	if (Math.abs(scoreDelta) > Number.EPSILON) return scoreDelta;
 	return a.stableKey.localeCompare(b.stableKey);

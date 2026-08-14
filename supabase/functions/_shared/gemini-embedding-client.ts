@@ -246,7 +246,9 @@ function base64Bytes(bytes: Uint8Array) {
 	const chunkSize = 0x8000;
 	let binary = '';
 	for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-		binary += String.fromCharCode(...bytes.subarray(offset, Math.min(bytes.length, offset + chunkSize)));
+		binary += String.fromCharCode(
+			...bytes.subarray(offset, Math.min(bytes.length, offset + chunkSize))
+		);
 	}
 	return btoa(binary);
 }

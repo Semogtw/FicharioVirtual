@@ -148,7 +148,10 @@ function parseResponse(value: unknown): SemanticSearchResponse {
 	} catch {
 		throw new SemanticSearchServiceError('O serviço de busca devolveu uma resposta inválida.');
 	}
-	if ((parsed.mode === 'hybrid' || parsed.mode === 'multimodal') && parsed.embeddingModel === null) {
+	if (
+		(parsed.mode === 'hybrid' || parsed.mode === 'multimodal') &&
+		parsed.embeddingModel === null
+	) {
 		throw new SemanticSearchServiceError('O serviço de busca devolveu um modo semântico inválido.');
 	}
 	return Object.freeze({

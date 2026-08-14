@@ -15,4 +15,10 @@ describe('search result interaction states', () => {
 		expect(mediaIndex).toBeGreaterThanOrEqual(0);
 		expect(hoverIndex).toBeGreaterThan(mediaIndex);
 	});
+	it('opens pure visual matches without inventing a textual highlight or excerpt', () => {
+		expect(source).toContain("result.matchMode === 'visual'");
+		expect(source).toContain('? base');
+		expect(source).toContain('{#if result.excerpt}');
+		expect(source).toContain("if (matchMode === 'visual') return 'Pela página'");
+	});
 });

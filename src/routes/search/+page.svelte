@@ -88,6 +88,23 @@
 		timer = setTimeout(() => void run(true, version), 650);
 	}
 
+	function resultHref(result: SemanticSearchResult) {
+		const base = `/documents/${result.documentId}/?page=${result.pageNumber}`;
+		return result.matchMode === 'visual'
+			? base
+			: `${base}&highlight=${encodeURIComponent(query.trim())}`;
+	}
+
+	function resultBadge(matchMode: SemanticSearchResult['matchMode']) {
+		if (matchMode === 'visual') return 'Pela página';
+		if (matchMode === 'semantic') return 'Por sentido';
+		if (matchMode === 'hybrid') return 'Texto + sentido';
+		if (matchMode === 'lexical_visual') return 'Texto + página';
+		if (matchMode === 'semantic_visual') return 'Sentido + página';
+		if (matchMode === 'hybrid_visual') return 'Texto + sentido + página';
+		return null;
+	}
+
 	function semanticStatus() {
 		if (!analysis) return null;
 		if (analysis.mode === 'hybrid') {
@@ -230,24 +247,22 @@
 			<ol>
 				{#each results as result (result.pageId)}
 					<li>
-						<a
-							href={`/documents/${result.documentId}/?page=${result.pageNumber}&highlight=${encodeURIComponent(query.trim())}`}
-						>
+						<a href={resultHref(result)}>
 							<div class="result-meta">
 								<strong>{result.documentTitle}</strong>
 								<span>Página {result.pageNumber}</span>
 								{#if result.notebookName}<span>{result.notebookName}</span>{/if}
-								{#if result.matchMode === 'semantic'}
-									<span class="match-badge">Por sentido</span>
-								{:else if result.matchMode === 'hybrid'}
-									<span class="match-badge">Texto + sentido</span>
+								{#if resultBadge(result.matchMode)}
+									<span class="match-badge">{resultBadge(result.matchMode)}</span>
 								{/if}
 							</div>
-							<p>
-								{#each highlightSnippet(result.excerpt, query) as part}
-									{#if part.highlighted}<mark>{part.text}</mark>{:else}{part.text}{/if}
-								{/each}
-							</p>
+							{#if result.excerpt}
+								<p>
+									{#each highlightSnippet(result.excerpt, query) as part}
+										{#if part.highlighted}<mark>{part.text}</mark>{:else}{part.text}{/if}
+									{/each}
+								</p>
+							{/if}
 						</a>
 					</li>
 				{/each}

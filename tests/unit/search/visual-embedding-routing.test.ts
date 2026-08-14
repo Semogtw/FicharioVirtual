@@ -30,7 +30,10 @@ describe('visual embedding routing', () => {
 		['table_layout', 'table_layout'],
 		['math', 'math']
 	] as const)('routes %s visually', (contentClass, reason) => {
-		expect(decideVisualEmbedding({ ...base, contentClass })).toMatchObject({ eligible: true, reason });
+		expect(decideVisualEmbedding({ ...base, contentClass })).toMatchObject({
+			eligible: true,
+			reason
+		});
 	});
 
 	it('uses review and warning signals without an extra classifier', () => {

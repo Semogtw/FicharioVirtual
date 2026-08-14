@@ -253,10 +253,7 @@ async function failClaim(
 	});
 }
 
-async function cleanupTemporaryImage(
-	admin: AdminClient,
-	claimed: ClaimedCandidate
-) {
+async function cleanupTemporaryImage(admin: AdminClient, claimed: ClaimedCandidate) {
 	const path = claimed.candidate.temporaryImagePath;
 	if (!path) return;
 	const { error } = await admin.storage.from('documents').remove([path]);
