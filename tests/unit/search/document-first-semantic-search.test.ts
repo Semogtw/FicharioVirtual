@@ -20,7 +20,8 @@ describe('document-first semantic search UX', () => {
 		expect(searchPage).not.toContain('highlightSnippet');
 		expect(searchPage).not.toContain('result.excerpt');
 		expect(searchCard).toContain('<DocumentMediaViewer');
-		expect(searchCard).toContain('pages={[previewPage]}');
+		expect(searchCard).toContain('pages={previewPages}');
+		expect(searchCard).toContain('Object.freeze([previewPage])');
 		expect(searchCard).not.toContain('<strong>{result.documentTitle}</strong>');
 		expect(viewer).toContain('WordGeometryOverlay');
 	});
