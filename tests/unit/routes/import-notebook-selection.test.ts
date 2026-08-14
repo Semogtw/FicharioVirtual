@@ -21,15 +21,19 @@ describe('import notebook query selection', () => {
 
 	it('keeps fast file selections until a requested notebook finishes resolving', () => {
 		const source = read('src/lib/components/UnifiedImportPage.svelte');
-		expect(source).toContain('let pendingFiles: readonly File[] | null = null;');
-		expect(source).toContain('pendingFiles = [...(pendingFiles ?? []), ...files];');
+		expect(source).toContain('let pendingSelections = $state<PendingSelection[]>([]);');
+		expect(source).toContain('...pendingSelections,');
+		expect(source).toContain('{ files: [...files], draftImages: options.draftImages ?? false }');
 		expect(source).toContain('Confirmando o caderno antes de adicionar os arquivos…');
-		expect(source).toContain('const waiting = pendingFiles;');
+		expect(source).toContain('const waiting = pendingSelections;');
+		expect(source).toContain('pendingSelections = [];');
 		expect(source).toContain(
 			'const resolved = resolveImportNotebookSelection(requestedNotebookId, items, true);'
 		);
-		expect(source).toContain('enqueue(waiting, resolved.notebookId);');
-		expect(source).toContain('pendingFiles = null;');
+		expect(source).toContain('for (const pending of waiting)');
+		expect(source).toContain(
+			'enqueue(pending.files, resolved.notebookId, { draftImages: pending.draftImages });'
+		);
 	});
 
 	it.each(['src/routes/import/+page.svelte', 'src/routes/import/pdf/+page.svelte'])(
