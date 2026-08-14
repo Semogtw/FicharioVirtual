@@ -113,7 +113,7 @@ test('adds, repositions and removes a private notebook banner', async ({ page })
 	await page.getByLabel(/Posição vertical/).fill('64');
 	await page.getByRole('button', { name: 'Salvar banner' }).click();
 
-	await page.getByRole('button', { name: 'Salvando…' })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Salvando…' })).toBeDisabled();
 	await expect(page.getByRole('button', { name: 'Personalizar banner' })).toHaveCount(0);
 	await expect(page.getByRole('button', { name: 'Personalizar banner' })).toBeVisible();
 	await expect(page.locator('.banner img')).toBeVisible();
@@ -131,6 +131,6 @@ test('adds, repositions and removes a private notebook banner', async ({ page })
 
 	await page.getByRole('button', { name: 'Personalizar banner' }).click();
 	await page.getByRole('button', { name: 'Remover banner' }).click();
-	await page.getByRole('button', { name: 'Adicionar banner' })).toBeVisible();
-	await page.locator('.banner')).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Adicionar banner' })).toBeVisible();
+	await expect(page.locator('.banner')).toHaveCount(0);
 });
