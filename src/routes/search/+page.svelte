@@ -2,10 +2,11 @@
 	import { page } from '$app/state';
 	import { onDestroy, untrack } from 'svelte';
 	import Button from '$lib/components/Button.svelte';
-	import NativeSelect from '$lib/components/ui/native-select/NativeSelect.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
+	import SearchDocumentCard from '$lib/components/SearchDocumentCard.svelte';
+	import NativeSelect from '$lib/components/ui/native-select/NativeSelect.svelte';
 	import type { NotebookSummary } from '$lib/domain/notebook';
-	import { highlightSnippet } from '$lib/search/highlight';
+	import { appendUniqueDocumentResults } from '$lib/search/document-search-results';
 	import { listNotebooks } from '$lib/services/notebooks';
 	import { RequestVersion } from '$lib/services/request-version';
 	import {
@@ -14,12 +15,17 @@
 		type SemanticSearchResult
 	} from '$lib/services/semantic-search';
 
-	const pageSize = 30;
+	const pageSize = 18;
+	const rawBatchSize = 50;
+	const maxRawBatchesPerPage = 6;
 	const requests = new RequestVersion();
 	const notebookRequests = new RequestVersion();
 	let query = $state('');
 	let notebookId = $state('');
 	let results = $state<readonly SemanticSearchResult[]>([]);
+	let pendingResults = $state<readonly SemanticSearchResult[]>([]);
+	let rawOffset = $state(0);
+	let rawHasMore = $state(false);
 	let analysis = $state<SemanticSearchAnalysis | null>(null);
 	let notebooks = $state<readonly NotebookSummary[]>([]);
 	let notebookLoading = $state(true);
@@ -38,15 +44,22 @@
 		controller = null;
 	}
 
+	function resetSearchState() {
+		results = [];
+		pendingResults = [];
+		rawOffset = 0;
+		rawHasMore = false;
+		analysis = null;
+		hasMore = false;
+	}
+
 	async function run(reset: boolean, version = reset ? requests.next() : requests.current()) {
 		if (!reset && loadingMore) return;
 		const normalized = query.trim();
 		if (!normalized) {
 			requests.next();
 			cancelPending();
-			results = [];
-			analysis = null;
-			hasMore = false;
+			resetSearchState();
 			error = null;
 			loading = false;
 			loadingMore = false;
@@ -59,17 +72,43 @@
 		if (reset) loading = true;
 		else loadingMore = true;
 		error = null;
+
 		try {
-			const response = await searchPagesHybrid(normalized, {
-				notebookId: notebookId || null,
-				limit: pageSize,
-				offset: reset ? 0 : results.length,
-				signal: activeController.signal
-			});
+			const visibleBase = reset ? Object.freeze([]) : results;
+			let pool = reset ? Object.freeze([]) : pendingResults;
+			let offset = reset ? 0 : rawOffset;
+			let canFetch = reset ? true : rawHasMore;
+			let nextAnalysis = reset ? null : analysis;
+			let batches = 0;
+
+			while (pool.length < pageSize && canFetch && batches < maxRawBatchesPerPage) {
+				const response = await searchPagesHybrid(normalized, {
+					notebookId: notebookId || null,
+					limit: rawBatchSize,
+					offset,
+					signal: activeController.signal
+				});
+				if (!requests.isCurrent(version)) return;
+				if (nextAnalysis === null) nextAnalysis = response.analysis;
+
+				const merged = appendUniqueDocumentResults(
+					Object.freeze([...visibleBase, ...pool]),
+					response.results
+				);
+				pool = Object.freeze(merged.slice(visibleBase.length));
+				offset += rawBatchSize;
+				canFetch = response.hasMore;
+				batches += 1;
+			}
+
 			if (!requests.isCurrent(version)) return;
-			results = reset ? response.results : Object.freeze([...results, ...response.results]);
-			analysis = response.analysis;
-			hasMore = response.hasMore;
+			const nextVisible = Object.freeze(pool.slice(0, pageSize));
+			pendingResults = Object.freeze(pool.slice(pageSize));
+			results = reset ? nextVisible : Object.freeze([...visibleBase, ...nextVisible]);
+			rawOffset = offset;
+			rawHasMore = canFetch;
+			analysis = nextAnalysis;
+			hasMore = pendingResults.length > 0 || rawHasMore;
 		} catch (caught) {
 			if (caught instanceof DOMException && caught.name === 'AbortError') return;
 			if (requests.isCurrent(version)) error = 'Não foi possível concluir esta pesquisa agora.';
@@ -88,42 +127,17 @@
 		timer = setTimeout(() => void run(true, version), 650);
 	}
 
-	function resultHref(result: SemanticSearchResult) {
-		const base = `/documents/${result.documentId}/?page=${result.pageNumber}`;
-		return result.matchMode === 'visual'
-			? base
-			: `${base}&highlight=${encodeURIComponent(query.trim())}`;
-	}
-
-	function resultBadge(matchMode: SemanticSearchResult['matchMode']) {
-		if (matchMode === 'visual') return 'Pela página';
-		if (matchMode === 'semantic') return 'Por sentido';
-		if (matchMode === 'hybrid') return 'Texto + sentido';
-		if (matchMode === 'lexical_visual') return 'Texto + página';
-		if (matchMode === 'semantic_visual') return 'Sentido + página';
-		if (matchMode === 'hybrid_visual') return 'Texto + sentido + página';
-		return null;
-	}
-
 	function semanticStatus() {
 		if (!analysis) return null;
-		if (analysis.mode === 'hybrid') {
-			const index = analysis.index;
-			if (!index) return 'Busca textual + semântica ativa.';
-			return index.complete
-				? `Busca textual + semântica ativa · ${index.indexedPages} páginas no índice.`
-				: `Busca textual + semântica ativa · ${index.indexedPages}/${index.totalPages} páginas indexadas; o restante continua coberto pela busca textual.`;
+		if (analysis.mode === 'hybrid') return 'Busca por palavras e significado ativa.';
+		if (analysis.reason === 'query_too_short') return 'Esta busca usa correspondência textual.';
+		if (
+			analysis.reason === 'semantic_quota_or_rate_limit' ||
+			analysis.reason === 'semantic_provider_unavailable' ||
+			analysis.reason === 'semantic_function_unavailable'
+		) {
+			return 'Busca textual ativa; a busca por significado está temporariamente indisponível.';
 		}
-		if (analysis.reason === 'query_too_short')
-			return 'Consultas muito curtas usam somente a busca textual.';
-		if (analysis.reason === 'semantic_quota_or_rate_limit')
-			return 'Busca textual ativa; a cota semântica está temporariamente indisponível.';
-		if (analysis.reason === 'semantic_provider_unavailable')
-			return 'Busca textual ativa; o provedor semântico está temporariamente indisponível.';
-		if (analysis.reason === 'semantic_window_exhausted')
-			return 'Resultados mais profundos continuam pela busca textual.';
-		if (analysis.reason === 'semantic_function_unavailable')
-			return 'Busca textual ativa; a camada semântica ainda não está disponível neste ambiente.';
 		return null;
 	}
 
@@ -168,16 +182,12 @@
 
 <div class="page" aria-labelledby="page-title">
 	<header>
-		<p class="eyebrow">Busca híbrida</p>
+		<p class="eyebrow">Busca</p>
 		<h1 id="page-title">Pesquisar no fichário</h1>
-		<p>
-			Combine palavras, tolerância a OCR e relações de significado. Quando a busca semântica estiver
-			ativa, a consulta e pequenos trechos das suas páginas podem ser enviados ao Gemini para gerar
-			embeddings; se essa camada falhar, a pesquisa textual continua funcionando.
-		</p>
+		<p>Encontre o documento pela palavra, trecho ou ideia que você lembra.</p>
 	</header>
 
-	<section class="search-panel" aria-label="Pesquisar páginas">
+	<section class="search-panel" aria-label="Pesquisar documentos">
 		<label class="query-field">
 			<span class="visually-hidden">Termos da pesquisa</span>
 			<input
@@ -227,43 +237,27 @@
 			<Button label="Tentar novamente" variant="secondary" onclick={() => void run(true)} />
 		</div>
 	{:else if loading}
-		<p class="loading" role="status">Pesquisando suas páginas…</p>
+		<p class="loading" role="status">Procurando nos seus documentos…</p>
 	{:else if query.trim().length === 0}
 		<EmptyState
 			title="Digite algo para pesquisar"
-			description="A busca considera texto nativo de PDFs, transcrições, correções manuais e proximidade semântica quando o serviço estiver disponível."
+			description="Você pode procurar uma palavra, um trecho ou uma ideia presente nos seus documentos."
 		/>
 	{:else if results.length === 0}
 		<EmptyState
-			title="Nenhuma página encontrada"
-			description="Tente reformular a ideia, remova filtros ou verifique se o documento já terminou de processar."
+			title="Nenhum documento encontrado"
+			description="Tente reformular a busca, remova filtros ou verifique se o documento já terminou de processar."
 		/>
 	{:else}
 		<section class="results" aria-labelledby="results-title">
 			<div class="results-heading">
 				<h2 id="results-title">Resultados</h2>
-				<span>{results.length}{hasMore ? '+' : ''} páginas</span>
+				<span>{results.length}{hasMore ? '+' : ''} documentos</span>
 			</div>
 			<ol>
-				{#each results as result (result.pageId)}
+				{#each results as result (result.documentId)}
 					<li>
-						<a href={resultHref(result)}>
-							<div class="result-meta">
-								<strong>{result.documentTitle}</strong>
-								<span>Página {result.pageNumber}</span>
-								{#if result.notebookName}<span>{result.notebookName}</span>{/if}
-								{#if resultBadge(result.matchMode)}
-									<span class="match-badge">{resultBadge(result.matchMode)}</span>
-								{/if}
-							</div>
-							{#if result.excerpt}
-								<p>
-									{#each highlightSnippet(result.excerpt, query) as part}
-										{#if part.highlighted}<mark>{part.text}</mark>{:else}{part.text}{/if}
-									{/each}
-								</p>
-							{/if}
-						</a>
+						<SearchDocumentCard {result} query={query.trim()} />
 					</li>
 				{/each}
 			</ol>
@@ -340,14 +334,14 @@
 		margin: 0;
 		padding: 0.65rem 0.8rem;
 		border-left: 0.22rem solid var(--accent);
-		background: rgb(166 94 67 / 7%);
+		background: rgb(var(--accent-rgb) / 7%);
 		color: var(--muted);
 		font-size: 0.83rem;
 	}
 
 	.semantic-status.semantic-active {
 		border-left-color: var(--archive);
-		background: rgb(83 106 91 / 7%);
+		background: rgb(var(--archive-rgb) / 7%);
 	}
 
 	.results-heading {
@@ -369,66 +363,16 @@
 
 	ol {
 		display: grid;
-		gap: 0.65rem;
+		grid-template-columns: repeat(auto-fill, minmax(min(20rem, 100%), 1fr));
+		align-items: start;
+		gap: 0.9rem;
 		margin: 0;
 		padding: 0;
 		list-style: none;
 	}
 
 	li {
-		border: 1px solid var(--line);
-		border-radius: var(--radius-md);
-		background: var(--surface);
-	}
-
-	li:focus-within {
-		border-color: var(--line-strong);
-		box-shadow: var(--shadow-soft);
-	}
-
-	li a {
-		display: grid;
-		gap: 0.75rem;
-		padding: 1rem;
-	}
-
-	.result-meta {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: baseline;
-		gap: 0.45rem 0.8rem;
-	}
-
-	.result-meta strong {
-		font-family: var(--font-heading);
-		font-size: 1.2rem;
-		font-weight: 560;
-	}
-
-	.result-meta span {
-		color: var(--muted);
-		font-size: 0.78rem;
-	}
-
-	.result-meta .match-badge {
-		padding: 0.15rem 0.45rem;
-		border: 1px solid rgb(83 106 91 / 25%);
-		border-radius: 999px;
-		background: rgb(83 106 91 / 8%);
-		color: var(--archive);
-		font-weight: 700;
-	}
-
-	li p {
-		margin: 0;
-		color: #454b48;
-		line-height: 1.65;
-	}
-
-	mark {
-		padding-inline: 0.08em;
-		background: rgb(236 190 76 / 38%);
-		color: inherit;
+		min-width: 0;
 	}
 
 	.loading {
@@ -445,12 +389,12 @@
 		gap: 1rem;
 		padding: 1rem;
 		border-left: 0.3rem solid var(--danger);
-		background: rgb(155 63 54 / 7%);
+		background: rgb(var(--danger-rgb) / 7%);
 	}
 
 	.filter-warning {
 		border-left-color: var(--accent);
-		background: rgb(166 94 67 / 7%);
+		background: rgb(var(--accent-rgb) / 7%);
 	}
 
 	.filter-warning p,
@@ -469,13 +413,6 @@
 	.load-more {
 		display: flex;
 		justify-content: center;
-	}
-
-	@media (hover: hover) and (pointer: fine) {
-		li:hover {
-			border-color: var(--line-strong);
-			box-shadow: var(--shadow-soft);
-		}
 	}
 
 	@media (max-width: 760px) {
