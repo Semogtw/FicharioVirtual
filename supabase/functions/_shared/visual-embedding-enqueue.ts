@@ -35,6 +35,7 @@ function queuedFromRpc(value: unknown) {
 
 export async function enqueueVisualEmbeddingAfterOcr(input: {
 	supabase: SupabaseClient;
+	ownerUserId?: string | null;
 	pageId: string;
 	mediaPath: string | null;
 	mediaMimeType?: string | null;
@@ -58,15 +59,21 @@ export async function enqueueVisualEmbeddingAfterOcr(input: {
 		return Object.freeze({ decision, queued: false, preserveTemporaryMedia: false, mimeType });
 	}
 
+	const rpcName = input.ownerUserId
+		? 'queue_page_visual_embedding_job_as_user'
+		: 'queue_page_visual_embedding_job';
+	const args: Record<string, unknown> = {
+		target_page_id: input.pageId,
+		target_model: SEMANTIC_EMBEDDING_MODEL,
+		target_media_path: input.mediaPath,
+		target_mime_type: mimeType,
+		target_routing_reason: decision.reason,
+		target_routing_version: decision.routingVersion
+	};
+	if (input.ownerUserId) args.target_user_id = input.ownerUserId;
+
 	try {
-		const { data, error } = await input.supabase.rpc('queue_page_visual_embedding_job', {
-			target_page_id: input.pageId,
-			target_model: SEMANTIC_EMBEDDING_MODEL,
-			target_media_path: input.mediaPath,
-			target_mime_type: mimeType,
-			target_routing_reason: decision.reason,
-			target_routing_version: decision.routingVersion
-		});
+		const { data, error } = await input.supabase.rpc(rpcName, args);
 		const queued = !error && queuedFromRpc(data);
 		return Object.freeze({
 			decision,
