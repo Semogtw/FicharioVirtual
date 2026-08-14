@@ -544,15 +544,15 @@ Deno.serve(async (request) => {
 			Math.max(parsed.offset + parsed.limit + 20, parsed.limit * 2)
 		);
 		const visualMode = visualSearchMode();
-		const visualRequest: Promise<RpcResponse> =
+		const visualRequest =
 			visualMode === 'off'
-				? Promise.resolve({ data: [], error: null })
-				: (supabase.rpc('search_pages_visual_semantic', {
+				? Promise.resolve<RpcResponse>({ data: [], error: null })
+				: supabase.rpc('search_pages_visual_semantic', {
 						query_embedding: queryEmbedding.vectorText,
 						target_model: SEMANTIC_EMBEDDING_MODEL,
 						notebook_filter: parsed.notebookId,
 						result_limit: Math.min(50, candidateLimit)
-					}) as Promise<RpcResponse>);
+					});
 		const [lexical, semanticResponse, visualResponse] = await Promise.all([
 			lexicalRows(supabase, parsed, candidateLimit, 0),
 			supabase.rpc('search_pages_semantic', {
