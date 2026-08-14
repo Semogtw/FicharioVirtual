@@ -4,116 +4,113 @@ import {
 	downloadBrowserDriveRange
 } from '../../../src/lib/drive/browser-download';
 
-const accessToken = 'ephemeral-access-token-value';
-const expiresAt = '2026-08-13T08:00:00.000Z';
 const fileId = '1AbCdEfGhIjKlMnOpQrStUvWxYz_123456';
 
-function client() {
+function client(...responses: Array<{ data: unknown; error: unknown }>) {
 	return {
 		functions: {
-			invoke: vi.fn().mockResolvedValue({ data: { accessToken, expiresAt }, error: null })
+			invoke: vi.fn().mockImplementation(async () => {
+				const next = responses.shift();
+				if (!next) throw new Error('Unexpected drive-media invocation');
+				return next;
+			})
 		}
 	};
 }
 
-describe('redirect-safe browser Drive downloads', () => {
-	it('lets fetch follow the Drive media redirect for a complete file', async () => {
-		const fetchImpl = vi.fn().mockResolvedValue(
-			new Response(new Uint8Array([1, 2, 3]), {
-				status: 200,
-				headers: { 'Content-Type': 'application/pdf', 'Content-Length': '3' }
-			})
+describe('authenticated browser Drive media proxy', () => {
+	it('downloads a complete file through metadata plus bounded media reads', async () => {
+		const proxy = client(
+			{ data: { size: 3, mimeType: 'application/pdf' }, error: null },
+			{ data: new Blob([new Uint8Array([1, 2, 3])]), error: null }
 		);
 
 		const blob = await downloadBrowserDriveFile({
-			client: client(),
+			client: proxy,
 			fileId,
-			maximumBytes: 20,
-			fetchImpl
+			maximumBytes: 20
 		});
 
 		expect(blob.size).toBe(3);
-		const [requested, init] = fetchImpl.mock.calls[0];
-		expect(new URL(requested).hostname).toBe('www.googleapis.com');
-		expect(new URL(requested).searchParams.get('alt')).toBe('media');
-		expect(init.redirect).toBeUndefined();
-		expect(init.cache).toBe('no-store');
-		expect(init.headers).toEqual({ Authorization: `Bearer ${accessToken}` });
-	});
-
-	it('lets fetch follow the Drive media redirect while preserving an exact range request', async () => {
-		const bytes = new Uint8Array(1024).fill(7);
-		const fetchImpl = vi.fn().mockResolvedValue(
-			new Response(bytes, {
-				status: 206,
-				headers: {
-					'Content-Type': 'application/pdf',
-					'Content-Length': '1024',
-					'Content-Range': 'bytes 1024-2047/4096'
-				}
-			})
-		);
-
-		const blob = await downloadBrowserDriveRange({
-			client: client(),
-			fileId,
-			start: 1024,
-			endExclusive: 2048,
-			totalBytes: 4096,
-			fetchImpl
+		expect(blob.type).toBe('application/pdf');
+		expect(proxy.functions.invoke).toHaveBeenNthCalledWith(1, 'drive-media', {
+			body: { operation: 'metadata', fileId }
 		});
-
-		expect(blob.size).toBe(1024);
-		const [, init] = fetchImpl.mock.calls[0];
-		expect(init.redirect).toBeUndefined();
-		expect(init.headers).toMatchObject({
-			Authorization: `Bearer ${accessToken}`,
-			Range: 'bytes=1024-2047'
+		expect(proxy.functions.invoke).toHaveBeenNthCalledWith(2, 'drive-media', {
+			body: { operation: 'read', fileId, start: 0, endExclusive: 3, totalBytes: 3 }
 		});
 	});
 
-	it('accepts a valid non-empty media response when the redirected host omits Content-Type', async () => {
-		const fetchImpl = vi.fn().mockResolvedValue(
-			new Response(new Uint8Array([37, 80, 68, 70]), {
-				status: 200,
-				headers: { 'Content-Length': '4' }
-			})
+	it('splits larger files into one-megabyte proxy reads', async () => {
+		const first = new Uint8Array(1024 * 1024).fill(7);
+		const second = new Uint8Array([8, 9, 10]);
+		const total = first.byteLength + second.byteLength;
+		const proxy = client(
+			{ data: { size: total, mimeType: 'application/pdf' }, error: null },
+			{ data: new Blob([first]), error: null },
+			{ data: new Blob([second]), error: null }
 		);
 
 		const blob = await downloadBrowserDriveFile({
-			client: client(),
+			client: proxy,
 			fileId,
-			maximumBytes: 20,
-			fetchImpl
+			maximumBytes: total
 		});
 
-		expect(blob.size).toBe(4);
-		expect(blob.type).toBe('');
+		expect(blob.size).toBe(total);
+		expect(proxy.functions.invoke).toHaveBeenCalledTimes(3);
+		expect(proxy.functions.invoke).toHaveBeenNthCalledWith(3, 'drive-media', {
+			body: {
+				operation: 'read',
+				fileId,
+				start: 1024 * 1024,
+				endExclusive: total,
+				totalBytes: total
+			}
+		});
 	});
 
-	it('retries a transient Drive media miss before returning the file', async () => {
-		vi.useFakeTimers();
-		try {
-			const fetchImpl = vi
-				.fn()
-				.mockResolvedValueOnce(new Response(null, { status: 404 }))
-				.mockResolvedValueOnce(
-					new Response(new Uint8Array([1, 2, 3]), {
-						status: 200,
-						headers: { 'Content-Type': 'application/pdf', 'Content-Length': '3' }
-					})
-				);
-			const result = downloadBrowserDriveFile({
-				client: client(),
+	it('preserves exact PDF.js range boundaries through the proxy', async () => {
+		const bytes = new Uint8Array(1024).fill(7);
+		const proxy = client({ data: new Blob([bytes]), error: null });
+
+		const blob = await downloadBrowserDriveRange({
+			client: proxy,
+			fileId,
+			start: 1024,
+			endExclusive: 2048,
+			totalBytes: 4096
+		});
+
+		expect(blob.size).toBe(1024);
+		expect(proxy.functions.invoke).toHaveBeenCalledWith('drive-media', {
+			body: {
+				operation: 'read',
 				fileId,
-				maximumBytes: 20,
-				fetchImpl
-			});
-			await vi.runAllTimersAsync();
-			await expect(result).resolves.toMatchObject({ size: 3 });
-			expect(fetchImpl).toHaveBeenCalledTimes(2);
-		} finally {
-			vi.useRealTimers();
-		}
+				start: 1024,
+				endExclusive: 2048,
+				totalBytes: 4096
+			}
+		});
+	});
+
+	it('rejects a file above the caller limit before transferring media chunks', async () => {
+		const proxy = client({ data: { size: 21, mimeType: 'application/pdf' }, error: null });
+
+		await expect(
+			downloadBrowserDriveFile({ client: proxy, fileId, maximumBytes: 20 })
+		).rejects.toThrow('grande demais');
+		expect(proxy.functions.invoke).toHaveBeenCalledTimes(1);
+	});
+
+	it('fails closed when the proxy returns a chunk with the wrong size', async () => {
+		const proxy = client(
+			{ data: { size: 4, mimeType: 'application/pdf' }, error: null },
+			{ data: new Blob([new Uint8Array([1, 2, 3])]), error: null }
+		);
+
+		await expect(
+			downloadBrowserDriveFile({ client: proxy, fileId, maximumBytes: 20 })
+		).rejects.toThrow('Não foi possível baixar');
 	});
 });
