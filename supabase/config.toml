@@ -74,6 +74,9 @@ verify_jwt = false
 [functions.drive-access-token]
 verify_jwt = true
 
+[functions.drive-media]
+verify_jwt = true
+
 [functions.drive-resolve-folder]
 verify_jwt = true
 
