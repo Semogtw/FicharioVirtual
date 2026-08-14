@@ -82,6 +82,10 @@ jobs:
                   "await page.getByLabel('Dentro de', { exact: true }).selectOption(notebook.id);",
                   "await page.locator('form.new-notebook select').selectOption(notebook.id);",
               ),
+              (
+                  "const correctionBox = page.getByLabel('Texto corrigido da página 1', { exact: true });",
+                  "const transcriptTool = page.locator('details.transcript-tool');\n\tif ((await transcriptTool.getAttribute('open')) === null) await transcriptTool.locator('summary').click();\n\tconst correctionBox = page.getByLabel('Texto corrigido da página 1', { exact: true });",
+              ),
           ]
           for old, new in replacements:
               if actions.count(old) != 1:
@@ -126,7 +130,26 @@ jobs:
           """
           if exhaustive.count(old) != 1:
               raise SystemExit('unexpected exhaustive tag-dialog contract')
-          exhaustive_path.write_text(exhaustive.replace(old, new), encoding='utf-8')
+          exhaustive = exhaustive.replace(old, new)
+          draft_replacements = [
+              (
+                  "const correctionEditor = page.getByLabel('Texto corrigido da página 1', { exact: true });",
+                  "const draftTranscriptTool = page.locator('details.transcript-tool');\n\tif ((await draftTranscriptTool.getAttribute('open')) === null) await draftTranscriptTool.locator('summary').click();\n\tconst correctionEditor = page.getByLabel('Texto corrigido da página 1', { exact: true });",
+              ),
+              (
+                  "const resumedEditor = page.getByLabel('Texto corrigido da página 1', { exact: true });",
+                  "const resumedTranscriptTool = page.locator('details.transcript-tool');\n\tif ((await resumedTranscriptTool.getAttribute('open')) === null) await resumedTranscriptTool.locator('summary').click();\n\tconst resumedEditor = page.getByLabel('Texto corrigido da página 1', { exact: true });",
+              ),
+              (
+                  "page.once('dialog', (dialog) => dialog.accept());\n\tawait draftRow.getByRole('button', { name: 'Descartar local', exact: true }).click();",
+                  "await draftRow.getByRole('button', { name: 'Descartar local', exact: true }).click();\n\tconst discardDialog = page.getByRole('alertdialog', { name: 'Descartar rascunho local?' });\n\tawait discardDialog.getByRole('button', { name: 'Descartar', exact: true }).click();",
+              ),
+          ]
+          for old_draft, new_draft in draft_replacements:
+              if exhaustive.count(old_draft) != 1:
+                  raise SystemExit(f'unexpected exhaustive draft contract for: {old_draft}')
+              exhaustive = exhaustive.replace(old_draft, new_draft)
+          exhaustive_path.write_text(exhaustive, encoding='utf-8')
           PY
 
           node --check /tmp/fichario-real-flow/check-real-app-actions.mjs
