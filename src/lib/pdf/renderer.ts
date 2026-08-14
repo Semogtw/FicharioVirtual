@@ -1,4 +1,5 @@
 import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist';
+import { safelyWipeBytes } from './safe-wipe';
 
 export type RenderPdfPageOptions = {
 	maxDimension?: number;
@@ -137,7 +138,7 @@ export async function renderPdfPage(
 
 	const bytes = new Uint8Array(await file.arrayBuffer());
 	if (options.signal?.aborted) {
-		bytes.fill(0);
+		safelyWipeBytes(bytes);
 		throw abortError();
 	}
 	const loadingTask = getDocument({ data: bytes, useSystemFonts: true });
@@ -164,6 +165,6 @@ export async function renderPdfPage(
 		options.signal?.removeEventListener('abort', cancel);
 		safely(() => pdfDocument?.cleanup());
 		await destroyLoadingTask();
-		bytes.fill(0);
+		safelyWipeBytes(bytes);
 	}
 }
