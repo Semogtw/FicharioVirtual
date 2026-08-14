@@ -1,0 +1,39 @@
+name: Format visual calibration artifact
+
+on:
+  push:
+    branches: [fix/visual-threshold-calibration]
+    paths:
+      - .github/workflows/format-visual-calibration-artifact.yml
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: fix/visual-threshold-calibration
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: 10
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22.16.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Format calibration test
+        run: pnpm exec prettier --write tests/unit/search/visual-threshold-calibration.test.ts
+      - name: Upload formatted test
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: formatted-visual-threshold-calibration-${{ github.run_id }}
+          path: tests/unit/search/visual-threshold-calibration.test.ts
+          if-no-files-found: error
+          retention-days: 1
