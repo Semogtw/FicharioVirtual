@@ -1,5 +1,6 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
-import type { OcrContentClass, OcrWordGeometry } from './ocr-batch-contract.ts';
+import type { OcrContentClass } from './ocr-batch-contract.ts';
+import type { OcrWordGeometry } from './ocr-word-geometry.ts';
 import { SEMANTIC_EMBEDDING_MODEL } from './semantic-config.ts';
 import {
 	decideVisualEmbedding,
@@ -41,7 +42,7 @@ export async function enqueueVisualEmbeddingAfterOcr(input: {
 	warnings: readonly unknown[];
 	needsReview: boolean;
 	effectiveText: string;
-	wordGeometry: OcrWordGeometry;
+	wordGeometry: readonly OcrWordGeometry[];
 }): Promise<VisualEmbeddingEnqueueResult> {
 	const decision = decideVisualEmbedding({
 		hasNativeText: false,
