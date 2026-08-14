@@ -140,7 +140,7 @@ jobs:
 
       - name: Install Chromium
         id: chromium
-        if: ${{ always() && steps.frontend.outcome == 'success' }}
+        if: always()
         continue-on-error: true
         run: pnpm exec playwright install --with-deps chromium
 
