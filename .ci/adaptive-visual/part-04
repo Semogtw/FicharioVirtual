@@ -1,0 +1,129 @@
++		await input.supabase.rpc('record_semantic_visual_event', {
++			event_operation: input.visualMode === 'active' ? 'search_visible' : 'search_shadow',
++			event_model: SEMANTIC_EMBEDDING_MODEL,
++			event_item_count: input.visual.length,
++			event_overlap_count: overlapCount,
++			event_bytes_total: 0,
++			event_duration_ms: Math.max(0, Math.min(300_000, Math.round(performance.now() - input.startedAt))),
++			event_status: input.visualRpcFailed ? 'search_error' : 'success',
++			event_routing_reason: null,
++			event_routing_version: null
++		});
++	} catch {
++		// Visual search telemetry is best effort and cannot alter visible search.
++	}
++}
++
+ async function fallbackResponse(input: {
+ 	supabase: SupabaseClient;
+ 	parsed: ParsedRequest;
+@@ -293,12 +420,7 @@ async function fallbackResponse(input: {
+ 		index: input.index ?? null,
+ 		hasMore: rows.length === input.parsed.limit,
+ 		results: rows.map((row, position) => {
+-			const score = hybridReciprocalRankScore({
+-				lexicalRank: position + 1,
+-				semanticRank: null,
+-				semanticSimilarity: null
+-			});
+-			return publicCandidate({
++			const candidate: SearchCandidate = {
+ 				pageId: row.page_id,
+ 				documentId: row.document_id,
+ 				documentTitle: row.document_title,
+@@ -308,12 +430,16 @@ async function fallbackResponse(input: {
+ 				excerpt: row.excerpt.slice(0, 2000),
+ 				lexicalRank: row.rank,
+ 				semanticSimilarity: 0,
++				visualSimilarity: 0,
+ 				lexicalPosition: position + 1,
+ 				semanticPosition: null,
+-				score,
++				visualPosition: null,
++				score: 0,
+ 				matchMode: 'lexical',
+ 				stableKey: candidateKey({ documentId: row.document_id, pageNumber: row.page_number })
+-			});
++			};
++			scoreCandidate(candidate);
++			return publicCandidate(candidate);
+ 		})
+ 	};
+ }
+@@ -329,8 +455,9 @@ Deno.serve(async (request) => {
+ 	if (request.method !== 'POST') return respond(405, { code: 'method_not_allowed' });
+ 
+ 	const authorization = request.headers.get('Authorization');
+-	if (!authorization?.startsWith('Bearer '))
++	if (!authorization?.startsWith('Bearer ')) {
+ 		return respond(401, { code: 'authentication_required' });
++	}
+ 
+ 	let raw: unknown;
+ 	try {
+@@ -373,8 +500,9 @@ Deno.serve(async (request) => {
+ 		if (!semanticAllowed) {
+ 			let reason = 'semantic_not_configured';
+ 			if (parsed.query.length < MIN_SEMANTIC_QUERY_CHARS) reason = 'query_too_short';
+-			else if (parsed.offset + parsed.limit > MAX_HYBRID_WINDOW)
++			else if (parsed.offset + parsed.limit > MAX_HYBRID_WINDOW) {
+ 				reason = 'semantic_window_exhausted';
++			}
+ 			return respond(200, await fallbackResponse({ supabase, parsed, reason, startedAt }));
+ 		}
+ 
+@@ -410,14 +538,25 @@ Deno.serve(async (request) => {
+ 			MAX_HYBRID_WINDOW,
+ 			Math.max(parsed.offset + parsed.limit + 20, parsed.limit * 2)
+ 		);
+-		const [lexical, semanticResponse] = await Promise.all([
++		const visualMode = visualSearchMode();
++		const visualRequest: Promise<RpcResponse> =
++			visualMode === 'off'
++				? Promise.resolve({ data: [], error: null })
++				: (supabase.rpc('search_pages_visual_semantic', {
++						query_embedding: queryEmbedding.vectorText,
++						target_model: SEMANTIC_EMBEDDING_MODEL,
++						notebook_filter: parsed.notebookId,
++						result_limit: Math.min(50, candidateLimit)
++					}) as Promise<RpcResponse>);
++		const [lexical, semanticResponse, visualResponse] = await Promise.all([
+ 			lexicalRows(supabase, parsed, candidateLimit, 0),
+ 			supabase.rpc('search_pages_semantic', {
+ 				query_embedding: queryEmbedding.vectorText,
+ 				target_model: SEMANTIC_EMBEDDING_MODEL,
+ 				notebook_filter: parsed.notebookId,
+ 				result_limit: Math.min(50, candidateLimit)
+-			})
++			}),
++			visualRequest
+ 		]);
+ 		if (semanticResponse.error) {
+ 			const index = await semanticIndexStats(supabase, parsed.notebookId).catch(() => null);
+@@ -437,13 +576,32 @@ Deno.serve(async (request) => {
+ 		const semantic = Array.isArray(semanticResponse.data)
+ 			? semanticResponse.data.filter(validSemanticRow)
+ 			: [];
+-		const ranked = mergeCandidates(lexical, semantic);
++		const visual =
++			!visualResponse.error && Array.isArray(visualResponse.data)
++				? visualResponse.data.filter(validVisualRow)
++				: [];
++		const textualRanked = mergeCandidates(lexical, semantic, []);
++		if (visualMode !== 'off') {
++			await recordVisualSearchEvent({
++				supabase,
++				visualMode,
++				visual,
++				textualPageIds: new Set(textualRanked.map((candidate) => candidate.pageId)),
++				visualRpcFailed: Boolean(visualResponse.error),
++				startedAt
++			});
++		}
++
++		// Shadow is the production default: visual candidates are measured but
++		// cannot alter user-visible ordering until benchmark calibration promotes
++		// the mode explicitly to active.
++		const ranked = mergeCandidates(lexical, semantic, visualMode === 'active' ? visual : []);
+ 		const end = parsed.offset + parsed.limit;
+ 		const results = ranked.slice(parsed.offset, end).map(publicCandidate);

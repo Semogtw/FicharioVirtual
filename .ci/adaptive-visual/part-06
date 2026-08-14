@@ -1,0 +1,33 @@
++			desktopOcr.indexOf('enqueueVisualEmbeddingAfterOcr({')
+ 		);
+ 	});
+ 
+@@ -42,6 +55,7 @@ describe('adaptive visual semantic implementation contract', () => {
+ 		expect(indexer).toContain('inputs: prepared.map');
+ 		expect(indexer).not.toContain('ocr_raw_text');
+ 		expect(indexer).not.toContain('corrected_text');
++		expect(dispatch).toContain("'*/5 * * * *'");
+ 	});
+ 
+ 	it('prepares new OCR media as JPEG while preserving originals elsewhere', () => {
+@@ -57,12 +71,17 @@ describe('adaptive visual semantic implementation contract', () => {
+ 		expect(search).toContain("visualMode === 'active' ? visual : []");
+ 		expect(search).toContain("matchMode: 'visual'");
+ 		expect(search).toContain("excerpt: ''");
++		expect(search).toContain("mode: visualMode === 'active' ? 'multimodal' : 'hybrid'");
+ 	});
+ 
+ 	it('keeps quota/provider failures degradable and visual jobs idempotent', () => {
+-		expect(migration).toContain('unique (page_id, model)');
+-		expect(migration).toContain("status in ('pending', 'processing', 'retryable', 'blocked_quota', 'failed', 'complete')");
+-		expect(indexer).toContain("error.status === 429");
++		expect(migration).toContain('unique (user_id, page_id, model)');
++		expect(migration).toContain(
++			"status in ('queued', 'processing', 'retryable', 'blocked_quota', 'ready', 'failed')"
++		);
++		expect(migration).toContain("j.status = 'processing' and j.claimed_at < now() - interval '5 minutes'");
++		expect(indexer).toContain('target_source_hash: job.sourceHash');
++		expect(indexer).toContain('error.status === 429');
+ 		expect(indexer).toContain("status: 'blocked_quota'");
+ 	});
+ });

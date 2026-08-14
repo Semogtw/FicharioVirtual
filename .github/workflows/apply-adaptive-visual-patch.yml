@@ -1,0 +1,42 @@
+name: Apply adaptive visual end-to-end patch
+
+on:
+  push:
+    branches: [feat/adaptive-visual-embeddings]
+    paths:
+      - .github/workflows/apply-adaptive-visual-patch.yml
+      - .ci/adaptive-visual/**
+
+permissions:
+  contents: write
+
+concurrency:
+  group: adaptive-visual-patch
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: feat/adaptive-visual-embeddings
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Apply verified source patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .ci/adaptive-visual/part-* > /tmp/adaptive-visual.patch
+          git apply --check /tmp/adaptive-visual.patch
+          git apply /tmp/adaptive-visual.patch
+          rm -rf .ci/adaptive-visual
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "feat(search): wire adaptive visual embeddings end to end"
+          git push origin HEAD:feat/adaptive-visual-embeddings
