@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { SEMANTIC_VISUAL_SEARCH_MIN_SIMILARITY } from '../../../supabase/functions/_shared/semantic-config';
+import {
+	SEMANTIC_VISUAL_SEARCH_MIN_SIMILARITY
+} from '../../../supabase/functions/_shared/semantic-config';
 
 // Real staging evidence from the 2026-08-14 15-document corpus. The visual
 // channel is intentionally calibrated from cross-modal scores instead of
