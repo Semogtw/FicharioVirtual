@@ -22,6 +22,7 @@ function result(input: {
 		rank: input.rank,
 		lexicalRank: input.rank,
 		semanticSimilarity: 0,
+		visualSimilarity: 0,
 		matchMode: 'lexical'
 	};
 }

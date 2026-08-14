@@ -15,4 +15,11 @@ describe('search result interaction states', () => {
 		expect(mediaIndex).toBeGreaterThanOrEqual(0);
 		expect(hoverIndex).toBeGreaterThan(mediaIndex);
 	});
+
+	it('opens pure visual matches without inventing a textual highlight', () => {
+		expect(source).toContain("result.matchMode === 'visual'");
+		expect(source).toContain('? `/documents/${result.documentId}/?page=${result.pageNumber}`');
+		expect(source).toContain("result.matchMode === 'visual' ? '' : query");
+		expect(source).toContain("return 'Pela página'");
+	});
 });

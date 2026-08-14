@@ -1,0 +1,208 @@
+{
+	"version": "visual-v1-rank-fixtures-1",
+	"notes": "Deterministic offline rank fixtures. They validate safety/selection contracts only; provider-quality recall requires real staging evidence before active rollout.",
+	"routing": [
+		{
+			"id": "book-clean",
+			"contentClass": "book_clean",
+			"hasNativeText": false,
+			"warningCount": 0,
+			"needsReview": false,
+			"effectiveTextLength": 1200,
+			"wordBoxCount": 180,
+			"eligible": false
+		},
+		{
+			"id": "native-text",
+			"contentClass": "unknown",
+			"hasNativeText": true,
+			"warningCount": 0,
+			"needsReview": false,
+			"effectiveTextLength": 900,
+			"wordBoxCount": 0,
+			"eligible": false
+		},
+		{
+			"id": "scan-degraded",
+			"contentClass": "scan_degraded",
+			"hasNativeText": false,
+			"warningCount": 1,
+			"needsReview": true,
+			"effectiveTextLength": 320,
+			"wordBoxCount": 38,
+			"eligible": true
+		},
+		{
+			"id": "handwriting",
+			"contentClass": "handwriting",
+			"hasNativeText": false,
+			"warningCount": 0,
+			"needsReview": false,
+			"effectiveTextLength": 280,
+			"wordBoxCount": 31,
+			"eligible": true
+		},
+		{
+			"id": "mixed",
+			"contentClass": "mixed",
+			"hasNativeText": false,
+			"warningCount": 0,
+			"needsReview": false,
+			"effectiveTextLength": 510,
+			"wordBoxCount": 44,
+			"eligible": true
+		},
+		{
+			"id": "table-layout",
+			"contentClass": "table_layout",
+			"hasNativeText": false,
+			"warningCount": 0,
+			"needsReview": false,
+			"effectiveTextLength": 440,
+			"wordBoxCount": 70,
+			"eligible": true
+		},
+		{
+			"id": "math",
+			"contentClass": "math",
+			"hasNativeText": false,
+			"warningCount": 0,
+			"needsReview": false,
+			"effectiveTextLength": 180,
+			"wordBoxCount": 19,
+			"eligible": true
+		},
+		{
+			"id": "sparse-empty",
+			"contentClass": "sparse",
+			"hasNativeText": false,
+			"warningCount": 0,
+			"needsReview": false,
+			"effectiveTextLength": 2,
+			"wordBoxCount": 1,
+			"eligible": false
+		},
+		{
+			"id": "sparse-useful",
+			"contentClass": "sparse",
+			"hasNativeText": false,
+			"warningCount": 0,
+			"needsReview": false,
+			"effectiveTextLength": 28,
+			"wordBoxCount": 2,
+			"eligible": true
+		},
+		{
+			"id": "ocr-review",
+			"contentClass": "unknown",
+			"hasNativeText": false,
+			"warningCount": 1,
+			"needsReview": true,
+			"effectiveTextLength": 160,
+			"wordBoxCount": 16,
+			"eligible": true
+		}
+	],
+	"ranking": [
+		{
+			"id": "lexical-strong-hit",
+			"queryKind": "lexical",
+			"relevant": "target",
+			"baselineTop": "target",
+			"activeTop": "target",
+			"candidates": [
+				{
+					"id": "target",
+					"lexicalRank": 1,
+					"semanticRank": null,
+					"semanticSimilarity": null,
+					"visualRank": null,
+					"visualSimilarity": null
+				},
+				{
+					"id": "visual-decoy",
+					"lexicalRank": null,
+					"semanticRank": null,
+					"semanticSimilarity": null,
+					"visualRank": 1,
+					"visualSimilarity": 0.93
+				}
+			]
+		},
+		{
+			"id": "handwriting-concept-recovery",
+			"queryKind": "conceptual",
+			"relevant": "handwritten-target",
+			"baselineTop": "text-decoy",
+			"activeTop": "handwritten-target",
+			"candidates": [
+				{
+					"id": "handwritten-target",
+					"lexicalRank": null,
+					"semanticRank": 4,
+					"semanticSimilarity": 0.65,
+					"visualRank": 1,
+					"visualSimilarity": 0.9
+				},
+				{
+					"id": "text-decoy",
+					"lexicalRank": null,
+					"semanticRank": 1,
+					"semanticSimilarity": 0.72,
+					"visualRank": null,
+					"visualSimilarity": null
+				}
+			]
+		},
+		{
+			"id": "table-visual-recovery",
+			"queryKind": "visual",
+			"relevant": "table-target",
+			"baselineTop": "text-decoy",
+			"activeTop": "table-target",
+			"candidates": [
+				{
+					"id": "table-target",
+					"lexicalRank": null,
+					"semanticRank": 5,
+					"semanticSimilarity": 0.61,
+					"visualRank": 1,
+					"visualSimilarity": 0.92
+				},
+				{
+					"id": "text-decoy",
+					"lexicalRank": null,
+					"semanticRank": 1,
+					"semanticSimilarity": 0.69,
+					"visualRank": null,
+					"visualSimilarity": null
+				}
+			]
+		},
+		{
+			"id": "negative-visual-noise",
+			"queryKind": "negative",
+			"relevant": "text-target",
+			"baselineTop": "text-target",
+			"activeTop": "text-target",
+			"candidates": [
+				{
+					"id": "text-target",
+					"lexicalRank": 1,
+					"semanticRank": 2,
+					"semanticSimilarity": 0.8,
+					"visualRank": null,
+					"visualSimilarity": null
+				},
+				{
+					"id": "visual-noise",
+					"lexicalRank": null,
+					"semanticRank": null,
+					"semanticSimilarity": null,
+					"visualRank": 1,
+					"visualSimilarity": 0.99
+				}
+			]
+		}
+	]
+}

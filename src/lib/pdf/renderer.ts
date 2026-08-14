@@ -31,10 +31,10 @@ function toBlob(canvas: HTMLCanvasElement, type: string, quality: number) {
 }
 
 async function encode(canvas: HTMLCanvasElement, quality: number) {
-	const webp = await toBlob(canvas, 'image/webp', quality);
-	if (webp && webp.size > 0 && webp.type === 'image/webp') return webp;
 	const jpeg = await toBlob(canvas, 'image/jpeg', quality);
-	if (!jpeg || jpeg.size < 1) throw new PdfRenderError('render_failed');
+	if (!jpeg || jpeg.size < 1 || jpeg.type !== 'image/jpeg') {
+		throw new PdfRenderError('render_failed');
+	}
 	return jpeg;
 }
 

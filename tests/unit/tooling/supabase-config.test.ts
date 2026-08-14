@@ -38,6 +38,7 @@ describe('Supabase local configuration', () => {
 			[
 				'ocr-queue-worker',
 				'semantic-index-worker',
+				'semantic-visual-worker',
 				'drive-oauth-callback',
 				'desktop-ocr-pair',
 				'desktop-ocr-worker'

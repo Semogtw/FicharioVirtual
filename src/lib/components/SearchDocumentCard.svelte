@@ -25,13 +25,25 @@
 	let previewPages = $derived(
 		previewPage ? (Object.freeze([previewPage]) as readonly PageDetail[]) : EMPTY_PREVIEW_PAGES
 	);
+	let previewQuery = $derived(result.matchMode === 'visual' ? '' : query);
 	let occurrenceCount = $derived(detail ? countDocumentQueryOccurrences(detail.pages, query) : 0);
 	let href = $derived(
-		`/documents/${result.documentId}/?page=${result.pageNumber}&highlight=${encodeURIComponent(query.trim())}`
+		result.matchMode === 'visual'
+			? `/documents/${result.documentId}/?page=${result.pageNumber}`
+			: `/documents/${result.documentId}/?page=${result.pageNumber}&highlight=${encodeURIComponent(query.trim())}`
 	);
 	let occurrenceLabel = $derived(
 		occurrenceCount === 1 ? '1 ocorrência' : `${occurrenceCount} ocorrências`
 	);
+	let matchLabel = $derived.by(() => {
+		if (result.matchMode === 'visual') return 'Pela página';
+		if (result.matchMode === 'semantic') return 'Por sentido';
+		if (result.matchMode === 'hybrid') return 'Texto + sentido';
+		if (result.matchMode === 'lexical_visual') return 'Texto + página';
+		if (result.matchMode === 'semantic_visual') return 'Sentido + página';
+		if (result.matchMode === 'hybrid_visual') return 'Texto + sentido + página';
+		return null;
+	});
 
 	async function loadPreview() {
 		if (detail || failed) return;
@@ -75,7 +87,7 @@
 	>
 		<div class="preview">
 			{#if detail && previewPage}
-				<DocumentMediaViewer {detail} pages={previewPages} {query} />
+				<DocumentMediaViewer {detail} pages={previewPages} query={previewQuery} />
 			{:else if failed}
 				<div class="preview-state error" role="status">Não foi possível carregar a prévia.</div>
 			{:else}
@@ -85,8 +97,8 @@
 			<div class="badges" role="group" aria-label="Detalhes da correspondência">
 				{#if detail && occurrenceCount > 0}
 					<span class="occurrences">{occurrenceLabel}</span>
-				{:else if result.matchMode === 'semantic'}
-					<span>Por sentido</span>
+				{:else if matchLabel}
+					<span>{matchLabel}</span>
 				{:else if detail}
 					<span>Correspondência aproximada</span>
 				{/if}

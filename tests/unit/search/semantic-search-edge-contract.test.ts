@@ -15,7 +15,8 @@ describe('global semantic search edge contract', () => {
 		expect(queryCache).toContain("operation: 'query_embedding'");
 		expect(edge).toContain("supabase.rpc('search_pages_semantic'");
 		expect(edge).toContain("supabase.rpc('search_pages'");
-		expect(edge).toContain('mergeCandidates(lexical, semantic)');
+		expect(edge).toContain("supabase.rpc('search_pages_visual_semantic'");
+		expect(edge).toContain("visualMode === 'active' ? visual : []");
 		expect(edge).toContain("matchMode: 'semantic'");
 	});
 

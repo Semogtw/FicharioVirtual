@@ -129,7 +129,8 @@
 
 	function semanticStatus() {
 		if (!analysis) return null;
-		if (analysis.mode === 'hybrid') return 'Busca por palavras e significado ativa.';
+		if (analysis.mode === 'hybrid' || analysis.mode === 'multimodal')
+			return 'Busca por palavras e significado ativa.';
 		if (analysis.reason === 'query_too_short') return 'Esta busca usa correspondência textual.';
 		if (
 			analysis.reason === 'semantic_quota_or_rate_limit' ||
@@ -226,7 +227,11 @@
 	{/if}
 
 	{#if semanticStatus()}
-		<p class:semantic-active={analysis?.mode === 'hybrid'} class="semantic-status" role="status">
+		<p
+			class:semantic-active={analysis?.mode === 'hybrid' || analysis?.mode === 'multimodal'}
+			class="semantic-status"
+			role="status"
+		>
 			{semanticStatus()}
 		</p>
 	{/if}

@@ -28,7 +28,8 @@
 		"test:staging:ocr": "node tools/checks/check-ocr-staging.mjs",
 		"test:staging:desktop-ocr-pairing": "node tools/checks/check-desktop-ocr-pairing-staging.mjs",
 		"verify": "pnpm lint && pnpm check && pnpm test && pnpm build",
-		"verify:full": "pnpm verify && pnpm test:e2e && pnpm test:source:offline && pnpm test:functions:check && pnpm test:db:local"
+		"verify:full": "pnpm verify && pnpm test:e2e && pnpm test:source:offline && pnpm test:functions:check && pnpm test:db:local",
+		"benchmark:visual-semantic": "vitest run tests/unit/search/visual-semantic-benchmark.test.ts tests/unit/search/visual-semantic-ranking.test.ts"
 	},
 	"dependencies": {
 		"@firecrawl/pdf-inspector-wasm": "0.1.1",

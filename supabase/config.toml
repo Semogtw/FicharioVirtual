@@ -62,6 +62,11 @@ verify_jwt = true
 [functions.semantic-index-worker]
 verify_jwt = false
 
+# Optional low-priority visual semantic enrichment. Authentication is an internal
+# high-entropy worker key; user-visible search remains functional if it is disabled.
+[functions.semantic-visual-worker]
+verify_jwt = false
+
 [functions.delete-document]
 verify_jwt = true
 

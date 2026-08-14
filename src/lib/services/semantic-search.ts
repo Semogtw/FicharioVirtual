@@ -18,7 +18,16 @@ const resultSchema = z
 		rank: z.number().finite().nonnegative(),
 		lexicalRank: z.number().finite().nonnegative(),
 		semanticSimilarity: z.number().finite().min(0).max(1),
-		matchMode: z.enum(['lexical', 'semantic', 'hybrid'])
+		visualSimilarity: z.number().finite().min(0).max(1).optional().default(0),
+		matchMode: z.enum([
+			'lexical',
+			'semantic',
+			'visual',
+			'hybrid',
+			'lexical_visual',
+			'semantic_visual',
+			'hybrid_visual'
+		])
 	})
 	.strict()
 	.superRefine((row, context) => {
@@ -50,7 +59,7 @@ const indexSchema = z
 
 const responseSchema = z
 	.object({
-		mode: z.enum(['hybrid', 'lexical']),
+		mode: z.enum(['multimodal', 'hybrid', 'lexical']),
 		reason: z.string().regex(REASON).nullable(),
 		embeddingModel: z.string().regex(MODEL).nullable(),
 		index: indexSchema.nullable(),
@@ -72,7 +81,7 @@ export type SemanticSearchIndex = Readonly<{
 	complete: boolean;
 }>;
 export type SemanticSearchAnalysis = Readonly<{
-	mode: 'hybrid' | 'lexical';
+	mode: 'multimodal' | 'hybrid' | 'lexical';
 	reason: string | null;
 	embeddingModel: string | null;
 	index: SemanticSearchIndex | null;
@@ -111,6 +120,7 @@ function lexicalResult(result: SearchResult): SemanticSearchResult {
 		...result,
 		lexicalRank: result.rank,
 		semanticSimilarity: 0,
+		visualSimilarity: 0,
 		matchMode: 'lexical' as const
 	});
 }
@@ -138,7 +148,10 @@ function parseResponse(value: unknown): SemanticSearchResponse {
 	} catch {
 		throw new SemanticSearchServiceError('O serviço de busca devolveu uma resposta inválida.');
 	}
-	if (parsed.mode === 'hybrid' && parsed.embeddingModel === null) {
+	if (
+		(parsed.mode === 'hybrid' || parsed.mode === 'multimodal') &&
+		parsed.embeddingModel === null
+	) {
 		throw new SemanticSearchServiceError('O serviço de busca devolveu um modo semântico inválido.');
 	}
 	return Object.freeze({
