@@ -21,6 +21,9 @@ export const SEMANTIC_RRF_K = 28;
 export const SEMANTIC_RRF_LEXICAL_WEIGHT = 0.48;
 export const SEMANTIC_RRF_VECTOR_WEIGHT = 0.52;
 export const SEMANTIC_RRF_BOTH_BONUS = 0.012;
-// Visual enrichment starts deliberately weaker than text and is promoted only after benchmark evidence.
-export const SEMANTIC_RRF_VISUAL_WEIGHT = 0.12;
-export const SEMANTIC_RRF_VISUAL_BONUS = 0.002;
+// Visual rank stays just below a pure lexical rank, while similarity above the
+// calibrated cross-modal floor supplies bounded confidence. This keeps exact
+// text hits stable but lets strong visual-only evidence beat weak OCR semantics.
+export const SEMANTIC_RRF_VISUAL_WEIGHT = 0.475;
+export const SEMANTIC_RRF_VISUAL_BONUS = 0.0002;
+export const SEMANTIC_RRF_VISUAL_CONFIDENCE_WEIGHT = 0.045;
