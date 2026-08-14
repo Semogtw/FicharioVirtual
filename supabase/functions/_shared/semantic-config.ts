@@ -26,4 +26,6 @@ export const SEMANTIC_RRF_BOTH_BONUS = 0.012;
 // text hits stable but lets strong visual-only evidence beat weak OCR semantics.
 export const SEMANTIC_RRF_VISUAL_WEIGHT = 0.475;
 export const SEMANTIC_RRF_VISUAL_BONUS = 0.0002;
-export const SEMANTIC_RRF_VISUAL_CONFIDENCE_WEIGHT = 0.045;
+export const SEMANTIC_RRF_VISUAL_CONFIDENCE_WEIGHT = 0.04;
+export const SEMANTIC_RRF_VISUAL_CONFIDENCE_MARGIN_CAP = 0.1;
+export const SEMANTIC_RRF_EXACT_LEXICAL_GUARD_BONUS = 0.0045;
