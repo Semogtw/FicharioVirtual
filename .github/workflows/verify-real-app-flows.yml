@@ -179,6 +179,24 @@ jobs:
               if exhaustive.count(old_draft) != 1:
                   raise SystemExit(f'unexpected exhaustive draft contract for: {old_draft}')
               exhaustive = exhaustive.replace(old_draft, new_draft)
+
+          old_fuzzy = """\tconst fuzzyResult = page
+          \t\t.locator('section.results li')
+          \t\t.filter({ hasText: organizedTitle })
+          \t\t.first();
+          \tawait fuzzyResult.waitFor({ state: 'visible', timeout: 45_000 });
+          \tawait fuzzyResult.locator('a').click();
+          """
+          new_fuzzy = """\tconst fuzzyResult = page
+          \t\t.locator(`section.results a[href^=\"/documents/${imported.id}/\"]`)
+          \t\t.first();
+          \tawait fuzzyResult.waitFor({ state: 'visible', timeout: 45_000 });
+          \tawait fuzzyResult.locator('img').first().waitFor({ state: 'visible', timeout: 45_000 });
+          \tawait fuzzyResult.click();
+          """
+          if exhaustive.count(old_fuzzy) != 1:
+              raise SystemExit('unexpected exhaustive fuzzy-search result contract')
+          exhaustive = exhaustive.replace(old_fuzzy, new_fuzzy)
           exhaustive_path.write_text(exhaustive, encoding='utf-8')
           PY
 
