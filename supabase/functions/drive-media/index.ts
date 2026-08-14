@@ -163,9 +163,8 @@ Deno.serve(async (request) => {
 
 	let accessToken: string;
 	try {
-		accessToken = (
-			await refreshGoogleAccessToken({ clientId, clientSecret, refreshToken: data })
-		).accessToken;
+		accessToken = (await refreshGoogleAccessToken({ clientId, clientSecret, refreshToken: data }))
+			.accessToken;
 	} catch {
 		return respond(503, { code: 'drive_token_refresh_failed' });
 	}
@@ -183,7 +182,8 @@ Deno.serve(async (request) => {
 		} catch {
 			return respond(503, { code: 'drive_media_unavailable' });
 		}
-		if (!response.ok) return respond(response.status === 404 ? 404 : 502, { code: 'drive_media_unavailable' });
+		if (!response.ok)
+			return respond(response.status === 404 ? 404 : 502, { code: 'drive_media_unavailable' });
 		let value: unknown;
 		try {
 			value = await response.json();
@@ -238,6 +238,7 @@ Deno.serve(async (request) => {
 	} catch {
 		return respond(502, { code: 'drive_media_unavailable' });
 	}
-	if (bytes.byteLength !== expectedLength) return respond(502, { code: 'drive_media_invalid_range' });
+	if (bytes.byteLength !== expectedLength)
+		return respond(502, { code: 'drive_media_invalid_range' });
 	return media(bytes, appOrigin);
 });
