@@ -1,0 +1,280 @@
+name: Verify adaptive visual staging
+
+on:
+  push:
+    branches:
+      - feat/adaptive-visual-embeddings
+    paths:
+      - .github/workflows/verify-adaptive-visual-staging.yml
+      - tools/checks/check-visual-semantic-staging.mjs
+      - supabase/functions/_shared/background-visual-indexer.ts
+      - supabase/functions/_shared/gemini-embedding-client.ts
+      - supabase/functions/_shared/visual-embedding-enqueue.ts
+      - supabase/functions/semantic-search/index.ts
+      - supabase/functions/semantic-visual-worker/index.ts
+      - supabase/migrations/20260814113500_adaptive_visual_embeddings.sql
+      - supabase/migrations/20260814114500_visual_embedding_dispatch.sql
+
+permissions:
+  contents: read
+
+concurrency:
+  group: adaptive-visual-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: staging-deploy
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.STAGING_SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.STAGING_SUPABASE_DB_PASSWORD }}
+      STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+    steps:
+      - name: Checkout exact feature revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf # v2
+        with:
+          version: 2.111.0
+
+      - name: Validate protected staging configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          test -n "$SUPABASE_DB_PASSWORD"
+          test -n "$STAGING_SUPABASE_PROJECT_REF"
+
+      - name: Link staging project
+        run: supabase link --project-ref "$STAGING_SUPABASE_PROJECT_REF"
+
+      - name: Force safe shadow mode before deployment
+        run: supabase secrets set --project-ref "$STAGING_SUPABASE_PROJECT_REF" "SEMANTIC_VISUAL_MODE=shadow"
+
+      - name: Preview pending migrations
+        run: supabase db push --linked --dry-run --include-all
+
+      - name: Apply pending migrations
+        run: supabase db push --linked --include-all
+
+      - name: Deploy feature Edge Functions to staging
+        run: supabase functions deploy --project-ref "$STAGING_SUPABASE_PROJECT_REF"
+
+  shadow:
+    needs: deploy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    environment: staging
+    env:
+      VISUAL_BENCHMARK_PHASE: setup-shadow
+      VISUAL_BENCHMARK_STATE_PATH: /tmp/visual-state.json
+      VISUAL_SHADOW_REPORT_PATH: /tmp/visual-shadow.json
+      STAGING_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+      STAGING_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
+      STAGING_AUTHORIZED_EMAIL: ${{ secrets.STAGING_AUTHORIZED_EMAIL }}
+      STAGING_AUTHORIZED_PASSWORD: ${{ secrets.STAGING_AUTHORIZED_PASSWORD }}
+    steps:
+      - name: Checkout exact feature revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22.16.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run real shadow corpus and PNG/JPEG smoke
+        run: node tools/checks/check-visual-semantic-staging.mjs
+
+      - name: Upload shadow state and sanitized report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: visual-shadow-${{ github.run_id }}
+          path: |
+            /tmp/visual-state.json
+            /tmp/visual-shadow.json
+          if-no-files-found: warn
+          retention-days: 7
+
+  activate:
+    needs: [deploy, shadow]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: staging-deploy
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.STAGING_SUPABASE_ACCESS_TOKEN }}
+      STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+    steps:
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf # v2
+        with:
+          version: 2.111.0
+
+      - name: Temporarily enable active visual ranking
+        run: |
+          supabase secrets set --project-ref "$STAGING_SUPABASE_PROJECT_REF" "SEMANTIC_VISUAL_MODE=active"
+          sleep 8
+
+  active:
+    needs: [shadow, activate]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: staging
+    env:
+      VISUAL_BENCHMARK_PHASE: measure-active
+      VISUAL_BENCHMARK_STATE_PATH: /tmp/visual-input/visual-state.json
+      VISUAL_ACTIVE_REPORT_PATH: /tmp/visual-active.json
+      STAGING_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+      STAGING_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
+      STAGING_AUTHORIZED_EMAIL: ${{ secrets.STAGING_AUTHORIZED_EMAIL }}
+      STAGING_AUTHORIZED_PASSWORD: ${{ secrets.STAGING_AUTHORIZED_PASSWORD }}
+    steps:
+      - name: Checkout exact feature revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Download shadow state
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: visual-shadow-${{ github.run_id }}
+          path: /tmp/visual-input
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22.16.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Measure real active multimodal ranking
+        run: node tools/checks/check-visual-semantic-staging.mjs
+
+      - name: Upload sanitized active report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: visual-active-${{ github.run_id }}
+          path: /tmp/visual-active.json
+          if-no-files-found: warn
+          retention-days: 7
+
+  restore-shadow:
+    needs: [deploy, shadow, activate, active]
+    if: always() && needs.deploy.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: staging-deploy
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.STAGING_SUPABASE_ACCESS_TOKEN }}
+      STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+    steps:
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf # v2
+        with:
+          version: 2.111.0
+
+      - name: Restore safe shadow mode
+        run: supabase secrets set --project-ref "$STAGING_SUPABASE_PROJECT_REF" "SEMANTIC_VISUAL_MODE=shadow"
+
+  compare-cleanup:
+    needs: [shadow, active, restore-shadow]
+    if: always() && needs.shadow.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: staging
+    env:
+      STAGING_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+      STAGING_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
+      STAGING_AUTHORIZED_EMAIL: ${{ secrets.STAGING_AUTHORIZED_EMAIL }}
+      STAGING_AUTHORIZED_PASSWORD: ${{ secrets.STAGING_AUTHORIZED_PASSWORD }}
+    steps:
+      - name: Checkout exact feature revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Download shadow state and report
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: visual-shadow-${{ github.run_id }}
+          path: /tmp/visual-shadow-input
+
+      - name: Download active report
+        if: needs.active.result == 'success'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: visual-active-${{ github.run_id }}
+          path: /tmp/visual-active-input
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22.16.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Compare shadow against active
+        if: needs.active.result == 'success' && needs.restore-shadow.result == 'success'
+        env:
+          VISUAL_BENCHMARK_PHASE: compare
+          VISUAL_SHADOW_REPORT_PATH: /tmp/visual-shadow-input/visual-shadow.json
+          VISUAL_ACTIVE_REPORT_PATH: /tmp/visual-active-input/visual-active.json
+          VISUAL_COMPARISON_REPORT_PATH: /tmp/visual-comparison.json
+        run: node tools/checks/check-visual-semantic-staging.mjs
+
+      - name: Cleanup staging benchmark documents
+        if: always()
+        env:
+          VISUAL_BENCHMARK_PHASE: cleanup
+          VISUAL_BENCHMARK_STATE_PATH: /tmp/visual-shadow-input/visual-state.json
+          VISUAL_CLEANUP_REPORT_PATH: /tmp/visual-cleanup.json
+        run: node tools/checks/check-visual-semantic-staging.mjs
+
+      - name: Upload comparison and cleanup reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: visual-final-${{ github.run_id }}
+          path: |
+            /tmp/visual-comparison.json
+            /tmp/visual-cleanup.json
+          if-no-files-found: warn
+          retention-days: 7
