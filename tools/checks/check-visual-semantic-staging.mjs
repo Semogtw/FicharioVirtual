@@ -45,6 +45,17 @@ async function login(db) {
 	return result.data.user;
 }
 
+function functionErrorStatus(error) {
+	const context = error && typeof error === 'object' ? error.context : null;
+	return context instanceof Response ? context.status : null;
+}
+
+async function recoverAuthentication(db, error) {
+	if (functionErrorStatus(error) !== 401) return false;
+	await login(db);
+	return true;
+}
+
 function crc32(bytes) {
 	let crc = 0xffffffff;
 	for (const byte of bytes) {
@@ -535,11 +546,14 @@ async function rawVisualSearch(db, query, notebookId, labels) {
 async function searches(db, state, expectedMode) {
 	const labels = new Map(state.probes.map((p) => [p.documentId, p.id]));
 	const rows = [];
+	// Staging checks share one account. Renew immediately before the long search
+	// phase so another smoke cannot leave this runner with a revoked session.
+	await login(db);
 	for (const spec of QUERIES) {
 		const start = performance.now();
 		let result = null;
 		let retryCount = 0;
-		for (const delay of [0, 5_000, 15_000]) {
+		for (const delay of [0, 2_000, 5_000, 15_000]) {
 			if (delay) {
 				retryCount += 1;
 				await sleep(delay);
@@ -548,6 +562,7 @@ async function searches(db, state, expectedMode) {
 				body: { query: spec.query, notebookId: state.notebookId, limit: 15, offset: 0 }
 			});
 			if (!result.error && Array.isArray(result.data?.results)) break;
+			if (result.error) await recoverAuthentication(db, result.error);
 		}
 		if (!result || result.error || !Array.isArray(result.data?.results))
 			throw new Error(
@@ -756,20 +771,54 @@ async function compare(shadowPath, activePath, reportPath) {
 
 async function cleanup(db, statePath, reportPath) {
 	const state = JSON.parse(await readFile(statePath, 'utf8'));
+	const probes = [...(state.probes ?? []), ...(state.jpegSmoke ? [state.jpegSmoke] : [])];
+	const failures = [];
 	let count = 0;
-	for (const probe of [...(state.probes ?? []), ...(state.jpegSmoke ? [state.jpegSmoke] : [])]) {
-		const result = await db.functions.invoke('delete-document', {
-			body: { documentId: probe.documentId }
-		});
-		if (result.error) throw new Error(`Cleanup ${probe.id} failed: ${result.error.message}`);
-		count += 1;
+
+	await login(db);
+	for (const probe of probes) {
+		let deleted = false;
+		let lastError = null;
+		for (const delay of [0, 500, 1_500, 4_000]) {
+			if (delay) await sleep(delay);
+			const result = await db.functions.invoke('delete-document', {
+				body: { documentId: probe.documentId }
+			});
+			if (!result.error) {
+				deleted = true;
+				count += 1;
+				break;
+			}
+			lastError = result.error;
+			await recoverAuthentication(db, result.error);
+		}
+		if (!deleted) {
+			failures.push({
+				id: probe.id,
+				documentId: probe.documentId,
+				status: functionErrorStatus(lastError),
+				message: lastError?.message ?? 'unknown cleanup error'
+			});
+		}
 	}
-	const notebook = await db.from('notebooks').delete().eq('id', state.notebookId);
-	if (notebook.error) throw new Error(`Notebook cleanup failed: ${notebook.error.message}`);
-	await writeFile(
-		reportPath,
-		JSON.stringify({ status: 'pass', documentsDeleted: count, notebookDeleted: true }, null, 2)
-	);
+
+	let notebookDeleted = false;
+	if (failures.length === 0 && state.notebookId) {
+		const notebook = await db.from('notebooks').delete().eq('id', state.notebookId);
+		if (notebook.error) failures.push({ id: 'notebook', message: notebook.error.message });
+		else notebookDeleted = true;
+	}
+
+	const report = {
+		status: failures.length === 0 ? 'pass' : 'partial',
+		documentsDeleted: count,
+		documentsAttempted: probes.length,
+		notebookDeleted,
+		failures
+	};
+	await writeFile(reportPath, JSON.stringify(report, null, 2));
+	if (failures.length > 0)
+		throw new Error(`Cleanup incomplete: ${failures.map((failure) => failure.id).join(', ')}`);
 	console.log(`PASS cleanup ${count} documents`);
 }
 
@@ -794,7 +843,7 @@ async function main() {
 			await cleanup(db, env('VISUAL_BENCHMARK_STATE_PATH'), env('VISUAL_CLEANUP_REPORT_PATH'));
 		else throw new Error(`Unknown phase ${phase}`);
 	} finally {
-		if (loggedIn) await db.auth.signOut().catch(() => undefined);
+		if (loggedIn) await db.auth.signOut({ scope: 'local' }).catch(() => undefined);
 	}
 }
 main().catch((error) => {

@@ -557,7 +557,7 @@ try {
 		recordCleanupFailure('importSessions', error, 'Synthetic import-session cleanup failed');
 	}
 
-	await client.auth.signOut().catch(() => undefined);
+	await client.auth.signOut({ scope: 'local' }).catch(() => undefined);
 	await context?.close().catch(() => undefined);
 	await browser?.close().catch(() => undefined);
 	await persistReport();

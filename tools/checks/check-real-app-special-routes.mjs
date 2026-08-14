@@ -200,5 +200,5 @@ try {
 	report.finishedAt = new Date().toISOString();
 	await persistReport();
 	await browser?.close().catch(() => undefined);
-	await client.auth.signOut().catch(() => undefined);
+	await client.auth.signOut({ scope: 'local' }).catch(() => undefined);
 }
