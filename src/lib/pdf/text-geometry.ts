@@ -1,5 +1,6 @@
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import type { WordGeometry } from '$lib/ocr/word-geometry';
+import { safelyWipeBytes } from './safe-wipe';
 
 const TOKEN = /[\p{L}\p{N}]+/gu;
 const GRID = 10_000;
@@ -187,6 +188,6 @@ export async function extractPdfFileWordGeometry(
 		return Object.freeze([]);
 	} finally {
 		await Promise.resolve(loadingTask.destroy()).catch(() => undefined);
-		bytes.fill(0);
+		safelyWipeBytes(bytes);
 	}
 }
