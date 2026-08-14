@@ -128,7 +128,9 @@ jobs:
 
       - name: Format and lint
         run: |
-          pnpm exec prettier --write tools/checks/check-visual-semantic-staging.mjs
+          pnpm exec prettier --write \
+            tools/checks/check-visual-semantic-staging.mjs \
+            tools/checks/check-semantic-search-staging.mjs
           pnpm lint
           git diff --check
 
