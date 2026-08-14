@@ -1,22 +1,19 @@
-name: Fix visual Deno typing
+name: Apply visual Deno type fixes
 
 on:
   push:
-    branches: [feat/adaptive-visual-embeddings]
+    branches:
+      - feat/adaptive-visual-embeddings
     paths:
       - .github/workflows/fix-visual-deno.yml
 
 permissions:
   contents: write
 
-concurrency:
-  group: fix-visual-deno
-  cancel-in-progress: false
-
 jobs:
   fix:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
       - name: Checkout feature branch
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -25,18 +22,22 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
-      - name: Apply type-only fixes
-        shell: python
+      - name: Apply exact type fixes
+        shell: bash
         run: |
+          set -euo pipefail
+          python3 <<'PY'
           from pathlib import Path
 
           path = Path('supabase/functions/_shared/background-visual-indexer.ts')
           text = path.read_text()
-          text = text.replace(
-              "const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));",
-              "const digest = new Uint8Array(\n\t\tawait crypto.subtle.digest('SHA-256', Uint8Array.from(bytes).buffer)\n\t);",
-          )
-          old_event = """\tawait admin
+          old = "const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));"
+          new = "const digest = new Uint8Array(\n\t\tawait crypto.subtle.digest('SHA-256', Uint8Array.from(bytes).buffer)\n\t);"
+          if old not in text:
+              raise SystemExit('sha256 pattern not found')
+          text = text.replace(old, new)
+
+          old = """\tawait admin
 \t\t.rpc('record_semantic_visual_event_as_user', {
 \t\t\ttarget_user_id: job.userId,
 \t\t\tevent_operation: 'index',
@@ -50,7 +51,7 @@ jobs:
 \t\t\tevent_routing_version: job.routingVersion
 \t\t})
 \t\t.catch(() => undefined);"""
-          new_event = """\ttry {
+          new = """\ttry {
 \t\tawait admin.rpc('record_semantic_visual_event_as_user', {
 \t\t\ttarget_user_id: job.userId,
 \t\t\tevent_operation: 'index',
@@ -66,17 +67,18 @@ jobs:
 \t} catch {
 \t\t// Telemetry is best effort and must not fail visual indexing.
 \t}"""
-          if old_event not in text:
-              raise SystemExit('recordEvent pattern not found')
-          text = text.replace(old_event, new_event)
-          old_cleanup = """\tawait admin
+          if old not in text:
+              raise SystemExit('telemetry pattern not found')
+          text = text.replace(old, new)
+
+          old = """\tawait admin
 \t\t.rpc('clear_page_visual_embedding_temporary_media', {
 \t\t\ttarget_user_id: completion.userId,
 \t\t\ttarget_page_id: completion.pageId,
 \t\t\texpected_media_path: completion.mediaPath
 \t\t})
 \t\t.catch(() => undefined);"""
-          new_cleanup = """\ttry {
+          new = """\ttry {
 \t\tawait admin.rpc('clear_page_visual_embedding_temporary_media', {
 \t\t\ttarget_user_id: completion.userId,
 \t\t\ttarget_page_id: completion.pageId,
@@ -85,9 +87,9 @@ jobs:
 \t} catch {
 \t\t// Cleanup metadata is best effort after object deletion.
 \t}"""
-          if old_cleanup not in text:
+          if old not in text:
               raise SystemExit('cleanup pattern not found')
-          path.write_text(text.replace(old_cleanup, new_cleanup))
+          path.write_text(text.replace(old, new))
 
           path = Path('supabase/functions/semantic-search/index.ts')
           text = path.read_text()
@@ -112,35 +114,7 @@ jobs:
           if old not in text:
               raise SystemExit('visual request pattern not found')
           path.write_text(text.replace(old, new))
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-          run_install: false
-
-      - name: Set up Node
-        uses: actions/setup-node@v6
-        with:
-          node-version: 22.12.0
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Set up Deno
-        uses: denoland/setup-deno@e95548e56dfa95d4e1a28d6f422fafe75c4c26fb # v2
-        with:
-          deno-version: v2.x
-
-      - name: Format and type check fixes
-        shell: bash
-        run: |
-          set -euo pipefail
-          pnpm exec prettier --write supabase/functions/_shared/background-visual-indexer.ts supabase/functions/semantic-search/index.ts
-          deno check --no-config supabase/functions/_shared/background-visual-indexer.ts
-          deno check --no-config supabase/functions/semantic-search/index.ts
-          deno check --no-config supabase/functions/semantic-visual-worker/index.ts
+          PY
           git diff --check
 
       - name: Commit fixes and remove workflow
