@@ -18,7 +18,7 @@ const resultSchema = z
 		rank: z.number().finite().nonnegative(),
 		lexicalRank: z.number().finite().nonnegative(),
 		semanticSimilarity: z.number().finite().min(0).max(1),
-		visualSimilarity: z.number().finite().min(0).max(1),
+		visualSimilarity: z.number().finite().min(0).max(1).optional().default(0),
 		matchMode: z.enum([
 			'lexical',
 			'semantic',
