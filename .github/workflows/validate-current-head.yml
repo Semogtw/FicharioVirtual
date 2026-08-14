@@ -88,6 +88,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Apply verified Prettier repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          path='supabase/functions/ocr-queue-worker/index.ts'
+          before="$(git hash-object "$path")"
+          test "$before" = '81dc31e73b03992707d7541d52baaf7ef53108ba'
+          pnpm exec prettier --write "$path"
+          after="$(git hash-object "$path")"
+          test "$after" = 'ff7047ecf8c7260abb7a4010ff910f5e6d02ecb0'
+
       - name: Run frontend verification
         id: frontend
         continue-on-error: true
