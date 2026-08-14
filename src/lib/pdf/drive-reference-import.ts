@@ -1,5 +1,6 @@
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { DriveMediaClientLike } from '$lib/drive/browser-download';
 import type { DriveTokenClientLike } from '$lib/drive/browser-upload';
 import { processOcrBatch as runOcrBatch, type OcrBatchRunResult } from '$lib/services/ocr';
 import { getSupabaseClient } from '$lib/services/supabase';
@@ -32,7 +33,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const DRIVE_ID = /^[A-Za-z0-9_-]{10,256}$/;
 const MAX_DERIVED_PAGE_BYTES = 12 * 1024 * 1024;
 
-type ReferenceImportClient = SupabaseClient<Database> & DriveTokenClientLike;
+type ReferenceImportClient = SupabaseClient<Database> & DriveTokenClientLike & DriveMediaClientLike;
 
 export type DrivePdfReferenceImportProgress = Readonly<{
 	phase:
@@ -59,7 +60,7 @@ export interface DrivePdfReferenceImportDependencies {
 		sourceSizeBytes: number;
 	}): Promise<Readonly<{ driveVersion: string; sourceSizeBytes: number }>>;
 	openDocument(input: {
-		client: DriveTokenClientLike;
+		client: DriveMediaClientLike;
 		fileId: string;
 		totalBytes: number;
 	}): Promise<DrivePdfRangeDocument>;
