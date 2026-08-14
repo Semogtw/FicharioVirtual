@@ -1,0 +1,116 @@
+name: Harden visual benchmark cleanup
+
+on:
+  push:
+    branches: [feat/adaptive-visual-embeddings]
+    paths:
+      - .github/workflows/harden-visual-benchmark-cleanup.yml
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: feat/adaptive-visual-embeddings
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Make cleanup unconditional when state exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          path = Path('.github/workflows/verify-adaptive-visual-staging.yml')
+          text = path.read_text()
+          old = """  compare-cleanup:
+    needs: [shadow, active, restore-shadow]
+    if: always() && needs.shadow.result == 'success'
+"""
+          new = """  compare-cleanup:
+    needs: [shadow, active, restore-shadow]
+    if: always()
+"""
+          if old not in text:
+              raise SystemExit('compare-cleanup condition not found')
+          text = text.replace(old, new)
+          old = """      - name: Download shadow state and report
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: visual-shadow-${{ github.run_id }}
+          path: /tmp/visual-shadow-input
+"""
+          new = """      - name: Download shadow state and report
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: visual-shadow-${{ github.run_id }}
+          path: /tmp/visual-shadow-input
+"""
+          if old not in text:
+              raise SystemExit('shadow download step not found')
+          text = text.replace(old, new)
+          old = """      - name: Cleanup staging benchmark documents
+        if: always()
+        env:
+          VISUAL_BENCHMARK_PHASE: cleanup
+          VISUAL_BENCHMARK_STATE_PATH: /tmp/visual-shadow-input/visual-state.json
+          VISUAL_CLEANUP_REPORT_PATH: /tmp/visual-cleanup.json
+        run: node tools/checks/check-visual-semantic-staging.mjs
+"""
+          new = """      - name: Cleanup staging benchmark documents
+        if: always()
+        env:
+          VISUAL_BENCHMARK_PHASE: cleanup
+          VISUAL_BENCHMARK_STATE_PATH: /tmp/visual-shadow-input/visual-state.json
+          VISUAL_CLEANUP_REPORT_PATH: /tmp/visual-cleanup.json
+        run: |
+          if [[ -f \"$VISUAL_BENCHMARK_STATE_PATH\" ]]; then
+            node tools/checks/check-visual-semantic-staging.mjs
+          else
+            echo 'No benchmark state exists; nothing was created to clean up.'
+          fi
+"""
+          if old not in text:
+              raise SystemExit('cleanup step not found')
+          path.write_text(text.replace(old, new))
+          PY
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22.16.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Format and lint
+        run: |
+          pnpm exec prettier --write .github/workflows/verify-adaptive-visual-staging.yml
+          pnpm lint
+          git diff --check
+
+      - name: Commit cleanup hardening
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/harden-visual-benchmark-cleanup.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'ci(search): guarantee visual benchmark cleanup'
+          git push origin HEAD:feat/adaptive-visual-embeddings
