@@ -84,7 +84,9 @@ function validateFiles(files: readonly File[]) {
 	}
 }
 
-async function appendPreparedImage(input: AppendPreparedImageInput): Promise<ImageImportIdentifiers> {
+async function appendPreparedImage(
+	input: AppendPreparedImageInput
+): Promise<ImageImportIdentifiers> {
 	if (input.signal?.aborted) throw abortError();
 	const documentId = requireUuid(input.documentId, 'document identifier');
 	if (!Number.isInteger(input.pageNumber) || input.pageNumber < 2 || input.pageNumber > 10_000) {
@@ -97,7 +99,8 @@ async function appendPreparedImage(input: AppendPreparedImageInput): Promise<Ima
 
 	const client = getSupabaseClient();
 	const { data: sessionData, error: sessionError } = await client.auth.getSession();
-	if (sessionError || sessionData.session === null) throw new Error('Entre novamente antes de enviar arquivos.');
+	if (sessionError || sessionData.session === null)
+		throw new Error('Entre novamente antes de enviar arquivos.');
 	const userId = requireUuid(sessionData.session.user.id, 'user identifier');
 	const [preparedSha256, sourceSha256, parentFolderId] = await Promise.all([
 		calculateSha256(input.prepared.image),
@@ -113,7 +116,9 @@ async function appendPreparedImage(input: AppendPreparedImageInput): Promise<Ima
 		parentFolderId
 	});
 	if (driveFile.parents.length !== 1 || driveFile.parents[0] !== parentFolderId) {
-		await deleteBrowserDriveFile({ client: client as never, fileId: driveFile.id }).catch(() => undefined);
+		await deleteBrowserDriveFile({ client: client as never, fileId: driveFile.id }).catch(
+			() => undefined
+		);
 		throw new Error('Não foi possível confirmar o destino da página no Drive.');
 	}
 
@@ -123,11 +128,13 @@ async function appendPreparedImage(input: AppendPreparedImageInput): Promise<Ima
 	let temporaryUploaded = false;
 	try {
 		if (input.signal?.aborted) throw abortError();
-		const { error: uploadError } = await client.storage.from('documents').upload(ocrPath, input.prepared.image, {
-			contentType: input.prepared.image.type,
-			cacheControl: '86400',
-			upsert: false
-		});
+		const { error: uploadError } = await client.storage
+			.from('documents')
+			.upload(ocrPath, input.prepared.image, {
+				contentType: input.prepared.image.type,
+				cacheControl: '86400',
+				upsert: false
+			});
 		if (uploadError) throw new Error('Não foi possível preparar a página para leitura.');
 		temporaryUploaded = true;
 		if (input.signal?.aborted) throw abortError();
@@ -139,36 +146,39 @@ async function appendPreparedImage(input: AppendPreparedImageInput): Promise<Ima
 			): Promise<{ data: unknown; error: unknown }>;
 		};
 		const preprocessing = input.prepared.preprocessing;
-		const { data, error } = await (client as unknown as RpcClient).rpc('append_drive_image_page_v1', {
-			target_document_id: documentId,
-			target_page_id: pageId,
-			target_job_id: ocrJobId,
-			target_page_number: input.pageNumber,
-			target_drive_file_id: driveFile.id,
-			target_drive_parent_folder_id: parentFolderId,
-			target_drive_mime_type: driveFile.mimeType,
-			target_drive_modified_time: driveFile.modifiedTime,
-			target_drive_version: driveFile.version,
-			target_drive_md5_checksum: driveFile.md5Checksum,
-			ocr_storage_path: ocrPath,
-			prepared_sha256: preparedSha256,
-			source_sha256: sourceSha256,
-			preprocessing_profile: preprocessing.profile,
-			preprocessing_version: preprocessing.version,
-			preprocessing_auto_crop: preprocessing.autoCropApplied,
-			preprocessing_retained_permille: preprocessing.retainedAreaPermille,
-			preprocessing_deskew_mdeg: preprocessing.deskewMilliDegrees,
-			preprocessing_illumination: preprocessing.illuminationNormalized,
-			preprocessing_contrast: preprocessing.contrastEnhanced,
-			preprocessing_fallback: preprocessing.fallbackToStandard,
-			preprocessing_source_width: preprocessing.sourceWidth,
-			preprocessing_source_height: preprocessing.sourceHeight,
-			preprocessing_prepared_width: preprocessing.preparedWidth,
-			preprocessing_prepared_height: preprocessing.preparedHeight,
-			preprocessing_original_bytes: input.prepared.original.size,
-			preprocessing_prepared_bytes: input.prepared.image.size,
-			prompt_version: promptVersion
-		});
+		const { data, error } = await (client as unknown as RpcClient).rpc(
+			'append_drive_image_page_v1',
+			{
+				target_document_id: documentId,
+				target_page_id: pageId,
+				target_job_id: ocrJobId,
+				target_page_number: input.pageNumber,
+				target_drive_file_id: driveFile.id,
+				target_drive_parent_folder_id: parentFolderId,
+				target_drive_mime_type: driveFile.mimeType,
+				target_drive_modified_time: driveFile.modifiedTime,
+				target_drive_version: driveFile.version,
+				target_drive_md5_checksum: driveFile.md5Checksum,
+				ocr_storage_path: ocrPath,
+				prepared_sha256: preparedSha256,
+				source_sha256: sourceSha256,
+				preprocessing_profile: preprocessing.profile,
+				preprocessing_version: preprocessing.version,
+				preprocessing_auto_crop: preprocessing.autoCropApplied,
+				preprocessing_retained_permille: preprocessing.retainedAreaPermille,
+				preprocessing_deskew_mdeg: preprocessing.deskewMilliDegrees,
+				preprocessing_illumination: preprocessing.illuminationNormalized,
+				preprocessing_contrast: preprocessing.contrastEnhanced,
+				preprocessing_fallback: preprocessing.fallbackToStandard,
+				preprocessing_source_width: preprocessing.sourceWidth,
+				preprocessing_source_height: preprocessing.sourceHeight,
+				preprocessing_prepared_width: preprocessing.preparedWidth,
+				preprocessing_prepared_height: preprocessing.preparedHeight,
+				preprocessing_original_bytes: input.prepared.original.size,
+				preprocessing_prepared_bytes: input.prepared.image.size,
+				prompt_version: promptVersion
+			}
+		);
 		if (error) throw new Error('Não foi possível anexar esta página ao documento.');
 		return parseImageImportResult(data, { documentId, pageId, ocrJobId });
 	} catch (error) {
@@ -228,7 +238,8 @@ export async function importPhotoDocument(
 		}
 	} catch (error) {
 		if (error instanceof DOMException && error.name === 'AbortError') throw error;
-		if (documentId !== null) throw new PartialPhotoDocumentImportError(documentId, pageIds.length, error);
+		if (documentId !== null)
+			throw new PartialPhotoDocumentImportError(documentId, pageIds.length, error);
 		throw error;
 	}
 

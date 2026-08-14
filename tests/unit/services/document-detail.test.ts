@@ -110,9 +110,7 @@ describe('loadDocumentDetailWithGateway', () => {
 		});
 		const detail = await loadDocumentDetailWithGateway(documentId, fixture.value);
 
-		expect(detail.originalUrl).toBe(
-			`https://drive.google.com/file/d/${pageDriveFileId}/view`
-		);
+		expect(detail.originalUrl).toBe(`https://drive.google.com/file/d/${pageDriveFileId}/view`);
 		expect(detail.originalReference).toEqual({
 			provider: 'google_drive',
 			url: detail.originalUrl,

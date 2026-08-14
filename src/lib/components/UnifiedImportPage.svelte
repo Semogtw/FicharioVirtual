@@ -52,7 +52,9 @@
 	);
 
 	function localId() {
-		return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+		return (
+			globalThis.crypto?.randomUUID?.() ?? `${Date.now()}_${Math.random().toString(36).slice(2)}`
+		);
 	}
 
 	function defaultPhotoDocumentTitle(file: File) {
@@ -104,7 +106,8 @@
 	function moveDraftPhoto(index: number, direction: -1 | 1) {
 		if (savingPhotoDraft) return;
 		const target = index + direction;
-		if (index < 0 || target < 0 || index >= photoDraft.length || target >= photoDraft.length) return;
+		if (index < 0 || target < 0 || index >= photoDraft.length || target >= photoDraft.length)
+			return;
 		const copy = [...photoDraft];
 		const current = copy[index];
 		const other = copy[target];
@@ -229,7 +232,8 @@
 				clearPhotoDraft();
 				selectionError = `${error.message} As páginas já salvas não serão reenviadas.`;
 			} else {
-				selectionError = error instanceof Error ? error.message : 'Não foi possível salvar o documento.';
+				selectionError =
+					error instanceof Error ? error.message : 'Não foi possível salvar o documento.';
 				photoProgress = null;
 			}
 		} finally {
@@ -296,8 +300,8 @@
 		<p class="eyebrow">Entrada unificada</p>
 		<h1>Adicionar ao fichário</h1>
 		<p>
-			Solte fotos e PDFs juntos. Para anotações fotografadas, você pode montar várias páginas
-			como um único documento antes de salvar.
+			Solte fotos e PDFs juntos. Para anotações fotografadas, você pode montar várias páginas como
+			um único documento antes de salvar.
 		</p>
 	</header>
 
@@ -319,7 +323,10 @@
 			</label>
 			<label class="choice">
 				<input type="radio" name="image-mode" value="high-definition" bind:group={mode} />
-				<span><strong>Alta definição</strong><small>Preserva mais detalhe para letras pequenas.</small></span>
+				<span
+					><strong>Alta definição</strong><small>Preserva mais detalhe para letras pequenas.</small
+					></span
+				>
 			</label>
 		</fieldset>
 	</section>
@@ -421,20 +428,20 @@
 								type="button"
 								onclick={() => moveDraftPhoto(index, -1)}
 								disabled={savingPhotoDraft || index === 0}
-								aria-label={`Mover página ${index + 1} para antes`}
-							>←</button>
+								aria-label={`Mover página ${index + 1} para antes`}>←</button
+							>
 							<button
 								type="button"
 								onclick={() => moveDraftPhoto(index, 1)}
 								disabled={savingPhotoDraft || index === photoDraft.length - 1}
-								aria-label={`Mover página ${index + 1} para depois`}
-							>→</button>
+								aria-label={`Mover página ${index + 1} para depois`}>→</button
+							>
 							<button
 								type="button"
 								onclick={() => removeDraftPhoto(photo.id)}
 								disabled={savingPhotoDraft}
-								aria-label={`Remover página ${index + 1}`}
-							>Remover</button>
+								aria-label={`Remover página ${index + 1}`}>Remover</button
+							>
 						</div>
 					</article>
 				{/each}
@@ -449,7 +456,12 @@
 				{:else}
 					<p>Você pode adicionar mais fotos pela câmera antes de salvar.</p>
 				{/if}
-				<button class="save-button" type="button" onclick={savePhotoDraft} disabled={savingPhotoDraft}>
+				<button
+					class="save-button"
+					type="button"
+					onclick={savePhotoDraft}
+					disabled={savingPhotoDraft}
+				>
 					{savingPhotoDraft
 						? 'Salvando…'
 						: photoGrouping === 'document' && photoDraft.length > 1
