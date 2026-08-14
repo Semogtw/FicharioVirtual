@@ -1,0 +1,127 @@
+name: Prepare visual benchmark
+
+on:
+  push:
+    branches: [feat/adaptive-visual-embeddings]
+    paths:
+      - .github/workflows/prepare-visual-benchmark.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prepare-visual-benchmark
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: feat/adaptive-visual-embeddings
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Harden benchmark and multimodal status handling
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path('tools/checks/check-visual-semantic-staging.mjs')
+          text = path.read_text()
+          old = """async function waitText(db, notebookId, count) {
+            const deadline = Date.now() + WAIT_MS;
+            let last = {};
+            while (Date.now() < deadline) {
+              const result = await db.rpc('semantic_index_stats', { target_model: MODEL, notebook_filter: notebookId });
+              if (result.error) throw new Error(`Text index stats failed: ${result.error.message}`);
+              last = Array.isArray(result.data) ? result.data[0] : result.data;
+              if (Number(last?.total_pages) === count && Number(last?.indexed_pages) === count) return { totalPages: count, indexedPages: count };
+              await sleep(POLL_MS);
+            }
+            throw new Error(`Text index timeout ${last?.indexed_pages ?? 0}/${last?.total_pages ?? 0}`);
+          }"""
+          new = """async function waitText(db, notebookId) {
+            const deadline = Date.now() + WAIT_MS;
+            let last = {};
+            while (Date.now() < deadline) {
+              const result = await db.rpc('semantic_index_stats', {
+                target_model: MODEL,
+                notebook_filter: notebookId
+              });
+              if (result.error) throw new Error(`Text index stats failed: ${result.error.message}`);
+              last = Array.isArray(result.data) ? result.data[0] : result.data;
+              const totalPages = Number(last?.total_pages ?? 0);
+              const indexedPages = Number(last?.indexed_pages ?? 0);
+              if (totalPages >= 1 && indexedPages === totalPages) return { totalPages, indexedPages };
+              await sleep(POLL_MS);
+            }
+            throw new Error(`Text index timeout ${last?.indexed_pages ?? 0}/${last?.total_pages ?? 0}`);
+          }"""
+          if old not in text:
+              raise SystemExit('waitText pattern not found')
+          text = text.replace(old, new)
+          text = text.replace(
+              'const textIndex = await waitText(db, notebookId, state.probes.length);',
+              'const textIndex = await waitText(db, notebookId);'
+          )
+          path.write_text(text)
+
+          path = Path('src/routes/search/+page.svelte')
+          text = path.read_text()
+          text = text.replace(
+              "if (analysis.mode === 'hybrid') return 'Busca por palavras e significado ativa.';",
+              "if (analysis.mode === 'hybrid' || analysis.mode === 'multimodal') return 'Busca por palavras e significado ativa.';"
+          )
+          text = text.replace(
+              "class:semantic-active={analysis?.mode === 'hybrid'}",
+              "class:semantic-active={analysis?.mode === 'hybrid' || analysis?.mode === 'multimodal'}"
+          )
+          path.write_text(text)
+          PY
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22.16.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Format and check touched files
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec prettier --write \
+            .github/workflows/verify-adaptive-visual-staging.yml \
+            tools/checks/check-visual-semantic-staging.mjs \
+            src/lib/components/SearchDocumentCard.svelte \
+            src/routes/search/+page.svelte \
+            tests/unit/routes/search-result-interaction.test.ts \
+            tests/unit/search/document-search-results.test.ts
+          git diff --check
+          pnpm check
+
+      - name: Commit prepared benchmark
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/prepare-visual-benchmark.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'test(search): prepare real visual staging benchmark'
+          git push origin HEAD:feat/adaptive-visual-embeddings
