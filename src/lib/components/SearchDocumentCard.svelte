@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
 	import DocumentMediaViewer from '$lib/components/DocumentMediaViewer.svelte';
+	import type { PageDetail } from '$lib/domain/page';
 	import { countDocumentQueryOccurrences } from '$lib/search/document-search-results';
 	import { loadDocumentDetail, type DocumentDetail } from '$lib/services/document-detail';
 	import type { SemanticSearchResult } from '$lib/services/semantic-search';
@@ -10,6 +11,8 @@
 		query: string;
 	}
 
+	const EMPTY_PREVIEW_PAGES = Object.freeze([]) as readonly PageDetail[];
+
 	let { result, query }: SearchDocumentCardProps = $props();
 	let host = $state<HTMLElement | null>(null);
 	let detail = $state<DocumentDetail | null>(null);
@@ -18,6 +21,9 @@
 
 	let previewPage = $derived(
 		detail?.pages.find((page) => page.pageNumber === result.pageNumber) ?? detail?.pages[0] ?? null
+	);
+	let previewPages = $derived(
+		previewPage ? (Object.freeze([previewPage]) as readonly PageDetail[]) : EMPTY_PREVIEW_PAGES
 	);
 	let occurrenceCount = $derived(detail ? countDocumentQueryOccurrences(detail.pages, query) : 0);
 	let href = $derived(
@@ -69,7 +75,7 @@
 	>
 		<div class="preview">
 			{#if detail && previewPage}
-				<DocumentMediaViewer {detail} pages={[previewPage]} {query} />
+				<DocumentMediaViewer {detail} pages={previewPages} {query} />
 			{:else if failed}
 				<div class="preview-state error" role="status">Não foi possível carregar a prévia.</div>
 			{:else}
