@@ -15,7 +15,9 @@ describe('Gemini daily request budget contract', () => {
 		expect(migration).toContain("at time zone 'America/Los_Angeles'");
 		expect(migration).toContain('daily_request_count = daily_count + 1');
 		expect(migration).toContain("new.safe_error_code <> 'gemini_daily_quota'");
-		expect(migration).toContain('next_provider_day timestamptz := public.gemini_ocr_next_rpd_reset');
+		expect(migration).toContain(
+			'next_provider_day timestamptz := public.gemini_ocr_next_rpd_reset'
+		);
 	});
 
 	it('routes reservation failures through the same fallback decision in both OCR paths', () => {
