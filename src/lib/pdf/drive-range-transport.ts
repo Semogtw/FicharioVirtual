@@ -4,10 +4,7 @@ import {
 	getDocument,
 	type PDFDocumentProxy
 } from 'pdfjs-dist/legacy/build/pdf.mjs';
-import {
-	downloadBrowserDriveRange,
-	type DriveMediaClientLike
-} from '$lib/drive/browser-download';
+import { downloadBrowserDriveRange, type DriveMediaClientLike } from '$lib/drive/browser-download';
 
 const DRIVE_ID = /^[A-Za-z0-9_-]{10,256}$/;
 export const DRIVE_PDF_RANGE_CHUNK_BYTES = 256 * 1024;
