@@ -9,7 +9,7 @@ import { createOcrProbePng } from './ocr-staging-contract.mjs';
 const MODEL = 'gemini-embedding-2';
 const BUCKET = 'documents';
 const RETRY_MS = [0, 5_000, 20_000, 60_000];
-const WAIT_MS = 6 * 60_000;
+const WAIT_MS = 12 * 60_000;
 const POLL_MS = 4_000;
 const JPEG_BYTES = Uint8Array.from(
 	Buffer.from(
@@ -65,23 +65,55 @@ function patternPng(kind) {
 	const w = 640,
 		h = 420,
 		pixels = Buffer.alloc(w * h, 255);
-	const dot = (x, y) => {
-		if (x >= 0 && y >= 0 && x < w && y < h) pixels[y * w + x] = 0;
+	const dot = (x, y, value = 0) => {
+		if (x >= 0 && y >= 0 && x < w && y < h) pixels[y * w + x] = value;
 	};
-	const line = (x0, y0, x1, y1, t = 4) => {
+	const line = (x0, y0, x1, y1, t = 3) => {
 		const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
 		for (let i = 0; i <= steps; i += 1) {
-			const x = Math.round(x0 + ((x1 - x0) * i) / steps),
-				y = Math.round(y0 + ((y1 - y0) * i) / steps);
+			const x = Math.round(x0 + ((x1 - x0) * i) / Math.max(1, steps)),
+				y = Math.round(y0 + ((y1 - y0) * i) / Math.max(1, steps));
 			for (let dx = -t; dx <= t; dx += 1) for (let dy = -t; dy <= t; dy += 1) dot(x + dx, y + dy);
 		}
 	};
-	const rect = (x, y, rw, rh) => {
-		line(x, y, x + rw, y);
-		line(x + rw, y, x + rw, y + rh);
-		line(x + rw, y + rh, x, y + rh);
-		line(x, y + rh, x, y);
+	const rect = (x, y, rw, rh, t = 3) => {
+		line(x, y, x + rw, y, t);
+		line(x + rw, y, x + rw, y + rh, t);
+		line(x + rw, y + rh, x, y + rh, t);
+		line(x, y + rh, x, y, t);
 	};
+	const fillRect = (x, y, rw, rh, value = 0) => {
+		for (let py = y; py <= y + rh; py += 1)
+			for (let px = x; px <= x + rw; px += 1) dot(px, py, value);
+	};
+	const circle = (cx, cy, radius, t = 3) => {
+		for (let degree = 0; degree < 360; degree += 1) {
+			const angle = (degree * Math.PI) / 180;
+			const x = Math.round(cx + Math.cos(angle) * radius),
+				y = Math.round(cy + Math.sin(angle) * radius);
+			for (let dx = -t; dx <= t; dx += 1) for (let dy = -t; dy <= t; dy += 1) dot(x + dx, y + dy);
+		}
+	};
+	const arrow = (x0, y0, x1, y1) => {
+		line(x0, y0, x1, y1, 3);
+		const angle = Math.atan2(y1 - y0, x1 - x0),
+			length = 18;
+		line(
+			x1,
+			y1,
+			Math.round(x1 - Math.cos(angle - 0.55) * length),
+			Math.round(y1 - Math.sin(angle - 0.55) * length),
+			3
+		);
+		line(
+			x1,
+			y1,
+			Math.round(x1 - Math.cos(angle + 0.55) * length),
+			Math.round(y1 - Math.sin(angle + 0.55) * length),
+			3
+		);
+	};
+
 	if (kind === 'table') {
 		rect(70, 55, 500, 310);
 		for (const x of [195, 320, 445]) line(x, 55, x, 365, 2);
@@ -90,10 +122,139 @@ function patternPng(kind) {
 		rect(45, 160, 140, 90);
 		rect(250, 65, 140, 90);
 		rect(455, 160, 140, 90);
-		line(185, 205, 250, 110);
-		line(390, 110, 455, 205);
-		line(455, 245, 185, 245);
+		arrow(185, 205, 250, 110);
+		arrow(390, 110, 455, 205);
+		arrow(455, 245, 185, 245);
+	} else if (kind === 'bar') {
+		line(90, 340, 560, 340, 3);
+		line(90, 340, 90, 70, 3);
+		for (const [x, height] of [
+			[135, 90],
+			[225, 170],
+			[315, 120],
+			[405, 240],
+			[495, 195]
+		])
+			fillRect(x, 340 - height, 45, height);
+	} else if (kind === 'line') {
+		line(90, 340, 560, 340, 3);
+		line(90, 340, 90, 70, 3);
+		const points = [
+			[110, 290],
+			[200, 220],
+			[290, 250],
+			[380, 135],
+			[470, 180],
+			[545, 95]
+		];
+		for (let i = 1; i < points.length; i += 1)
+			line(points[i - 1][0], points[i - 1][1], points[i][0], points[i][1], 3);
+		for (const [x, y] of points) circle(x, y, 7, 2);
+	} else if (kind === 'pie') {
+		circle(320, 210, 145, 4);
+		for (const degree of [0, 80, 205]) {
+			const angle = (degree * Math.PI) / 180;
+			line(
+				320,
+				210,
+				Math.round(320 + Math.cos(angle) * 145),
+				Math.round(210 + Math.sin(angle) * 145),
+				3
+			);
+		}
+	} else if (kind === 'checklist') {
+		for (let row = 0; row < 5; row += 1) {
+			const y = 75 + row * 65;
+			rect(80, y, 34, 34, 2);
+			if (row % 2 === 0) {
+				line(86, y + 18, 96, y + 29, 2);
+				line(96, y + 29, 111, y + 6, 2);
+			}
+			line(145, y + 17, 540, y + 17, 2);
+		}
+	} else if (kind === 'calendar') {
+		rect(80, 55, 480, 315, 3);
+		line(80, 115, 560, 115, 3);
+		for (let col = 1; col < 7; col += 1)
+			line(80 + col * (480 / 7), 115, 80 + col * (480 / 7), 370, 1);
+		for (let row = 1; row < 5; row += 1) line(80, 115 + row * 51, 560, 115 + row * 51, 1);
+		fillRect(82, 57, 476, 55, 210);
+	} else if (kind === 'form') {
+		rect(105, 45, 430, 330, 3);
+		for (const y of [100, 160, 220, 280]) {
+			line(140, y - 16, 265, y - 16, 2);
+			rect(285, y - 35, 205, 42, 2);
+		}
+		rect(285, 325, 95, 30, 2);
+	} else if (kind === 'mindmap') {
+		circle(320, 210, 55, 4);
+		for (const [x, y] of [
+			[105, 90],
+			[535, 90],
+			[90, 315],
+			[550, 315]
+		]) {
+			rect(x - 55, y - 28, 110, 56, 2);
+			line(
+				320 + Math.sign(x - 320) * 45,
+				210 + Math.sign(y - 210) * 35,
+				x - Math.sign(x - 320) * 55,
+				y,
+				2
+			);
+		}
+	} else if (kind === 'timeline') {
+		line(75, 215, 565, 215, 4);
+		for (const [x, up] of [
+			[120, true],
+			[230, false],
+			[340, true],
+			[450, false],
+			[540, true]
+		]) {
+			circle(x, 215, 9, 2);
+			line(x, 215, x, up ? 105 : 325, 2);
+			rect(x - 45, up ? 60 : 325, 90, 48, 2);
+		}
+	} else if (kind === 'venn') {
+		circle(275, 210, 115, 4);
+		circle(365, 210, 115, 4);
+	} else if (kind === 'hierarchy') {
+		rect(255, 45, 130, 55, 2);
+		for (const x of [110, 255, 400]) {
+			rect(x, 180, 130, 55, 2);
+			line(320, 100, 320, 145, 2);
+			line(175, 145, 465, 145, 2);
+			line(x + 65, 145, x + 65, 180, 2);
+		}
+		for (const x of [75, 220, 365, 510]) {
+			rect(x - 45, 315, 90, 45, 2);
+			line(x, 235, x, 315, 1);
+		}
+	} else if (kind === 'kanban') {
+		for (let col = 0; col < 3; col += 1) {
+			const x = 55 + col * 195;
+			rect(x, 45, 165, 330, 3);
+			fillRect(x + 3, 48, 159, 38, 220);
+			for (let card = 0; card < 3; card += 1) rect(x + 20, 110 + card * 80, 125, 50, 2);
+		}
+	} else if (kind === 'route') {
+		const points = [
+			[80, 310],
+			[155, 240],
+			[245, 285],
+			[330, 175],
+			[430, 210],
+			[555, 95]
+		];
+		for (let i = 1; i < points.length; i += 1)
+			line(points[i - 1][0], points[i - 1][1], points[i][0], points[i][1], 6);
+		for (const [x, y] of points) {
+			circle(x, y, 13, 3);
+			fillRect(x - 4, y - 4, 8, 8);
+		}
 	} else throw new Error(`Unknown pattern ${kind}`);
+
 	const scan = Buffer.alloc((w + 1) * h, 255);
 	for (let y = 0; y < h; y += 1) {
 		scan[y * (w + 1)] = 0;
@@ -247,12 +408,130 @@ const QUERIES = [
 		query: 'um fluxograma com caixas conectadas por setas'
 	},
 	{
-		id: 'negative',
+		id: 'bar',
+		expected: 'bar',
+		kind: 'visual',
+		query: 'um gráfico de barras verticais com alturas diferentes'
+	},
+	{
+		id: 'line',
+		expected: 'line',
+		kind: 'visual',
+		query: 'um gráfico de linha com pontos conectados mostrando uma tendência'
+	},
+	{ id: 'pie', expected: 'pie', kind: 'visual', query: 'um gráfico circular dividido em fatias' },
+	{
+		id: 'checklist',
+		expected: 'checklist',
+		kind: 'visual',
+		query: 'uma lista de tarefas com caixas de seleção'
+	},
+	{
+		id: 'calendar',
+		expected: 'calendar',
+		kind: 'visual',
+		query: 'um calendário mensal organizado em uma grade de dias'
+	},
+	{
+		id: 'form',
+		expected: 'form',
+		kind: 'visual',
+		query: 'um formulário com vários campos retangulares para preencher'
+	},
+	{
+		id: 'mindmap',
+		expected: 'mindmap',
+		kind: 'visual',
+		query: 'um mapa mental com um tópico central e quatro ramificações'
+	},
+	{
+		id: 'timeline',
+		expected: 'timeline',
+		kind: 'visual',
+		query: 'uma linha do tempo horizontal com vários marcos'
+	},
+	{
+		id: 'venn',
+		expected: 'venn',
+		kind: 'visual',
+		query: 'um diagrama de venn com dois círculos sobrepostos'
+	},
+	{
+		id: 'hierarchy',
+		expected: 'hierarchy',
+		kind: 'visual',
+		query: 'um organograma hierárquico com caixas conectadas em níveis'
+	},
+	{
+		id: 'kanban',
+		expected: 'kanban',
+		kind: 'visual',
+		query: 'um quadro kanban com três colunas e cartões de tarefas'
+	},
+	{
+		id: 'route',
+		expected: 'route',
+		kind: 'visual',
+		query: 'um mapa esquemático de rota com um caminho ligando vários pontos'
+	},
+	{
+		id: 'negative-dog',
 		expected: null,
 		kind: 'negative',
 		query: 'uma fotografia de cachorro correndo na praia'
+	},
+	{
+		id: 'negative-portrait',
+		expected: null,
+		kind: 'negative',
+		query: 'um retrato fotográfico de uma pessoa sorrindo'
+	},
+	{
+		id: 'negative-landscape',
+		expected: null,
+		kind: 'negative',
+		query: 'uma fotografia colorida de montanhas e céu azul'
 	}
 ];
+
+function normalizeBenchmarkQuery(value) {
+	return value
+		.normalize('NFKC')
+		.replace(/[\u00ad\u200b-\u200d\u2060\ufeff]/gu, '')
+		.replace(/\r\n?/g, '\n')
+		.replace(/\s+/gu, ' ')
+		.trim()
+		.toLocaleLowerCase('pt-BR');
+}
+
+async function rawVisualSearch(db, query, notebookId, labels) {
+	const normalized = normalizeBenchmarkQuery(query);
+	const queryHash = createHash('sha256').update(`${MODEL}\nv2\n${normalized}`).digest('hex');
+	const cached = await db.rpc('get_cached_semantic_query_embedding', {
+		target_model: MODEL,
+		target_query_hash: queryHash
+	});
+	if (cached.error || typeof cached.data !== 'string') {
+		return { error: cached.error?.message ?? 'query_embedding_cache_miss', candidates: [] };
+	}
+	const visual = await db.rpc('search_pages_visual_semantic', {
+		query_embedding: cached.data,
+		target_model: MODEL,
+		notebook_filter: notebookId,
+		result_limit: 15
+	});
+	if (visual.error || !Array.isArray(visual.data)) {
+		return { error: visual.error?.message ?? 'invalid_visual_rpc_response', candidates: [] };
+	}
+	return {
+		error: null,
+		candidates: visual.data.map((row) => ({
+			label: labels.get(row.document_id) ?? null,
+			similarity: Number(row.visual_similarity)
+		}))
+	};
+}
+
 async function searches(db, state, expectedMode) {
 	const labels = new Map(state.probes.map((p) => [p.documentId, p.id]));
 	const rows = [];
@@ -266,7 +545,7 @@ async function searches(db, state, expectedMode) {
 				await sleep(delay);
 			}
 			result = await db.functions.invoke('semantic-search', {
-				body: { query: spec.query, notebookId: state.notebookId, limit: 10, offset: 0 }
+				body: { query: spec.query, notebookId: state.notebookId, limit: 15, offset: 0 }
 			});
 			if (!result.error && Array.isArray(result.data?.results)) break;
 		}
@@ -276,6 +555,10 @@ async function searches(db, state, expectedMode) {
 			);
 		if (result.data.mode !== expectedMode)
 			throw new Error(`${spec.id} expected ${expectedMode}, got ${result.data.mode}`);
+		const rawVisual = await rawVisualSearch(db, spec.query, state.notebookId, labels);
+		const expectedRawIndex = spec.expected
+			? rawVisual.candidates.findIndex((candidate) => candidate.label === spec.expected)
+			: -1;
 		rows.push({
 			id: spec.id,
 			kind: spec.kind,
@@ -283,6 +566,20 @@ async function searches(db, state, expectedMode) {
 			latencyMs: Math.round(performance.now() - start),
 			retryCount,
 			resultLabels: result.data.results.map((r) => labels.get(r.documentId)).filter(Boolean),
+			resultDetails: result.data.results
+				.map((r) => ({
+					label: labels.get(r.documentId) ?? null,
+					matchMode: r.matchMode ?? null,
+					semanticSimilarity: Number(r.semanticSimilarity ?? 0),
+					visualSimilarity: Number(r.visualSimilarity ?? 0),
+					rank: Number(r.rank ?? 0)
+				}))
+				.filter((r) => r.label),
+			rawVisualError: rawVisual.error,
+			rawVisualCandidates: rawVisual.candidates,
+			rawVisualExpectedRank: expectedRawIndex < 0 ? null : expectedRawIndex + 1,
+			rawVisualExpectedSimilarity:
+				expectedRawIndex < 0 ? null : (rawVisual.candidates[expectedRawIndex]?.similarity ?? null),
 			reason: result.data.reason ?? null
 		});
 	}
@@ -290,24 +587,49 @@ async function searches(db, state, expectedMode) {
 }
 function metric(rows) {
 	const positives = rows.filter((r) => r.expected),
-		visual = positives.filter((r) => r.kind === 'visual');
+		visual = positives.filter((r) => r.kind === 'visual'),
+		negatives = rows.filter((r) => r.kind === 'negative');
 	const rank = (r) => {
 		const i = r.resultLabels.indexOf(r.expected);
 		return i < 0 ? null : i + 1;
 	};
-	const recall = (list, k) => list.filter((r) => (rank(r) ?? 999) <= k).length / list.length;
-	const mrr = (list) => list.reduce((sum, r) => sum + (rank(r) ? 1 / rank(r) : 0), 0) / list.length;
+	const rawRank = (r) => r.rawVisualExpectedRank ?? null;
+	const recall = (list, k, ranker = rank) =>
+		list.length === 0 ? 0 : list.filter((r) => (ranker(r) ?? 999) <= k).length / list.length;
+	const mrr = (list, ranker = rank) =>
+		list.length === 0
+			? 0
+			: list.reduce((sum, r) => sum + (ranker(r) ? 1 / ranker(r) : 0), 0) / list.length;
 	const times = rows.map((r) => r.latencyMs).sort((a, b) => a - b);
+	const expectedSimilarities = visual
+		.map((r) => r.rawVisualExpectedSimilarity)
+		.filter((value) => typeof value === 'number' && Number.isFinite(value))
+		.sort((a, b) => a - b);
 	return {
 		recallAt1: recall(positives, 1),
 		recallAt3: recall(positives, 3),
+		recallAt5: recall(positives, 5),
 		mrr: mrr(positives),
+		visualRecallAt1: recall(visual, 1),
+		visualRecallAt3: recall(visual, 3),
+		visualRecallAt5: recall(visual, 5),
 		visualMrr: mrr(visual),
+		rawVisualRecallAt1: recall(visual, 1, rawRank),
+		rawVisualRecallAt3: recall(visual, 3, rawRank),
+		rawVisualRecallAt5: recall(visual, 5, rawRank),
+		rawVisualMrr: mrr(visual, rawRank),
+		rawVisualExpectedSimilarityMedian:
+			expectedSimilarities[Math.floor(expectedSimilarities.length / 2)] ?? null,
+		rawVisualExpectedAboveCurrentThreshold: visual.filter(
+			(r) =>
+				typeof r.rawVisualExpectedSimilarity === 'number' && r.rawVisualExpectedSimilarity >= 0.5
+		).length,
+		rawVisualRpcErrors: rows.filter((r) => r.rawVisualError).length,
 		lexicalTop: rank(rows.find((r) => r.kind === 'lexical')) === 1,
-		negativeCount: rows.find((r) => r.kind === 'negative')?.resultLabels.length ?? 0,
+		negativeCount: negatives.reduce((sum, row) => sum + row.resultLabels.length, 0),
 		searchRetries: rows.reduce((sum, row) => sum + (row.retryCount ?? 0), 0),
 		latencyMedianMs: times[Math.floor(times.length / 2)] ?? 0,
-		latencyP95Ms: times.at(-1) ?? 0
+		latencyP95Ms: times[Math.min(times.length - 1, Math.floor(times.length * 0.95))] ?? 0
 	};
 }
 
@@ -324,12 +646,24 @@ async function setup(db, user, statePath, reportPath) {
 	for (const [id, bytes] of [
 		['lexical', createOcrProbePng(`visual-${randomUUID()}`)],
 		['table', patternPng('table')],
-		['flow', patternPng('flow')]
+		['flow', patternPng('flow')],
+		['bar', patternPng('bar')],
+		['line', patternPng('line')],
+		['pie', patternPng('pie')],
+		['checklist', patternPng('checklist')],
+		['calendar', patternPng('calendar')],
+		['form', patternPng('form')],
+		['mindmap', patternPng('mindmap')],
+		['timeline', patternPng('timeline')],
+		['venn', patternPng('venn')],
+		['hierarchy', patternPng('hierarchy')],
+		['kanban', patternPng('kanban')],
+		['route', patternPng('route')]
 	]) {
 		const probe = await makeProbe(db, user.id, notebookId, id, bytes, 'image/png');
 		state.probes.push(probe);
 		await writeFile(statePath, JSON.stringify(state));
-		await sleep(5_000);
+		await sleep(2_000);
 	}
 	const jpegSeed = await makeProbe(
 		db,
