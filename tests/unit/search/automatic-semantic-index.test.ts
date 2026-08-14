@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const migration = readFileSync(
-	'supabase/migrations/202608131546_background_semantic_index.sql',
+	'supabase/migrations/20260813154628_background_semantic_index.sql',
 	'utf8'
 );
 const cronMigration = readFileSync(
