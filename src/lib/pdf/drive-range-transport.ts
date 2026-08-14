@@ -4,8 +4,10 @@ import {
 	getDocument,
 	type PDFDocumentProxy
 } from 'pdfjs-dist/legacy/build/pdf.mjs';
-import { downloadBrowserDriveRange } from '$lib/drive/browser-download';
-import type { DriveTokenClientLike } from '$lib/drive/browser-upload';
+import {
+	downloadBrowserDriveRange,
+	type DriveMediaClientLike
+} from '$lib/drive/browser-download';
 
 const DRIVE_ID = /^[A-Za-z0-9_-]{10,256}$/;
 export const DRIVE_PDF_RANGE_CHUNK_BYTES = 256 * 1024;
@@ -35,7 +37,7 @@ function validSource(fileId: string, totalBytes: number) {
 }
 
 export class DrivePdfDataRangeTransport extends PDFDataRangeTransport {
-	readonly #client: DriveTokenClientLike;
+	readonly #client: DriveMediaClientLike;
 	readonly #fileId: string;
 	readonly #totalBytes: number;
 	readonly #downloadRange: DownloadRange;
@@ -50,7 +52,7 @@ export class DrivePdfDataRangeTransport extends PDFDataRangeTransport {
 		downloadRange = downloadBrowserDriveRange,
 		onFailure
 	}: {
-		client: DriveTokenClientLike;
+		client: DriveMediaClientLike;
 		fileId: string;
 		totalBytes: number;
 		downloadRange?: DownloadRange;
@@ -136,7 +138,7 @@ export async function openDrivePdfRangeDocument({
 	totalBytes,
 	dependencies = defaultDependencies
 }: {
-	client: DriveTokenClientLike;
+	client: DriveMediaClientLike;
 	fileId: string;
 	totalBytes: number;
 	dependencies?: DrivePdfRangeDependencies;
