@@ -1,0 +1,87 @@
+name: Diagnose visual retrieval with 15 documents
+
+on:
+  push:
+    branches: [fix/visual-retrieval-benchmark-15]
+    paths:
+      - .github/workflows/diagnose-visual15-shadow.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: diagnose-visual15-shadow
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: staging
+    env:
+      VISUAL_BENCHMARK_PHASE: setup-shadow
+      VISUAL_BENCHMARK_STATE_PATH: /tmp/visual15-state.json
+      VISUAL_SHADOW_REPORT_PATH: /tmp/visual15-shadow.json
+      STAGING_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+      STAGING_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
+      STAGING_AUTHORIZED_EMAIL: ${{ secrets.STAGING_AUTHORIZED_EMAIL }}
+      STAGING_AUTHORIZED_PASSWORD: ${{ secrets.STAGING_AUTHORIZED_PASSWORD }}
+    steps:
+      - name: Checkout diagnostic branch
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: 10
+
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22.16.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run real 15-document shadow diagnostic
+        run: node tools/checks/check-visual-semantic-staging.mjs
+
+      - name: Upload diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: visual15-shadow-${{ github.run_id }}
+          path: |
+            /tmp/visual15-state.json
+            /tmp/visual15-shadow.json
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Cleanup diagnostic documents
+        if: always()
+        shell: bash
+        env:
+          VISUAL_BENCHMARK_PHASE: cleanup
+          VISUAL_BENCHMARK_STATE_PATH: /tmp/visual15-state.json
+          VISUAL_CLEANUP_REPORT_PATH: /tmp/visual15-cleanup.json
+        run: |
+          if [[ -f "$VISUAL_BENCHMARK_STATE_PATH" ]]; then
+            node tools/checks/check-visual-semantic-staging.mjs
+          else
+            echo 'No diagnostic state exists; nothing to clean.'
+          fi
+
+      - name: Upload cleanup evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: visual15-cleanup-${{ github.run_id }}
+          path: /tmp/visual15-cleanup.json
+          if-no-files-found: warn
+          retention-days: 7
