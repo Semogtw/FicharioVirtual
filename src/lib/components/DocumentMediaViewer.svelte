@@ -257,7 +257,12 @@
 					continue;
 				}
 				if (index === 0 && detail.originalReference.provider === 'supabase') {
-					publishRemotePage(index, detail.originalReference.url, expectedGeneration, expectedRevision);
+					publishRemotePage(
+						index,
+						detail.originalReference.url,
+						expectedGeneration,
+						expectedRevision
+					);
 					continue;
 				}
 				if (index === 0 && detail.originalReference.provider === 'google_drive') {
