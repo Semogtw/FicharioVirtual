@@ -1,309 +1,297 @@
-# Plano de implementação — embedding multimodal adaptativo
+# Implementação de embedding visual adaptativo
 
-**Status:** planejado; ainda não implementado  
-**Design:** [`ADAPTIVE_MULTIMODAL_EMBEDDING.md`](ADAPTIVE_MULTIMODAL_EMBEDDING.md)  
-**Data:** 13 de agosto de 2026
+Atualizado em **2026-08-14**.
+
+## Estado atual
+
+**Implementado no código e validado em modo `shadow`.**
+
+O Fichário agora possui um canal semântico visual por página, separado do índice textual. O canal visual usa `gemini-embedding-2` com os bytes da imagem preparada para OCR, é enfileirado **somente depois** de um resultado OCR durável e pode ser consultado pela mesma embedding textual da busca.
+
+A configuração de produção permanece deliberadamente em `shadow`: candidatos visuais são medidos e registrados, mas **não mudam o ranking visível** até haver evidência real de staging suficiente para promover `SEMANTIC_VISUAL_MODE=active`.
+
+Isso significa que a implementação está pronta; o que permanece pendente é o **rollout ativo**, não código faltante.
 
 ## Objetivo
 
-Adicionar um terceiro sinal de recuperação — embedding visual por página — sem substituir o fluxo atual de FTS/fuzzy e embeddings textuais por chunks. A implementação deve ser seletiva, degradável e compatível com operação gratuita.
+Usar embedding visual somente quando ele tende a acrescentar informação que OCR/texto podem perder, preservando:
 
-## Princípios obrigatórios
+- OCR como caminho principal para busca lexical, transcrição e highlight;
+- embedding textual como caminho semântico padrão;
+- custo previsível e degradável;
+- privacidade e isolamento por usuário;
+- ausência de dependência do Gemini visual para concluir OCR;
+- zero alteração de ranking enquanto o modo estiver em `shadow`.
 
-- decisão por página, nunca por arquivo inteiro;
-- nenhuma chamada extra de IA apenas para decidir elegibilidade;
-- `gemini-embedding-2` e 768 dimensões permanecem o contrato inicial;
-- primeira versão usa embedding **image-only** para desacoplar visual de correções no OCR;
-- páginas com bom texto nativo e `book_clean` não entram por padrão;
-- OCR válido nunca falha por causa do enriquecimento visual;
-- canal visual pode ficar indisponível sem quebrar busca;
-- original do Drive nunca é alterado;
-- nenhuma rota paga é ativada automaticamente.
-
-## Etapa 1 — benchmark de baseline
-
-Criar fixtures representativas para:
-
-- `book_clean`;
-- `scan_degraded`;
-- `handwriting`;
-- `mixed`;
-- `table_layout`;
-- `math`;
-- `sparse` vazio e útil;
-- PDF com texto nativo;
-- página com erro OCR;
-- página com diagrama/fórmula cujo significado não esteja totalmente no OCR.
-
-Cobrir consultas lexicais, conceituais, visuais e negativas. Registrar o ranking atual lexical + semântico textual antes de alterar produção.
-
-- [ ] fixtures versionadas;
-- [ ] harness de benchmark;
-- [ ] baseline reproduzível;
-- [ ] nenhuma alteração de peso nesta etapa.
-
-## Etapa 2 — roteador `visual-v1`
-
-Criar uma função pura, sugerida em:
+## Arquitetura implementada
 
 ```text
-supabase/functions/_shared/visual-embedding-routing.ts
+upload/importação
+  |
+  +--> original preservado
+  |
+  +--> mídia preparada para OCR (JPEG/PNG suportado)
+           |
+           +--> OCR
+           |     |
+           |     +--> resultado OCR persistido
+           |     |
+           |     +--> roteador local visual-v1
+           |             |
+           |             +--> não elegível -> encerra
+           |             |
+           |             +--> elegível -> fila visual durável
+           |                                 |
+           |                                 +--> semantic-visual-worker
+           |                                         |
+           |                                         +--> hash SHA-256 dos pixels enviados
+           |                                         +--> reuse/idempotência
+           |                                         +--> gemini-embedding-2
+           |                                         +--> page_visual_embeddings
+           |                                         +--> telemetria + cleanup
+           |
+           +--> mídia temporária só é removida quando não houver job visual pendente
+
+busca textual
+  |
+  +--> embedding da consulta
+  +--> lexical
+  +--> semantic textual
+  +--> visual semantic
+          |
+          +--> shadow: mede overlap/latência, não muda ranking
+          +--> active: terceiro canal no RRF
 ```
 
-Entrada: presença de texto nativo, `contentClass`, warning count, `needsReview`, tamanho do texto e, quando útil, quantidade de caixas em `wordGeometry`.
+## 1. Roteamento adaptativo
 
-Política inicial:
+Implementado em `supabase/functions/_shared/visual-embedding-routing.ts`.
+
+O roteador é local, determinístico e versionado como `visual-v1`; ele **não faz uma chamada extra de IA** apenas para decidir se deve gerar embedding visual.
+
+Critérios implementados:
+
+| Sinal | Decisão padrão |
+| --- | --- |
+| página com texto nativo suficiente | não gerar |
+| `book_clean` com OCR suficiente | não gerar |
+| `handwriting` | gerar |
+| `scan_degraded` | gerar |
+| `mixed` | gerar |
+| `table_layout` | gerar |
+| `math` | gerar |
+| página `needs_review`/warnings relevantes | gerar |
+| página `sparse` útil | gerar |
+| página praticamente vazia | não gerar |
+| classe desconhecida sem sinal de risco | conservador: não gerar |
+
+O roteamento ocorre somente **depois** da persistência bem-sucedida do OCR nos três caminhos reais:
+
+- `process-ocr`;
+- `ocr-queue-worker`;
+- `desktop-ocr-worker`.
+
+Falha no enriquecimento visual nunca reverte um OCR `ready`/`needs_review` para falha.
+
+## 2. Embedding de imagem
+
+O cliente compartilhado `gemini-embedding-client.ts` aceita imagens para `gemini-embedding-2` com as seguintes guardas:
+
+- somente `image/jpeg` e `image/png`;
+- máximo de 6 imagens por requisição;
+- limite por imagem e por lote;
+- vetor normalizado com 768 dimensões, igual ao índice textual;
+- erros HTTP, quota, transporte e resposta inválida tratados separadamente.
+
+Para páginas de PDF, novos derivados preparados são JPEG. O original continua preservado e não é alterado pelo pipeline de embedding.
+
+O hash SHA-256 é calculado sobre os bytes realmente enviados ao provedor. Se uma página já possui embedding do mesmo modelo e mesmo `source_hash`, o job é concluído por reuse sem nova chamada Gemini.
+
+## 3. Persistência e fila
+
+Migration principal:
+
+- `supabase/migrations/20260814113500_adaptive_visual_embeddings.sql`
+
+Dispatch/recovery:
+
+- `supabase/migrations/20260814114500_visual_embedding_dispatch.sql`
+
+Objetos principais:
+
+- `page_visual_embeddings`: índice visual separado do textual, `vector(768)`, `source_hash`, modelo, versão e motivo de roteamento;
+- `page_visual_embedding_jobs`: fila durável e idempotente por `(user_id, page_id, model)`;
+- `semantic_visual_events`: telemetria operacional agregável;
+- índice HNSW para cosine similarity;
+- RLS forçado e leitura owner-only;
+- escrita/claim restritos ao `service_role`.
+
+Estados da fila:
+
+- `queued`;
+- `processing`;
+- `retryable`;
+- `blocked_quota`;
+- `ready`;
+- `failed`.
+
+O claim usa `FOR UPDATE SKIP LOCKED`; jobs presos em `processing` por mais de 5 minutos são recuperáveis. Retry usa backoff e `429` entra como `blocked_quota` sem afetar OCR/busca textual.
+
+Antes de persistir um vetor, a RPC confirma que a mídia usada ainda é a fonte atual da página. Fonte stale termina o job sem sobrescrever o vetor atual.
+
+## 4. Worker visual
+
+`supabase/functions/semantic-visual-worker/index.ts` reutiliza a autenticação interna do worker de background (`OCR_BACKGROUND_WORKER_KEY`).
+
+O worker:
+
+1. faz claim de até 6 jobs;
+2. baixa a mídia do bucket privado;
+3. valida MIME e tamanho;
+4. calcula SHA-256;
+5. tenta reuse por hash;
+6. envia apenas jobs necessários ao `gemini-embedding-2`;
+7. persiste resultado por RPC protegida;
+8. registra telemetria best-effort;
+9. remove mídia temporária apenas em estado terminal seguro.
+
+Wakeup imediato é disparado por trigger com debounce global. Um cron de 5 minutos é o fallback para wakeups perdidos e tem prioridade inferior ao canal textual.
+
+## 5. Busca visual e ranking
+
+`semantic-search` usa a **mesma embedding textual da consulta** para:
+
+- `search_pages_semantic`;
+- `search_pages_visual_semantic`.
+
+Não existe segunda chamada Gemini apenas para consultar o índice visual.
+
+Configuração:
 
 ```text
-native_text suficiente                    -> não
-book_clean sem warning/review             -> não
-handwriting                               -> sim
-scan_degraded                             -> sim
-mixed                                     -> sim
-table_layout                              -> sim
-math                                      -> sim
-needsReview                               -> sim
-warnings relevantes                       -> sim
-unknown sem outro sinal                   -> não
-sparse                                    -> depende de regra de quase-vazio
+SEMANTIC_VISUAL_MODE=off|shadow|active
 ```
 
-A saída deve conter `eligible`, um `reason` allowlisted e `routingVersion = visual-v1`.
+Padrão atual: `shadow`.
 
-- [ ] testes de todas as classes;
-- [ ] quase-vazio não gera chamada;
-- [ ] nenhum acesso a rede/banco dentro do roteador.
+### `off`
 
-## Etapa 3 — persistência visual separada
+Nenhuma busca visual é executada.
 
-Criar uma tabela própria, sem reutilizar `page_semantic_chunks`:
+### `shadow`
 
-```text
-page_visual_embeddings
-  id
-  user_id
-  page_id
-  model
-  source_hash
-  routing_version
-  embedding vector(768)
-  created_at
-  updated_at
+A busca visual é executada, overlap/latência/status são registrados, mas a resposta visível continua sendo o ranking lexical + textual semântico já existente.
+
+### `active`
+
+O canal visual entra como terceiro canal de RRF. O código de ranking já está implementado e possui fixtures determinísticas, mas a promoção para `active` depende de benchmark real de staging.
+
+Resultados puramente visuais:
+
+- retornam `excerpt: ''`;
+- não inventam transcrição;
+- não inventam highlight textual;
+- abrem diretamente o documento na página encontrada;
+- a UI exibe o motivo `Pela página`.
+
+## 6. Telemetria
+
+Eventos visuais registram apenas metadados operacionais necessários, como:
+
+- operação (`index`, `search_shadow`, `search_visible`);
+- modelo;
+- quantidade de itens;
+- overlap;
+- bytes;
+- duração;
+- status;
+- versão/motivo de roteamento.
+
+Não são gravados pixels, texto OCR, query em claro ou vetor no log de eventos.
+
+## 7. Benchmark e testes
+
+Fixtures determinísticas:
+
+- `tests/fixtures/search/visual-semantic-benchmark.json`;
+- `tests/unit/search/visual-semantic-benchmark.test.ts`;
+- `tests/unit/search/visual-semantic-ranking.test.ts`.
+
+Comando dedicado:
+
+```bash
+pnpm benchmark:visual-semantic
 ```
 
-Criar RPCs equivalentes a:
+As fixtures cobrem:
 
-```text
-replace_page_visual_embedding
-search_pages_visual_semantic
-visual_embedding_stats
-```
+- consulta lexical forte;
+- consulta conceitual;
+- recuperação visual de manuscrito/tabela;
+- caso negativo de ruído visual;
+- todas as classes principais do roteador.
 
-Requisitos:
+Essas fixtures verificam **contrato e segurança do ranking**, não qualidade real do provedor. Recall, custo e latência reais precisam ser medidos com corpus de staging antes do rollout ativo.
 
-- RLS owner-only;
-- escrita validada por RPC/Edge Function;
-- HNSW/cosseno;
-- nenhuma mídia, OCR, prompt ou URL privada na tabela;
-- hash visual independente do `page_effective_text`.
+## 8. Evidência de validação
 
-- [ ] migration;
-- [ ] pgTAP owner isolation;
-- [ ] stale-hash test;
-- [ ] índice vetorial.
+O commit de código `4b43bdaba3bbaf9c221e771161235a67beab2a5b` passou o `verify:full` privado no `Offline-Toolchains`, run **31801182442**, incluindo:
 
-## Etapa 4 — hash visual
+- Prettier/lint;
+- `svelte-check`/TypeScript;
+- 378 testes unitários;
+- build de produção;
+- testes E2E/Chromium;
+- source/offline gates;
+- `deno check` das Edge Functions;
+- Supabase local e migrations/pgTAP.
 
-O hash atual dos chunks semânticos é textual e não pode ser reutilizado.
+## 9. Checklist de implementação
 
-Definir uma identidade estável para os pixels efetivamente usados pelo embedding visual. Correção de OCR deve invalidar somente o canal textual; mudança da representação visual deve invalidar somente o canal visual.
+### Código e infraestrutura
 
-- [ ] localizar hash/identidade reutilizável no pipeline atual;
-- [ ] introduzir contrato explícito se ele não existir;
-- [ ] versionar o método quando necessário.
+- [x] roteador determinístico `visual-v1`;
+- [x] Gemini Embedding 2 com imagem;
+- [x] limites PNG/JPEG, bytes e lote <= 6;
+- [x] índice visual separado com HNSW;
+- [x] RLS forçado e owner-only read;
+- [x] fila durável/idempotente;
+- [x] reclaim de job preso;
+- [x] retry/backoff/429 degradável;
+- [x] SHA-256 sobre bytes enviados;
+- [x] reuse por hash;
+- [x] proteção contra fonte stale;
+- [x] worker interno autenticado;
+- [x] trigger de wakeup + cron de recuperação;
+- [x] integração pós-OCR nos três caminhos;
+- [x] cleanup seguro de mídia temporária;
+- [x] shadow retrieval;
+- [x] RRF de três canais pronto para `active`;
+- [x] UI sem excerpt/highlight falso para resultado puramente visual;
+- [x] telemetria sem conteúdo sensível;
+- [x] benchmark offline determinístico;
+- [x] `verify:full` completo verde.
 
-## Etapa 5 — cliente visual do Gemini Embedding 2
+### Rollout ativo — propositalmente pendente
 
-Preservar o cliente textual atual e adicionar entrada explícita:
+- [ ] smoke real com ao menos um JPEG elegível;
+- [ ] smoke real com ao menos um PNG elegível;
+- [ ] corpus real de staging com lexical/conceitual/visual/negativo;
+- [ ] comparar Recall@K/MRR/precision contra baseline de staging;
+- [ ] medir latência e custo reais;
+- [ ] confirmar billing/quota reais do projeto usado em staging;
+- [ ] promover `SEMANTIC_VISUAL_MODE` de `shadow` para `active` somente se os resultados forem positivos.
 
-```ts
-type GeminiVisualEmbeddingInput = {
-	mimeType: 'image/png' | 'image/jpeg';
-	bytes: Uint8Array;
-};
-```
+## 10. Critério para promoção a `active`
 
-Requisitos:
+A implementação **não deve** mudar pesos de produção ou ativar o terceiro canal automaticamente só porque o código está pronto.
 
-- 768 dimensões;
-- lote compatível com o máximo documentado de seis imagens por request;
-- limites de bytes e response bounded;
-- abort/timeout;
-- um vetor válido por entrada;
-- normalização igual à usada no texto;
-- bytes nunca entram em logs ou mensagens persistidas.
+Promover para `active` apenas quando o benchmark real mostrar que:
 
-- [ ] testes PNG/JPEG;
-- [ ] rejeição de formato/lote inválido;
-- [ ] teste 429/5xx/abort;
-- [ ] regressão do caminho textual.
+1. recuperação visual melhora casos onde OCR/texto perdem estrutura/conteúdo;
+2. consultas lexicais fortes não pioram de forma material;
+3. casos negativos não ganham falsos positivos relevantes;
+4. custo/latência permanecem aceitáveis;
+5. quota/429 continuam degradáveis e observáveis.
 
-## Etapa 6 — preparação da mídia
-
-### Imagem
-
-Usar PNG/JPEG original quando seguro ou derivado efêmero equivalente.
-
-### PDF
-
-Renderizar somente a página elegível e enviar PNG/JPEG. Não enviar o PDF inteiro na primeira versão, evitando OCR duplicado do endpoint de embedding de PDF e preservando a granularidade por página.
-
-Como o derivado OCR pode ser WebP, a rota visual deve converter efemeramente para JPEG/PNG quando necessário.
-
-- [ ] original nunca recomprimido/substituído;
-- [ ] derivado temporário removido após estado terminal apropriado;
-- [ ] hash do original inalterado.
-
-## Etapa 7 — job/worker visual
-
-Após OCR válido:
-
-```text
-persistir OCR
-→ obter contentClass/warnings/review já produzidos
-→ visual-v1
-→ se elegível, enfileirar enriquecimento visual
-```
-
-O job deve ser idempotente por página/modelo/hash. Rate limit e falhas temporárias entram em backoff; erro visual nunca muda uma página de `ready` para erro de OCR.
-
-Worker sugerido:
-
-```text
-supabase/functions/semantic-visual-worker/
-```
-
-- [ ] fila durável ou extensão segura da infraestrutura semântica existente;
-- [ ] concorrência baixa;
-- [ ] lote máximo de seis imagens e também limitado por bytes;
-- [ ] 429 interrompe o lote sem loop agressivo;
-- [ ] página problemática não bloqueia as demais;
-- [ ] desligar worker visual mantém produto funcional.
-
-## Etapa 8 — recuperação visual em shadow
-
-Antes de mudar resultados do usuário:
-
-```text
-consulta
-  → lexical
-  → semantic_text
-  → semantic_visual (shadow)
-```
-
-O query embedding textual existente deve ser comparado com os vetores visuais no mesmo espaço multimodal.
-
-Medir somente agregados seguros, como quantidade de candidatos, overlap/top-K, latência e cobertura do índice visual.
-
-- [ ] resultado visível idêntico com shadow ligado/desligado;
-- [ ] benchmark de ganho por classe;
-- [ ] nenhum trecho textual inventado para match puramente visual.
-
-## Etapa 9 — RRF de três canais
-
-Somente após benchmark positivo, estender o ranking para:
-
-```text
-lexical/fuzzy
-semantic_text
-semantic_visual
-```
-
-Não fixar pesos por intuição. O benchmark deve calibrar o terceiro canal e garantir que:
-
-- match lexical forte não seja deslocado por ruído visual;
-- visual recupere páginas realmente úteis perdidas pelo texto;
-- ausência de embedding visual preserve o ranking anterior.
-
-- [ ] testes determinísticos de ranking;
-- [ ] pesos/limiares documentados depois da calibração;
-- [ ] fallback completo para dois canais.
-
-## Etapa 10 — UI
-
-O documento original continua sendo o alvo da busca.
-
-Resultado visual puro:
-
-- abre a página correta;
-- não inventa highlight;
-- não inventa excerpt textual;
-- pode receber um badge discreto de origem visual;
-- mantém a transcrição como ferramenta auxiliar.
-
-## Etapa 11 — telemetria e cota
-
-Registrar somente metadados:
-
-- canal/operação;
-- modelo/dimensão;
-- quantidade de imagens;
-- bytes agregados;
-- latência/status;
-- routing reason/version;
-- usage metadata oficial quando disponível;
-- elegíveis/indexadas/pendentes.
-
-Nunca registrar mídia, base64, OCR, query em claro, prompt, embedding ou URL privada.
-
-Sem hard cap diário artificial: a resposta real do provedor continua autoridade de quota. Se a cota visual acabar, OCR, FTS/fuzzy e embedding textual continuam.
-
-## Etapa 12 — staging e ativação
-
-Antes do ranking visual de produção:
-
-- [ ] migrations em banco limpo;
-- [ ] pgTAP completo;
-- [ ] Deno/Edge checks;
-- [ ] smoke PNG/JPEG real;
-- [ ] `handwriting` elegível;
-- [ ] `book_clean` e `native_text` ignorados;
-- [ ] retry idempotente;
-- [ ] cleanup correto;
-- [ ] consulta textual recuperando vetor visual;
-- [ ] logs/telemetria sem dados privados;
-- [ ] billing desativado confirmado.
-
-Rollout:
-
-1. gravação visual sem uso na busca;
-2. shadow retrieval;
-3. contribuição pequena calibrada no RRF;
-4. recalibração usando dados reais.
-
-A feature deve poder ser desativada operacionalmente, retornando imediatamente ao ranking lexical + textual sem interromper OCR/importação.
-
-## Ordem sugerida de commits
-
-1. `test(search): add visual semantic benchmark fixtures`
-2. `feat(search): add deterministic visual embedding router`
-3. `feat(db): add page visual embedding index`
-4. `feat(search): support Gemini image embeddings`
-5. `feat(search): add visual embedding worker`
-6. `feat(search): add shadow visual retrieval`
-7. `feat(search): fuse visual semantic ranking`
-8. `docs(search): record multimodal rollout evidence`
-
-## Definição de pronto
-
-- [ ] roteamento seletivo por página;
-- [ ] nenhuma IA extra só para decidir rota;
-- [ ] image-only na primeira versão;
-- [ ] visual separado de `page_semantic_chunks`;
-- [ ] OCR e busca funcionam sem visual;
-- [ ] cota não é duplicada no corpus inteiro;
-- [ ] RLS/privacidade passam;
-- [ ] original permanece intacto;
-- [ ] benchmark mostra ganho nas classes alvo;
-- [ ] staging real passa;
-- [ ] billing/fallback pago permanecem desativados.
+Até essa evidência existir, `shadow` é o estado correto e intencional de produção.
