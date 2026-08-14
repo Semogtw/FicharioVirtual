@@ -4,7 +4,9 @@ import {
 	SEMANTIC_RRF_LEXICAL_WEIGHT,
 	SEMANTIC_RRF_VECTOR_WEIGHT,
 	SEMANTIC_RRF_VISUAL_BONUS,
-	SEMANTIC_RRF_VISUAL_WEIGHT
+	SEMANTIC_RRF_VISUAL_CONFIDENCE_WEIGHT,
+	SEMANTIC_RRF_VISUAL_WEIGHT,
+	SEMANTIC_VISUAL_SEARCH_MIN_SIMILARITY
 } from './semantic-config.ts';
 
 export type HybridRankingSignal = Readonly<{
@@ -24,6 +26,10 @@ function reciprocalRank(rank: number | null, weight: number) {
 	return weight / (SEMANTIC_RRF_K + rank);
 }
 
+function boundedSimilarity(value: number | null | undefined) {
+	return Math.max(0, Math.min(1, value ?? 0));
+}
+
 /**
  * Reciprocal-rank fusion keeps FTS/trigram ranks and cosine similarities on
  * separate scales. That makes the production ranking much less sensitive to
@@ -34,23 +40,33 @@ export function hybridReciprocalRankScore(signal: HybridRankingSignal) {
 	const semantic = reciprocalRank(signal.semanticRank, SEMANTIC_RRF_VECTOR_WEIGHT);
 	const both =
 		signal.lexicalRank !== null && signal.semanticRank !== null ? SEMANTIC_RRF_BOTH_BONUS : 0;
-	const similarityTieBreak = Math.max(0, Math.min(1, signal.semanticSimilarity ?? 0)) * 0.0001;
+	const similarityTieBreak = boundedSimilarity(signal.semanticSimilarity) * 0.0001;
 	return lexical + semantic + both + similarityTieBreak;
 }
 
 /**
- * Adds the optional visual channel conservatively. With no visual rank the
- * score is bit-for-bit the existing two-channel score, which preserves the
- * previous ranking when visual enrichment is absent or disabled.
+ * Adds the optional visual channel without double-counting correlated OCR and
+ * image evidence. A page that already ranks textually receives the stronger
+ * of its textual or visual scores plus a small corroboration bonus. Pure visual
+ * pages keep the full visual score. The similarity margin above the calibrated
+ * cross-modal floor is bounded and only supplies confidence inside the visual
+ * channel; it never rescues a candidate that failed the retrieval threshold.
  */
 export function multimodalReciprocalRankScore(signal: MultimodalRankingSignal) {
 	const base = hybridReciprocalRankScore(signal);
 	if (signal.visualRank === null) return base;
-	const visual = reciprocalRank(signal.visualRank, SEMANTIC_RRF_VISUAL_WEIGHT);
-	const crossChannelBonus =
-		signal.lexicalRank !== null || signal.semanticRank !== null ? SEMANTIC_RRF_VISUAL_BONUS : 0;
-	const visualTieBreak = Math.max(0, Math.min(1, signal.visualSimilarity ?? 0)) * 0.00002;
-	return base + visual + crossChannelBonus + visualTieBreak;
+
+	const similarity = boundedSimilarity(signal.visualSimilarity);
+	const confidence =
+		Math.max(0, similarity - SEMANTIC_VISUAL_SEARCH_MIN_SIMILARITY) *
+		SEMANTIC_RRF_VISUAL_CONFIDENCE_WEIGHT;
+	const visual =
+		reciprocalRank(signal.visualRank, SEMANTIC_RRF_VISUAL_WEIGHT) +
+		confidence +
+		similarity * 0.00002;
+	const hasTextSignal = signal.lexicalRank !== null || signal.semanticRank !== null;
+	if (!hasTextSignal) return visual;
+	return Math.max(base, visual) + SEMANTIC_RRF_VISUAL_BONUS;
 }
 
 export function compareHybridRanked<T extends HybridRankingSignal & { stableKey: string }>(
