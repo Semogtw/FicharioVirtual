@@ -228,11 +228,7 @@ async function waitForQueueEntry(page, filename, { timeoutMs = 180_000, final = 
 	throw new Error(`Timed out waiting for import queue entry ${filename}; last state: ${last}`);
 }
 
-async function searchFor(
-	page,
-	text,
-	{ documentId, documentTitle, expectedOccurrences = null }
-) {
+async function searchFor(page, text, { documentId, documentTitle, expectedOccurrences = null }) {
 	await page.goto(new URL(`/search/?q=${encodeURIComponent(text)}`, target).href, {
 		waitUntil: 'domcontentloaded',
 		timeout: 45_000
@@ -262,6 +258,9 @@ async function searchFor(
 			)
 			.waitFor({ state: 'visible', timeout: 20_000 });
 	}
+	await page
+		.screenshot({ path: `${evidenceDir}/search-${documentId}.png`, fullPage: true })
+		.catch(() => undefined);
 	await assertNoVisibleFailure(page, 'search');
 }
 
