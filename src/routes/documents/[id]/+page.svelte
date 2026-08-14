@@ -59,6 +59,15 @@
 		});
 	}
 
+	function selectPage(pageNumber: number) {
+		selectedPageNumber = pageNumber;
+		requestAnimationFrame(() => {
+			document
+				.getElementById(`document-page-${pageNumber}`)
+				?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		});
+	}
+
 	async function retryOcr() {
 		if (!detail || retrying || deleting) return;
 		const documentId = detail.id;
@@ -175,18 +184,19 @@
 		{#if highlightedQuery}
 			<p class="search-context">
 				Aberto a partir da busca por <strong>“{highlightedQuery}”</strong>. A correspondência é
-				marcada sobre a mídia e na transcrição.
+				marcada diretamente nas páginas e na transcrição auxiliar.
 			</p>
 		{/if}
 		{#if error}<p class="inline-error" role="alert">{error}</p>{/if}
 
 		{#if detail.pages.length > 1}
-			<nav class="page-strip" aria-label="Páginas do documento">
+			<nav class="page-strip" aria-label="Páginas para revisão">
 				{#each detail.pages as item}
 					<button
 						type="button"
 						class:active={item.pageNumber === selectedPage?.pageNumber}
-						onclick={() => (selectedPageNumber = item.pageNumber)}
+						aria-pressed={item.pageNumber === selectedPage?.pageNumber}
+						onclick={() => selectPage(item.pageNumber)}
 					>
 						<span>{item.pageNumber}</span>
 						<small>{item.status === 'needs_review' ? 'Revisar' : item.status}</small>
@@ -196,7 +206,7 @@
 		{/if}
 
 		{#if selectedPage}
-			<section class="reader" aria-label={`Página ${selectedPage.pageNumber}`}>
+			<section class="reader" aria-label="Documento completo">
 				<div class="original-panel">
 					<div class="panel-heading">
 						<h2>Original</h2>
@@ -209,7 +219,7 @@
 						{/if}
 					</div>
 					<div class="original-body">
-						<DocumentMediaViewer {detail} page={selectedPage} query={highlightedQuery} />
+						<DocumentMediaViewer {detail} pages={detail.pages} query={highlightedQuery} />
 					</div>
 				</div>
 
@@ -351,7 +361,7 @@
 		display: grid;
 		grid-template-columns: minmax(20rem, 1fr) minmax(22rem, 1fr);
 		gap: 1rem;
-		align-items: stretch;
+		align-items: start;
 	}
 
 	.original-panel {
