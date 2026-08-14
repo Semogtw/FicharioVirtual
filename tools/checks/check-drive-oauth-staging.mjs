@@ -211,7 +211,7 @@ async function main() {
 	}
 
 	if (signedIn) {
-		const { error } = await client.auth.signOut();
+		const { error } = await client.auth.signOut({ scope: 'local' });
 		if (error && operationError === null) {
 			operationError = new Error(`Drive OAuth staging sign-out failed: ${error.message}`);
 		}

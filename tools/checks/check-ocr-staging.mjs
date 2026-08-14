@@ -177,7 +177,7 @@ async function deleteProbeDocument(client, documentId) {
 
 /** @param {ReturnType<typeof createStagingClient>} client */
 async function signOut(client) {
-	const result = await client.auth.signOut();
+	const result = await client.auth.signOut({ scope: 'local' });
 	assertSuccessfulSignOut({ label: 'OCR staging account', error: result.error });
 }
 

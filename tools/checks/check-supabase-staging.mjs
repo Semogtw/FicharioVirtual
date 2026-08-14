@@ -234,7 +234,7 @@ async function deleteStorageProbe(client, objectPath) {
  * @param {string} label
  */
 async function signOutClient(client, label) {
-	const result = await client.auth.signOut();
+	const result = await client.auth.signOut({ scope: 'local' });
 	assertSuccessfulSignOut({ label, error: result.error });
 }
 
