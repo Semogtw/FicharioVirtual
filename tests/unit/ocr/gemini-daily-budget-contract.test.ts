@@ -23,7 +23,10 @@ describe('Gemini daily request budget contract', () => {
 	it('routes reservation failures through the same fallback decision in both OCR paths', () => {
 		for (const source of [worker, foreground]) {
 			const attemptStart = source.indexOf('const attemptProvider = async');
-			const fallbackDecision = source.indexOf('shouldFallbackGeminiOcr(attempt.error)', attemptStart);
+			const fallbackDecision = source.indexOf(
+				'shouldFallbackGeminiOcr(attempt.error)',
+				attemptStart
+			);
 
 			expect(attemptStart).toBeGreaterThanOrEqual(0);
 			expect(fallbackDecision).toBeGreaterThan(attemptStart);
