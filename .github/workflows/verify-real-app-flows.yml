@@ -64,6 +64,74 @@ jobs:
           done
           printf '%s\n' '{"private":true,"type":"module"}' > /tmp/fichario-real-flow/package.json
 
+      - name: Align exact-SHA verifiers with current accessible controls and custom dialogs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          actions_path = Path('/tmp/fichario-real-flow/check-real-app-actions.mjs')
+          actions = actions_path.read_text(encoding='utf-8')
+          replacements = [
+              (
+                  "const parentField = page.getByLabel('Dentro de', { exact: true });",
+                  "const parentField = page.locator('form.new-notebook select');",
+              ),
+              (
+                  "await page.getByLabel('Dentro de', { exact: true }).selectOption(notebook.id);",
+                  "await page.locator('form.new-notebook select').selectOption(notebook.id);",
+              ),
+          ]
+          for old, new in replacements:
+              if actions.count(old) != 1:
+                  raise SystemExit(f'unexpected real-app-actions contract for: {old}')
+              actions = actions.replace(old, new)
+          actions_path.write_text(actions, encoding='utf-8')
+
+          exhaustive_path = Path('/tmp/fichario-real-flow/check-real-app-exhaustive.mjs')
+          exhaustive = exhaustive_path.read_text(encoding='utf-8')
+          old = """\tpage.once('dialog', (dialog) => dialog.accept(renamedTagName));
+          \tawait page.getByRole('button', { name: 'Renomear', exact: true }).click();
+          \tawait page
+          \t\t.getByText('Tag renomeada.', { exact: true })
+          \t\t.waitFor({ state: 'visible', timeout: 20_000 });
+          \tawait page
+          \t\t.getByText(renamedTagName, { exact: true })
+          \t\t.first()
+          \t\t.waitFor({ state: 'visible', timeout: 20_000 });
+          \tpage.once('dialog', (dialog) => dialog.accept());
+          \tawait page.getByRole('button', { name: 'Excluir', exact: true }).click();
+          \tawait page
+          \t\t.getByText('Tag excluída.', { exact: true })
+          \t\t.waitFor({ state: 'visible', timeout: 20_000 });
+          """
+          new = """\tawait page.getByRole('button', { name: 'Renomear', exact: true }).click();
+          \tconst renameDialog = page.locator('form.dialog').filter({ hasText: 'Renomear tag' });
+          \tawait renameDialog.getByLabel('Novo nome', { exact: true }).fill(renamedTagName);
+          \tawait renameDialog.getByRole('button', { name: 'Renomear', exact: true }).click();
+          \tawait page
+          \t\t.getByText('Tag renomeada.', { exact: true })
+          \t\t.waitFor({ state: 'visible', timeout: 20_000 });
+          \tawait page
+          \t\t.getByText(renamedTagName, { exact: true })
+          \t\t.first()
+          \t\t.waitFor({ state: 'visible', timeout: 20_000 });
+          \tawait page.getByRole('button', { name: 'Excluir', exact: true }).click();
+          \tconst deleteDialog = page.getByRole('alertdialog', { name: 'Excluir tag?' });
+          \tawait deleteDialog.getByRole('button', { name: 'Excluir', exact: true }).click();
+          \tawait page
+          \t\t.getByText('Tag excluída.', { exact: true })
+          \t\t.waitFor({ state: 'visible', timeout: 20_000 });
+          """
+          if exhaustive.count(old) != 1:
+              raise SystemExit('unexpected exhaustive tag-dialog contract')
+          exhaustive_path.write_text(exhaustive.replace(old, new), encoding='utf-8')
+          PY
+
+          node --check /tmp/fichario-real-flow/check-real-app-actions.mjs
+          node --check /tmp/fichario-real-flow/check-real-app-exhaustive.mjs
+
       - name: Set up Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
