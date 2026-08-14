@@ -257,11 +257,7 @@
 			}
 
 			if (detail.originalReference.provider === 'supabase') {
-				await renderSupabasePdf(
-					detail.originalReference.url,
-					expectedGeneration,
-					expectedRevision
-				);
+				await renderSupabasePdf(detail.originalReference.url, expectedGeneration, expectedRevision);
 			} else {
 				await renderDrivePdf(
 					detail.originalReference.driveFileId,
