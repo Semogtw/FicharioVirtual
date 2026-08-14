@@ -22,10 +22,19 @@ describe('Gemini daily request budget contract', () => {
 
 	it('routes reservation failures through the same fallback decision in both OCR paths', () => {
 		for (const source of [worker, foreground]) {
-			expect(source).toMatch(
-				/const attemptProvider[\s\S]*?try \{\s*await reserveProviderSlot\([\s\S]*?catch \(error\) \{\s*return Object\.freeze\(\{ ok: false as const, error, latencyMs: 0 \}\)/
+			const attemptStart = source.indexOf('const attemptProvider = async');
+			const fallbackDecision = source.indexOf('shouldFallbackGeminiOcr(attempt.error)', attemptStart);
+
+			expect(attemptStart).toBeGreaterThanOrEqual(0);
+			expect(fallbackDecision).toBeGreaterThan(attemptStart);
+
+			const attemptBlock = source.slice(attemptStart, fallbackDecision);
+			expect(attemptBlock).toContain('try {');
+			expect(attemptBlock).toContain('await reserveProviderSlot(');
+			expect(attemptBlock).toContain('catch (error) {');
+			expect(attemptBlock).toContain(
+				'return Object.freeze({ ok: false as const, error, latencyMs: 0 });'
 			);
-			expect(source).toContain('shouldFallbackGeminiOcr(attempt.error)');
 		}
 	});
 });
