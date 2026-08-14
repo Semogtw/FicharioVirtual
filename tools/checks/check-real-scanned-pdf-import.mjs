@@ -134,7 +134,7 @@ async function waitForOcr(client, documentId, timeoutMs = 300_000) {
 	while (Date.now() < deadline) {
 		const { data: pages, error: pagesError } = await client
 			.from('pages')
-			.select('id,status,page_number,native_text,ocr_text,corrected_text')
+			.select('id,status,page_number,native_text,ocr_raw_text,corrected_text')
 			.eq('document_id', documentId)
 			.order('page_number');
 		if (pagesError) throw new Error('Could not read scanned PDF pages');
@@ -156,7 +156,7 @@ async function waitForOcr(client, documentId, timeoutMs = 300_000) {
 				jobs.every((job) => ['ready', 'needs_review'].includes(job.status))
 			) {
 				const effective = (pages ?? [])
-					.map((page) => page.corrected_text || page.ocr_text || page.native_text || '')
+					.map((page) => page.corrected_text || page.ocr_raw_text || page.native_text || '')
 					.join('\n');
 				if (!effective.trim()) throw new Error('OCR finished without searchable text');
 				return { pages, jobs, effective };
