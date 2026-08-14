@@ -1,0 +1,77 @@
+filter((r) => r.kind === 'visual');
++		visual = positives.filter((r) => r.kind === 'visual'),
++		negatives = rows.filter((r) => r.kind === 'negative');
+ 	const rank = (r) => {
+ 		const i = r.resultLabels.indexOf(r.expected);
+ 		return i < 0 ? null : i + 1;
+ 	};
+-	const recall = (list, k) => list.filter((r) => (rank(r) ?? 999) <= k).length / list.length;
+-	const mrr = (list) => list.reduce((sum, r) => sum + (rank(r) ? 1 / rank(r) : 0), 0) / list.length;
++	const rawRank = (r) => r.rawVisualExpectedRank ?? null;
++	const recall = (list, k, ranker = rank) =>
++		list.length === 0 ? 0 : list.filter((r) => (ranker(r) ?? 999) <= k).length / list.length;
++	const mrr = (list, ranker = rank) =>
++		list.length === 0
++			? 0
++			: list.reduce((sum, r) => sum + (ranker(r) ? 1 / ranker(r) : 0), 0) / list.length;
+ 	const times = rows.map((r) => r.latencyMs).sort((a, b) => a - b);
++	const expectedSimilarities = visual
++		.map((r) => r.rawVisualExpectedSimilarity)
++		.filter((value) => typeof value === 'number' && Number.isFinite(value))
++		.sort((a, b) => a - b);
+ 	return {
+ 		recallAt1: recall(positives, 1),
+ 		recallAt3: recall(positives, 3),
++		recallAt5: recall(positives, 5),
+ 		mrr: mrr(positives),
++		visualRecallAt1: recall(visual, 1),
++		visualRecallAt3: recall(visual, 3),
++		visualRecallAt5: recall(visual, 5),
+ 		visualMrr: mrr(visual),
++		rawVisualRecallAt1: recall(visual, 1, rawRank),
++		rawVisualRecallAt3: recall(visual, 3, rawRank),
++		rawVisualRecallAt5: recall(visual, 5, rawRank),
++		rawVisualMrr: mrr(visual, rawRank),
++		rawVisualExpectedSimilarityMedian:
++			expectedSimilarities[Math.floor(expectedSimilarities.length / 2)] ?? null,
++		rawVisualExpectedAboveCurrentThreshold: visual.filter(
++			(r) => typeof r.rawVisualExpectedSimilarity === 'number' && r.rawVisualExpectedSimilarity >= 0.5
++		).length,
++		rawVisualRpcErrors: rows.filter((r) => r.rawVisualError).length,
+ 		lexicalTop: rank(rows.find((r) => r.kind === 'lexical')) === 1,
+-		negativeCount: rows.find((r) => r.kind === 'negative')?.resultLabels.length ?? 0,
++		negativeCount: negatives.reduce((sum, row) => sum + row.resultLabels.length, 0),
+ 		searchRetries: rows.reduce((sum, row) => sum + (row.retryCount ?? 0), 0),
+ 		latencyMedianMs: times[Math.floor(times.length / 2)] ?? 0,
+-		latencyP95Ms: times.at(-1) ?? 0
++		latencyP95Ms: times[Math.min(times.length - 1, Math.floor(times.length * 0.95))] ?? 0
+ 	};
+ }
+ 
+@@ -324,12 +507,24 @@
+ 	for (const [id, bytes] of [
+ 		['lexical', createOcrProbePng(`visual-${randomUUID()}`)],
+ 		['table', patternPng('table')],
+-		['flow', patternPng('flow')]
++		['flow', patternPng('flow')],
++		['bar', patternPng('bar')],
++		['line', patternPng('line')],
++		['pie', patternPng('pie')],
++		['checklist', patternPng('checklist')],
++		['calendar', patternPng('calendar')],
++		['form', patternPng('form')],
++		['mindmap', patternPng('mindmap')],
++		['timeline', patternPng('timeline')],
++		['venn', patternPng('venn')],
++		['hierarchy', patternPng('hierarchy')],
++		['kanban', patternPng('kanban')],
++		['route', patternPng('route')]
+ 	]) {
+ 		const probe = await makeProbe(db, user.id, notebookId, id, bytes, 'image/png');
+ 		state.probes.push(probe);
+ 		await writeFile(statePath, JSON.stringify(state));
+-		await sleep(5_000);
++		await sleep(2_000);
+ 	}
+ 	const jpegSeed = await makeProbe(
+ 		db,
