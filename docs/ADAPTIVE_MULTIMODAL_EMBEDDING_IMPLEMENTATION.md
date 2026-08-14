@@ -71,19 +71,19 @@ O roteador é local, determinístico e versionado como `visual-v1`; ele **não f
 
 Critérios implementados:
 
-| Sinal | Decisão padrão |
-| --- | --- |
-| página com texto nativo suficiente | não gerar |
-| `book_clean` com OCR suficiente | não gerar |
-| `handwriting` | gerar |
-| `scan_degraded` | gerar |
-| `mixed` | gerar |
-| `table_layout` | gerar |
-| `math` | gerar |
-| página `needs_review`/warnings relevantes | gerar |
-| página `sparse` útil | gerar |
-| página praticamente vazia | não gerar |
-| classe desconhecida sem sinal de risco | conservador: não gerar |
+| Sinal                                     | Decisão padrão         |
+| ----------------------------------------- | ---------------------- |
+| página com texto nativo suficiente        | não gerar              |
+| `book_clean` com OCR suficiente           | não gerar              |
+| `handwriting`                             | gerar                  |
+| `scan_degraded`                           | gerar                  |
+| `mixed`                                   | gerar                  |
+| `table_layout`                            | gerar                  |
+| `math`                                    | gerar                  |
+| página `needs_review`/warnings relevantes | gerar                  |
+| página `sparse` útil                      | gerar                  |
+| página praticamente vazia                 | não gerar              |
+| classe desconhecida sem sinal de risco    | conservador: não gerar |
 
 O roteamento ocorre somente **depois** da persistência bem-sucedida do OCR nos três caminhos reais:
 
