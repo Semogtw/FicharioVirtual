@@ -25,7 +25,7 @@ describe('document original reference rendering', () => {
 
 	it('renders every PDF page in one continuous viewer instead of replacing the visible page', () => {
 		expect(viewer).toContain('pages: readonly PageDetail[]');
-		expect(viewer).toContain('class:document-pages={detail.kind === \'pdf\'}');
+		expect(viewer).toContain("class:document-pages={detail.kind === 'pdf'}");
 		expect(viewer).toContain('id={`document-page-${rendered.page.pageNumber}`}');
 		expect(viewer).toContain('renderPdfDocumentPages');
 		expect(route).not.toContain('page={selectedPage} query={highlightedQuery}');
