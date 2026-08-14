@@ -64,9 +64,9 @@ function tableRlsState(tableName, migrationIndex) {
 }
 
 for (const [migrationIndex, { name, content }] of migrations.entries()) {
-	const match = name.match(/^(\d{12})_[a-z0-9_]+\.sql$/);
+	const match = name.match(/^(\d{12}(?:\d{2})?)_[a-z0-9_]+\.sql$/);
 	if (!match) {
-		failures.push(`${name}: migration name must be YYYYMMDDHHMM_description.sql`);
+		failures.push(`${name}: migration name must be YYYYMMDDHHMM[SS]_description.sql`);
 		continue;
 	}
 	if (prefixes.has(match[1])) failures.push(`${name}: duplicate migration timestamp ${match[1]}`);
