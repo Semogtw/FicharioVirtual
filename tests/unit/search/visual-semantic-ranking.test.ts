@@ -3,6 +3,7 @@ import {
 	hybridReciprocalRankScore,
 	multimodalReciprocalRankScore
 } from '../../../supabase/functions/_shared/semantic-ranking';
+import { SEMANTIC_VISUAL_SEARCH_MIN_SIMILARITY } from '../../../supabase/functions/_shared/semantic-config';
 
 describe('visual semantic RRF benchmark fixtures', () => {
 	it('preserves the previous score exactly when no visual signal exists', () => {
@@ -21,7 +22,7 @@ describe('visual semantic RRF benchmark fixtures', () => {
 		expect(multimodal).toBe(base);
 	});
 
-	it('does not let a visual-only result displace a strong lexical hit', () => {
+	it('keeps an exact lexical hit ahead of threshold-level visual-only evidence', () => {
 		const lexical = multimodalReciprocalRankScore({
 			lexicalRank: 1,
 			semanticRank: null,
@@ -31,9 +32,42 @@ describe('visual semantic RRF benchmark fixtures', () => {
 			lexicalRank: null,
 			semanticRank: null,
 			visualRank: 1,
-			visualSimilarity: 0.91
+			visualSimilarity: SEMANTIC_VISUAL_SEARCH_MIN_SIMILARITY
 		});
 		expect(lexical).toBeGreaterThan(visual);
+	});
+
+	it('lets measured strong visual evidence beat a misleading semantic-only candidate', () => {
+		const misleadingSemantic = multimodalReciprocalRankScore({
+			lexicalRank: null,
+			semanticRank: 1,
+			semanticSimilarity: 0.75,
+			visualRank: null
+		});
+		const strongVisual = multimodalReciprocalRankScore({
+			lexicalRank: null,
+			semanticRank: null,
+			visualRank: 1,
+			visualSimilarity: 0.421
+		});
+		expect(strongVisual).toBeGreaterThan(misleadingSemantic);
+	});
+
+	it('does not double-count weak text and visual agreement over a better visual candidate', () => {
+		const misleadingCrossChannel = multimodalReciprocalRankScore({
+			lexicalRank: null,
+			semanticRank: 1,
+			semanticSimilarity: 0.7446,
+			visualRank: 9,
+			visualSimilarity: 0.36307
+		});
+		const expectedVisual = multimodalReciprocalRankScore({
+			lexicalRank: null,
+			semanticRank: null,
+			visualRank: 2,
+			visualSimilarity: 0.419399619102481
+		});
+		expect(expectedVisual).toBeGreaterThan(misleadingCrossChannel);
 	});
 
 	it('gives a missed page a deterministic non-zero score from the visual channel', () => {
@@ -46,7 +80,7 @@ describe('visual semantic RRF benchmark fixtures', () => {
 		expect(visual).toBeGreaterThan(0);
 	});
 
-	it('rewards agreement between text and visual channels without raw-score mixing', () => {
+	it('rewards agreement between text and visual channels without additive double-counting', () => {
 		const textOnly = multimodalReciprocalRankScore({
 			lexicalRank: 5,
 			semanticRank: 4,
