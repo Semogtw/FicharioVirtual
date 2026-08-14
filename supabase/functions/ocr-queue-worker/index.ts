@@ -14,6 +14,7 @@ import {
 } from '../_shared/gemini-ocr-routing.ts';
 import { buildGeminiTelemetryRpcArgs } from '../_shared/ocr-provider-telemetry.ts';
 import { randomJitterMs } from '../_shared/random-jitter.ts';
+import { enqueueVisualEmbeddingAfterOcr } from '../_shared/visual-embedding-enqueue.ts';
 
 declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void };
 
@@ -345,6 +346,7 @@ async function drainOnce(settings: WorkerConfig) {
 
 	const providerPages: GeminiOcrBatchPage[] = [];
 	const providerClaims = new Map<string, ClaimedCandidate>();
+	const providerSources = new Map<string, { mediaPath: string; mimeType: string }>();
 	let aggregateBytes = 0;
 	for (const entry of claimed) {
 		const sourcePath =
@@ -400,6 +402,10 @@ async function drainOnce(settings: WorkerConfig) {
 			bytes
 		});
 		providerClaims.set(entry.candidate.pageId, entry);
+		providerSources.set(entry.candidate.pageId, {
+			mediaPath: sourcePath,
+			mimeType: blob.type || ''
+		});
 	}
 
 	if (providerPages.length === 0) {
@@ -512,7 +518,20 @@ async function drainOnce(settings: WorkerConfig) {
 					completedAt: new Date().toISOString(),
 					geometry: result.wordGeometry
 				});
-				await cleanupTemporaryImage(admin, entry);
+				const visualSource = providerSources.get(result.pageId);
+				const visual = await enqueueVisualEmbeddingAfterOcr({
+					supabase: admin,
+					ownerUserId: entry.candidate.userId,
+					pageId: result.pageId,
+					mediaPath: visualSource?.mediaPath ?? null,
+					mediaMimeType: visualSource?.mimeType ?? null,
+					contentClass: result.contentClass,
+					warnings: result.warnings,
+					needsReview: result.needsReview,
+					effectiveText: result.text,
+					wordGeometry: result.wordGeometry
+				});
+				if (!visual.preserveTemporaryMedia) await cleanupTemporaryImage(admin, entry);
 			} catch {
 				await failClaim(admin, entry, {
 					code: 'ocr_persistence_failed',

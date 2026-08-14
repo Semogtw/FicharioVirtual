@@ -356,6 +356,7 @@ export async function indexBackgroundVisualPass(input: {
 				}
 				const completionRecord = record(completion);
 				if (completionRecord?.stored !== true) {
+					await cleanupTemporary(input.admin, completionRecord);
 					failedPages += 1;
 					continue;
 				}

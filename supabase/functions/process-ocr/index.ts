@@ -16,6 +16,10 @@ import {
 } from '../_shared/gemini-ocr-routing.ts';
 import { requestGeminiOcrBatch, type GeminiOcrBatchPage } from '../_shared/gemini-ocr-client.ts';
 import { buildGeminiTelemetryRpcArgs } from '../_shared/ocr-provider-telemetry.ts';
+import {
+	enqueueVisualEmbeddingAfterOcr,
+	visualTemporaryMediaIsNeeded
+} from '../_shared/visual-embedding-enqueue.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MODEL = /^[A-Za-z0-9._-]{3,128}$/;
@@ -246,6 +250,7 @@ Deno.serve(async (request) => {
 
 	const cleanupTemporaryImage = async (pageId: string, path: string | null) => {
 		if (!path) return;
+		if (await visualTemporaryMediaIsNeeded({ supabase, pageId, mediaPath: path })) return;
 		const { error } = await supabase.storage.from('documents').remove([path]);
 		if (!error) {
 			await supabase.rpc('clear_temporary_page_image', {
@@ -443,6 +448,7 @@ Deno.serve(async (request) => {
 
 	const providerPages: GeminiOcrBatchPage[] = [];
 	const providerClaims = new Map<string, ClaimedPage>();
+	const providerSources = new Map<string, { mediaPath: string; mimeType: string }>();
 	let aggregateBytes = 0;
 	for (let index = 0; index < claimedPages.length; index += 1) {
 		const claimed = claimedPages[index]!;
@@ -512,6 +518,10 @@ Deno.serve(async (request) => {
 			bytes
 		});
 		providerClaims.set(claimed.page.id, claimed);
+		providerSources.set(claimed.page.id, {
+			mediaPath: sourcePath,
+			mimeType: sourceBlob.type || ''
+		});
 	}
 
 	if (providerPages.length === 0) {
@@ -651,6 +661,18 @@ Deno.serve(async (request) => {
 			}
 			completedPageIds.push(result.pageId);
 			if (result.needsReview) reviewPageIds.push(result.pageId);
+			const visualSource = providerSources.get(result.pageId);
+			await enqueueVisualEmbeddingAfterOcr({
+				supabase,
+				pageId: result.pageId,
+				mediaPath: visualSource?.mediaPath ?? null,
+				mediaMimeType: visualSource?.mimeType ?? null,
+				contentClass: result.contentClass,
+				warnings: result.warnings,
+				needsReview: result.needsReview,
+				effectiveText: result.text,
+				wordGeometry: result.wordGeometry
+			});
 			await cleanupTemporaryImage(result.pageId, claimed.page.temporary_image_path);
 		}
 
