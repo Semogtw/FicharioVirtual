@@ -1,0 +1,148 @@
+name: Patch visual benchmark retries
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/patch-visual-benchmark-retries.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: patch-visual-benchmark-retries
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Add bounded search retries and reliability gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path('tools/checks/check-visual-semantic-staging.mjs')
+          text = path.read_text()
+          old = '''async function searches(db, state, expectedMode) {
+          \tconst labels = new Map(state.probes.map((p) => [p.documentId, p.id]));
+          \tconst rows = [];
+          \tfor (const spec of QUERIES) {
+          \t\tconst start = performance.now();
+          \t\tconst result = await db.functions.invoke('semantic-search', {
+          \t\t\tbody: { query: spec.query, notebookId: state.notebookId, limit: 10, offset: 0 }
+          \t\t});
+          \t\tif (result.error || !Array.isArray(result.data?.results))
+          \t\t\tthrow new Error(`${spec.id} search failed: ${result.error?.message ?? 'invalid response'}`);
+          \t\tif (result.data.mode !== expectedMode)
+          \t\t\tthrow new Error(`${spec.id} expected ${expectedMode}, got ${result.data.mode}`);
+          \t\trows.push({
+          \t\t\tid: spec.id,
+          \t\t\tkind: spec.kind,
+          \t\t\texpected: spec.expected,
+          \t\t\tlatencyMs: Math.round(performance.now() - start),
+          \t\t\tresultLabels: result.data.results.map((r) => labels.get(r.documentId)).filter(Boolean),
+          \t\t\treason: result.data.reason ?? null
+          \t\t});
+          \t}
+          \treturn rows;
+          }'''
+          new = '''async function searches(db, state, expectedMode) {
+          \tconst labels = new Map(state.probes.map((p) => [p.documentId, p.id]));
+          \tconst rows = [];
+          \tfor (const spec of QUERIES) {
+          \t\tconst start = performance.now();
+          \t\tlet result = null;
+          \t\tlet retryCount = 0;
+          \t\tfor (const delay of [0, 5_000, 15_000]) {
+          \t\t\tif (delay) {
+          \t\t\t\tretryCount += 1;
+          \t\t\t\tawait sleep(delay);
+          \t\t\t}
+          \t\t\tresult = await db.functions.invoke('semantic-search', {
+          \t\t\t\tbody: { query: spec.query, notebookId: state.notebookId, limit: 10, offset: 0 }
+          \t\t\t});
+          \t\t\tif (!result.error && Array.isArray(result.data?.results)) break;
+          \t\t}
+          \t\tif (!result || result.error || !Array.isArray(result.data?.results))
+          \t\t\tthrow new Error(`${spec.id} search failed after retries: ${result?.error?.message ?? 'invalid response'}`);
+          \t\tif (result.data.mode !== expectedMode)
+          \t\t\tthrow new Error(`${spec.id} expected ${expectedMode}, got ${result.data.mode}`);
+          \t\trows.push({
+          \t\t\tid: spec.id,
+          \t\t\tkind: spec.kind,
+          \t\t\texpected: spec.expected,
+          \t\t\tlatencyMs: Math.round(performance.now() - start),
+          \t\t\tretryCount,
+          \t\t\tresultLabels: result.data.results.map((r) => labels.get(r.documentId)).filter(Boolean),
+          \t\t\treason: result.data.reason ?? null
+          \t\t});
+          \t}
+          \treturn rows;
+          }'''
+          if old not in text:
+              raise SystemExit('searches block not found')
+          text = text.replace(old, new)
+          old_metric = '''\t\tnegativeCount: rows.find((r) => r.kind === 'negative')?.resultLabels.length ?? 0,
+          \t\tlatencyMedianMs: times[Math.floor(times.length / 2)] ?? 0,'''
+          new_metric = '''\t\tnegativeCount: rows.find((r) => r.kind === 'negative')?.resultLabels.length ?? 0,
+          \t\tsearchRetries: rows.reduce((sum, row) => sum + (row.retryCount ?? 0), 0),
+          \t\tlatencyMedianMs: times[Math.floor(times.length / 2)] ?? 0,'''
+          if old_metric not in text:
+              raise SystemExit('metric insertion point not found')
+          text = text.replace(old_metric, new_metric)
+          old_gate = '''\tconst gates = {
+          \t\tnoQuotaSignal: !shadow.quotaSignalObserved && !active.quotaSignalObserved,'''
+          new_gate = '''\tconst gates = {
+          \t\tnoQuotaSignal: !shadow.quotaSignalObserved && !active.quotaSignalObserved,
+          \t\tnoSearchRetries: shadow.metrics.searchRetries === 0 && active.metrics.searchRetries === 0,'''
+          if old_gate not in text:
+              raise SystemExit('gate insertion point not found')
+          path.write_text(text.replace(old_gate, new_gate))
+          PY
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22.16.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Format and lint
+        run: |
+          pnpm exec prettier --write tools/checks/check-visual-semantic-staging.mjs
+          pnpm lint
+          git diff --check
+
+      - name: Commit patch and remove diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f \
+            .github/workflows/patch-visual-benchmark-retries.yml \
+            .github/workflows/diagnose-semantic-search-staging.yml \
+            tools/checks/check-semantic-search-staging.mjs
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'test(search): make staging visual benchmark retry-aware'
+          git push origin HEAD:main
