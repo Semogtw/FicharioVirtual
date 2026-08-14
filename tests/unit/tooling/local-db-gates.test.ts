@@ -18,7 +18,7 @@ describe('local database gate runner', () => {
 		);
 		expect(packageJson.scripts?.['test:db:local']).toBe('bash tools/checks/run-local-db-gates.sh');
 		expect(packageJson.scripts?.['test:functions:check']).toBe(
-			'bash tools/checks/check-edge-functions.sh'
+			"find supabase/functions -type f -name '*.ts' -print0 | sort -z | xargs -0 -n 1 deno check --no-config"
 		);
 		expect(packageJson.scripts?.['verify:full']).toBe(
 			'pnpm verify && pnpm test:e2e && pnpm test:source:offline && pnpm test:functions:check && pnpm test:db:local'
