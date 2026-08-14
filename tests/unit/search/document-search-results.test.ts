@@ -52,7 +52,9 @@ describe('document search result aggregation', () => {
 
 	it('counts whole-word and phrase occurrences without case or accent differences', () => {
 		expect(countExactQueryOccurrences('Árvore árvore ARVORE; arvoredo.', 'árvore')).toBe(3);
-		expect(countExactQueryOccurrences('Energia cinética e energia cinética.', 'energia cinética')).toBe(2);
+		expect(
+			countExactQueryOccurrences('Energia cinética e energia cinética.', 'energia cinética')
+		).toBe(2);
 		expect(countExactQueryOccurrences('fotossíntese fotossinteses', 'fotossíntese')).toBe(1);
 	});
 });

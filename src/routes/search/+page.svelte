@@ -104,9 +104,7 @@
 			if (!requests.isCurrent(version)) return;
 			const nextVisible = Object.freeze(pool.slice(0, pageSize));
 			pendingResults = Object.freeze(pool.slice(pageSize));
-			results = reset
-				? nextVisible
-				: Object.freeze([...visibleBase, ...nextVisible]);
+			results = reset ? nextVisible : Object.freeze([...visibleBase, ...nextVisible]);
 			rawOffset = offset;
 			rawHasMore = canFetch;
 			analysis = nextAnalysis;
