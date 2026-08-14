@@ -1,6 +1,7 @@
 name: Diagnose visual retrieval 15-doc shadow now
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
