@@ -1,7 +1,7 @@
 # Operação 100% gratuita
 
-**Última verificação externa registrada:** 6 de agosto de 2026  
-**Implementação OCR atualizada:** 6 de agosto de 2026
+**Última verificação externa registrada:** 15 de agosto de 2026  
+**Implementação OCR ativa:** Gemini 3.1 Flash-Lite principal + Gemini 3.5 Flash-Lite fallback; Azure ainda é somente plano documentado.
 
 Este documento define as regras para manter o Fichário Virtual em R$ 0. Franquias externas podem mudar; a aplicação deve falhar de forma segura quando um serviço deixa de aceitar uso e nunca migrar automaticamente para cobrança.
 
@@ -21,6 +21,7 @@ Este documento define as regras para manter o Fichário Virtual em R$ 0. Franqui
 12. Não obrigar tablet ou celular a baixar modelos destinados ao computador.
 13. Permitir que trabalhos aguardem serviço externo ou computador sem perda.
 14. Revisar franquias e billing antes de cada implantação relevante.
+15. Qualquer recurso Azure usado automaticamente deve permanecer explicitamente no SKU F0; nunca fazer upgrade programático para S0/S1.
 
 ## 2. Autoridades de armazenamento e processamento
 
@@ -58,17 +59,21 @@ Este documento define as regras para manter o Fichário Virtual em R$ 0. Franqui
 
 O worker desktop continua aprovado em arquitetura, mas não faz parte da implementação de lotes Gemini concluída nesta etapa.
 
-## 3. Gemini Developer API
+## 3. OCR externo ativo: Gemini Developer API
 
-Referências oficiais operacionais permanecem registradas em `docs/DEPLOYMENT.md` e `docs/OCR_STAGING.md`.
+Referências operacionais permanecem registradas em `docs/DEPLOYMENT.md`, `docs/OCR_STAGING.md` e `docs/OCR_FAILURE_MATRIX.md`.
 
-Configuração obrigatória:
+Configuração atual relevante:
 
 ```text
 APP_ORIGIN
 GEMINI_API_KEY
 OCR_MODEL_PRIMARY
+OCR_MODEL_FALLBACK
 OCR_PROMPT_VERSION
+OCR_MODEL_PRIMARY_RPM
+OCR_MODEL_FALLBACK_RPM
+OCR_PROVIDER_MAX_QUEUE_WAIT_MS
 ```
 
 Controles técnicos opcionais:
@@ -79,11 +84,11 @@ OCR_BATCH_MAX_BYTES=12582912
 OCR_REQUEST_TIMEOUT_MS=120000
 ```
 
-Esses valores controlam páginas por chamada, memória e duração. Eles não representam franquia diária.
+Os modelos padrão do runtime são Gemini 3.1 Flash-Lite como principal e Gemini 3.5 Flash-Lite como fallback. Os limites locais de RPM mantêm margem abaixo da capacidade nominal configurada; não representam franquia diária.
 
 ### Política de quota
 
-A quota real do Gemini é a única autoridade para capacidade do provedor.
+A quota real do provider é a única autoridade para capacidade disponível.
 
 O Fichário pode registrar:
 
@@ -93,21 +98,99 @@ O Fichário pode registrar:
 - tentativas;
 - erros temporários;
 - bloqueios reais de quota;
-- média de páginas por chamada.
+- média de páginas por chamada;
+- provider/modelo/rota efetivamente usados.
 
-Esses contadores não podem impedir uma chamada que ainda seria aceita.
+Esses contadores não podem impedir uma chamada que ainda seria aceita pelo provider, salvo rate limiting técnico necessário para não exceder RPM/concorrência.
 
 Estados relevantes:
 
 - `retryable`: falha curta, timeout ou rate limit temporário;
-- `blocked_quota`: quota real indisponível;
+- `blocked_quota`: quota real indisponível e identificada com segurança;
 - `waiting_desktop`: trabalho aguardando computador, quando essa rota existir;
 - `needs_review`: resultado incerto;
 - `failed`: erro permanente de arquivo, segurança ou configuração.
 
 Nenhum estado ativa billing.
 
-## 4. OCR por lotes implementado
+## 4. Terceiro fallback planejado: Azure Vision Read F0
+
+A especificação completa está em `docs/AZURE_OCR_FALLBACK_IMPLEMENTATION.md`.
+
+A ordem aprovada para implementação é:
+
+```text
+Gemini 3.1 Flash-Lite
+  -> Gemini 3.5 Flash-Lite
+    -> Azure Vision Read
+      -> fila persistente
+```
+
+Azure **ainda não está ativo**. Não adicionar secrets Azure à produção como se a feature já estivesse implementada.
+
+### Limites externos verificados em 15/08/2026
+
+Para Azure Vision no tier F0, a página oficial de preços informa:
+
+- 5.000 transações gratuitas por mês;
+- 20 transações por minuto.
+
+Para Read v3.2, a documentação oficial informa ainda:
+
+- processamento assíncrono por `POST` + polling;
+- uma imagem por chamada, sem batch multi-imagem;
+- imagens F0 abaixo de 4 MB;
+- suporte a JPEG, PNG, BMP, PDF e TIFF;
+- caixas de linhas/palavras e confidence por palavra;
+- português impresso e manuscrito suportados.
+
+A Microsoft também informa que Read v3.2 não recebe mais atualizações e recomenda Document Intelligence Read para documentos. Mesmo assim, o primeiro adapter planejado permanece Azure Vision Read porque o pipeline já trabalha com páginas renderizadas individuais e a franquia F0 do Azure Vision é substancialmente maior para o papel de terceiro fallback.
+
+### Por que não Document Intelligence F0 inicialmente
+
+A verificação de 15/08/2026 encontrou para Document Intelligence F0:
+
+- 500 páginas gratuitas por mês;
+- documento de até 4 MB;
+- somente as duas primeiras páginas analisadas em uma solicitação;
+- 1 analyze transaction por segundo.
+
+Isso deve ser reavaliado antes da implementação. Se pricing/lifecycle mudar, o adapter precisa poder trocar de edição Azure sem mudar o orquestrador.
+
+### Garantia de custo
+
+- criar o recurso explicitamente como F0;
+- não implementar upgrade automático;
+- não trocar para SKU pago quando a franquia acabar;
+- não usar contador local como substituto da resposta real do provider;
+- quando Azure não aceitar mais trabalho, devolver o job para a fila persistente;
+- revisar visualmente o SKU no portal antes de habilitar produção.
+
+## 5. Particularidades Azure que afetam o free tier
+
+### 5.1 Página maior que 4 MB
+
+O teto Gemini atual não deve cair para 4 MB. Se Azure precisar receber uma página maior que o seu limite F0:
+
+- criar derivação temporária provider-specific;
+- preservar original e derivação Gemini;
+- reduzir tamanho de modo conservador;
+- preferir teto operacional abaixo de 4.000.000 bytes;
+- se não for seguro reduzir, não chamar Azure e manter a página na fila aguardando Gemini.
+
+### 5.2 WebP
+
+Read v3.2 não deve ser assumido compatível com WebP. Se a derivação atual estiver em WebP, produzir JPEG/PNG temporário somente para Azure.
+
+### 5.3 Polling
+
+Read v3.2 é assíncrono. Polling precisa de intervalo, concurrency e timeout próprios; nunca abrir `Promise.all` irrestrito para dezenas de páginas. O rate limiter de submissão e o scheduler de polling devem impedir tempestade de requests.
+
+### 5.4 Geometria
+
+Azure fornece caixas de palavra nativas em pixels. O adapter deve normalizá-las para o contrato persistido `0..10000`, sem alterar schema de página. Isso permite aproveitar Azure como fallback sem criar uma segunda implementação de highlight.
+
+## 6. OCR por lotes implementado
 
 A implementação ativa inclui:
 
@@ -120,64 +203,53 @@ A implementação ativa inclui:
 - telemetria separada de páginas, lotes, chamadas e tentativas;
 - RLS e escrita de manifestos apenas por RPC;
 - transições terminais idempotentes;
-- rate limit temporário separado de quota diária real.
+- rate limit temporário separado de quota diária real;
+- Gemini 3.1 Flash-Lite principal e Gemini 3.5 Flash-Lite fallback.
 
-O segredo diário antigo não é lido pelo código atual e deve ser removido do painel depois do rollout:
+O segredo diário antigo não é lido pelo código atual e deve permanecer removido:
 
 ```bash
 supabase secrets unset OCR_DAILY_HARD_LIMIT
 ```
 
-A ausência de teto interno está implementada, mas só recebe `PASS` operacional depois de migrations, CI e staging no mesmo SHA.
+Azure não muda essa política provider-only.
 
-## 5. Economia de chamadas
+## 7. Economia de chamadas
 
-- PDF com texto nativo não chama Gemini.
+- PDF com texto nativo não chama provider OCR.
 - PDF misto envia somente páginas necessárias.
 - Classificação e transcrição preliminar não exigem chamadas separadas.
-- PDF visual usa páginas renderizadas em lotes adaptativos.
-- Lotes normais começam em até 40 páginas.
-- Conteúdo denso começa em até 20 páginas.
+- PDF visual usa páginas renderizadas em lotes adaptativos no Gemini.
+- Lotes normais Gemini começam em até 40 páginas.
+- Conteúdo denso pode começar em lotes menores.
 - Resultado continua persistido por página.
 - Páginas válidas não são repetidas quando outra página falha.
+- Quando Azure for implementado, somente páginas ainda pendentes depois dos dois Gemini poderão chegar a ele.
+- Azure processará páginas individualmente; não tentar emular batch concatenando imagens.
 
-O número do lote é ajustável e não é quota.
+## 8. PDFs grandes
 
-## 6. PDFs grandes
-
-Na verificação externa registrada em 6 de agosto de 2026, a documentação da Gemini indicava limite de 50 MB ou 1.000 páginas por PDF enviado. Esse é um limite do artefato de uma chamada, não do documento lógico armazenado no Drive.
+O arquivo lógico continua independente do limite de uma chamada de provider.
 
 Regras implementadas:
 
-- teto artificial de 20 MB removido da importação local;
 - original permanece único e intacto no Drive;
 - texto nativo é extraído antes do OCR;
 - somente páginas visuais recebem derivados;
-- bytes acumulados limitam cada chamada;
-- página derivada acima de 12 MiB recebe uma segunda renderização conservadora;
+- bytes acumulados limitam cada chamada Gemini;
+- páginas grandes recebem derivação conservadora quando necessário;
 - omissão, duplicação ou JSON truncado provocam divisão do subconjunto afetado;
 - uma página isolada que continua falhando permanece pendente, sem loop;
 - cancelamento preserva páginas concluídas;
 - retomada usa o mesmo executor adaptativo.
 
-Fragmentar não elimina RPM, TPM, RPD, limite de saída ou tempo de inferência.
+Quando Azure entrar, ele receberá a página derivada e nunca exigirá quebrar o original lógico em novos documentos.
 
-### Google Picker
-
-O download direto pelo navegador aceita até 50 MiB e verifica tamanho antes de transferir o arquivo.
-
-Esse valor:
-
-- não é limite do documento lógico;
-- não é limite dos lotes de OCR;
-- não impede upload local retomável ao Drive;
-- ainda exige conclusão do fluxo por referência ou cópia para arquivos externos maiores que 50 MiB.
-
-## 7. Compressão segura
+## 9. Compressão segura
 
 O Fichário não recomprime o original.
 
-“Compressão” nesta implementação significa produzir uma segunda imagem temporária da página quando a primeira ultrapassa o limite técnico seguro. A transformação:
+“Compressão” significa produzir imagem temporária quando necessário para um provider. A transformação:
 
 - afeta somente a página derivada;
 - reduz dimensão e qualidade de forma conservadora;
@@ -185,7 +257,9 @@ O Fichário não recomprime o original.
 - não é aplicada a páginas que já cabem;
 - não autoriza degradação agressiva de manuscritos, fórmulas ou cores relevantes.
 
-## 8. Cloudflare Pages e R2
+A implementação Azure poderá exigir uma segunda derivação abaixo de 4 MB; isso não altera esta regra.
+
+## 10. Cloudflare Pages e R2
 
 Cloudflare Pages continua sendo o host estático preferencial.
 
@@ -201,9 +275,11 @@ Regras:
 
 R2 permanece fora do MVP por envolver assinatura e cobrança por uso. Só pode ser ativado por decisão explícita com necessidade, estimativa, risco, alertas e procedimento de desligamento.
 
-## 9. Painel de uso
+## 11. Painel de uso
 
-A tela de Configurações mostra:
+A tela de Configurações deve mostrar telemetria real, não promessa de franquia restante.
+
+Atual:
 
 - páginas analisadas;
 - lotes;
@@ -211,13 +287,19 @@ A tela de Configurações mostra:
 - tentativas;
 - tamanho médio de lote;
 - bloqueios reais de quota;
-- pendências, revisão e falhas;
-- trabalhos futuros do computador, quando implementados;
-- data da última revisão operacional.
+- pendências, revisão e falhas.
+
+Quando Azure for implementado:
+
+- chamadas/páginas por provider;
+- rota `fallback_azure_after_gemini`;
+- 429/indisponibilidade Azure;
+- quantidade de páginas que exigiram derivação Azure;
+- revisão/confidence agregada sem conteúdo textual.
 
 Não apresentar contador local como “páginas restantes”.
 
-## 10. Variáveis e segredos
+## 12. Variáveis e segredos
 
 ### Frontend
 
@@ -229,14 +311,17 @@ PUBLIC_GOOGLE_PICKER_API_KEY
 PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER
 ```
 
-### Supabase
+### Supabase — ativos
 
 ```text
 APP_ORIGIN
 GEMINI_API_KEY
 OCR_MODEL_PRIMARY
-OCR_MODEL_QUALITY
+OCR_MODEL_FALLBACK
 OCR_PROMPT_VERSION
+OCR_MODEL_PRIMARY_RPM
+OCR_MODEL_FALLBACK_RPM
+OCR_PROVIDER_MAX_QUEUE_WAIT_MS
 OCR_BATCH_MAX_PAGES
 OCR_BATCH_MAX_BYTES
 OCR_REQUEST_TIMEOUT_MS
@@ -245,7 +330,18 @@ GOOGLE_CLIENT_SECRET
 GOOGLE_DRIVE_REDIRECT_URI
 ```
 
-`OCR_MODEL_QUALITY` continua opcional e não cria fallback automático.
+### Supabase — planejados para Azure, somente quando runtime existir
+
+```text
+AZURE_VISION_ENDPOINT
+AZURE_VISION_KEY
+OCR_AZURE_MODEL
+OCR_AZURE_RPM
+OCR_AZURE_MAX_IMAGE_BYTES
+OCR_AZURE_POLL_INTERVAL_MS
+OCR_AZURE_POLL_TIMEOUT_MS
+OCR_AZURE_FALLBACK_ENABLED
+```
 
 Nunca expor:
 
@@ -253,10 +349,11 @@ Nunca expor:
 SUPABASE_SERVICE_ROLE_KEY
 DRIVE_REFRESH_TOKEN
 GEMINI_API_KEY
+AZURE_VISION_KEY
 OCR_WORKER_DEVICE_TOKEN
 ```
 
-## 11. Gates antes de release
+## 13. Gates antes de release
 
 No mesmo SHA:
 
@@ -272,31 +369,44 @@ pnpm build
 pnpm test:e2e
 ```
 
-Também são obrigatórios:
+Também são obrigatórios para OCR:
 
 - migrations em Supabase limpo;
 - smoke Gemini real;
 - lote multipágina real;
-- PDF textual com zero chamadas;
-- fixtures acima de 50 MB e 1.000 páginas;
+- PDF textual com zero chamadas OCR;
 - hash do original inalterado;
 - cancelamento e retomada;
 - celular e tablet;
 - confirmação de billing desativado.
 
-Os procedimentos estão em:
+Antes de Azure ficar `active`, adicionar:
 
+- protocolo Azure loopback POST + polling;
+- smoke Azure real em staging;
+- confirmação do recurso F0;
+- página acima de 4 MB;
+- WebP convertido para formato Azure suportado;
+- manuscrito em português;
+- geometria/highlight sobre bitmap real;
+- 429/5xx/timeout Azure retornando à fila;
+- nenhum secret/body OCR em logs/telemetria.
+
+Procedimentos relacionados:
+
+- `docs/AZURE_OCR_FALLBACK_IMPLEMENTATION.md`;
 - `docs/DEPLOYMENT.md`;
 - `docs/OCR_STAGING.md`;
-- `docs/checkpoints/2026-08-06-provider-only-ocr-large-pdf-implementation.md`.
+- `docs/OCR_FAILURE_MATRIX.md`.
 
-## 12. Plano de saída
+## 14. Plano de saída
 
 Se um serviço deixar de atender gratuitamente:
 
 - **Cloudflare Pages:** mover frontend e artefatos públicos para host estático gratuito compatível;
 - **Supabase:** exportar PostgreSQL e temporários;
-- **Gemini:** pausar fila, usar correção manual ou rota desktop explicitamente aprovada;
+- **Gemini:** tentar somente providers gratuitos explicitamente configurados; caso contrário preservar fila;
+- **Azure F0:** desabilitar o adapter e preservar fila; nunca promover para SKU pago automaticamente;
 - **Google Drive:** exportar originais e metadados sem migração paga automática;
 - **projeto de modelos:** usar host público autorizado ou instalação manual com checksum.
 
