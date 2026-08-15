@@ -185,8 +185,11 @@ jobs:
           retention-days: 7
 
   restore-active:
-    needs: [shadow, activate, active]
-    if: always() && needs.shadow.result == 'success'
+    needs: [gate, prepare-shadow, shadow, activate, active]
+    if: >-
+      always() &&
+      needs.gate.outputs.should_run == 'true' &&
+      needs.prepare-shadow.result != 'skipped'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment: staging-deploy
