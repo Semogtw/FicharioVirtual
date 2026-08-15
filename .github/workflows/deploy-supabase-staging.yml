@@ -138,6 +138,7 @@ jobs:
             "OCR_MODEL_PRIMARY_RPM=12" \
             "OCR_MODEL_FALLBACK_RPM=12" \
             "OCR_PROVIDER_MAX_QUEUE_WAIT_MS=20000" \
+            "SEMANTIC_VISUAL_MODE=active" \
             "GOOGLE_DRIVE_REDIRECT_URI=https://$STAGING_SUPABASE_PROJECT_REF.supabase.co/functions/v1/drive-oauth-callback" \
             "GOOGLE_DRIVE_SCOPE=https://www.googleapis.com/auth/drive.file" \
             "GOOGLE_DRIVE_ROOT_FOLDER_NAME=Fichário Digital"
