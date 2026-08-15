@@ -42,9 +42,29 @@ jobs:
             echo "Skipping visual benchmark because deploy job conclusion is: $deploy_conclusion"
           fi
 
-  shadow:
+  prepare-shadow:
     needs: gate
     if: needs.gate.outputs.should_run == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: staging-deploy
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.STAGING_SUPABASE_ACCESS_TOKEN }}
+      STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+    steps:
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf # v2
+        with:
+          version: 2.111.0
+
+      - name: Temporarily switch to shadow baseline
+        run: |
+          supabase secrets set --project-ref "$STAGING_SUPABASE_PROJECT_REF" "SEMANTIC_VISUAL_MODE=shadow"
+          sleep 20
+
+  shadow:
+    needs: [gate, prepare-shadow]
+    if: needs.gate.outputs.should_run == 'true' && needs.prepare-shadow.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     environment: staging
@@ -106,7 +126,7 @@ jobs:
         with:
           version: 2.111.0
 
-      - name: Temporarily enable active visual ranking
+      - name: Enable active visual ranking
         run: |
           supabase secrets set --project-ref "$STAGING_SUPABASE_PROJECT_REF" "SEMANTIC_VISUAL_MODE=active"
           sleep 20
@@ -164,7 +184,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-  restore-shadow:
+  restore-active:
     needs: [shadow, activate, active]
     if: always() && needs.shadow.result == 'success'
     runs-on: ubuntu-24.04
@@ -179,11 +199,11 @@ jobs:
         with:
           version: 2.111.0
 
-      - name: Restore safe shadow mode
-        run: supabase secrets set --project-ref "$STAGING_SUPABASE_PROJECT_REF" "SEMANTIC_VISUAL_MODE=shadow"
+      - name: Keep promoted active visual ranking enabled
+        run: supabase secrets set --project-ref "$STAGING_SUPABASE_PROJECT_REF" "SEMANTIC_VISUAL_MODE=active"
 
   compare-cleanup:
-    needs: [gate, shadow, active, restore-shadow]
+    needs: [gate, shadow, active, restore-active]
     if: always() && needs.gate.outputs.should_run == 'true' && needs.shadow.result != 'skipped'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -230,7 +250,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Compare shadow against active
-        if: needs.active.result == 'success' && needs.restore-shadow.result == 'success'
+        if: needs.active.result == 'success' && needs.restore-active.result == 'success'
         env:
           VISUAL_BENCHMARK_PHASE: compare
           VISUAL_SHADOW_REPORT_PATH: /tmp/visual-shadow-input/visual-shadow.json
