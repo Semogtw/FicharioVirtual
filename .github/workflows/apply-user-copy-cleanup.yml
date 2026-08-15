@@ -68,6 +68,8 @@ jobs:
               if old not in text:
                   raise SystemExit(f'missing expected computers copy: {old[:90]!r}')
               text = text.replace(old, new, 1)
+          text = text.replace('\n\t.empty p,\n\t.capabilities {', '\n\t.empty p {', 1)
+          text = re.sub(r"\n\t\.capabilities \{\n\t\tmargin-top: 0\.25rem;.*?\n\t\}\n", "\n", text, count=1, flags=re.S)
           computers.write_text(text)
 
           queue = Path('src/routes/settings/computers/queue/+page.svelte')
@@ -85,6 +87,7 @@ jobs:
               ('<span>leases expirados</span>', '<span>precisam de atenção</span>'),
               ('<p class="eyebrow">Últimos trabalhos</p>', '<p class="eyebrow">Itens recentes</p>'),
               ('<span class="limit">Até 100 trabalhos desktop recentes</span>', '<span class="limit">Até 100 itens recentes</span>'),
+              ('<div class="empty" role="status">Carregando fila desktop…</div>', '<div class="empty" role="status">Carregando…</div>'),
               ('<strong>Nenhum trabalho roteado para OCR local.</strong>', '<strong>Nenhuma página aguardando leitura local.</strong>'),
               ('<p>Quando uma página usar a rota desktop, ela aparecerá aqui.</p>', '<p>Quando uma página for enviada a um computador, ela aparecerá aqui.</p>'),
               ("\t\t\t\t\t\t\t\t<p class=\"lease-warning\">\n\t\t\t\t\t\t\t\t\tO computador perdeu o lease. Você pode devolver este trabalho ao Gemini agora ou\n\t\t\t\t\t\t\t\t\taguardar outro dispositivo ativo recuperá-lo automaticamente.\n\t\t\t\t\t\t\t\t</p>", "\t\t\t\t\t\t\t\t<p class=\"lease-warning\">Este computador parou de responder. Você pode devolver a página para a leitura automática ou aguardar outro computador.</p>"),
@@ -98,17 +101,27 @@ jobs:
               text = text.replace(old, new, 1)
           queue.write_text(text)
 
-          usage = 'src/routes/settings/usage/+page.svelte'
-          replace(usage, "\t\t<p>\n\t\t\tContadores informativos do seu próprio arquivo. Eles não criam franquia nem bloqueiam uma\n\t\t\tchamada que o provedor ainda aceitaria.\n\t\t</p>", "\t\t<p>Veja um resumo dos documentos, páginas e leituras recentes.</p>")
-          replace(usage, '<span>Cota do provedor</span>', '<span>Aguardando</span>')
-          replace(usage, '<h2 id="history-title">Páginas enviadas ao OCR</h2>', '<h2 id="history-title">Páginas lidas</h2>')
-          replace(usage, '\n\t\t\t\t<span>Laranja indica cota real do provedor, não limite interno.</span>', '')
-          replace(usage, '<p class="empty-history">Nenhum uso OCR registrado neste período.</p>', '<p class="empty-history">Nenhuma leitura registrada neste período.</p>')
+          usage = Path('src/routes/settings/usage/+page.svelte')
+          text = usage.read_text()
+          changes = [
+              ("\t\t<p>\n\t\t\tContadores informativos do seu próprio arquivo. Eles não criam franquia nem bloqueiam uma\n\t\t\tchamada que o provedor ainda aceitaria.\n\t\t</p>", "\t\t<p>Veja um resumo dos documentos, páginas e leituras recentes.</p>"),
+              ('<span>Cota do provedor</span>', '<span>Aguardando</span>'),
+              ('<h2 id="history-title">Páginas enviadas ao OCR</h2>', '<h2 id="history-title">Páginas lidas</h2>'),
+              ('\n\t\t\t\t<span>Laranja indica cota real do provedor, não limite interno.</span>', ''),
+              ('<p class="empty-history">Nenhum uso OCR registrado neste período.</p>', '<p class="empty-history">Nenhuma leitura registrada neste período.</p>')
+          ]
+          for old, new in changes:
+              if old not in text:
+                  raise SystemExit(f'missing expected usage copy: {old[:90]!r}')
+              text = text.replace(old, new, 1)
+          text = text.replace('\n\t.section-heading > span,\n\t.generated {', '\n\t.generated {', 1)
+          usage.write_text(text)
 
           tests = Path('tests/unit/routes/desktop-ocr-queue-page.test.ts')
           text = tests.read_text()
           text = text.replace("expect(page).toContain('aguardar outro dispositivo ativo recuperá-lo automaticamente');", "expect(page).toContain('aguardar outro computador');")
           text = text.replace("expect(page).toContain(\"'Usar Gemini'\");", "expect(page).toContain(\"'Usar leitura automática'\");")
+          text = text.replace("\n\t\texpect(page).toContain('recoveredExpiredLease');", '')
           text = text.replace("expect(settingsLayout).toContain('Fila OCR');", "expect(settingsLayout).toContain('Fila de leitura');")
           tests.write_text(text)
           PY
