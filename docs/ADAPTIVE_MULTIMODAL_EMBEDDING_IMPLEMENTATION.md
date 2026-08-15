@@ -1,6 +1,6 @@
 # Implementação — embeddings visuais adaptativos
 
-**Status:** implementação concluída e validada em staging. O canal visual permanece em `shadow` por padrão; `active` foi testado temporariamente com resultado positivo e restauração automática.
+**Status:** implementação concluída, validada em staging e promovida para `active` como modo operacional contínuo. O benchmark pós-deploy ainda força `shadow` temporariamente para medir a baseline e volta para `active` ao final.
 
 **Arquitetura:** [ADAPTIVE_MULTIMODAL_EMBEDDING.md](./ADAPTIVE_MULTIMODAL_EMBEDDING.md)
 
@@ -24,7 +24,8 @@
 - [x] telemetria visual sem conteúdo da página;
 - [x] testes unitários e contratuais;
 - [x] benchmark de staging idempotente entre execuções;
-- [x] smokes PNG/JPEG, corpus de 15 documentos, negativas e cleanup real.
+- [x] smokes PNG/JPEG, corpus de 15 documentos, negativas e cleanup real;
+- [x] rollout contínuo do ranking visual em `active`.
 
 ## Configuração calibrada
 
@@ -73,19 +74,21 @@ Resultado final: `status: pass`, `recommendation: promote_active`.
 
 Delta sobre shadow: MRR visual `+0.8286`, Recall@3 global `+0.80`, p95 `+1387 ms`; todos os gates configurados passaram.
 
-## Estado final do staging
+## Estado operacional após promoção
 
-O workflow restaurou `SEMANTIC_VISUAL_MODE=shadow` antes da etapa final. O cleanup removeu `16/16` documentos temporários e o fichário do benchmark, com `failures: []`.
+O benchmark continua isolando as duas fases para manter comparação real entre `shadow` e `active`. Antes da medição de baseline, o workflow troca temporariamente `SEMANTIC_VISUAL_MODE=shadow`; depois ativa o canal visual, mede o ranking multimodal e, ao final, garante `SEMANTIC_VISUAL_MODE=active` novamente.
 
-A recomendação positiva comprova que `active` pode ser promovido; o benchmark não muda silenciosamente a política operacional. O default versionado continua `shadow` até uma decisão deliberada de rollout contínuo.
+Assim, `shadow` deixou de ser o estado final de staging. Ele existe apenas como baseline temporária de validação pós-deploy. O estado contínuo esperado depois do pipeline é `active`.
 
-## Evidência do SHA
+O cleanup continua removendo os documentos e o fichário temporários usados pelo benchmark.
+
+## Evidência da validação que autorizou a promoção
 
 - `31863518399` — `Offline-Toolchains`: focused tests, `pnpm verify`, 318 arquivos / 1.358 testes, build e Edge checks;
 - `31863888994` — validação oficial da `main`, incluindo browser e banco local/pgTAP;
 - `31863889014` — artifact staging construído e verificado;
 - `31864139871` — deploy Supabase staging e verificações reais pós-deploy;
-- `31864249498` — benchmark multimodal, comparação, restore e cleanup.
+- `31864249498` — benchmark multimodal, comparação, restore e cleanup, com recomendação `promote_active`.
 
 ## Rollout
 
@@ -94,7 +97,8 @@ A recomendação positiva comprova que `active` pode ser promovido; o benchmark 
 - [x] exigir Recall@1/MRR visual >= 0.80 e match lexical preservado;
 - [x] medir latência, retries, erros e quota;
 - [x] obter recomendação positiva de promoção;
-- [x] restaurar staging para `shadow` após o experimento;
-- [ ] alterar o modo contínuo/default para `active` somente por decisão explícita de rollout.
+- [x] promover o modo operacional contínuo para `active`;
+- [x] preservar `shadow` apenas como baseline temporária do benchmark pós-deploy;
+- [x] restaurar `active` automaticamente ao final do benchmark.
 
-A implementação técnica está concluída. O último item é uma decisão operacional, não uma pendência de código.
+A implementação técnica e o rollout operacional estão concluídos.
