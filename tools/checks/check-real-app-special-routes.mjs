@@ -136,11 +136,11 @@ try {
 	await cameraInput.waitFor({ state: 'attached', timeout: 20_000 });
 	const cameraAccept = await cameraInput.getAttribute('accept');
 	if (cameraAccept !== 'image/*') throw new Error('Camera input no longer accepts captured images');
-	const originalMode = page.locator('input[name="image-mode"][value="original"]');
+	const highDefinitionMode = page.locator('input[name="image-mode"][value="high-definition"]');
 	const standardMode = page.locator('input[name="image-mode"][value="standard"]');
-	await originalMode.check();
-	if (!(await originalMode.isChecked()))
-		throw new Error('Original image mode could not be selected');
+	await highDefinitionMode.check();
+	if (!(await highDefinitionMode.isChecked()))
+		throw new Error('High-definition image mode could not be selected');
 	await standardMode.check();
 	if (!(await standardMode.isChecked()))
 		throw new Error('Standard image mode could not be restored');

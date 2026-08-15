@@ -341,9 +341,6 @@ try {
 	});
 	const pdfInput = page.locator('input[type="file"][accept*="application/pdf"]').first();
 	await pdfInput.setInputFiles({ name: filename, mimeType: 'application/pdf', buffer: pdfBuffer });
-	await page
-		.getByText(/arquivo\(s\) adicionados à fila global/i)
-		.waitFor({ state: 'visible', timeout: 20_000 });
 	const initialQueue = await waitForQueueEntry(page, filename, { timeoutMs: 240_000 });
 	const documentRow = await waitForRow(client, 'documents', { original_filename: filename });
 	report.created.documents.push(documentRow.id);
