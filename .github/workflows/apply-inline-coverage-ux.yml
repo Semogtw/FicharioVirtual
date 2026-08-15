@@ -35,11 +35,26 @@ jobs:
           block = source.split("          python <<'PY'\n", 1)[1].split("\n          PY\n", 1)[0]
           code = '\n'.join(line[10:] if line.startswith('          ') else line for line in block.splitlines())
           exec(compile(code, 'apply-inline-coverage-ux.py', 'exec'))
+
           path = Path('src/routes/coverage/+page.svelte')
           text = path.read_text()
           text = text.replace("\tconst bulkPlaceholder =\n\t\t'3.1 Temperatura\\n3.2 Calor específico\\n3.3 Mudanças de fase\\n3.4 Primeira lei da termodinâmica';\n", '')
           start = text.index('\n\tlet duplicateCount = $derived(')
           end = text.index('\n\n\tconst statusLabel', start)
+          text = text[:start] + text[end:]
+          text = text.replace('\n\t.evidence,,\n\t.input-card {', '\n\t.evidence,\n\t.input-card {')
+          path.write_text(text)
+
+          path = Path('src/lib/components/ImportQueueTray.svelte')
+          text = path.read_text()
+          text = text.replace('\n\theader small,\n\t.copy span,', '\n\t.copy span,')
+          text = text.replace("\n\theader small {\n\t\tmax-width: 22rem;\n\t\tfont-size: 0.72rem;\n\t\tline-height: 1.35;\n\t}\n", '\n')
+          path.write_text(text)
+
+          path = Path('src/lib/components/UnifiedImportPage.svelte')
+          text = path.read_text()
+          start = text.index('\n\t.background-note {')
+          end = text.index('\n\n\t@media (max-width: 720px)', start)
           text = text[:start] + text[end:]
           path.write_text(text)
           PY
