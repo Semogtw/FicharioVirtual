@@ -6,6 +6,7 @@ on:
     types: [completed]
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
@@ -13,10 +14,37 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  shadow:
+  gate:
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      should_run: ${{ steps.deploy.outputs.should_run }}
+    steps:
+      - name: Require an actual Supabase runtime deployment
+        id: deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_RUN_ID: ${{ github.event.workflow_run.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          deploy_conclusion="$(
+            gh api "/repos/$GITHUB_REPOSITORY/actions/runs/$DEPLOY_RUN_ID/jobs?per_page=100" \
+              --jq '[.jobs[] | select(.name == "deploy")][0].conclusion // "missing"'
+          )"
+          if [ "$deploy_conclusion" = "success" ]; then
+            echo 'should_run=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'should_run=false' >> "$GITHUB_OUTPUT"
+            echo "Skipping visual benchmark because deploy job conclusion is: $deploy_conclusion"
+          fi
+
+  shadow:
+    needs: gate
+    if: needs.gate.outputs.should_run == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     environment: staging
@@ -155,8 +183,8 @@ jobs:
         run: supabase secrets set --project-ref "$STAGING_SUPABASE_PROJECT_REF" "SEMANTIC_VISUAL_MODE=shadow"
 
   compare-cleanup:
-    needs: [shadow, active, restore-shadow]
-    if: always()
+    needs: [gate, shadow, active, restore-shadow]
+    if: always() && needs.gate.outputs.should_run == 'true' && needs.shadow.result != 'skipped'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: staging
