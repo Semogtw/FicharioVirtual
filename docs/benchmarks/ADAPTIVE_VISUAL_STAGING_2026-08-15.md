@@ -14,42 +14,38 @@ O corpus de benchmark usou bytes PNG únicos por execução por meio de metadata
 
 ## Shadow
 
-| Métrica | Resultado |
-| --- | ---: |
-| Recall@1 global | 0.1333 |
-| Recall@3 global | 0.1333 |
-| MRR global | 0.1333 |
-| Raw visual Recall@1 | 0.8571 |
-| Raw visual Recall@3 | 0.9286 |
-| Raw visual MRR | 0.9008 |
-| Similaridade esperada mediana | 0.4371 |
-| Esperados visuais acima do threshold | 14/14 |
-| Negativos visuais acima do threshold | 0 |
-| RPC errors | 0 |
-| Search retries | 0 |
-| Latência mediana | 2129 ms |
-| Latência p95 | 3495 ms |
+- Recall@1 global: `0.1333`;
+- Recall@3 global: `0.1333`;
+- MRR global: `0.1333`;
+- raw visual Recall@1: `0.8571`;
+- raw visual Recall@3: `0.9286`;
+- raw visual MRR: `0.9008`;
+- similaridade esperada mediana: `0.4371`;
+- esperados visuais acima do threshold: `14/14`;
+- negativos visuais acima do threshold: `0`;
+- RPC errors: `0`;
+- search retries: `0`;
+- latência mediana: `2129 ms`;
+- latência p95: `3495 ms`.
 
 O baixo Recall/MRR global é esperado em `shadow`: o terceiro canal é medido, mas não altera a ordenação entregue.
 
 ## Active
 
-| Métrica | Resultado |
-| --- | ---: |
-| Recall@1 global | 0.8667 |
-| Recall@3 global | 0.9333 |
-| Recall@5 global | 0.9333 |
-| MRR global | 0.9067 |
-| Visual Recall@1 | 0.8571 |
-| Visual Recall@3 | 0.9286 |
-| Visual Recall@5 | 0.9286 |
-| Visual MRR | 0.9000 |
-| Raw visual MRR | 0.9008 |
-| Negativos visuais acima do threshold | 0 |
-| RPC errors | 0 |
-| Search retries | 0 |
-| Latência mediana | 2408 ms |
-| Latência p95 | 4882 ms |
+- Recall@1 global: `0.8667`;
+- Recall@3 global: `0.9333`;
+- Recall@5 global: `0.9333`;
+- MRR global: `0.9067`;
+- visual Recall@1: `0.8571`;
+- visual Recall@3: `0.9286`;
+- visual Recall@5: `0.9286`;
+- visual MRR: `0.9000`;
+- raw visual MRR: `0.9008`;
+- negativos visuais acima do threshold: `0`;
+- RPC errors: `0`;
+- search retries: `0`;
+- latência mediana: `2408 ms`;
+- latência p95: `4882 ms`.
 
 O match lexical de controle permaneceu no top-1.
 
