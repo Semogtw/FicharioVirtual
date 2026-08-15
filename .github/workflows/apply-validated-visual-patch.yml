@@ -1,0 +1,61 @@
+name: Apply validated visual patch
+
+on:
+  push:
+    branches: [fix/visual-rrf-calibration]
+    paths:
+      - .github/workflows/apply-validated-visual-patch.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-validated-visual-patch
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      BRANCH: fix/visual-rrf-calibration
+      EXPORT_COMMIT: dea3dfad4e7bf52d7c2a7e2e734b628f06e22d18
+    steps:
+      - name: Apply exact validated tree without checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="repos/$REPO"
+          current_sha="$(gh api "$api/git/ref/heads/$BRANCH" --jq '.object.sha')"
+          base_tree="$(gh api "$api/git/commits/$current_sha" --jq '.tree.sha')"
+          entries='[]'
+
+          while IFS= read -r path; do
+            raw="https://raw.githubusercontent.com/Semogtw/Offline-Toolchains/$EXPORT_COMMIT/validated/fichario-visual-ranking/$path"
+            content_b64="$(curl --fail --silent --show-error --location "$raw" | base64 -w0)"
+            blob_sha="$(jq -n --arg content "$content_b64" '{content:$content,encoding:"base64"}' | gh api --method POST "$api/git/blobs" --input - --jq '.sha')"
+            entries="$(jq -c --arg path "$path" --arg sha "$blob_sha" '. + [{path:$path,mode:"100644",type:"blob",sha:$sha}]' <<<"$entries")"
+          done <<'EOF'
+          supabase/functions/_shared/semantic-ranking.ts
+          supabase/functions/semantic-search/index.ts
+          tests/unit/search/visual-semantic-benchmark.test.ts
+          tests/unit/tooling/visual-staging-benchmark-contract.test.ts
+          tools/checks/check-visual-semantic-staging.mjs
+          EOF
+
+          while IFS= read -r path; do
+            entries="$(jq -c --arg path "$path" '. + [{path:$path,mode:"100644",type:"blob",sha:null}]' <<<"$entries")"
+          done <<'EOF'
+          .github/workflows/check-visual-rrf-calibration.yml
+          .github/workflows/cleanup-visual15-residue-now.yml
+          .github/workflows/diagnose-visual15-shadow-now.yml
+          .github/workflows/run-visual-staging-now.yml
+          .github/workflows/apply-validated-visual-patch.yml
+          EOF
+
+          tree_sha="$(jq -n --arg base "$base_tree" --argjson tree "$entries" '{base_tree:$base,tree:$tree}' | gh api --method POST "$api/git/trees" --input - --jq '.sha')"
+          commit_sha="$(jq -n --arg message 'fix(search): finish visual ranking calibration' --arg tree "$tree_sha" --arg parent "$current_sha" '{message:$message,tree:$tree,parents:[$parent]}' | gh api --method POST "$api/git/commits" --input - --jq '.sha')"
+          jq -n --arg sha "$commit_sha" '{sha:$sha,force:false}' | gh api --method PATCH "$api/git/refs/heads/$BRANCH" --input - >/dev/null
+          echo "Published validated commit: $commit_sha"
