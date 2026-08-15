@@ -122,26 +122,28 @@ begin
     raise exception 'provider quota terminal was not accepted';
   end if;
 
+  -- 2026-08-01 uses PDT (UTC-07), so the next Gemini provider day begins
+  -- at 2026-08-02T07:00:00Z rather than at midnight UTC.
   select next_retry_at into provider_retry_at
   from public.ocr_jobs
   where page_id = '55555555-5555-4555-8555-555555555555'::uuid;
-  if provider_retry_at is distinct from '2026-08-02T00:00:00Z'::timestamptz then
-    raise exception 'provider quota retry was not scheduled for next UTC day: %', provider_retry_at;
+  if provider_retry_at is distinct from '2026-08-02T07:00:00Z'::timestamptz then
+    raise exception 'provider quota retry was not scheduled for next Pacific day: %', provider_retry_at;
   end if;
 
   same_day_claim := public.claim_ocr_job(
     '55555555-5555-4555-8555-555555555555'::uuid,
     'gemini-test',
-    '2026-08-01T23:59:59Z'::timestamptz
+    '2026-08-02T06:59:59Z'::timestamptz
   );
   if same_day_claim->>'state' <> 'retry_later' then
-    raise exception 'provider quota retried before UTC rollover: %', same_day_claim;
+    raise exception 'provider quota retried before Pacific rollover: %', same_day_claim;
   end if;
 
   select count(*) into same_day_resumable_count
   from public.list_resumable_ocr_pages(
     '11111111-1111-4111-8111-111111111111'::uuid,
-    '2026-08-01T23:59:59Z'::timestamptz
+    '2026-08-02T06:59:59Z'::timestamptz
   );
   if same_day_resumable_count <> 0 then
     raise exception 'quota-blocked page was selectable before retry time';
@@ -150,19 +152,19 @@ begin
   select count(*) into next_day_resumable_count
   from public.list_resumable_ocr_pages(
     '11111111-1111-4111-8111-111111111111'::uuid,
-    '2026-08-02T00:00:01Z'::timestamptz
+    '2026-08-02T07:00:01Z'::timestamptz
   );
   if next_day_resumable_count <> 1 then
-    raise exception 'quota-blocked page was not selectable after UTC rollover';
+    raise exception 'quota-blocked page was not selectable after Pacific rollover';
   end if;
 
   next_day_claim := public.claim_ocr_job(
     '55555555-5555-4555-8555-555555555555'::uuid,
     'gemini-test',
-    '2026-08-02T00:00:01Z'::timestamptz
+    '2026-08-02T07:00:01Z'::timestamptz
   );
   if next_day_claim->>'state' <> 'claimed' then
-    raise exception 'UTC day rollover did not release provider quota: %', next_day_claim;
+    raise exception 'Pacific day rollover did not release provider quota: %', next_day_claim;
   end if;
   if (next_day_claim->>'attemptCount')::integer < 1
     or (next_day_claim->>'usageToday')::integer <> 1
