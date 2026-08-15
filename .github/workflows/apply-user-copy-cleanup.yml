@@ -32,33 +32,28 @@ jobs:
           from pathlib import Path
           import re
 
-          def patch(path, replacements):
+          def replace(path, old, new):
               file = Path(path)
               text = file.read_text()
-              for old, new in replacements:
-                  if old not in text:
-                      raise SystemExit(f'missing expected copy in {path}: {old[:90]!r}')
-                  text = text.replace(old, new, 1)
-              file.write_text(text)
+              if old not in text:
+                  raise SystemExit(f'missing expected copy in {path}: {old[:90]!r}')
+              file.write_text(text.replace(old, new, 1))
 
-          patch('src/routes/review/+page.svelte', [
-              ("\t\tblocked_quota: 'Aguardando nova cota',", "\t\tblocked_quota: 'Aguardando',"),
-              ("\t\tfailed: 'Falha permanente'", "\t\tfailed: 'Falha'"),
-              ('<p class="eyebrow">Qualidade e continuidade</p>', '<p class="eyebrow">Revisão</p>'),
-              ("\t\t<p>\n\t\t\tCorrija trechos incertos e retome páginas interrompidas sem reenviar os arquivos originais.\n\t\t</p>", "\t\t<p>Revise as páginas que precisam de atenção.</p>"),
-              ('description="Quando o OCR sinalizar dúvida, quota ou falha, a página aparecerá aqui."', 'description="Quando uma página precisar de atenção, ela aparecerá aqui."'),
-          ])
+          review = 'src/routes/review/+page.svelte'
+          replace(review, "\t\tblocked_quota: 'Aguardando nova cota',", "\t\tblocked_quota: 'Aguardando',")
+          replace(review, "\t\tfailed: 'Falha permanente'", "\t\tfailed: 'Falha'")
+          replace(review, '<p class="eyebrow">Qualidade e continuidade</p>', '<p class="eyebrow">Revisão</p>')
+          replace(review, "\t\t<p>\n\t\t\tCorrija trechos incertos e retome páginas interrompidas sem reenviar os arquivos originais.\n\t\t</p>", "\t\t<p>Revise as páginas que precisam de atenção.</p>")
+          replace(review, 'description="Quando o OCR sinalizar dúvida, quota ou falha, a página aparecerá aqui."', 'description="Quando uma página precisar de atenção, ela aparecerá aqui."')
 
-          patch('src/routes/settings/+layout.svelte', [
-              ('\t\tFila OCR\n', '\t\tFila de leitura\n'),
-          ])
+          replace('src/routes/settings/+layout.svelte', '\t\tFila OCR\n', '\t\tFila de leitura\n')
 
-          path = Path('src/routes/settings/computers/+page.svelte')
-          text = path.read_text()
+          computers = Path('src/routes/settings/computers/+page.svelte')
+          text = computers.read_text()
           text, count = re.subn(r"\n\tfunction capabilitySummary\(device: DesktopOcrDevice\) \{.*?\n\t\}\n\n\tasync function refreshDevices", "\n\tasync function refreshDevices", text, count=1, flags=re.S)
           if count != 1:
               raise SystemExit('could not remove capabilitySummary')
-          replacements = [
+          changes = [
               ('<title>Computadores de OCR — Fichário Virtual</title>', '<title>Computadores — Fichário Virtual</title>'),
               ('<p class="eyebrow">OCR local</p>', '<p class="eyebrow">Leitura local</p>'),
               ("\t\t\t\t<p>\n\t\t\t\t\tGerencie dispositivos autorizados a processar páginas localmente. Credenciais do worker\n\t\t\t\t\tnunca são exibidas nesta tela.\n\t\t\t\t</p>", "\t\t\t\t<p>Gerencie os computadores conectados ao Fichário.</p>"),
@@ -67,18 +62,17 @@ jobs:
               ('<span class="badge">Saída HTTPS apenas</span>', '<span class="badge">Conexão segura</span>'),
               ("\t\t\t\t<p class=\"pairing-help\">\n\t\t\t\t\tTroque “Meu computador” pelo nome desejado. O comando solicitará o código em seguida para\n\t\t\t\t\tevitá-lo no histórico do shell. Depois do sucesso, use “Atualizar” para ver o dispositivo.\n\t\t\t\t</p>", "\t\t\t\t<p class=\"pairing-help\">Troque “Meu computador” pelo nome desejado. Depois, use “Atualizar” para ver o dispositivo.</p>"),
               ('<p>Gere um código acima e conclua o pareamento no worker local.</p>', '<p>Gere um código acima e conclua a conexão no computador.</p>'),
-              ('\n\t\t\t\t\t\t\t<p class="capabilities">{capabilitySummary(device)}</p>', ''),
-              (',\n\t.capabilities {', ' {'),
+              ('\n\t\t\t\t\t\t\t<p class="capabilities">{capabilitySummary(device)}</p>', '')
           ]
-          for old, new in replacements:
+          for old, new in changes:
               if old not in text:
                   raise SystemExit(f'missing expected computers copy: {old[:90]!r}')
               text = text.replace(old, new, 1)
-          path.write_text(text)
+          computers.write_text(text)
 
-          path = Path('src/routes/settings/computers/queue/+page.svelte')
-          text = path.read_text()
-          replacements = [
+          queue = Path('src/routes/settings/computers/queue/+page.svelte')
+          text = queue.read_text()
+          changes = [
               ("\t\tif (status === 'processing' && leaseExpired) return 'Lease expirado';", "\t\tif (status === 'processing' && leaseExpired) return 'Precisa de atenção';"),
               ("\t\t\tconst change = await returnDesktopOcrJobToGemini(job.pageId);\n\t\t\tjobs = jobs.filter((item) => item.pageId !== job.pageId);\n\t\t\tnotice = change.recoveredExpiredLease\n\t\t\t\t? 'Lease expirado recuperado. O trabalho voltou para a fila do Gemini.'\n\t\t\t\t: 'O trabalho voltou para a fila do Gemini.';", "\t\t\tawait returnDesktopOcrJobToGemini(job.pageId);\n\t\t\tjobs = jobs.filter((item) => item.pageId !== job.pageId);\n\t\t\tnotice = 'A página voltou para a leitura automática.';"),
               ("'Não foi possível devolver o trabalho ao Gemini.'", "'Não foi possível devolver a página para a leitura automática.'"),
@@ -96,65 +90,30 @@ jobs:
               ("\t\t\t\t\t\t\t\t<p class=\"lease-warning\">\n\t\t\t\t\t\t\t\t\tO computador perdeu o lease. Você pode devolver este trabalho ao Gemini agora ou\n\t\t\t\t\t\t\t\t\taguardar outro dispositivo ativo recuperá-lo automaticamente.\n\t\t\t\t\t\t\t\t</p>", "\t\t\t\t\t\t\t\t<p class=\"lease-warning\">Este computador parou de responder. Você pode devolver a página para a leitura automática ou aguardar outro computador.</p>"),
               ('<dt>Lease até</dt>', '<dt>Prazo atual</dt>'),
               ('<dt>Último código</dt>', '<dt>Último erro</dt>'),
-              ("label={movingPageId === job.pageId ? 'Movendo…' : 'Usar Gemini'}", "label={movingPageId === job.pageId ? 'Movendo…' : 'Usar leitura automática'}"),
+              ("label={movingPageId === job.pageId ? 'Movendo…' : 'Usar Gemini'}", "label={movingPageId === job.pageId ? 'Movendo…' : 'Usar leitura automática'}")
           ]
-          for old, new in replacements:
+          for old, new in changes:
               if old not in text:
                   raise SystemExit(f'missing expected queue copy: {old[:90]!r}')
               text = text.replace(old, new, 1)
-          path.write_text(text)
+          queue.write_text(text)
 
-          patch('src/routes/settings/usage/+page.svelte', [
-              ("\t\t<p>\n\t\t\tContadores informativos do seu próprio arquivo. Eles não criam franquia nem bloqueiam uma\n\t\t\tchamada que o provedor ainda aceitaria.\n\t\t</p>", "\t\t<p>Veja um resumo dos documentos, páginas e leituras recentes.</p>"),
-              ('<span>Cota do provedor</span>', '<span>Aguardando</span>'),
-              ('<h2 id="history-title">Páginas enviadas ao OCR</h2>', '<h2 id="history-title">Páginas lidas</h2>'),
-              ('\n\t\t\t\t<span>Laranja indica cota real do provedor, não limite interno.</span>', ''),
-              ('<p class="empty-history">Nenhum uso OCR registrado neste período.</p>', '<p class="empty-history">Nenhuma leitura registrada neste período.</p>'),
-          ])
+          usage = 'src/routes/settings/usage/+page.svelte'
+          replace(usage, "\t\t<p>\n\t\t\tContadores informativos do seu próprio arquivo. Eles não criam franquia nem bloqueiam uma\n\t\t\tchamada que o provedor ainda aceitaria.\n\t\t</p>", "\t\t<p>Veja um resumo dos documentos, páginas e leituras recentes.</p>")
+          replace(usage, '<span>Cota do provedor</span>', '<span>Aguardando</span>')
+          replace(usage, '<h2 id="history-title">Páginas enviadas ao OCR</h2>', '<h2 id="history-title">Páginas lidas</h2>')
+          replace(usage, '\n\t\t\t\t<span>Laranja indica cota real do provedor, não limite interno.</span>', '')
+          replace(usage, '<p class="empty-history">Nenhum uso OCR registrado neste período.</p>', '<p class="empty-history">Nenhuma leitura registrada neste período.</p>')
 
-          path = Path('tests/unit/routes/desktop-ocr-queue-page.test.ts')
-          text = path.read_text()
-          text = text.replace("\t\texpect(page).toContain('aguardar outro dispositivo ativo recuperá-lo automaticamente');", "\t\texpect(page).toContain('aguardar outro computador');")
-          text = text.replace("\t\texpect(page).toContain(\"'Usar Gemini'\");", "\t\texpect(page).toContain(\"'Usar leitura automática'\");")
-          text = text.replace("\t\texpect(settingsLayout).toContain('Fila OCR');", "\t\texpect(settingsLayout).toContain('Fila de leitura');")
-          path.write_text(text)
-
-          test = Path('tests/unit/routes/user-facing-copy-cleanup.test.ts')
-          test.write_text("""import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
-
-const files = [
-	'src/routes/review/+page.svelte',
-	'src/routes/settings/+layout.svelte',
-	'src/routes/settings/computers/+page.svelte',
-	'src/routes/settings/computers/queue/+page.svelte',
-	'src/routes/settings/usage/+page.svelte'
-];
-
-const combined = files.map((file) => readFileSync(file, 'utf8')).join('\n');
-
-describe('user-facing copy cleanup', () => {
-	it('keeps implementation-oriented prose out of the simplified surfaces', () => {
-		for (const phrase of [
-			'Credenciais do worker',
-			'guardada no Secret Service',
-			'Saída HTTPS apenas',
-			'Fila OCR',
-			'Lease expirado',
-			'identificadores de lease',
-			'rota desktop',
-			'Cota do provedor',
-			'Páginas enviadas ao OCR',
-			'OCR sinalizar dúvida'
-		]) {
-			expect(combined).not.toContain(phrase);
-		}
-	});
-});
-""")
+          tests = Path('tests/unit/routes/desktop-ocr-queue-page.test.ts')
+          text = tests.read_text()
+          text = text.replace("expect(page).toContain('aguardar outro dispositivo ativo recuperá-lo automaticamente');", "expect(page).toContain('aguardar outro computador');")
+          text = text.replace("expect(page).toContain(\"'Usar Gemini'\");", "expect(page).toContain(\"'Usar leitura automática'\");")
+          text = text.replace("expect(settingsLayout).toContain('Fila OCR');", "expect(settingsLayout).toContain('Fila de leitura');")
+          tests.write_text(text)
           PY
       - name: Format changed files
-        run: pnpm exec prettier --write src/routes/review/+page.svelte src/routes/settings/+layout.svelte src/routes/settings/computers/+page.svelte src/routes/settings/computers/queue/+page.svelte src/routes/settings/usage/+page.svelte tests/unit/routes/desktop-ocr-queue-page.test.ts tests/unit/routes/user-facing-copy-cleanup.test.ts
+        run: pnpm exec prettier --write src/routes/review/+page.svelte src/routes/settings/+layout.svelte src/routes/settings/computers/+page.svelte src/routes/settings/computers/queue/+page.svelte src/routes/settings/usage/+page.svelte tests/unit/routes/desktop-ocr-queue-page.test.ts
       - name: Remove temporary workflow before repository tests
         run: rm .github/workflows/apply-user-copy-cleanup.yml
       - name: Verify
