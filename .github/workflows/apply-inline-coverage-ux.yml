@@ -31,10 +31,18 @@ jobs:
           git show 42946c19ffa83ffe22f7fc7db4d0aea6d9cf3560:.github/workflows/apply-inline-coverage-ux.yml > /tmp/ux-patch-source.yml
           python <<'PY'
           from pathlib import Path
+          import re
           source = Path('/tmp/ux-patch-source.yml').read_text()
           block = source.split("          python <<'PY'\n", 1)[1].split("\n          PY\n", 1)[0]
           code = '\n'.join(line[10:] if line.startswith('          ') else line for line in block.splitlines())
           exec(compile(code, 'apply-inline-coverage-ux.py', 'exec'))
+          path = Path('src/routes/coverage/+page.svelte')
+          text = path.read_text()
+          text = text.replace("\tconst bulkPlaceholder =\n\t\t'3.1 Temperatura\\n3.2 Calor específico\\n3.3 Mudanças de fase\\n3.4 Primeira lei da termodinâmica';\n", '')
+          text, count = re.subn(r"\n\tlet duplicateCount = \\$derived\\(.*?\n\t\\);\n", '\n', text, count=1, flags=re.S)
+          if count != 1:
+              raise SystemExit('could not remove unused duplicateCount')
+          path.write_text(text)
           PY
       - name: Format changed files
         run: pnpm exec prettier --write src/routes/coverage/+page.svelte src/lib/components/UnifiedImportPage.svelte src/lib/components/ImportQueueTray.svelte src/routes/library/+page.svelte src/routes/drive/jobs/+page.svelte src/routes/import/drive/+page.svelte tools/checks/check-real-app-actions.mjs tests/unit/routes/drive-import-page.test.ts tests/unit/routes/coverage-entry-ux.test.ts
