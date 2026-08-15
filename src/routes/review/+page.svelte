@@ -19,8 +19,8 @@
 	const statusLabels = {
 		needs_review: 'Revisão humana',
 		retryable: 'Pode tentar novamente',
-		blocked_quota: 'Aguardando nova cota',
-		failed: 'Falha permanente'
+		blocked_quota: 'Aguardando',
+		failed: 'Falha'
 	} as const;
 
 	async function load(
@@ -87,11 +87,9 @@
 
 <div class="page" aria-labelledby="page-title">
 	<header>
-		<p class="eyebrow">Qualidade e continuidade</p>
+		<p class="eyebrow">Revisão</p>
 		<h1 id="page-title">Fila de revisão</h1>
-		<p>
-			Corrija trechos incertos e retome páginas interrompidas sem reenviar os arquivos originais.
-		</p>
+		<p>Revise as páginas que precisam de atenção.</p>
 	</header>
 
 	{#if error}
@@ -106,7 +104,7 @@
 	{:else if items.length === 0}
 		<EmptyState
 			title="Nenhuma página pendente"
-			description="Quando o OCR sinalizar dúvida, quota ou falha, a página aparecerá aqui."
+			description="Quando uma página precisar de atenção, ela aparecerá aqui."
 		/>
 	{:else}
 		<section class="list" aria-label="Páginas para revisar">

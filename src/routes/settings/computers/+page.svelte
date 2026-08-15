@@ -47,16 +47,6 @@
 		return dateTime.format(new Date(value));
 	}
 
-	function capabilitySummary(device: DesktopOcrDevice) {
-		const parts: string[] = [];
-		if (device.capabilities.backend) parts.push(device.capabilities.backend);
-		if (device.capabilities.model) parts.push(device.capabilities.model);
-		if (device.capabilities.maxConcurrency) {
-			parts.push(`${device.capabilities.maxConcurrency} trabalho por vez`);
-		}
-		return parts.length > 0 ? parts.join(' · ') : 'Capacidades não informadas';
-	}
-
 	async function refreshDevices() {
 		const version = requests.next();
 		loading = true;
@@ -258,19 +248,16 @@
 </script>
 
 <svelte:head>
-	<title>Computadores de OCR — Fichário Virtual</title>
+	<title>Computadores — Fichário Virtual</title>
 </svelte:head>
 
 <div class="page" aria-labelledby="page-title">
 	<header>
-		<p class="eyebrow">OCR local</p>
+		<p class="eyebrow">Leitura local</p>
 		<div class="header-row">
 			<div>
 				<h1 id="page-title">Computadores</h1>
-				<p>
-					Gerencie dispositivos autorizados a processar páginas localmente. Credenciais do worker
-					nunca são exibidas nesta tela.
-				</p>
+				<p>Gerencie os computadores conectados ao Fichário.</p>
 			</div>
 			<Button
 				label={loading ? 'Atualizando…' : 'Atualizar'}
@@ -286,15 +273,11 @@
 	<section class="info-card pairing-card" aria-labelledby="pairing-title">
 		<div class="pairing-copy">
 			<p class="eyebrow">Novo computador</p>
-			<h2 id="pairing-title">Pareamento seguro</h2>
-			<p>
-				Gere um código de uso único e informe-o somente ao worker local. O token da sua sessão web
-				não sai do navegador; a credencial permanente é gerada no próprio computador e guardada no
-				Secret Service.
-			</p>
+			<h2 id="pairing-title">Conectar computador</h2>
+			<p>Gere um código e use-o no computador que deseja conectar.</p>
 		</div>
 		<div class="pairing-action">
-			<span class="badge">Saída HTTPS apenas</span>
+			<span class="badge">Conexão segura</span>
 			<Button
 				label={creatingPairingCode ? 'Gerando…' : pairing ? 'Gerar outro código' : 'Gerar código'}
 				disabled={creatingPairingCode}
@@ -324,8 +307,8 @@
 					</button>
 				</div>
 				<p class="pairing-help">
-					Troque “Meu computador” pelo nome desejado. O comando solicitará o código em seguida para
-					evitá-lo no histórico do shell. Depois do sucesso, use “Atualizar” para ver o dispositivo.
+					Troque “Meu computador” pelo nome desejado. Depois, use “Atualizar” para ver o
+					dispositivo.
 				</p>
 			</div>
 		{/if}
@@ -344,7 +327,7 @@
 		{:else if devices.length === 0}
 			<div class="empty">
 				<strong>Nenhum computador pareado.</strong>
-				<p>Gere um código acima e conclua o pareamento no worker local.</p>
+				<p>Gere um código acima e conclua a conexão no computador.</p>
 			</div>
 		{:else}
 			<div class="device-list">
@@ -357,7 +340,6 @@
 									{device.status === 'active' ? 'Ativo' : 'Revogado'}
 								</span>
 							</div>
-							<p class="capabilities">{capabilitySummary(device)}</p>
 							<dl>
 								<div>
 									<dt>Último contato</dt>
@@ -513,8 +495,7 @@
 
 	header p:last-child,
 	.info-card p,
-	.empty p,
-	.capabilities {
+	.empty p {
 		max-width: 52rem;
 		margin: 0;
 		color: var(--muted);
@@ -666,11 +647,6 @@
 	h3 {
 		margin: 0;
 		font-size: 1.1rem;
-	}
-
-	.capabilities {
-		margin-top: 0.25rem;
-		font-size: 0.86rem;
 	}
 
 	dl {

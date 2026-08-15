@@ -26,7 +26,7 @@
 	}
 
 	function statusLabel(status: DesktopOcrJobStatus, leaseExpired: boolean) {
-		if (status === 'processing' && leaseExpired) return 'Lease expirado';
+		if (status === 'processing' && leaseExpired) return 'Precisa de atenção';
 		const labels: Record<DesktopOcrJobStatus, string> = {
 			pending: 'Pendente',
 			processing: 'Processando',
@@ -56,16 +56,14 @@
 		error = null;
 		notice = null;
 		try {
-			const change = await returnDesktopOcrJobToGemini(job.pageId);
+			await returnDesktopOcrJobToGemini(job.pageId);
 			jobs = jobs.filter((item) => item.pageId !== job.pageId);
-			notice = change.recoveredExpiredLease
-				? 'Lease expirado recuperado. O trabalho voltou para a fila do Gemini.'
-				: 'O trabalho voltou para a fila do Gemini.';
+			notice = 'A página voltou para a leitura automática.';
 		} catch (caught) {
 			error =
 				caught instanceof Error
 					? caught.message
-					: 'Não foi possível devolver o trabalho ao Gemini.';
+					: 'Não foi possível devolver a página para a leitura automática.';
 		} finally {
 			if (movingPageId === job.pageId) movingPageId = null;
 		}
@@ -98,19 +96,15 @@
 </script>
 
 <svelte:head>
-	<title>Fila de OCR local — Fichário Virtual</title>
+	<title>Fila de leitura local — Fichário Virtual</title>
 </svelte:head>
 
 <div class="page" aria-labelledby="page-title">
 	<header class="header-row">
 		<div>
-			<p class="eyebrow">OCR local</p>
-			<h1 id="page-title">Fila desktop</h1>
-			<p>
-				Acompanhe trabalhos roteados para seus computadores. Esta tela mostra somente metadados
-				operacionais; texto OCR, URLs temporárias, credenciais e identificadores de lease não são
-				expostos.
-			</p>
+			<p class="eyebrow">Leitura local</p>
+			<h1 id="page-title">Fila de leitura</h1>
+			<p>Acompanhe as páginas enviadas aos seus computadores.</p>
 		</div>
 		<Button
 			label={loading ? 'Atualizando…' : 'Atualizar fila'}
@@ -119,9 +113,9 @@
 		/>
 	</header>
 
-	<nav class="subnav" aria-label="OCR local">
+	<nav class="subnav" aria-label="Leitura local">
 		<a href="/settings/computers/">Computadores</a>
-		<a href="/settings/computers/queue/" aria-current="page">Fila desktop</a>
+		<a href="/settings/computers/queue/" aria-current="page">Fila de leitura</a>
 	</nav>
 
 	{#if error}<p class="error" role="alert">{error}</p>{/if}
@@ -144,25 +138,25 @@
 		</div>
 		<div>
 			<strong>{jobs.filter((job) => job.leaseExpired).length}</strong>
-			<span>leases expirados</span>
+			<span>precisam de atenção</span>
 		</div>
 	</section>
 
 	<section class="queue" aria-labelledby="queue-title" aria-busy={loading}>
 		<div class="section-heading">
 			<div>
-				<p class="eyebrow">Últimos trabalhos</p>
+				<p class="eyebrow">Itens recentes</p>
 				<h2 id="queue-title">{jobs.length} item(ns)</h2>
 			</div>
-			<span class="limit">Até 100 trabalhos desktop recentes</span>
+			<span class="limit">Até 100 itens recentes</span>
 		</div>
 
 		{#if loading && jobs.length === 0}
-			<div class="empty" role="status">Carregando fila desktop…</div>
+			<div class="empty" role="status">Carregando…</div>
 		{:else if jobs.length === 0}
 			<div class="empty">
-				<strong>Nenhum trabalho roteado para OCR local.</strong>
-				<p>Quando uma página usar a rota desktop, ela aparecerá aqui.</p>
+				<strong>Nenhuma página aguardando leitura local.</strong>
+				<p>Quando uma página for enviada a um computador, ela aparecerá aqui.</p>
 			</div>
 		{:else}
 			<div class="job-list">
@@ -186,8 +180,8 @@
 
 							{#if job.leaseExpired}
 								<p class="lease-warning">
-									O computador perdeu o lease. Você pode devolver este trabalho ao Gemini agora ou
-									aguardar outro dispositivo ativo recuperá-lo automaticamente.
+									Este computador parou de responder. Você pode devolver a página para a leitura
+									automática ou aguardar outro computador.
 								</p>
 							{/if}
 
@@ -206,13 +200,13 @@
 								</div>
 								{#if job.leaseExpiresAt}
 									<div>
-										<dt>Lease até</dt>
+										<dt>Prazo atual</dt>
 										<dd>{formatDate(job.leaseExpiresAt)}</dd>
 									</div>
 								{/if}
 								{#if job.lastErrorCode}
 									<div>
-										<dt>Último código</dt>
+										<dt>Último erro</dt>
 										<dd><code>{job.lastErrorCode}</code></dd>
 									</div>
 								{/if}
@@ -221,7 +215,7 @@
 							{#if canReturnToGemini(job)}
 								<div class="job-actions">
 									<Button
-										label={movingPageId === job.pageId ? 'Movendo…' : 'Usar Gemini'}
+										label={movingPageId === job.pageId ? 'Movendo…' : 'Usar leitura automática'}
 										disabled={loading || movingPageId !== null}
 										onclick={() => void returnToGemini(job)}
 									/>

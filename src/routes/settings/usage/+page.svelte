@@ -40,10 +40,7 @@
 	<header>
 		<p class="eyebrow">Operação local e gratuita</p>
 		<h1 id="page-title">Uso</h1>
-		<p>
-			Contadores informativos do seu próprio arquivo. Eles não criam franquia nem bloqueiam uma
-			chamada que o provedor ainda aceitaria.
-		</p>
+		<p>Veja um resumo dos documentos, páginas e leituras recentes.</p>
 	</header>
 
 	{#if loading}
@@ -68,7 +65,7 @@
 				<span>Falhas</span><strong>{overview.totals.failedPages}</strong>
 			</article>
 			<article class:quota={overview.totals.blockedQuotaPages > 0}>
-				<span>Cota do provedor</span><strong>{overview.totals.blockedQuotaPages}</strong>
+				<span>Aguardando</span><strong>{overview.totals.blockedQuotaPages}</strong>
 			</article>
 			<article>
 				<span>Correções manuais</span><strong>{overview.totals.manualReviews}</strong>
@@ -102,13 +99,12 @@
 			<div class="section-heading">
 				<div>
 					<p class="eyebrow">Últimos 30 dias</p>
-					<h2 id="history-title">Páginas enviadas ao OCR</h2>
+					<h2 id="history-title">Páginas lidas</h2>
 				</div>
-				<span>Laranja indica cota real do provedor, não limite interno.</span>
 			</div>
 
 			{#if overview.daily.length === 0}
-				<p class="empty-history">Nenhum uso OCR registrado neste período.</p>
+				<p class="empty-history">Nenhuma leitura registrada neste período.</p>
 			{:else}
 				<div class="chart" role="img" aria-label="Histórico diário de páginas processadas">
 					{#each overview.daily as day}
@@ -237,7 +233,6 @@
 		gap: 1rem;
 		margin-bottom: 1rem;
 	}
-	.section-heading > span,
 	.generated {
 		color: var(--muted);
 		font-size: 0.76rem;
