@@ -536,7 +536,11 @@ Deno.serve(async (request) => {
 	}
 
 	const attemptProvider = async (targetModel: string, rpm: number) => {
-		await reserveProviderSlot(targetModel, rpm);
+		try {
+			await reserveProviderSlot(targetModel, rpm);
+		} catch (error) {
+			return Object.freeze({ ok: false as const, error, latencyMs: 0 });
+		}
 		const abortController = new AbortController();
 		const timeout = setTimeout(() => abortController.abort(), requestTimeoutMs);
 		const startedAt = performance.now();

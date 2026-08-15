@@ -419,7 +419,11 @@ async function drainOnce(settings: WorkerConfig) {
 	}
 
 	const attemptProvider = async (model: string, rpm: number) => {
-		await reserveProviderSlot(admin, model, rpm, settings.maxQueueWaitMs);
+		try {
+			await reserveProviderSlot(admin, model, rpm, settings.maxQueueWaitMs);
+		} catch (error) {
+			return Object.freeze({ ok: false as const, error, latencyMs: 0 });
+		}
 		const controller = new AbortController();
 		const timeout = setTimeout(() => controller.abort(), settings.requestTimeoutMs);
 		const startedAt = performance.now();

@@ -59,7 +59,7 @@ O E2E multitab trava que uma restauração concorrente produz uma única criaç�
 2. seleciona um conjunto limitado de candidatos elegíveis;
 3. reutiliza os RPCs existentes de claim, falha, quota e conclusão por meio de um dispatcher restrito a `service_role`;
 4. baixa somente os derivados privados necessários;
-5. respeita o rate limiter compartilhado e tenta o modelo fallback somente quando o primário recebe `429` do provedor;
+5. reserva o orçamento compartilhado do modelo antes de chamar o Gemini e usa o fallback quando o primário recebe `429` ou está bloqueado pelo orçamento diário local;
 6. persiste resultado, geometria e telemetria;
 7. limpa derivados temporários concluídos;
 8. reconcilia o estado do lote;
@@ -72,6 +72,25 @@ Limites configuráveis por ambiente:
 - `OCR_BACKGROUND_TIMEOUT_MS` — padrão 90 s para a chamada ao provedor.
 
 Esses limites mantêm cada execução curta em vez de transformar um PDF grande em uma única Edge Function longa.
+
+## Orçamento Gemini: RPM e RPD
+
+O projeto trata os limites de requisição como orçamento compartilhado do backend, e não como algo que cada Edge Function tenta descobrir isoladamente.
+
+Para os limites atuais do projeto no AI Studio:
+
+- cada modelo possui teto de 15 RPM;
+- o Fichário reserva no máximo 12 RPM por modelo, mantendo margem antes do teto do provedor;
+- cada modelo possui 15 RPD;
+- o banco mantém um contador diário separado por nome de modelo, portanto o orçamento do `gemini-3.1-flash-lite` não consome o orçamento do `gemini-3.5-flash-lite`.
+
+A reserva acontece **antes** da chamada HTTP ao Gemini. Pressão normal de RPM recebe uma espera curta ou volta à fila sem consumir RPD. Ao atingir 15 reservas diárias, novas chamadas daquele modelo são bloqueadas localmente antes de chegar ao provedor.
+
+Quando o orçamento diário do modelo primário fecha, uma espera longa é interpretada como indisponibilidade diária e o roteamento pode usar o modelo fallback. Se o fallback também estiver sem orçamento, o job permanece persistido com retry futuro; não existe polling apertado contra o Gemini.
+
+O reset de RPD segue `America/Los_Angeles`, incluindo horário de verão, porque a renovação diária do Gemini ocorre à meia-noite no horário do Pacífico. O cron de cinco minutos continua sendo apenas o despertador: jobs com `next_retry_at` no futuro não são selecionados até a janela correta.
+
+Além do contador preventivo, um evento de telemetria com `gemini_daily_quota` fecha imediatamente o circuit breaker compartilhado daquele modelo até o próximo reset do Pacífico. Isso cobre o caso em que a mesma cota foi consumida fora do Fichário e o provedor acusa esgotamento antes de o contador local chegar a 15.
 
 ## Wake-up e retries sem navegador
 
@@ -100,9 +119,10 @@ Os RPCs de infraestrutura de background são `service_role` only:
 - `recover_background_stale_ocr_jobs()`;
 - `list_background_gemini_ocr_candidates(integer)`;
 - `background_ocr_as_user(uuid, text, jsonb)`;
-- `reconcile_background_ocr_batches(uuid[], timestamptz)`.
+- `reconcile_background_ocr_batches(uuid[], timestamptz)`;
+- `reserve_ocr_provider_rate_slot(text, integer, integer)`.
 
-O dispatcher aceita somente uma lista fixa de operações e reutiliza os contratos user-scoped já existentes. `anon` e `authenticated` não recebem `EXECUTE` nesse dispatcher.
+O dispatcher aceita somente uma lista fixa de operações e reutiliza os contratos user-scoped já existentes. `anon` e `authenticated` não recebem `EXECUTE` nesse dispatcher nem no reservador compartilhado de orçamento do provedor.
 
 O resumo usado pela UI (`get_document_ocr_summary`) é diferente: ele é `security invoker`, exige usuário autorizado e só agrega jobs pertencentes ao documento do próprio usuário.
 

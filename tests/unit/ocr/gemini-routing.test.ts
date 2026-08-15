@@ -19,13 +19,13 @@ describe('Gemini OCR routing', () => {
 		expect(DEFAULT_GEMINI_OCR_MAX_QUEUE_WAIT_MS).toBe(20_000);
 	});
 
-	it('falls back only for a provider 429, not normal transport or server failures', () => {
+	it('falls back for provider 429s but not normal transport or server failures', () => {
 		expect(shouldFallbackGeminiOcr(new GeminiHttpError(429, '{}'))).toBe(true);
 		expect(shouldFallbackGeminiOcr(new GeminiHttpError(503, '{}'))).toBe(false);
 		expect(shouldFallbackGeminiOcr(new Error('network'))).toBe(false);
 	});
 
-	it('parses bounded distributed rate reservations', () => {
+	it('parses short RPM waits and long denied daily-budget waits without allowing long sleeps', () => {
 		expect(parseGeminiRateReservation({ allowed: true, waitMs: 4999.2 })).toEqual({
 			allowed: true,
 			waitMs: 5000
@@ -34,16 +34,31 @@ describe('Gemini OCR routing', () => {
 			allowed: false,
 			waitMs: 20_001
 		});
+		expect(parseGeminiRateReservation({ allowed: false, waitMs: 14_400_000 })).toEqual({
+			allowed: false,
+			waitMs: 14_400_000
+		});
+		expect(parseGeminiRateReservation({ allowed: true, waitMs: 14_400_000 })).toBeNull();
 		expect(parseGeminiRateReservation({ allowed: true, waitMs: -1 })).toBeNull();
 		expect(parseGeminiRateReservation({ allowed: 'yes', waitMs: 0 })).toBeNull();
 	});
 
-	it('keeps local queue retries bounded and separate from provider fallback', () => {
-		const error = new LocalOcrProviderRateLimitError('local_queue_full', 75_000);
-		expect(error.retryAfterMs).toBe(60_000);
-		expect(shouldFallbackGeminiOcr(error)).toBe(false);
+	it('keeps normal local RPM pressure on primary but routes daily exhaustion to fallback', () => {
+		const rpmPressure = new LocalOcrProviderRateLimitError('local_queue_full', 20_001);
+		expect(rpmPressure.retryAfterMs).toBe(20_001);
+		expect(shouldFallbackGeminiOcr(rpmPressure)).toBe(false);
+
+		const dailyBudget = new LocalOcrProviderRateLimitError('local_queue_full', 14_400_000);
+		expect(dailyBudget.retryAfterMs).toBe(14_400_000);
+		expect(shouldFallbackGeminiOcr(dailyBudget)).toBe(true);
+	});
+
+	it('preserves long daily-budget deferrals so exhausted fallback work sleeps until reset', () => {
 		expect(retryAtFromRateLimit(new Date('2026-08-11T12:00:00.000Z'), 5000)).toBe(
 			'2026-08-11T12:00:05.000Z'
+		);
+		expect(retryAtFromRateLimit(new Date('2026-08-11T12:00:00.000Z'), 14_400_000)).toBe(
+			'2026-08-11T16:00:00.000Z'
 		);
 	});
 });
