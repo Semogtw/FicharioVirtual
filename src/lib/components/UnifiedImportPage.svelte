@@ -144,9 +144,9 @@
 			selectionError = `${unsupported} arquivo(s) ignorado(s). Use PDF, JPG, PNG ou WebP.`;
 		}
 		if (queued > 0 && photoDraft.length === 0) {
-			selectionMessage = `${queued} arquivo(s) adicionados à fila global. Você já pode navegar pelo Fichário.`;
+			selectionMessage = `${queued} arquivo(s) adicionados.`;
 		} else if (queued > 0 && photoDraft.length > 0) {
-			selectionMessage = `${queued} arquivo(s) já entraram na fila; ${photoDraft.length} foto(s) aguardam sua revisão.`;
+			selectionMessage = `${queued} arquivo(s) adicionados; ${photoDraft.length} foto(s) aguardam sua revisão.`;
 		}
 	}
 
@@ -210,7 +210,7 @@
 			addImages(files, { mode, notebookId: destinationNotebookId });
 			const count = files.length;
 			clearPhotoDraft();
-			selectionMessage = `${count} foto(s) adicionadas à fila como documento(s) separado(s).`;
+			selectionMessage = `${count} foto(s) adicionadas como documento(s) separado(s).`;
 			return;
 		}
 
@@ -226,7 +226,7 @@
 			});
 			const count = result.pageIds.length;
 			clearPhotoDraft();
-			selectionMessage = `Documento salvo com ${count} páginas. A leitura continua em segundo plano.`;
+			selectionMessage = `Documento salvo com ${count} páginas.`;
 		} catch (error) {
 			if (error instanceof PartialPhotoDocumentImportError) {
 				clearPhotoDraft();
@@ -478,17 +478,6 @@
 		</p>
 	{/if}
 	{#if selectionError}<p class="selection-error" role="alert">{selectionError}</p>{/if}
-
-	<section class="background-note" aria-labelledby="background-title">
-		<div aria-hidden="true">↗</div>
-		<div>
-			<h2 id="background-title">Não precisa ficar nesta tela</h2>
-			<p>
-				Depois que o material é salvo, a leitura automática continua em segundo plano. PDFs e fotos
-				separadas também continuam usando a fila global normalmente.
-			</p>
-		</div>
-	</section>
 </div>
 
 <style>
@@ -522,8 +511,7 @@
 		letter-spacing: -0.04em;
 	}
 
-	header > p:last-child,
-	.background-note p {
+	header > p:last-child {
 		margin: 0;
 		color: var(--muted);
 		line-height: 1.6;
@@ -796,21 +784,6 @@
 	.selection-error {
 		background: var(--danger-soft);
 		color: var(--danger);
-	}
-
-	.background-note {
-		display: grid;
-		grid-template-columns: auto 1fr;
-		gap: 0.9rem;
-		padding: 1rem;
-		border: 1px solid var(--line);
-		border-radius: var(--radius-md);
-		background: var(--surface);
-	}
-
-	.background-note h2 {
-		margin: 0 0 0.25rem;
-		font-size: 1rem;
 	}
 
 	@media (max-width: 720px) {

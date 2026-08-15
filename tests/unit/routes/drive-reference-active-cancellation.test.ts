@@ -11,7 +11,6 @@ describe('active oversized Drive PDF cancellation', () => {
 		expect(source).toContain('controller.abort()');
 		expect(source).toContain("'AbortError'");
 		expect(source).toContain('Parar processamento');
-		expect(source).toContain('sem apagar o estado durável');
 		expect(source).toContain('await loadPendingReferences()');
 	});
 

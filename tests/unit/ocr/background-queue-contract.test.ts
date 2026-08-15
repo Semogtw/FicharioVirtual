@@ -123,7 +123,10 @@ describe('background OCR queue contract', () => {
 		expect(importPage).toContain("import { addPdfs } from '$lib/stores/pdf-import-queue.svelte';");
 		expect(importPage).toContain('accept="application/pdf,image/jpeg,image/png,image/webp"');
 		expect(importPage).toContain('multiple');
-		expect(importPage).toContain('leitura automática continua em segundo plano');
+		expect(importPage).toContain('addPdfs(pdfs, { notebookId: destinationNotebookId || null });');
+		expect(importPage).toContain(
+			'addImages(images, { mode, notebookId: destinationNotebookId || null });'
+		);
 		expect(importPage).not.toContain('Autorizo o envio');
 	});
 });

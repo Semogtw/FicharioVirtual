@@ -92,27 +92,27 @@
 
 	function referenceMessage(name: string, pending: number) {
 		return pending > 0
-			? `“${name}” foi importado por referência; ${pending} página(s) de OCR permanecem retomáveis.`
-			: `“${name}” foi importado por referência sem baixar o PDF inteiro.`;
+			? `“${name}” foi adicionado. ${pending} página(s) ainda serão concluídas.`
+			: `“${name}” foi adicionado.`;
 	}
 
 	function referenceProgressMessage(progress: DrivePdfReferenceImportProgress) {
 		if (progress.phase === 'inspecting') {
-			return `Inspecionando página ${progress.pageNumber ?? 0} de ${progress.pageCount ?? 0}…`;
+			return `Preparando página ${progress.pageNumber ?? 0} de ${progress.pageCount ?? 0}…`;
 		}
 		if (progress.phase === 'rendering_ocr') {
-			return `Preparando página ${progress.current ?? 0} de ${progress.total ?? 0} para OCR…`;
+			return `Preparando página ${progress.current ?? 0} de ${progress.total ?? 0}…`;
 		}
 		if (progress.phase === 'ocr') {
-			return `Lendo página ${progress.current ?? 0} de ${progress.total ?? 0} com OCR…`;
+			return `Lendo página ${progress.current ?? 0} de ${progress.total ?? 0}…`;
 		}
 		const labels: Record<DrivePdfReferenceImportProgress['phase'], string> = {
-			verifying: 'Verificando a cópia preservada no Drive…',
-			opening: 'Abrindo o PDF por faixas…',
+			verifying: 'Verificando arquivo…',
+			opening: 'Abrindo PDF…',
 			inspecting: 'Inspecionando páginas…',
-			rendering_ocr: 'Preparando páginas para OCR…',
-			publishing: 'Publicando a estrutura do documento…',
-			ocr: 'Executando OCR…',
+			rendering_ocr: 'Preparando páginas…',
+			publishing: 'Salvando documento…',
+			ocr: 'Lendo páginas…',
 			complete: 'Importação concluída.'
 		};
 		return labels[progress.phase];
@@ -139,7 +139,7 @@
 		} catch (caught) {
 			if (isAbortError(caught)) {
 				error = null;
-				message = `O processamento de “${name}” foi interrompido sem apagar o estado durável. Se ainda houver etapas pendentes, elas poderão ser retomadas.`;
+				message = `“${name}” foi interrompido. Você poderá retomar depois.`;
 				return null;
 			}
 			throw caught;
@@ -156,7 +156,7 @@
 		const controller = referenceAbortController;
 		if (!controller || controller.signal.aborted) return;
 		controller.abort();
-		message = `Interrompendo “${reference.title}” sem apagar o estado durável…`;
+		message = `Interrompendo “${reference.title}”…`;
 	}
 
 	async function resumeReference(reference: ResumableDrivePdfReference) {
@@ -274,19 +274,16 @@
 <div class="page" aria-labelledby="page-title">
 	<header>
 		<div>
-			<p class="eyebrow">Seleção consciente</p>
+			<p class="eyebrow">Google Drive</p>
 			<h1 id="page-title">Importar do Google Drive</h1>
-			<p>
-				Escolha exatamente um arquivo. Ele é lido temporariamente e publicado pela mesma fila
-				Drive-first dos uploads locais. Nenhuma leitura ampla da conta é realizada.
-			</p>
+			<p>Escolha um arquivo do seu Google Drive para adicionar ao fichário.</p>
 		</div>
 	</header>
 
 	{#if !pickerConfigured}
 		<section class="notice" aria-labelledby="configuration-title">
-			<h2 id="configuration-title">Google Picker ainda não configurado</h2>
-			<p>Cadastre a chave pública restrita e o número do projeto para habilitar esta tela.</p>
+			<h2 id="configuration-title">Google Drive indisponível</h2>
+			<p>A importação pelo Google Drive ainda não está disponível.</p>
 		</section>
 	{/if}
 
@@ -306,10 +303,7 @@
 		<div>
 			<p class="eyebrow">JPG · PNG · WebP · PDF</p>
 			<h2 id="picker-title">Escolher um arquivo</h2>
-			<p>
-				O download direto no navegador aceita até 50 MiB. PDFs maiores são preservados no Drive e
-				preparados por referência; esse teto não é do documento lógico nem dos lotes de OCR.
-			</p>
+			<p>Imagens e PDFs são aceitos, inclusive PDFs grandes.</p>
 		</div>
 		<Button
 			label={selecting ? 'Abrindo Drive…' : 'Escolher no Google Drive'}
@@ -325,15 +319,12 @@
 	{#if loadingReferences || pendingReferences.length > 0 || referenceError}
 		<section class="resume-card" aria-labelledby="resume-title">
 			<div>
-				<p class="eyebrow">Retomada durável</p>
-				<h2 id="resume-title">PDFs grandes preservados</h2>
-				<p>
-					Esses arquivos já estão na pasta controlada do Drive. Retomar lê somente faixas e páginas
-					necessárias; você não precisa selecionar nem enviar o PDF novamente.
-				</p>
+				<p class="eyebrow">Continuar depois</p>
+				<h2 id="resume-title">PDFs pendentes</h2>
+				<p>Você pode continuar esses arquivos sem selecioná-los novamente.</p>
 			</div>
 			{#if loadingReferences}
-				<p class="muted" role="status">Verificando referências pendentes…</p>
+				<p class="muted" role="status">Verificando arquivos pendentes…</p>
 			{:else if referenceError}
 				<div class="reference-error">
 					<p role="alert">{referenceError}</p>
@@ -345,7 +336,7 @@
 						<article>
 							<div>
 								<strong>{reference.title}</strong>
-								<small>{formatSize(reference.sourceSizeBytes)} · preservado no Google Drive</small>
+								<small>{formatSize(reference.sourceSizeBytes)}</small>
 							</div>
 							<div class="reference-actions">
 								{#if resumingDocumentId === reference.documentId}

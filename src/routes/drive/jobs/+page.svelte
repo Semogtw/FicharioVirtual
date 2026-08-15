@@ -68,7 +68,7 @@
 		message = null;
 		try {
 			const receipt = await runPendingDriveJobs();
-			message = `${receipt.synced} mudanças sincronizadas, ${receipt.retryable} reagendadas e ${receipt.conflicts} isoladas como conflito.${receipt.status === 'partial' ? ' Ainda há itens para outra rodada.' : ''}`;
+			message = `${receipt.synced} mudança(s) sincronizada(s). ${receipt.retryable + receipt.conflicts} item(ns) ainda precisam de atenção.`;
 			await loadAfterRun();
 		} catch (caught) {
 			error =
@@ -100,12 +100,9 @@
 <div class="page" aria-labelledby="page-title">
 	<header>
 		<div>
-			<p class="eyebrow">Saída local → Drive</p>
+			<p class="eyebrow">Google Drive</p>
 			<h1 id="page-title">Mudanças locais</h1>
-			<p>
-				Aplique criação, renomeação e movimentação de pastas, mudanças de caderno e exclusões
-				físicas. Cada item possui lease, retry e recibo independente.
-			</p>
+			<p>Acompanhe as mudanças que ainda precisam ser sincronizadas com o Google Drive.</p>
 		</div>
 		<div class="header-actions">
 			<Button
@@ -125,15 +122,15 @@
 	<section class="summary" aria-label="Resumo da fila">
 		<article>
 			<strong>{activeCount}</strong>
-			<span>Pendentes ou em retry</span>
+			<span>Pendentes</span>
 		</article>
 		<article>
 			<strong>{conflictCount}</strong>
-			<span>Conflitos isolados</span>
+			<span>Conflitos</span>
 		</article>
 		<article>
 			<strong>{failedCount}</strong>
-			<span>Falhas persistentes</span>
+			<span>Falhas</span>
 		</article>
 	</section>
 
@@ -143,7 +140,7 @@
 	<section class="panel" aria-labelledby="jobs-title">
 		<div class="panel-heading">
 			<div>
-				<p class="eyebrow">Últimos 100 recibos</p>
+				<p class="eyebrow">Histórico recente</p>
 				<h2 id="jobs-title">Operações</h2>
 			</div>
 			<span>{jobs.length}</span>

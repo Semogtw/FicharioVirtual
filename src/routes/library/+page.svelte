@@ -104,7 +104,7 @@
 		<div>
 			<p class="eyebrow">Arquivo pesquisável</p>
 			<h1 id="page-title">Biblioteca</h1>
-			<p>Consulte os originais, acompanhe o processamento e organize tudo por caderno.</p>
+			<p>Consulte seus documentos e organize tudo por caderno.</p>
 		</div>
 		<a class="primary-action" href="/import/">Importar</a>
 	</header>

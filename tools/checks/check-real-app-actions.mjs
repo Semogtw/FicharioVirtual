@@ -130,7 +130,7 @@ async function waitForQueueEntry(page, filename, timeoutMs = 180_000) {
 			throw new Error(`Detached ArrayBuffer regression reproduced for ${filename}: ${last}`);
 		}
 		if (/Falhou/i.test(last)) throw new Error(`Import failed for ${filename}: ${last}`);
-		if (/Concluído|Pronto para revisão|Já existe|Leitura em segundo plano/i.test(last)) return last;
+		if (/Concluído|Pronto para revisão|Já existe|Aguardando leitura/i.test(last)) return last;
 		await page.waitForTimeout(1_500);
 	}
 	throw new Error(`Timed out waiting for import queue entry ${filename}; last state: ${last}`);
@@ -587,8 +587,10 @@ try {
 
 	stage('coverage-semantic', 'running');
 	await page.goto(new URL('/coverage/', target).href, { waitUntil: 'domcontentloaded' });
-	await page.getByLabel('Conteúdos', { exact: true }).fill('Conservação de energia');
-	await page.getByRole('button', { name: 'Transformar em campos', exact: true }).click();
+	const coverageInput = page.getByLabel('Conteúdos', { exact: true });
+	await coverageInput.fill('Conservação de energia');
+	await coverageInput.press('Enter');
+	await page.getByLabel('Conteúdo 1', { exact: true }).waitFor({ state: 'visible' });
 	await page.getByLabel('Buscar em', { exact: true }).selectOption(notebook.id);
 	await page.getByRole('button', { name: 'Verificar cobertura', exact: true }).click();
 	const coverage = page.locator('section.coverage');
@@ -612,7 +614,7 @@ try {
 	await photoInput.setInputFiles({ name: photoFilename, mimeType: 'image/png', buffer: syllabus });
 	const photoNotice = page.locator('section.photo-card p.photo-notice');
 	await photoNotice.waitFor({ state: 'visible', timeout: 180_000 });
-	if (!/[1-9]\d* conteúdo\(s\) extraído\(s\)/i.test(await photoNotice.innerText())) {
+	if (!/[1-9]\d* conteúdo\(s\) adicionados/i.test(await photoNotice.innerText())) {
 		throw new Error('Coverage photo OCR did not produce editable topics');
 	}
 	await assertNoVisibleFailure(page, 'coverage photo OCR');

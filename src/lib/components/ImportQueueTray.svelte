@@ -52,7 +52,7 @@
 		rendering: 'Preparando páginas',
 		publishing: 'Salvando no fichário',
 		reading: 'Leitura iniciada',
-		waiting: 'Leitura em segundo plano',
+		waiting: 'Aguardando leitura',
 		needs_review: 'Pronto para revisão',
 		complete: 'Concluído',
 		duplicate: 'Já existe',
@@ -227,7 +227,6 @@
 			<header>
 				<div>
 					<strong>Importações</strong>
-					<small>Você pode continuar usando o Fichário enquanto os itens são processados.</small>
 				</div>
 				<div class="header-actions">
 					{#if failedCount > 0}
@@ -359,17 +358,10 @@
 		font-weight: 600;
 	}
 
-	header small,
 	.copy span,
 	.copy small,
 	.empty {
 		color: var(--muted);
-	}
-
-	header small {
-		max-width: 22rem;
-		font-size: 0.72rem;
-		line-height: 1.35;
 	}
 
 	.header-actions,

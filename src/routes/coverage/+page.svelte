@@ -32,19 +32,12 @@
 
 	const notebookRequests = new RequestVersion();
 	const coverageRequests = new RequestVersion();
-	const bulkPlaceholder =
-		'3.1 Temperatura\n3.2 Calor específico\n3.3 Mudanças de fase\n3.4 Primeira lei da termodinâmica';
-	const confidenceLabel: Record<TopicImportConfidence, string> = {
-		high: 'alta',
-		medium: 'média',
-		low: 'baixa'
-	};
 	const photoStageLabel: Record<CoveragePhotoImportStage, string> = {
-		preparing: 'Preparando a foto…',
-		uploading: 'Enviando temporariamente…',
-		reading: 'Lendo com OCR…',
-		extracting: 'Separando os conteúdos…',
-		cleaning_up: 'Removendo o arquivo temporário…'
+		preparing: 'Preparando foto…',
+		uploading: 'Preparando foto…',
+		reading: 'Lendo conteúdo…',
+		extracting: 'Organizando conteúdos…',
+		cleaning_up: 'Finalizando…'
 	};
 
 	let unitName = $state('');
@@ -64,11 +57,16 @@
 	let photoError = $state<string | null>(null);
 	let photoNotice = $state<string | null>(null);
 	let photoController: AbortController | null = null;
-	let semanticNotice = $state<string | null>(null);
 
 	let topicValidation = $derived.by(() => {
 		try {
-			const active = topics.map((topic) => topic.text.trim()).filter(Boolean);
+			const active = [
+				...topics.map((topic) => topic.text.trim()).filter(Boolean),
+				...bulkInput
+					.split(/\r?\n/)
+					.map((line) => line.trim())
+					.filter(Boolean)
+			];
 			return {
 				topics: parseUnitTopics(active.join('\n')),
 				error: null as string | null,
@@ -78,14 +76,13 @@
 			return {
 				topics: Object.freeze([]) as readonly string[],
 				error: caught instanceof Error ? caught.message : 'A lista de assuntos não é válida.',
-				nonEmptyCount: topics.filter((topic) => topic.text.trim()).length
+				nonEmptyCount:
+					topics.filter((topic) => topic.text.trim()).length +
+					bulkInput.split(/\r?\n/).filter((line) => line.trim()).length
 			};
 		}
 	});
 
-	let duplicateCount = $derived(
-		Math.max(0, topicValidation.nonEmptyCount - topicValidation.topics.length)
-	);
 
 	const statusLabel: Record<TopicCoverageStatus, string> = {
 		covered: 'Coberto',
@@ -107,33 +104,6 @@
 		loading = false;
 		error = null;
 		summary = null;
-	}
-
-	function semanticResultNotice(result: AnalyzedUnitCoverageSummary) {
-		const analysis = result.analysis;
-		if (!analysis) return null;
-		if (analysis.mode === 'lexical') {
-			return 'A camada semântica não ficou disponível nesta análise. O resultado textual/fuzzy foi preservado normalmente.';
-		}
-		const notes = ['Análise híbrida ativa: busca textual/fuzzy + relação semântica.'];
-		if (analysis.index) {
-			if (analysis.index.complete) {
-				notes.push(`Índice semântico atualizado para ${analysis.index.totalPages} página(s).`);
-			} else {
-				notes.push(
-					`Índice semântico em construção: ${analysis.index.indexedPages}/${analysis.index.totalPages} página(s) atuais. A busca textual continua cobrindo o fichário inteiro.`
-				);
-			}
-			if (analysis.index.indexedThisRun > 0) {
-				notes.push(`${analysis.index.indexedThisRun} página(s) foram indexadas nesta análise.`);
-			}
-		}
-		if (analysis.verification === 'used') {
-			notes.push('Os melhores trechos também foram verificados semanticamente pelo Gemini.');
-		} else if (analysis.verification === 'unavailable') {
-			notes.push('O verificador Gemini não respondeu; o score híbrido permaneceu disponível.');
-		}
-		return notes.join(' ');
 	}
 
 	function appendEditableTopics(incoming: readonly EditableTopic[]) {
@@ -188,35 +158,87 @@
 		};
 	}
 
-	function convertBulkInput() {
-		bulkError = null;
+	function appendManualText(value: string) {
 		let parsed: readonly string[];
 		try {
-			parsed = parseUnitTopics(bulkInput);
+			parsed = parseUnitTopics(value);
 		} catch (caught) {
-			bulkError = caught instanceof Error ? caught.message : 'Não foi possível separar esta lista.';
-			return;
+			bulkError = caught instanceof Error ? caught.message : 'Não foi possível adicionar estes assuntos.';
+			return null;
 		}
-		if (parsed.length === 0) {
-			bulkError = 'Cole ou escreva pelo menos um assunto.';
-			return;
-		}
-		const result = appendEditableTopics(parsed.map(manualTopic));
-		if (result.added > 0) bulkInput = '';
+		if (parsed.length === 0) return { added: 0, duplicates: 0, truncated: false };
+		return appendEditableTopics(parsed.map(manualTopic));
+	}
+
+	function applyAppendResult(result: { added: number; duplicates: number; truncated: boolean }) {
 		if (result.truncated) {
-			bulkError = `A unidade aceita até ${MAX_UNIT_TOPICS} assuntos. Os itens excedentes não foram adicionados.`;
+			bulkError = `A unidade aceita até ${MAX_UNIT_TOPICS} assuntos.`;
 		} else if (result.duplicates > 0) {
-			bulkError = `${result.duplicates} assunto(s) repetido(s) não foram adicionados.`;
+			bulkError = `${result.duplicates} assunto(s) repetido(s) foram ignorados.`;
+		} else {
+			bulkError = null;
 		}
 	}
 
-	function addBlankTopic() {
+	function commitBulkInput() {
+		if (!bulkInput.trim()) {
+			bulkError = null;
+			return true;
+		}
+		const result = appendManualText(bulkInput);
+		if (!result) return false;
+		bulkInput = '';
+		applyAppendResult(result);
+		return true;
+	}
+
+	function handleBulkInput(event: Event) {
+		const value = (event.currentTarget as HTMLTextAreaElement).value;
+		bulkInput = value;
+		invalidateCoverage();
+		if (!value.includes('\n')) {
+			bulkError = null;
+			return;
+		}
+
+		const normalized = value.replace(/\r\n?/g, '\n');
+		const lines = normalized.split('\n');
+		const pending = lines.pop() ?? '';
+		const completed = lines.join('\n');
+		if (!completed.trim()) {
+			bulkInput = pending;
+			return;
+		}
+
+		const result = appendManualText(completed);
+		if (!result) return;
+		bulkInput = pending;
+		applyAppendResult(result);
+	}
+
+	function handleBulkKeydown(event: KeyboardEvent) {
+		if (event.key !== 'Enter' || event.isComposing) return;
+		event.preventDefault();
+		commitBulkInput();
+	}
+
+	function addTopicAfter(index: number) {
 		if (topics.length >= MAX_UNIT_TOPICS) {
 			bulkError = `A unidade aceita até ${MAX_UNIT_TOPICS} assuntos.`;
 			return;
 		}
-		topics = [...topics, manualTopic('')];
+		const topic = manualTopic('');
+		topics = [...topics.slice(0, index + 1), topic, ...topics.slice(index + 1)];
 		invalidateCoverage();
+		requestAnimationFrame(() => {
+			document.querySelector<HTMLInputElement>(`[data-topic-id="${topic.id}"]`)?.focus();
+		});
+	}
+
+	function handleTopicKeydown(event: KeyboardEvent, index: number) {
+		if (event.key !== 'Enter' || event.isComposing) return;
+		event.preventDefault();
+		addTopicAfter(index);
 	}
 
 	function updateTopic(id: string, event: Event) {
@@ -269,20 +291,10 @@
 				onStage: (stage) => (photoStage = stage)
 			});
 			const merged = appendEditableTopics(result.topics.map(ocrTopic));
-			const notes = [`${merged.added} conteúdo(s) extraído(s) viraram campos editáveis.`];
+			const notes = [`${merged.added} conteúdo(s) adicionados.`];
 			if (merged.duplicates > 0) notes.push(`${merged.duplicates} repetido(s) foram ignorados.`);
-			if (merged.truncated || result.truncated) {
-				notes.push(`O limite de ${MAX_UNIT_TOPICS} assuntos foi atingido.`);
-			}
-			if (result.topics.some((topic) => topic.reviewRequired)) {
-				notes.push('Os itens com confiança baixa ficaram marcados para revisão.');
-			}
-			if (result.reusedExistingDocument) {
-				notes.push('A foto já existia no fichário e o OCR existente foi reaproveitado.');
-			}
-			if (result.cleanupWarning) {
-				notes.push('A limpeza do arquivo temporário falhou; ele pode aparecer na biblioteca até nova limpeza.');
-			}
+			if (merged.truncated || result.truncated) notes.push(`O limite de ${MAX_UNIT_TOPICS} assuntos foi atingido.`);
+			if (result.topics.some((topic) => topic.reviewRequired)) notes.push('Alguns conteúdos precisam de revisão.');
 			photoNotice = notes.join(' ');
 		} catch (caught) {
 			if (caught instanceof DOMException && caught.name === 'AbortError') return;
@@ -319,6 +331,8 @@
 	}
 
 	async function analyze() {
+		if (bulkInput.trim() && !commitBulkInput()) return;
+
 		if (topicValidation.error) {
 			error = topicValidation.error;
 			return;
@@ -334,7 +348,6 @@
 		controller = activeController;
 		loading = true;
 		error = null;
-		semanticNotice = null;
 		try {
 			const semanticRequested = true;
 
@@ -345,7 +358,6 @@
 			});
 			if (coverageRequests.isCurrent(version)) {
 				summary = result;
-				semanticNotice = semanticResultNotice(result) ?? semanticNotice;
 			}
 		} catch (caught) {
 			if (caught instanceof DOMException && caught.name === 'AbortError') return;
@@ -383,10 +395,7 @@
 	<header>
 		<p class="eyebrow">Cobertura de conteúdo</p>
 		<h1 id="page-title">O que do conteúdo já está no seu fichário?</h1>
-		<p>
-			Monte a ementa digitando, colando uma lista ou fotografando o conteúdo. Antes da análise, cada
-			assunto fica em um campo independente para você revisar e corrigir.
-		</p>
+		<p>Adicione os assuntos e verifique o que já aparece no seu fichário.</p>
 	</header>
 
 	<section class="setup" aria-labelledby="setup-title">
@@ -423,33 +432,78 @@
 			<section class="input-card" aria-labelledby="manual-input-title">
 				<div>
 					<p class="eyebrow">Digitar ou colar</p>
-					<h3 id="manual-input-title">Lista escrita</h3>
+					<h3 id="manual-input-title">Conteúdos</h3>
 				</div>
+
+				{#if topics.length > 0}
+					<ol class="editable-topics">
+						{#each topics as topic, index (topic.id)}
+							<li class:needs-review={topic.reviewRequired} style={`--topic-level: ${topic.level}`}>
+								<div class="topic-index" aria-hidden="true">{index + 1}</div>
+								<div class="editable-topic-main">
+									<label>
+										<span class="sr-only">Conteúdo {index + 1}</span>
+										<input
+											data-topic-id={topic.id}
+											value={topic.text}
+											maxlength={MAX_TOPIC_LENGTH}
+											placeholder="Digite o assunto"
+											oninput={(event) => updateTopic(topic.id, event)}
+											onkeydown={(event) => handleTopicKeydown(event, index)}
+										/>
+									</label>
+									{#if topic.reviewRequired}<span class="review-badge">Revisar</span>{/if}
+								</div>
+								<div class="topic-controls" aria-label={`Ações do conteúdo ${index + 1}`}>
+									<button
+										type="button"
+										disabled={topic.level === 0}
+										onclick={() => adjustLevel(topic.id, -1)}
+										aria-label="Diminuir recuo">←</button
+									>
+									<button
+										type="button"
+										disabled={topic.level === 3}
+										onclick={() => adjustLevel(topic.id, 1)}
+										aria-label="Aumentar recuo">→</button
+									>
+									<button
+										type="button"
+										disabled={index === 0}
+										onclick={() => moveTopic(index, -1)}
+										aria-label="Mover para cima">↑</button
+									>
+									<button
+										type="button"
+										disabled={index === topics.length - 1}
+										onclick={() => moveTopic(index, 1)}
+										aria-label="Mover para baixo">↓</button
+									>
+									<button type="button" class="remove" onclick={() => removeTopic(topic.id)}>Excluir</button>
+								</div>
+							</li>
+						{/each}
+					</ol>
+				{/if}
+
 				<label class="bulk-field">
-					<span>Conteúdos</span>
+					<span class="sr-only">Novo assunto</span>
 					<textarea
 						aria-label="Conteúdos"
 						bind:value={bulkInput}
-						rows="6"
-						placeholder={bulkPlaceholder}
+						rows="2"
+						placeholder="Digite um assunto e pressione Enter"
+						oninput={handleBulkInput}
+						onkeydown={handleBulkKeydown}
 					></textarea>
-					<small>Uma linha por assunto. Numeração e marcadores são removidos ao converter.</small>
 				</label>
-				<div class="compact-actions">
-					<Button label="Transformar em campos" variant="secondary" onclick={convertBulkInput} />
-					<Button label="Adicionar campo vazio" variant="secondary" onclick={addBlankTopic} />
-				</div>
 				{#if bulkError}<p class="validation" role="status">{bulkError}</p>{/if}
+				{#if topicValidation.error}<p class="validation" role="alert">{topicValidation.error}</p>{/if}
 			</section>
-
 			<section class="input-card photo-card" aria-labelledby="photo-input-title">
 				<div>
 					<p class="eyebrow">Foto da ementa</p>
-					<h3 id="photo-input-title">Extrair com OCR</h3>
-					<p>
-						O Fichário prepara a imagem, lê o texto e separa a lista em campos individuais. A foto é
-						usada temporariamente e removida depois da extração.
-					</p>
+					<h3 id="photo-input-title">Adicionar pela foto</h3>
 				</div>
 
 				<div class="photo-actions">
@@ -486,92 +540,6 @@
 			</section>
 		</div>
 
-		<section class="topic-editor" aria-labelledby="topic-editor-title">
-			<div class="editor-heading">
-				<div>
-					<p class="eyebrow">Revisão</p>
-					<h3 id="topic-editor-title">Conteúdos estruturados</h3>
-				</div>
-				<Button label="Adicionar assunto" variant="secondary" onclick={addBlankTopic} />
-			</div>
-
-			{#if topics.length === 0}
-				<p class="empty-editor">
-					Os conteúdos aparecerão aqui como campos individuais. Você pode editar, excluir, reordenar e
-					ajustar a hierarquia antes de verificar a cobertura.
-				</p>
-			{:else}
-				<ol class="editable-topics">
-					{#each topics as topic, index (topic.id)}
-						<li class:needs-review={topic.reviewRequired} style={`--topic-level: ${topic.level}`}>
-							<div class="topic-index" aria-hidden="true">{index + 1}</div>
-							<div class="editable-topic-main">
-								<label>
-									<span class="sr-only">Conteúdo {index + 1}</span>
-									<input
-										value={topic.text}
-										maxlength={MAX_TOPIC_LENGTH}
-										placeholder="Digite o assunto"
-										oninput={(event) => updateTopic(topic.id, event)}
-									/>
-								</label>
-								<div class="topic-meta">
-									{#if topic.source === 'ocr'}
-										<span class={`confidence ${topic.confidence}`}>
-											OCR · confiança {confidenceLabel[topic.confidence]}
-										</span>
-									{:else}
-										<span>Manual</span>
-									{/if}
-									{#if topic.level > 0}<span>nível {topic.level + 1}</span>{/if}
-									{#if topic.reviewRequired}<strong>revisar</strong>{/if}
-								</div>
-							</div>
-							<div class="topic-controls" aria-label={`Ações do conteúdo ${index + 1}`}>
-								<button
-									type="button"
-									disabled={topic.level === 0}
-									onclick={() => adjustLevel(topic.id, -1)}
-									aria-label="Promover nível"
-								>←</button>
-								<button
-									type="button"
-									disabled={topic.level === 3}
-									onclick={() => adjustLevel(topic.id, 1)}
-									aria-label="Rebaixar nível"
-								>→</button>
-								<button
-									type="button"
-									disabled={index === 0}
-									onclick={() => moveTopic(index, -1)}
-									aria-label="Mover para cima"
-								>↑</button>
-								<button
-									type="button"
-									disabled={index === topics.length - 1}
-									onclick={() => moveTopic(index, 1)}
-									aria-label="Mover para baixo"
-								>↓</button>
-								<button type="button" class="remove" onclick={() => removeTopic(topic.id)}>Excluir</button>
-							</div>
-						</li>
-					{/each}
-				</ol>
-			{/if}
-
-			{#if topicValidation.error}
-				<p class="validation" role="alert">{topicValidation.error}</p>
-			{/if}
-			{#if duplicateCount > 0}
-				<p class="editor-note" role="status">
-					{duplicateCount} campo(s) repetido(s) serão considerados uma única vez na análise.
-				</p>
-			{/if}
-			<p class="editor-note">
-				A confiança do OCR é um sinal heurístico de revisão, não uma probabilidade estatística. Campos
-				marcados como “revisar” devem ser conferidos antes da análise.
-			</p>
-		</section>
 
 		{#if notebookError}
 			<div class="warning" role="status">
@@ -580,11 +548,6 @@
 			</div>
 		{/if}
 
-		<div class="processing-note">
-			<strong>Comparação por significado incluída automaticamente.</strong>
-			<span>Quando necessário, pequenos trechos podem ser processados pelo Gemini. A busca textual/fuzzy continua como fallback.</span>
-		</div>
-		{#if semanticNotice}<p class="photo-notice" role="status">{semanticNotice}</p>{/if}
 
 		<div class="actions">
 			<Button
@@ -592,9 +555,6 @@
 				disabled={loading || topicValidation.topics.length === 0 || Boolean(topicValidation.error)}
 				onclick={() => void analyze()}
 			/>
-			<p>
-				A busca é limitada e concorrente; com semântica ativa, o índice é atualizado em pequenos lotes.
-			</p>
 		</div>
 	</section>
 
@@ -607,7 +567,7 @@
 
 	{#if loading}
 		<p class="loading" role="status">
-			Comparando os assuntos por texto e significado…
+			Verificando cobertura…
 		</p>
 	{:else if summary}
 		<section class="coverage" aria-labelledby="coverage-title">
@@ -637,13 +597,10 @@
 								<span class="status">{statusLabel[topic.status]}</span>
 								<h3>{topic.topic}</h3>
 							</div>
-							<span class="strength">indício {topic.strength}%</span>
 						</div>
 
 						{#if topic.evidence.length === 0}
-							<p class="no-evidence">
-								Nenhuma página pesquisável trouxe um indício suficiente para este assunto.
-							</p>
+							<p class="no-evidence">Não encontramos conteúdo suficiente para este assunto.</p>
 						{:else}
 							<ul class="evidence" aria-label={`Evidências para ${topic.topic}`}>
 								{#each topic.evidence as evidence}
@@ -670,16 +627,6 @@
 				{/each}
 			</ol>
 
-			<p class="method-note">
-				{#if summary.analysis?.mode === 'hybrid'}
-					A classificação combina busca textual/fuzzy, similaridade por embeddings e, quando disponível,
-					verificação conservadora do Gemini sobre poucos trechos candidatos. O percentual continua
-					derivado dos mesmos estados Coberto, Parcial e Não encontrado.
-				{:else}
-					A classificação usa a força da busca textual/fuzzy. “Parcial” indica que há indícios, mas não
-					evidência forte o bastante para afirmar cobertura completa.
-				{/if}
-			</p>
 		</section>
 	{/if}
 </div>
@@ -690,7 +637,6 @@
 	.coverage,
 	.topic-results,
 	.evidence,
-	.topic-editor,
 	.input-card {
 		display: grid;
 		gap: 1.25rem;
@@ -747,8 +693,6 @@
 	.actions,
 	.warning,
 	.error,
-	.editor-heading,
-	.compact-actions,
 	.photo-actions {
 		display: flex;
 		align-items: center;
@@ -759,17 +703,11 @@
 	.section-heading h2,
 	.coverage-summary h2,
 	.topic-heading h3,
-	.editor-heading h3,
 	.input-card h3 {
 		margin-bottom: 0;
 	}
 
-	.section-heading > span,
-	.strength,
-	.actions p,
-	.bulk-field small,
-	.editor-note,
-	.photo-card > div > p:last-child {
+	.section-heading > span {
 		color: var(--muted);
 		font-size: 0.8rem;
 	}
@@ -785,8 +723,7 @@
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
 
-	.input-card,
-	.topic-editor {
+	.input-card {
 		padding: 1rem;
 		border: 1px solid var(--line);
 		border-radius: var(--radius-md);
@@ -816,31 +753,17 @@
 	}
 
 	textarea {
-		min-height: 9rem;
+		min-height: 4.75rem;
 		resize: vertical;
 		line-height: 1.55;
 	}
 
-	.compact-actions,
 	.photo-actions,
 	.actions {
 		justify-content: flex-start;
 		flex-wrap: wrap;
 	}
 
-	.processing-note {
-		display: grid;
-		gap: 0.25rem;
-		padding: 0.85rem;
-		border-left: 0.3rem solid var(--archive);
-		background: var(--archive-soft);
-	}
-
-	.processing-note span {
-		color: var(--muted);
-		font-size: 0.86rem;
-		line-height: 1.45;
-	}
 
 	.file-button {
 		display: inline-flex;
@@ -893,8 +816,7 @@
 	.photo-notice,
 	.validation,
 	.warning p,
-	.error p,
-	.editor-note {
+	.error p {
 		margin: 0;
 	}
 
@@ -922,14 +844,6 @@
 		background: rgb(155 63 54 / 7%);
 	}
 
-	.empty-editor {
-		margin: 0;
-		padding: 1rem;
-		border: 1px dashed var(--line-strong);
-		border-radius: var(--radius-sm);
-		color: var(--muted);
-		line-height: 1.6;
-	}
 
 	.editable-topics {
 		display: grid;
@@ -976,33 +890,16 @@
 		background: var(--surface-strong);
 	}
 
-	.topic-meta {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.4rem;
-		color: var(--muted);
-		font-size: 0.72rem;
-	}
-
-	.topic-meta span,
-	.topic-meta strong {
-		padding: 0.2rem 0.4rem;
+	.review-badge {
+		justify-self: start;
+		padding: 0.2rem 0.45rem;
 		border-radius: 999px;
-		background: var(--surface-strong);
+		background: var(--archive-soft);
+		color: var(--accent-strong);
+		font-size: 0.72rem;
+		font-weight: 760;
 	}
 
-	.topic-meta strong {
-		color: var(--accent);
-		text-transform: uppercase;
-	}
-
-	.confidence.high {
-		color: var(--archive);
-	}
-
-	.confidence.low {
-		color: var(--danger);
-	}
 
 	.topic-controls {
 		display: flex;
@@ -1037,9 +934,6 @@
 		border: 0;
 	}
 
-	.actions p {
-		margin: 0;
-	}
 
 	.loading {
 		padding: 2.5rem;
@@ -1075,8 +969,7 @@
 	}
 
 	.counts span,
-	.status,
-	.strength {
+	.status {
 		padding: 0.35rem 0.55rem;
 		border-radius: 999px;
 		background: var(--paper);
@@ -1147,8 +1040,7 @@
 	}
 
 	.evidence p,
-	.no-evidence,
-	.method-note {
+	.no-evidence {
 		margin: 0;
 		color: var(--muted);
 		line-height: 1.6;
@@ -1160,11 +1052,6 @@
 		color: inherit;
 	}
 
-	.method-note {
-		padding-top: 1rem;
-		border-top: 1px solid var(--line);
-		font-size: 0.84rem;
-	}
 
 	@media (max-width: 900px) {
 		.input-methods {
@@ -1182,8 +1069,7 @@
 		.topic-heading,
 		.actions,
 		.warning,
-		.error,
-		.editor-heading {
+		.error {
 			align-items: flex-start;
 			flex-direction: column;
 		}
