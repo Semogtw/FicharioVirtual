@@ -18,6 +18,14 @@ describe('visual staging benchmark contract', () => {
 			expect(existsSync(obsolete), obsolete).toBe(false);
 	});
 
+	it('runs the expensive corpus only after an actual Supabase deploy job succeeds', () => {
+		expect(workflow).toContain('actions: read');
+		expect(workflow).toContain('select(.name == "deploy")');
+		expect(workflow).toContain("echo 'should_run=false' >> \"$GITHUB_OUTPUT\"");
+		expect(workflow).toContain("needs.gate.outputs.should_run == 'true'");
+		expect(workflow).toContain("needs.shadow.result != 'skipped'");
+	});
+
 	it('makes synthetic PNG identities unique without changing their visual geometry', () => {
 		expect(script).toContain('function patternPng(kind, runNonce)');
 		expect(script).toContain("chunk('tEXt', benchmarkMetadata)");
