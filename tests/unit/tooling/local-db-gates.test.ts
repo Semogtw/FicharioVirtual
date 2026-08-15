@@ -53,7 +53,9 @@ describe('local database gate runner', () => {
 		expect(idempotencyGate).toContain('first claim contract drifted');
 		expect(idempotencyGate).toContain('already-complete claim contract drifted');
 		expect(idempotencyGate).toContain('provider quota retried before Pacific rollover');
-		expect(idempotencyGate).toContain('provider quota retry was not scheduled for next Pacific day');
+		expect(idempotencyGate).toContain(
+			'provider quota retry was not scheduled for next Pacific day'
+		);
 		expect(idempotencyGate).toContain('next-day claim contract drifted');
 		expect(idempotencyGate).toContain("array['attemptCount', 'jobId', 'state', 'usageToday']");
 	});
