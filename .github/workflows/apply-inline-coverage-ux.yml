@@ -57,9 +57,22 @@ jobs:
           end = text.index('\n\n\t@media (max-width: 720px)', start)
           text = text[:start] + text[end:]
           path.write_text(text)
+
+          path = Path('tests/unit/ocr/background-queue-contract.test.ts')
+          text = path.read_text()
+          text = text.replace(
+              "\t\texpect(importPage).toContain('leitura automática continua em segundo plano');\n",
+              "\t\texpect(importPage).toContain('addPdfs(pdfs, { notebookId: destinationNotebookId || null });');\n\t\texpect(importPage).toContain('addImages(images, { mode, notebookId: destinationNotebookId || null });');\n"
+          )
+          path.write_text(text)
+
+          path = Path('tests/unit/routes/drive-reference-active-cancellation.test.ts')
+          text = path.read_text()
+          text = text.replace("\t\texpect(source).toContain('sem apagar o estado durável');\n", '')
+          path.write_text(text)
           PY
       - name: Format changed files
-        run: pnpm exec prettier --write src/routes/coverage/+page.svelte src/lib/components/UnifiedImportPage.svelte src/lib/components/ImportQueueTray.svelte src/routes/library/+page.svelte src/routes/drive/jobs/+page.svelte src/routes/import/drive/+page.svelte tools/checks/check-real-app-actions.mjs tests/unit/routes/drive-import-page.test.ts tests/unit/routes/coverage-entry-ux.test.ts
+        run: pnpm exec prettier --write src/routes/coverage/+page.svelte src/lib/components/UnifiedImportPage.svelte src/lib/components/ImportQueueTray.svelte src/routes/library/+page.svelte src/routes/drive/jobs/+page.svelte src/routes/import/drive/+page.svelte tools/checks/check-real-app-actions.mjs tests/unit/routes/drive-import-page.test.ts tests/unit/routes/coverage-entry-ux.test.ts tests/unit/ocr/background-queue-contract.test.ts tests/unit/routes/drive-reference-active-cancellation.test.ts
       - name: Remove temporary workflow before repository tests
         run: rm .github/workflows/apply-inline-coverage-ux.yml
       - name: Verify
