@@ -1,0 +1,494 @@
+name: Apply simplified coverage UX
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/apply-inline-coverage-ux.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Simplify user-facing flows
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+          import re
+
+          def load(path):
+              return Path(path).read_text()
+
+          def save(path, text):
+              Path(path).write_text(text)
+
+          def must_replace(text, old, new, label):
+              if old not in text:
+                  raise SystemExit(f'missing expected block: {label}')
+              return text.replace(old, new, 1)
+
+          path = 'src/routes/coverage/+page.svelte'
+          s = load(path)
+
+          s = must_replace(s, "\tconst confidenceLabel: Record<TopicImportConfidence, string> = {\n\t\thigh: 'alta',\n\t\tmedium: 'média',\n\t\tlow: 'baixa'\n\t};\n", '', 'confidence labels')
+          s = must_replace(s, "\tconst photoStageLabel: Record<CoveragePhotoImportStage, string> = {\n\t\tpreparing: 'Preparando a foto…',\n\t\tuploading: 'Enviando temporariamente…',\n\t\treading: 'Lendo com OCR…',\n\t\textracting: 'Separando os conteúdos…',\n\t\tcleaning_up: 'Removendo o arquivo temporário…'\n\t};", "\tconst photoStageLabel: Record<CoveragePhotoImportStage, string> = {\n\t\tpreparing: 'Preparando foto…',\n\t\tuploading: 'Preparando foto…',\n\t\treading: 'Lendo conteúdo…',\n\t\textracting: 'Organizando conteúdos…',\n\t\tcleaning_up: 'Finalizando…'\n\t};", 'photo stages')
+          s = s.replace("\tlet semanticNotice = $state<string | null>(null);\n", '')
+
+          s = must_replace(s, "\t\t\tconst active = topics.map((topic) => topic.text.trim()).filter(Boolean);", "\t\t\tconst active = [\n\t\t\t\t...topics.map((topic) => topic.text.trim()).filter(Boolean),\n\t\t\t\t...bulkInput\n\t\t\t\t\t.split(/\\r?\\n/)\n\t\t\t\t\t.map((line) => line.trim())\n\t\t\t\t\t.filter(Boolean)\n\t\t\t];", 'topic validation input')
+          s = must_replace(s, "\t\t\t\tnonEmptyCount: topics.filter((topic) => topic.text.trim()).length", "\t\t\t\tnonEmptyCount:\n\t\t\t\t\ttopics.filter((topic) => topic.text.trim()).length +\n\t\t\t\t\tbulkInput.split(/\\r?\\n/).filter((line) => line.trim()).length", 'topic validation fallback')
+
+          s, n = re.subn(r"\n\tfunction semanticResultNotice\(result: AnalyzedUnitCoverageSummary\) \{.*?\n\t\}\n\n\tfunction appendEditableTopics", "\n\tfunction appendEditableTopics", s, count=1, flags=re.S)
+          if n != 1:
+              raise SystemExit('could not remove semanticResultNotice')
+
+          start = s.index('\n\tfunction convertBulkInput() {')
+          end = s.index('\n\tfunction updateTopic(', start)
+          new_functions = r'''
+	function appendManualText(value: string) {
+		let parsed: readonly string[];
+		try {
+			parsed = parseUnitTopics(value);
+		} catch (caught) {
+			bulkError = caught instanceof Error ? caught.message : 'Não foi possível adicionar estes assuntos.';
+			return null;
+		}
+		if (parsed.length === 0) return { added: 0, duplicates: 0, truncated: false };
+		return appendEditableTopics(parsed.map(manualTopic));
+	}
+
+	function applyAppendResult(result: { added: number; duplicates: number; truncated: boolean }) {
+		if (result.truncated) {
+			bulkError = `A unidade aceita até ${MAX_UNIT_TOPICS} assuntos.`;
+		} else if (result.duplicates > 0) {
+			bulkError = `${result.duplicates} assunto(s) repetido(s) foram ignorados.`;
+		} else {
+			bulkError = null;
+		}
+	}
+
+	function commitBulkInput() {
+		if (!bulkInput.trim()) {
+			bulkError = null;
+			return true;
+		}
+		const result = appendManualText(bulkInput);
+		if (!result) return false;
+		bulkInput = '';
+		applyAppendResult(result);
+		return true;
+	}
+
+	function handleBulkInput(event: Event) {
+		const value = (event.currentTarget as HTMLTextAreaElement).value;
+		bulkInput = value;
+		invalidateCoverage();
+		if (!value.includes('\n')) {
+			bulkError = null;
+			return;
+		}
+
+		const normalized = value.replace(/\r\n?/g, '\n');
+		const lines = normalized.split('\n');
+		const pending = lines.pop() ?? '';
+		const completed = lines.join('\n');
+		if (!completed.trim()) {
+			bulkInput = pending;
+			return;
+		}
+
+		const result = appendManualText(completed);
+		if (!result) return;
+		bulkInput = pending;
+		applyAppendResult(result);
+	}
+
+	function handleBulkKeydown(event: KeyboardEvent) {
+		if (event.key !== 'Enter' || event.isComposing) return;
+		event.preventDefault();
+		commitBulkInput();
+	}
+
+	function addTopicAfter(index: number) {
+		if (topics.length >= MAX_UNIT_TOPICS) {
+			bulkError = `A unidade aceita até ${MAX_UNIT_TOPICS} assuntos.`;
+			return;
+		}
+		const topic = manualTopic('');
+		topics = [...topics.slice(0, index + 1), topic, ...topics.slice(index + 1)];
+		invalidateCoverage();
+		requestAnimationFrame(() => {
+			document.querySelector<HTMLInputElement>(`[data-topic-id="${topic.id}"]`)?.focus();
+		});
+	}
+
+	function handleTopicKeydown(event: KeyboardEvent, index: number) {
+		if (event.key !== 'Enter' || event.isComposing) return;
+		event.preventDefault();
+		addTopicAfter(index);
+	}
+'''
+          s = s[:start] + new_functions + s[end:]
+
+          s = must_replace(s, "\t\tsemanticNotice = null;\n", '', 'semantic notice reset')
+          s = must_replace(s, "\t\tif (topicValidation.error) {", "\t\tif (bulkInput.trim() && !commitBulkInput()) return;\n\n\t\tif (topicValidation.error) {", 'analyze composer flush')
+          s = must_replace(s, "\t\t\t\tsummary = result;\n\t\t\t\tsemanticNotice = semanticResultNotice(result) ?? semanticNotice;", "\t\t\t\tsummary = result;", 'semantic result notice')
+
+          old_notes = """\t\t\tconst merged = appendEditableTopics(result.topics.map(ocrTopic));
+\t\t\tconst notes = [`${merged.added} conteúdo(s) extraído(s) viraram campos editáveis.`];
+\t\t\tif (merged.duplicates > 0) notes.push(`${merged.duplicates} repetido(s) foram ignorados.`);
+\t\t\tif (merged.truncated || result.truncated) {
+\t\t\t\tnotes.push(`O limite de ${MAX_UNIT_TOPICS} assuntos foi atingido.`);
+\t\t\t}
+\t\t\tif (result.topics.some((topic) => topic.reviewRequired)) {
+\t\t\t\tnotes.push('Os itens com confiança baixa ficaram marcados para revisão.');
+\t\t\t}
+\t\t\tif (result.reusedExistingDocument) {
+\t\t\t\tnotes.push('A foto já existia no fichário e o OCR existente foi reaproveitado.');
+\t\t\t}
+\t\t\tif (result.cleanupWarning) {
+\t\t\t\tnotes.push('A limpeza do arquivo temporário falhou; ele pode aparecer na biblioteca até nova limpeza.');
+\t\t\t}
+\t\t\tphotoNotice = notes.join(' ');"""
+          new_notes = """\t\t\tconst merged = appendEditableTopics(result.topics.map(ocrTopic));
+\t\t\tconst notes = [`${merged.added} conteúdo(s) adicionados.`];
+\t\t\tif (merged.duplicates > 0) notes.push(`${merged.duplicates} repetido(s) foram ignorados.`);
+\t\t\tif (merged.truncated || result.truncated) notes.push(`O limite de ${MAX_UNIT_TOPICS} assuntos foi atingido.`);
+\t\t\tif (result.topics.some((topic) => topic.reviewRequired)) notes.push('Alguns conteúdos precisam de revisão.');
+\t\t\tphotoNotice = notes.join(' ');"""
+          s = must_replace(s, old_notes, new_notes, 'photo result copy')
+
+          s = must_replace(s, """\t\t<p>
+\t\t\tMonte a ementa digitando, colando uma lista ou fotografando o conteúdo. Antes da análise, cada
+\t\t\tassunto fica em um campo independente para você revisar e corrigir.
+\t\t</p>""", "\t\t<p>Adicione os assuntos e verifique o que já aparece no seu fichário.</p>", 'coverage intro')
+
+          manual_start = s.index('\t\t\t<section class="input-card" aria-labelledby="manual-input-title">')
+          photo_start = s.index('\n\t\t\t<section class="input-card photo-card"', manual_start)
+          manual_block = r'''			<section class="input-card" aria-labelledby="manual-input-title">
+				<div>
+					<p class="eyebrow">Digitar ou colar</p>
+					<h3 id="manual-input-title">Conteúdos</h3>
+				</div>
+
+				{#if topics.length > 0}
+					<ol class="editable-topics">
+						{#each topics as topic, index (topic.id)}
+							<li class:needs-review={topic.reviewRequired} style={`--topic-level: ${topic.level}`}>
+								<div class="topic-index" aria-hidden="true">{index + 1}</div>
+								<div class="editable-topic-main">
+									<label>
+										<span class="sr-only">Conteúdo {index + 1}</span>
+										<input
+											data-topic-id={topic.id}
+											value={topic.text}
+											maxlength={MAX_TOPIC_LENGTH}
+											placeholder="Digite o assunto"
+											oninput={(event) => updateTopic(topic.id, event)}
+											onkeydown={(event) => handleTopicKeydown(event, index)}
+										/>
+									</label>
+									{#if topic.reviewRequired}<span class="review-badge">Revisar</span>{/if}
+								</div>
+								<div class="topic-controls" aria-label={`Ações do conteúdo ${index + 1}`}>
+									<button
+										type="button"
+										disabled={topic.level === 0}
+										onclick={() => adjustLevel(topic.id, -1)}
+										aria-label="Diminuir recuo">←</button
+									>
+									<button
+										type="button"
+										disabled={topic.level === 3}
+										onclick={() => adjustLevel(topic.id, 1)}
+										aria-label="Aumentar recuo">→</button
+									>
+									<button
+										type="button"
+										disabled={index === 0}
+										onclick={() => moveTopic(index, -1)}
+										aria-label="Mover para cima">↑</button
+									>
+									<button
+										type="button"
+										disabled={index === topics.length - 1}
+										onclick={() => moveTopic(index, 1)}
+										aria-label="Mover para baixo">↓</button
+									>
+									<button type="button" class="remove" onclick={() => removeTopic(topic.id)}>Excluir</button>
+								</div>
+							</li>
+						{/each}
+					</ol>
+				{/if}
+
+				<label class="bulk-field">
+					<span class="sr-only">Novo assunto</span>
+					<textarea
+						aria-label="Conteúdos"
+						bind:value={bulkInput}
+						rows="2"
+						placeholder="Digite um assunto e pressione Enter"
+						oninput={handleBulkInput}
+						onkeydown={handleBulkKeydown}
+					></textarea>
+				</label>
+				{#if bulkError}<p class="validation" role="status">{bulkError}</p>{/if}
+				{#if topicValidation.error}<p class="validation" role="alert">{topicValidation.error}</p>{/if}
+			</section>'''
+          s = s[:manual_start] + manual_block + s[photo_start:]
+
+          s = s.replace("\t\t\t\t\t<h3 id=\"photo-input-title\">Extrair com OCR</h3>\n\t\t\t\t\t<p>\n\t\t\t\t\t\tO Fichário prepara a imagem, lê o texto e separa a lista em campos individuais. A foto é\n\t\t\t\t\t\tusada temporariamente e removida depois da extração.\n\t\t\t\t\t</p>", "\t\t\t\t\t<h3 id=\"photo-input-title\">Adicionar pela foto</h3>")
+
+          editor_start = s.index('\n\t\t<section class="topic-editor"')
+          editor_end = s.index('\n\n\t\t{#if notebookError}', editor_start)
+          s = s[:editor_start] + s[editor_end:]
+
+          processing_start = s.index('\n\t\t<div class="processing-note">')
+          actions_start = s.index('\n\n\t\t<div class="actions">', processing_start)
+          s = s[:processing_start] + s[actions_start:]
+          s = s.replace('\n\t\t{#if semanticNotice}<p class="photo-notice" role="status">{semanticNotice}</p>{/if}', '')
+          s = must_replace(s, """\t\t<div class="actions">
+\t\t\t<Button
+\t\t\t\tlabel={loading ? 'Analisando…' : 'Verificar cobertura'}
+\t\t\t\tdisabled={loading || topicValidation.topics.length === 0 || Boolean(topicValidation.error)}
+\t\t\t\tonclick={() => void analyze()}
+\t\t\t/>
+\t\t\t<p>
+\t\t\t\tA busca é limitada e concorrente; com semântica ativa, o índice é atualizado em pequenos lotes.
+\t\t\t</p>
+\t\t</div>""", """\t\t<div class="actions">
+\t\t\t<Button
+\t\t\t\tlabel={loading ? 'Analisando…' : 'Verificar cobertura'}
+\t\t\t\tdisabled={loading || topicValidation.topics.length === 0 || Boolean(topicValidation.error)}
+\t\t\t\tonclick={() => void analyze()}
+\t\t\t/>
+\t\t</div>""", 'coverage action note')
+          s = must_replace(s, "\t\t\tComparando os assuntos por texto e significado…", "\t\t\tVerificando cobertura…", 'coverage loading')
+          s = s.replace('\n\t\t\t\t\t\t\t<span class="strength">indício {topic.strength}%</span>', '')
+          s = must_replace(s, """\t\t\t\t\t\t\t<p class="no-evidence">
+\t\t\t\t\t\t\t\tNenhuma página pesquisável trouxe um indício suficiente para este assunto.
+\t\t\t\t\t\t\t</p>""", "\t\t\t\t\t\t\t<p class=\"no-evidence\">Não encontramos conteúdo suficiente para este assunto.</p>", 'no evidence copy')
+          s, n = re.subn(r"\n\t\t\t<p class=\"method-note\">.*?\n\t\t\t</p>", '', s, count=1, flags=re.S)
+          if n != 1:
+              raise SystemExit('could not remove method note')
+
+          s = s.replace('\n\t.topic-editor,', ',')
+          s = s.replace('\n\t.editor-heading,', '')
+          s = s.replace('\n\t.compact-actions,', '')
+          s = s.replace('\n\t.editor-heading h3,', '')
+          s = re.sub(r"\n\t\.section-heading > span,\n\t\.strength,\n\t\.actions p,\n\t\.bulk-field small,\n\t\.editor-note,\n\t\.photo-card > div > p:last-child \{", "\n\t.section-heading > span {", s, count=1)
+          s = s.replace('\n\t.input-card,\n\t.topic-editor {', '\n\t.input-card {')
+          s = s.replace('\n\t.compact-actions,\n\t.photo-actions,', '\n\t.photo-actions,')
+          s, _ = re.subn(r"\n\t\.processing-note \{.*?\n\t\}\n\n\t\.processing-note span \{.*?\n\t\}\n", '\n', s, count=1, flags=re.S)
+          s = s.replace('\n\t\tmin-height: 9rem;', '\n\t\tmin-height: 4.75rem;')
+          s = s.replace(',\n\t.editor-note {', ' {')
+          s, _ = re.subn(r"\n\t\.empty-editor \{.*?\n\t\}\n", '\n', s, count=1, flags=re.S)
+          s, _ = re.subn(r"\n\t\.topic-meta \{.*?\n\t\.confidence.low \{.*?\n\t\}\n", '\n', s, count=1, flags=re.S)
+          s = must_replace(s, """\t.editable-topic-main input {
+\t\tbackground: var(--surface-strong);
+\t}
+""", """\t.editable-topic-main input {
+\t\tbackground: var(--surface-strong);
+\t}
+
+\t.review-badge {
+\t\tjustify-self: start;
+\t\tpadding: 0.2rem 0.45rem;
+\t\tborder-radius: 999px;
+\t\tbackground: var(--archive-soft);
+\t\tcolor: var(--accent-strong);
+\t\tfont-size: 0.72rem;
+\t\tfont-weight: 760;
+\t}
+""", 'review badge style')
+          s, _ = re.subn(r"\n\t\.actions p \{.*?\n\t\}\n", '\n', s, count=1, flags=re.S)
+          s = s.replace(',\n\t.strength {', ' {')
+          s = s.replace(',\n\t.method-note {', ' {')
+          s, _ = re.subn(r"\n\t\.method-note \{.*?\n\t\}\n", '\n', s, count=1, flags=re.S)
+          s = s.replace(',\n\t\t.editor-heading {', ' {')
+          save(path, s)
+
+          # Keep the end-user import experience focused on actions/results, not implementation details.
+          path = 'src/lib/components/UnifiedImportPage.svelte'
+          s = load(path)
+          replacements = {
+              "`${queued} arquivo(s) adicionados à fila global. Você já pode navegar pelo Fichário.`": "`${queued} arquivo(s) adicionados.`",
+              "`${queued} arquivo(s) já entraram na fila; ${photoDraft.length} foto(s) aguardam sua revisão.`": "`${queued} arquivo(s) adicionados; ${photoDraft.length} foto(s) aguardam sua revisão.`",
+              "`${count} foto(s) adicionadas à fila como documento(s) separado(s).`": "`${count} foto(s) adicionadas como documento(s) separado(s).`",
+              "`Documento salvo com ${count} páginas. A leitura continua em segundo plano.`": "`Documento salvo com ${count} páginas.`",
+              "\t<section class=\"background-note\" aria-labelledby=\"background-title\">\n\t\t<div aria-hidden=\"true\">↗</div>\n\t\t<div>\n\t\t\t<h2 id=\"background-title\">Não precisa ficar nesta tela</h2>\n\t\t\t<p>\n\t\t\t\tDepois que o material é salvo, a leitura automática continua em segundo plano. PDFs e fotos\n\t\t\t\tseparadas também continuam usando a fila global normalmente.\n\t\t\t</p>\n\t\t</div>\n\t</section>\n": "",
+          }
+          for old, new in replacements.items():
+              if old not in s:
+                  raise SystemExit(f'missing UnifiedImportPage copy: {old[:60]}')
+              s = s.replace(old, new, 1)
+          s = s.replace(',\n\t.background-note p {', ' {')
+          save(path, s)
+
+          path = 'src/lib/components/ImportQueueTray.svelte'
+          s = load(path)
+          s = must_replace(s, "\t\twaiting: 'Leitura em segundo plano',", "\t\twaiting: 'Aguardando leitura',", 'queue waiting label')
+          s = must_replace(s, "\t\t\t\t\t<small>Você pode continuar usando o Fichário enquanto os itens são processados.</small>\n", '', 'queue explanatory copy')
+          save(path, s)
+
+          path = 'src/routes/library/+page.svelte'
+          s = load(path)
+          s = must_replace(s, 'Consulte os originais, acompanhe o processamento e organize tudo por caderno.', 'Consulte seus documentos e organize tudo por caderno.', 'library header')
+          save(path, s)
+
+          path = 'src/routes/drive/jobs/+page.svelte'
+          s = load(path)
+          replacements = {
+              "\t\t\tmessage = `${receipt.synced} mudanças sincronizadas, ${receipt.retryable} reagendadas e ${receipt.conflicts} isoladas como conflito.${receipt.status === 'partial' ? ' Ainda há itens para outra rodada.' : ''}`;": "\t\t\tmessage = `${receipt.synced} mudança(s) sincronizada(s). ${receipt.retryable + receipt.conflicts} item(ns) ainda precisam de atenção.`;",
+              '<p class="eyebrow">Saída local → Drive</p>': '<p class="eyebrow">Google Drive</p>',
+              "\t\t\t<p>\n\t\t\t\tAplique criação, renomeação e movimentação de pastas, mudanças de caderno e exclusões\n\t\t\t\tfísicas. Cada item possui lease, retry e recibo independente.\n\t\t\t</p>": "\t\t\t<p>Acompanhe as mudanças que ainda precisam ser sincronizadas com o Google Drive.</p>",
+              '<span>Pendentes ou em retry</span>': '<span>Pendentes</span>',
+              '<span>Conflitos isolados</span>': '<span>Conflitos</span>',
+              '<span>Falhas persistentes</span>': '<span>Falhas</span>',
+              '<p class="eyebrow">Últimos 100 recibos</p>': '<p class="eyebrow">Histórico recente</p>',
+          }
+          for old, new in replacements.items():
+              if old not in s:
+                  raise SystemExit(f'missing Drive jobs copy: {old[:60]}')
+              s = s.replace(old, new, 1)
+          save(path, s)
+
+          path = 'src/routes/import/drive/+page.svelte'
+          s = load(path)
+          replacements = {
+              "return pending > 0\n\t\t\t? `“${name}” foi importado por referência; ${pending} página(s) de OCR permanecem retomáveis.`\n\t\t\t: `“${name}” foi importado por referência sem baixar o PDF inteiro.`;": "return pending > 0\n\t\t\t? `“${name}” foi adicionado. ${pending} página(s) ainda serão concluídas.`\n\t\t\t: `“${name}” foi adicionado.`;",
+              "return `Inspecionando página ${progress.pageNumber ?? 0} de ${progress.pageCount ?? 0}…`;": "return `Preparando página ${progress.pageNumber ?? 0} de ${progress.pageCount ?? 0}…`;",
+              "return `Preparando página ${progress.current ?? 0} de ${progress.total ?? 0} para OCR…`;": "return `Preparando página ${progress.current ?? 0} de ${progress.total ?? 0}…`;",
+              "return `Lendo página ${progress.current ?? 0} de ${progress.total ?? 0} com OCR…`;": "return `Lendo página ${progress.current ?? 0} de ${progress.total ?? 0}…`;",
+              "verifying: 'Verificando a cópia preservada no Drive…',": "verifying: 'Verificando arquivo…',",
+              "opening: 'Abrindo o PDF por faixas…',": "opening: 'Abrindo PDF…',",
+              "rendering_ocr: 'Preparando páginas para OCR…',": "rendering_ocr: 'Preparando páginas…',",
+              "publishing: 'Publicando a estrutura do documento…',": "publishing: 'Salvando documento…',",
+              "ocr: 'Executando OCR…',": "ocr: 'Lendo páginas…',",
+              "message = `O processamento de “${name}” foi interrompido sem apagar o estado durável. Se ainda houver etapas pendentes, elas poderão ser retomadas.`;": "message = `“${name}” foi interrompido. Você poderá retomar depois.`;",
+              "message = `Interrompendo “${reference.title}” sem apagar o estado durável…`;": "message = `Interrompendo “${reference.title}”…`;",
+              '<p class="eyebrow">Seleção consciente</p>': '<p class="eyebrow">Google Drive</p>',
+              "\t\t\t<p>\n\t\t\t\tEscolha exatamente um arquivo. Ele é lido temporariamente e publicado pela mesma fila\n\t\t\t\tDrive-first dos uploads locais. Nenhuma leitura ampla da conta é realizada.\n\t\t\t</p>": "\t\t\t<p>Escolha um arquivo do seu Google Drive para adicionar ao fichário.</p>",
+              '<h2 id="configuration-title">Google Picker ainda não configurado</h2>': '<h2 id="configuration-title">Google Drive indisponível</h2>',
+              '<p>Cadastre a chave pública restrita e o número do projeto para habilitar esta tela.</p>': '<p>A importação pelo Google Drive ainda não está disponível.</p>',
+              "\t\t\t<p>\n\t\t\t\tO download direto no navegador aceita até 50 MiB. PDFs maiores são preservados no Drive e\n\t\t\t\tpreparados por referência; esse teto não é do documento lógico nem dos lotes de OCR.\n\t\t\t</p>": "\t\t\t<p>Imagens e PDFs são aceitos, inclusive PDFs grandes.</p>",
+              '<p class="eyebrow">Retomada durável</p>': '<p class="eyebrow">Continuar depois</p>',
+              '<h2 id="resume-title">PDFs grandes preservados</h2>': '<h2 id="resume-title">PDFs pendentes</h2>',
+              "\t\t\t\t<p>\n\t\t\t\t\tEsses arquivos já estão na pasta controlada do Drive. Retomar lê somente faixas e páginas\n\t\t\t\t\tnecessárias; você não precisa selecionar nem enviar o PDF novamente.\n\t\t\t\t</p>": "\t\t\t\t<p>Você pode continuar esses arquivos sem selecioná-los novamente.</p>",
+              '<p class="muted" role="status">Verificando referências pendentes…</p>': '<p class="muted" role="status">Verificando arquivos pendentes…</p>',
+              '<small>{formatSize(reference.sourceSizeBytes)} · preservado no Google Drive</small>': '<small>{formatSize(reference.sourceSizeBytes)}</small>',
+          }
+          for old, new in replacements.items():
+              if old not in s:
+                  raise SystemExit(f'missing Drive import copy: {old[:70]}')
+              s = s.replace(old, new, 1)
+          save(path, s)
+
+          # Update real-flow checks to the new interaction and copy.
+          path = 'tools/checks/check-real-app-actions.mjs'
+          s = load(path)
+          s = must_replace(s, '/Concluído|Pronto para revisão|Já existe|Leitura em segundo plano/i', '/Concluído|Pronto para revisão|Já existe|Aguardando leitura/i', 'real action queue label')
+          s = must_replace(s, "\tawait page.getByLabel('Conteúdos', { exact: true }).fill('Conservação de energia');\n\tawait page.getByRole('button', { name: 'Transformar em campos', exact: true }).click();", "\tconst coverageInput = page.getByLabel('Conteúdos', { exact: true });\n\tawait coverageInput.fill('Conservação de energia');\n\tawait coverageInput.press('Enter');\n\tawait page.getByLabel('Conteúdo 1', { exact: true }).waitFor({ state: 'visible' });", 'real action coverage entry')
+          s = must_replace(s, "/[1-9]\\d* conteúdo\\(s\\) extraído\\(s\\)/i", "/[1-9]\\d* conteúdo\\(s\\) adicionados/i", 'real action photo copy')
+          save(path, s)
+
+          # Update source-contract tests so they assert simplified UI copy instead of implementation prose.
+          path = 'tests/unit/routes/drive-import-page.test.ts'
+          s = load(path)
+          s = must_replace(s, "\t\texpect(source).toContain('PDFs grandes preservados');", "\t\texpect(source).toContain('PDFs pendentes');", 'drive import test title')
+          old_test = """\tit('describes the direct browser ceiling and the reference path for larger PDFs', () => {
+\t\tconst source = readFileSync(path, 'utf8');
+\t\texpect(source).toContain('download direto no navegador aceita até 50 MiB');
+\t\texpect(source).toMatch(/PDFs maiores são preservados no Drive e\\s+preparados por referência/);
+\t\texpect(source).toContain('não é do documento lógico nem dos lotes de OCR');
+\t});"""
+          new_test = """\tit('keeps large-PDF implementation details out of the user-facing copy', () => {
+\t\tconst source = readFileSync(path, 'utf8');
+\t\texpect(source).toContain('Imagens e PDFs são aceitos, inclusive PDFs grandes.');
+\t\texpect(source).not.toContain('download direto no navegador aceita até 50 MiB');
+\t\texpect(source).not.toContain('preparados por referência');
+\t\texpect(source).not.toContain('lotes de OCR');
+\t});"""
+          s = must_replace(s, old_test, new_test, 'drive import implementation copy test')
+          s = s.replace("\t\texpect(source).toContain('Nenhuma leitura ampla da conta é realizada.');\n", '')
+          save(path, s)
+
+          # Add a focused source contract for the integrated coverage editor and the copy cleanup.
+          test_path = Path('tests/unit/routes/coverage-entry-ux.test.ts')
+          test_path.write_text("""import { readFileSync } from 'node:fs';
+import { describe, expect, it } from 'vitest';
+
+const source = readFileSync('src/routes/coverage/+page.svelte', 'utf8');
+
+describe('coverage topic entry UX', () => {
+\tit('turns Enter/newlines into editable topics inside the same input card', () => {
+\t\texpect(source).toContain('onkeydown={handleBulkKeydown}');
+\t\texpect(source).toContain('oninput={handleBulkInput}');
+\t\texpect(source).toContain('addTopicAfter(index)');
+\t\texpect(source).toContain('data-topic-id={topic.id}');
+\t\texpect(source).not.toContain('Transformar em campos');
+\t\texpect(source).not.toContain('Conteúdos estruturados');
+\t});
+
+\tit('does not expose semantic/OCR implementation prose on the coverage page', () => {
+\t\texpect(source).not.toContain('textual/fuzzy');
+\t\texpect(source).not.toContain('Gemini');
+\t\texpect(source).not.toContain('similaridade por embeddings');
+\t\texpect(source).not.toContain('confiança do OCR');
+\t\texpect(source).not.toContain('arquivo temporário');
+\t});
+});
+""")
+
+          # Guard the most visible implementation phrases across app-facing Svelte surfaces.
+          banned = [
+              'Drive-first',
+              'textual/fuzzy',
+              'similaridade por embeddings',
+              'estado durável',
+              'fila global',
+              'lease, retry',
+              'lotes de OCR',
+              'OCR · confiança',
+              'confiança do OCR',
+          ]
+          offenders = []
+          for root in (Path('src/routes'), Path('src/lib/components')):
+              for file in root.rglob('*.svelte'):
+                  text = file.read_text()
+                  for phrase in banned:
+                      if phrase in text:
+                          offenders.append(f'{file}: {phrase}')
+          if offenders:
+              raise SystemExit('technical copy still exposed:\n' + '\n'.join(offenders))
+          PY
+      - name: Format changed files
+        run: pnpm exec prettier --write src/routes/coverage/+page.svelte src/lib/components/UnifiedImportPage.svelte src/lib/components/ImportQueueTray.svelte src/routes/library/+page.svelte src/routes/drive/jobs/+page.svelte src/routes/import/drive/+page.svelte tools/checks/check-real-app-actions.mjs tests/unit/routes/drive-import-page.test.ts tests/unit/routes/coverage-entry-ux.test.ts
+      - name: Verify
+        run: pnpm verify
+      - name: Commit and push
+        shell: bash
+        run: |
+          rm .github/workflows/apply-inline-coverage-ux.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "refactor: simplify coverage entry and user-facing copy"
+          git pull --rebase origin main
+          git push origin HEAD:main
