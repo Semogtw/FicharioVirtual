@@ -1,168 +1,121 @@
-# Busca híbrida, tolerância a OCR e marcação de correspondências
+# Busca híbrida, OCR e correspondências multimodais
 
 ## Objetivo
 
-A busca global do Fichário Virtual precisa recuperar conteúdo em dois cenários complementares:
+A busca global precisa localizar o **documento/página real** mesmo quando a transcrição não é perfeita. Hoje há três caminhos complementares:
 
-1. quando a consulta e a página usam palavras iguais ou parecidas, inclusive com erros de OCR;
-2. quando a consulta e a página expressam o mesmo conceito com vocabulário diferente.
+1. lexical/fuzzy para palavras iguais ou parecidas, inclusive erros de OCR;
+2. embedding textual para conceitos expressos com vocabulário diferente;
+3. embedding visual seletivo para páginas cuja estrutura/imagem carrega informação que OCR não representa bem.
 
-Por isso a busca global combina **recuperação textual/fuzzy** e **recuperação semântica por embeddings**. O Gemini não é usado para decidir sozinho quais páginas aparecem: ele gera embeddings; PostgreSQL/pgvector faz a recuperação vetorial; os sinais lexical e semântico são então combinados de forma determinística.
+O Gemini gera embeddings; PostgreSQL/pgvector recupera candidatos e a ordenação final é determinística. O documento original continua sendo o destino da busca — OCR e embeddings são mecanismos internos de localização.
 
-A camada semântica é opcional e degradável. Sem configuração, cota ou provedor disponível, `search_pages` continua pesquisando o corpus inteiro.
+## Recuperação lexical/fuzzy
 
-## Recuperação textual no PostgreSQL
+`search_pages` combina normalização, substring, Full Text Search, `strict_word_similarity`, `word_similarity` e trigramas. O ranking lexical favorece correspondência exata e mantém tolerância a erros como `fotossintcse`/`fotossíntese` ou `ocitona`/`oxitona` sem reescrever automaticamente o conteúdo armazenado.
 
-A função pública `search_pages` combina sinais diferentes:
+## Semântica textual
 
-- igualdade e substring sobre texto normalizado;
-- Full Text Search com `tsvector`;
-- `strict_word_similarity` para encontrar palavras inteiras parecidas dentro de páginas longas;
-- `word_similarity` para tolerar variações parciais e erros típicos de OCR;
-- similaridade de trigramas em título de documento e nome de fichário.
+O índice textual compartilhado usa:
 
-A função configura limiares locais de `pg_trgm` para privilegiar recuperação de OCR sem alterar a configuração global do banco. Os operadores de word similarity continuam usando os índices GIN existentes.
+- `page_semantic_chunks`;
+- vetores 768;
+- `gemini-embedding-2`;
+- `source_hash` versionado;
+- HNSW/cosine;
+- `search_pages_semantic`.
 
-O ranking lexical favorece, nesta ordem geral, correspondência exata, substring, Full Text Search e correspondências de palavra. A similaridade entre a consulta curta e a página inteira permanece apenas como sinal secundário.
+A normalização para embedding remove ruído de layout de forma conservadora — NFKC, invisíveis, soft hyphen e hifenização de fim de linha — mas não funciona como corretor ortográfico.
 
-## Recuperação semântica
+Busca e cobertura reutilizam os mesmos chunks. Se uma página já está indexada com modelo/hash atuais, não é necessário reenviar seu texto apenas porque outra superfície precisa da mesma representação.
 
-A busca global reutiliza **o mesmo índice de páginas usado pela cobertura de conteúdos**:
+## Semântica visual seletiva
 
-- tabela `page_semantic_chunks`;
-- embeddings de 768 dimensões;
-- modelo padrão `gemini-embedding-2`;
-- hash SHA-256 versionado do texto efetivo para invalidação;
-- índice HNSW com distância cosseno;
-- RPC `search_pages_semantic`.
+Páginas elegíveis podem receber um embedding adicional em `page_visual_embeddings`. O roteador `visual-v1` é determinístico e favorece manuscritos, scans degradados, conteúdo misto, tabelas/layout, matemática, warnings de OCR e revisão; páginas textuais limpas ou quase vazias não consomem esse canal sem necessidade.
 
-Não existe um segundo conjunto de vetores para a busca. Se uma página já foi indexada pela cobertura com o mesmo modelo e hash, a busca global a reutiliza sem nova chamada de embedding de documento. O inverso também vale: páginas indexadas durante uma pesquisa ficam disponíveis para a cobertura.
+`search_pages_visual_semantic` usa o mesmo embedding da consulta textual para procurar páginas visualmente relacionadas no espaço multimodal.
 
-A Edge Function `semantic-search` faz indexação oportunista de páginas ainda ausentes ou obsoletas, gera um embedding `RETRIEVAL_QUERY` para a consulta e recupera os chunks semanticamente mais próximos. Uma página só é persistida como atual quando todos os chunks dela cabem no lote da execução.
+O threshold visual atual é `0.36`.
 
-### Normalização antes do embedding
+## Ranking
 
-O texto canônico da página continua armazenado sem alterações. Antes de criar os chunks semânticos, uma cópia usada apenas pelo índice passa por uma normalização conservadora em `semantic-text.ts`:
+`semantic-search` consulta os sinais aplicáveis e deduplica por página.
 
-- Unicode é normalizado com NFKC, o que também resolve ligaturas de PDF/OCR como `ﬁ`;
-- soft hyphens e caracteres invisíveis de largura zero são removidos;
-- palavras quebradas por hifenização de fim de linha, como `fotossín-\ntese`, são reunidas antes do chunking;
-- espaços e quebras de linha artificiais são regularizados sem aplicar corretor ortográfico.
+O RRF textual permanece exatamente igual quando o visual não participa. Em `active`, a extensão multimodal:
 
-A normalização **não tenta adivinhar a palavra correta**. Por exemplo, `ocitona` não é automaticamente transformada em `oxitona`; nomes próprios e termos técnicos também não são reescritos. O fuzzy continua responsável por tolerância ortográfica, enquanto o embedding recebe um texto menos contaminado por ruído de layout/OCR.
+- permite resultado puramente visual;
+- evita somar integralmente OCR e imagem correlacionados;
+- usa o sinal mais forte + pequeno bônus quando texto e visual corroboram;
+- limita a confiança visual à faixa realmente calibrada;
+- protege `lexicalRank = 1` para que um match lexical exato não seja derrubado por um visual concorrente exagerado.
 
-O mesmo princípio vale para consultas: a forma usada para calcular a chave de cache é também a forma efetivamente enviada ao modelo. A versão do texto faz parte da chave de cache, evitando reutilizar um vetor criado por uma normalização antiga.
+`SEMANTIC_VISUAL_MODE` aceita `off`, `shadow` e `active`. O default versionado é `shadow`; staging testa `active` temporariamente e restaura `shadow` ao final.
 
-Quando a política de normalização de documentos muda, `semantic_source_hash` é versionado. Isso torna os chunks anteriores obsoletos e permite que a indexação oportunista os regenere gradualmente com a versão nova, sem depender de uma edição manual da página.
+## Modos de match na API/UI
 
-Exemplo de recuperação semântica:
+Os resultados podem usar:
 
-- consulta: `conservação de energia em um sistema`;
-- anotação: `ΔU = Q − W` acompanhada de explicação sobre calor, trabalho e energia interna.
+- `lexical`;
+- `semantic`;
+- `hybrid`;
+- `visual`;
+- `lexical_visual`;
+- `semantic_visual`;
+- `hybrid_visual`.
 
-Mesmo com pouca sobreposição literal, a anotação pode entrar no conjunto candidato por similaridade vetorial.
+A interface pode traduzir esses sinais para badges como “Por sentido”, “Por conteúdo visual” e combinações de texto/sentido/visual.
 
-## Ranking híbrido
+## Trecho e highlight
 
-A Edge Function consulta em paralelo:
+O comportamento depende de como o resultado foi encontrado:
 
-- `search_pages`, para o sinal lexical/fuzzy;
-- `search_pages_semantic`, para similaridade vetorial.
+- lexical: excerpt centrado no termo/fuzzy e highlight quando houver geometria/texto confiável;
+- semântico textual: excerpt pode vir do chunk semanticamente mais próximo;
+- visual puro: **não é inventado texto nem highlight**. A busca abre a página correta da mídia original sem fingir que alguma palavra foi encontrada.
 
-Os resultados são deduplicados por página. O score final normaliza os sinais separadamente e privilegia correspondências lexicais fortes, sem impedir resultados puramente semânticos.
+Ao abrir imagens/PDFs, a mídia original é a representação principal. A transcrição continua disponível como ferramenta interna/auxiliar para pesquisa, correção e acessibilidade, mas não substitui o documento.
 
-Resultados semânticos isolados precisam atingir o limiar configurado para entrar no conjunto. Esses valores são heurísticos e devem ser calibrados com consultas reais; não representam probabilidade estatística.
+## Geometria OCR
 
-A interface identifica a origem do match:
+Quando `wordGeometry` confiável existe, highlights literais podem ser posicionados sobre a mídia. Caixas inválidas ou palavras que não correspondam à transcrição são descartadas; o sistema não inventa coordenadas.
 
-- sem badge: resultado essencialmente textual;
-- `Por sentido`: resultado recuperado apenas semanticamente;
-- `Texto + sentido`: ambos os sinais encontraram a página.
+## Custo e degradação
 
-A busca global **não usa o verificador generativo da cobertura**. Esse verificador responde à pergunta específica “este trecho cobre este tópico?”. Para pesquisa livre, a recuperação híbrida é o mecanismo correto e evita custo/latência de uma chamada generativa por consulta.
+Consultas muito curtas permanecem textuais. O embedding de consulta usa cache e pode ser reutilizado pelos índices textual e visual.
 
-## Paginação e custo
+Falhas degradam de forma independente:
 
-A busca digitada usa debounce mais conservador para não gerar um embedding a cada tecla. Consultas muito curtas permanecem textuais.
+- sem Gemini/quota → lexical;
+- índice textual indisponível → lexical;
+- índice visual indisponível → lexical + semântico textual;
+- visual em `shadow` → coleta de evidência sem mudar a ordenação entregue;
+- paginação profunda → mecanismo textual continua disponível.
 
-A janela híbrida inicial é limitada aos melhores candidatos combinados. Resultados mais profundos continuam disponíveis pela paginação textual. Isso mantém custo e latência previsíveis sem transformar a camada semântica em requisito para navegar por resultados antigos.
+## Privacidade
 
-A indexação oportunista trabalha em lotes pequenos e o índice pode, portanto, ficar temporariamente incompleto; o status é mostrado na tela, enquanto a busca textual continua cobrindo todas as páginas pesquisáveis.
+Quando a semântica é usada, consultas/chunks ou uma imagem de página elegível podem ser enviados ao Gemini para embedding. A chave permanece nas Edge Functions.
 
-## Privacidade e envio ao provedor
+Telemetria persiste somente metadados operacionais — operação, modelo, volume, latência e status — sem consulta, OCR, imagem, prompt ou vetor nos eventos.
 
-O sistema privado atual não mantém telas, flags ou RPCs de consentimento pré-lançamento para busca semântica. A chamada segue diretamente o fluxo normal da funcionalidade e degrada para busca textual quando o provedor não está disponível.
+## Benchmark multimodal atual
 
-Quando a camada semântica é usada:
+Run `31864249498`, SHA `a254e43d248943fad6ccf71203dc9059e6b40c63`.
 
-- a consulta pode ser enviada ao Gemini para gerar o embedding de pesquisa;
-- pequenos chunks de páginas ainda não indexadas podem ser enviados para gerar embeddings de documento;
-- a chave `GEMINI_API_KEY` permanece exclusivamente na Edge Function;
-- telemetria registra operação, modelo, volume, latência e status, mas não persiste consulta, texto de página, prompt completo ou vetor.
+O índice visual bruto atingiu Recall@1 `85,7%`, Recall@3 `92,9%` e MRR `0,901`. Com a fusão `active`, a busca entregue atingiu Recall@1 global `86,7%`, Recall@3 `93,3%`, MRR `0,907` e MRR visual `0,900`. O teste lexical permaneceu top-1, não houve falso positivo visual acima de `0.36` nas consultas negativas e todos os gates de latência/erro/quota passaram.
 
-As migrations históricas que introduziram consentimentos permanecem no repositório para preservar a sequência de schema; a migration de limpeza pré-lançamento remove essas superfícies do schema resultante.
-
-## Fallback
-
-A pesquisa continua textual quando ocorrer qualquer uma destas condições:
-
-- consulta curta demais;
-- Edge Function ainda não implantada no ambiente;
-- chave/modelo semântico ausente;
-- quota ou rate limit do Gemini;
-- indisponibilidade do provedor;
-- paginação além da janela híbrida inicial.
-
-O navegador também faz fallback para `searchPages()` se a chamada à Edge Function falhar.
-
-## Trechos de resultado
-
-Na recuperação lexical, `search_excerpt` é executada somente depois da ordenação e paginação dos candidatos. Ela escolhe a palavra da página mais parecida com um termo da consulta e recorta o texto ao redor dela.
-
-Na recuperação semântica, o excerpt pode vir diretamente do chunk vetorial mais próximo. Isso é necessário porque uma correspondência conceitual pode não conter nenhuma palavra da consulta.
-
-## Marcação no frontend
-
-`src/lib/search/highlight.ts` preserva o texto original e aplica dois níveis de marcação:
-
-1. correspondência exata depois de remover acentos e diferenças de caixa;
-2. correspondência aproximada por distância de edição quando o termo exato não aparece.
-
-Termos com menos de quatro caracteres não recebem fuzzy highlight para reduzir falsos positivos. Em um resultado `Por sentido`, pode não existir trecho literal para marcar; nesse caso o excerpt semântico continua sendo exibido sem inventar destaque.
-
-`SearchMatch.svelte` é o componente reutilizável que apresenta o trecho e usa `<mark>` sem gerar HTML a partir do conteúdo do usuário.
-
-## Mídias suportadas
-
-Ao abrir um resultado com `?highlight=...`, a correspondência literal aparece quando disponível:
-
-- no resultado da busca;
-- sobre o painel da mídia original;
-- na transcrição/correção da página.
-
-Isso funciona para imagens, PDFs e referências externas porque usa o texto efetivo da página (`corrected_text`, `native_text` ou `ocr_raw_text`). Para resultados puramente semânticos, a página correta ainda é aberta mesmo que não haja palavra equivalente para destacar.
-
-### Geometria OCR
-
-O contrato OCR de lançamento inclui `wordGeometry` opcional por palavra em coordenadas normalizadas, além de `text`, `warnings` e `contentClass`. O backend filtra caixas inválidas ou palavras que não aparecem na transcrição antes de persistir os dados.
-
-Quando existe geometria confiável, a interface pode posicionar a marcação sobre a mídia original. Quando uma palavra não possui caixa válida, o sistema preserva a marcação textual e não inventa coordenadas.
+Depois da medição o staging voltou para `shadow` e os 16 documentos temporários foram apagados.
 
 ## Cobertura de testes
 
-A implementação inclui ou deve manter testes para:
+A suíte mantém contratos para:
 
-- destaque sem acento preservando o texto original;
-- erro OCR aproximado (`fotossintcse` para consulta `fotossíntese`);
-- proteção contra fuzzy em termos muito curtos;
-- recorte centrado no termo aproximado;
-- normalização semântica de ligaturas, soft hyphens e caracteres invisíveis;
-- junção de palavras quebradas por hifenização de fim de linha antes do chunking;
-- preservação de hífens normais dentro da linha;
-- contrato estrito do cliente `semantic-search`;
-- recuperação `semantic` e `hybrid` sem exigir overlap literal;
-- ausência das superfícies de consentimento pré-lançamento;
-- reuso de `page_semantic_chunks` e `search_pages_semantic`;
-- fallback lexical para cota, provider e função indisponível;
-- geometria OCR validada e fallback textual sem coordenadas inventadas;
-- configuração JWT e inclusão da Edge Function nos gates de deploy/Deno.
+- fuzzy/highlight tolerante a OCR;
+- normalização semântica;
+- cache e fallback;
+- RRF textual;
+- roteamento visual;
+- cliente Gemini multimodal;
+- RRF multimodal e proteção lexical top-1;
+- resultado visual sem trecho inventado;
+- migrations/RLS da fila e índice visual;
+- benchmark de staging com bytes únicos por execução, threshold de produção, negativas e cleanup.

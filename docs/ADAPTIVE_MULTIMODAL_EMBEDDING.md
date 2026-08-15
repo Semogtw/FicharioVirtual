@@ -1,545 +1,135 @@
-# Embedding multimodal adaptativo por página
+# Embeddings visuais adaptativos e busca multimodal
 
-**Status:** proposta arquitetural documentada; **não implementada**  
-**Última revisão:** 13 de agosto de 2026  
-**Objetivo:** aumentar a qualidade da busca semântica em páginas visualmente difíceis sem transformar o embedding multimodal em custo obrigatório para todo o acervo.
+**Status:** implementado e validado em staging; indexação visual habilitada de forma seletiva e ranking visual mantido em `shadow` por padrão.
 
-## 1. Decisão
+**Última validação:** 15 de agosto de 2026.
 
-O Fichário deve manter o embedding textual atual como caminho padrão e adicionar, em uma etapa futura, um **segundo sinal visual seletivo** para páginas em que a imagem original provavelmente carrega informação que o OCR/texto não representa bem.
+## Objetivo
 
-A política alvo é:
+O Fichário usa o texto extraído apenas como uma das formas de localizar o documento real. Para páginas em que OCR/texto nativo não descrevem bem o conteúdo visual — manuscritos, scans degradados, diagramas, tabelas, matemática e layouts — existe um canal semântico visual complementar.
 
-```text
-texto nativo ou OCR
-        ↓
-embedding textual por chunks
-        ↓
-canal semântico padrão
+O sistema **não cria um único embedding para um PDF inteiro**. A unidade visual é a página. O fluxo textual continua sendo OCR/texto nativo → chunks normalizados → `gemini-embedding-2` → `page_semantic_chunks`; quando o roteador considera útil, a imagem da página também gera um embedding no mesmo espaço multimodal e é persistida em `page_visual_embeddings`.
 
-página visual difícil
-        ↓
-roteador determinístico, sem nova chamada de IA
-        ↓
-embedding visual da página
-        ↓
-canal semântico complementar
-```
+## Roteamento adaptativo
 
-O embedding visual:
+O roteador local e determinístico fica em `supabase/functions/_shared/visual-embedding-routing.ts` e usa a versão `visual-v1`. Ele não faz uma chamada de IA extra para classificar a página.
 
-- é decidido **por página**, nunca pelo arquivo inteiro;
-- não substitui OCR, FTS, fuzzy search nem os embeddings textuais;
-- não é obrigatório para uma página ser pesquisável;
-- é um enriquecimento de baixa prioridade e deve falhar de forma degradável;
-- deve preservar a política de operação sem cobrança do projeto.
+O canal visual é evitado quando já existe texto nativo suficiente, em páginas de livro limpas e em páginas praticamente vazias. Ele é elegível para escrita manual, scan degradado, conteúdo misto, tabelas/layout, matemática, páginas marcadas para revisão, warnings de OCR e páginas esparsas que ainda tenham conteúdo útil.
 
-## 2. Estado atual do projeto
+A decisão é integrada aos fluxos de OCR web, OCR em background e OCR desktop. O derivado JPEG preparado para OCR pode ser preservado temporariamente quando também será necessário para o embedding visual; ele é removido depois de sucesso ou falha terminal.
 
-Hoje o Fichário usa `gemini-embedding-2` com 768 dimensões, mas envia apenas **texto** ao provedor.
+## Persistência, fila e isolamento
 
-Fluxo atual:
+A migration visual cria superfícies separadas para o terceiro canal:
 
-```text
-PDF com texto
-  → native_text
-  → page_effective_text
-  → normalização
-  → chunks textuais
-  → gemini-embedding-2
-  → page_semantic_chunks
+- `page_visual_embeddings`: um vetor de 768 dimensões por página/modelo, com `source_hash` dos bytes efetivamente enviados, `routing_version` e HNSW cosseno;
+- `page_visual_embedding_jobs`: fila privada e retomável;
+- `semantic_visual_events`: telemetria operacional sem conteúdo sensível;
+- RPCs de enqueue, claim, reuse, completion, failure, cleanup, busca e estatísticas.
 
-imagem / PDF escaneado
-  → OCR
-  → ocr_raw_text ou corrected_text
-  → page_effective_text
-  → normalização
-  → chunks textuais
-  → gemini-embedding-2
-  → page_semantic_chunks
-```
+RLS é forçado nas tabelas privadas e os RPCs verificam ownership/allowlist. O worker usa service role apenas para executar trabalho já autorizado e não expõe escrita direta ao cliente.
 
-Arquivos relevantes:
+## Worker e Gemini Embedding 2
 
-- `supabase/functions/_shared/gemini-embedding-client.ts` — cliente atual de embedding textual;
-- `supabase/functions/_shared/semantic-indexer.ts` — indexação textual por chunks;
-- `supabase/functions/_shared/background-semantic-indexer.ts` — indexação textual em background;
-- `supabase/functions/_shared/semantic-config.ts` — modelo e dimensão canônicos;
-- `supabase/migrations/202608101410_semantic_coverage.sql` — `page_semantic_chunks` e RPCs vetoriais;
-- `docs/SEMANTIC_COVERAGE.md` — contrato semântico atual;
-- `docs/SEARCH_OCR_MATCHING.md` — recuperação híbrida e normalização.
+`semantic-visual-worker` usa `_shared/background-visual-indexer.ts` e `_shared/gemini-embedding-client.ts`.
 
-A proposta deste documento **não altera esse contrato atual até ser implementada, testada e explicitamente promovida**.
+Regras principais:
 
-## 3. Por que não aplicar embedding visual a tudo
-
-`gemini-embedding-2` aceita texto, imagem, vídeo, áudio e PDF no mesmo espaço vetorial. Isso permite comparar uma consulta textual contra uma representação visual da página.
-
-Entretanto, aplicar esse caminho a todas as páginas criaria trabalho redundante:
-
-- PDFs com bom texto nativo já possuem representação textual de alta qualidade;
-- páginas impressas simples normalmente são bem representadas pelo OCR;
-- o canal textual já é granular por chunks e fornece bons excerpts;
-- chamadas multimodais adicionais pressionam RPM/TPM/RPD do nível gratuito;
-- o PDF direto é particularmente redundante na Gemini Developer API, porque o embedding de PDF processa a representação visual **e** extrai texto; PDFs escaneados recebem OCR interno automaticamente.
-
-Segundo a documentação oficial consultada em 13 de agosto de 2026:
-
-- `gemini-embedding-2` aceita até 8.192 tokens de entrada;
-- suporta imagens PNG/JPEG, no máximo seis imagens por solicitação;
-- suporta um PDF por solicitação e até seis páginas;
-- para PDF, cada página adiciona 258 tokens da representação visual, além dos tokens de texto extraído;
-- na Gemini Developer API, o OCR de PDFs fica ativado e não pode ser desligado;
-- 768 dimensões continuam entre os tamanhos recomendados.
-
-Referências oficiais:
-
-- <https://ai.google.dev/gemini-api/docs/embeddings>
-- <https://ai.google.dev/gemini-api/docs/models/gemini-embedding-2>
-
-Esses limites são externos e precisam ser revistos antes de ativar a feature em produção.
+- somente PNG/JPEG;
+- no máximo 6 imagens por request;
+- limites explícitos por imagem e por batch;
+- `source_hash` calculado dos bytes visuais reais;
+- reuse idempotente quando página/modelo/router/hash não mudaram;
+- 429 vira `blocked_quota` com backoff e não bloqueia OCR nem índice textual;
+- falhas transitórias recebem retry; 4xx permanentes terminam o job;
+- limpeza do derivado temporário ocorre após sucesso/reuse/falha terminal.
 
-## 4. Sinal visual separado, não substituto do texto
+A indexação visual é de baixa prioridade e degradável: uma indisponibilidade do canal visual nunca torna OCR ou busca textual indisponíveis.
 
-A primeira implementação deve preferir um **embedding visual isolado da página**, e não um embedding agregado de `imagem + OCR`.
+## Recuperação multimodal
 
-Motivos:
+A busca global pode combinar três sinais independentes:
 
-1. o sinal visual fica independente do texto textual já indexado;
-2. uma correção posterior do OCR não obriga a reenviar a imagem;
-3. o hash visual pode depender apenas da representação visual da página;
-4. fica mais fácil medir se o canal visual realmente acrescenta recuperação;
-5. a busca continua podendo comparar consulta textual com embedding de imagem porque o modelo usa um espaço multimodal unificado.
+1. lexical/fuzzy (`search_pages`);
+2. embedding textual (`search_pages_semantic`);
+3. embedding visual por página (`search_pages_visual_semantic`).
 
-A variante `imagem + texto` pode ser benchmarkada depois, mas não deve ser o primeiro contrato de produção.
+A consulta textual é embeddada uma vez com `gemini-embedding-2` e o mesmo vetor pode consultar os índices textual e visual, pois os dois canais vivem no mesmo espaço multimodal.
 
-## 5. Identificação automática de páginas elegíveis
+O limiar visual calibrado está em `_shared/semantic-config.ts` e atualmente é `0.36`.
 
-A decisão não deve chamar outra IA. O roteador usa sinais que já existem no pipeline de OCR ou podem ser derivados localmente.
+### Fusão RRF calibrada
 
-O contrato OCR já possui a taxonomia:
+`_shared/semantic-ranking.ts` mantém o RRF textual original intacto quando o canal visual está ausente ou em shadow. Quando o visual participa:
 
-```text
-unknown
-book_clean
-scan_degraded
-handwriting
-mixed
-table_layout
-math
-sparse
-```
+- uma página puramente visual pode competir com o score visual completo;
+- uma página encontrada por texto **e** visual usa o mais forte dos dois sinais, em vez de somar duas evidências correlacionadas;
+- há apenas um pequeno bônus de corroboração;
+- a contribuição de confiança visual é limitada à janela medida acima do threshold;
+- `lexicalRank = 1` recebe uma guarda específica no modo multimodal, impedindo que um decoy visual extremo derrube um match lexical exato;
+- desempates permanecem determinísticos por `stableKey`.
 
-Ela é produzida na mesma chamada Gemini usada para OCR e validada por `supabase/functions/_shared/ocr-batch-contract.ts`.
+Isso corrige o problema observado nos primeiros benchmarks: o embedding visual era bom isoladamente, mas a fusão antiga ainda deixava candidatos semânticos textuais dominarem o ranking visível.
 
-A telemetria atual também persiste por página:
+## Modos de rollout
 
-- `contentClass`;
-- número de warnings;
-- `needsReview`;
-- caracteres retornados;
-- bytes da imagem derivada.
+`SEMANTIC_VISUAL_MODE` aceita:
 
-Importante: essa classificação existe **depois que o OCR Gemini já ocorreu**. Isso é suficiente para a decisão de embedding visual pós-OCR, mas não deve ser confundido com um classificador pré-OCR.
+- `off`: não consulta o índice visual;
+- `shadow`: consulta/mede o canal visual, mas a ordenação entregue ao usuário permanece textual + semântica;
+- `active`: o visual participa da fusão final.
 
-### 5.1 Política inicial de roteamento
+O contrato versionado mantém `shadow` como estado seguro padrão. O workflow de staging testa `active` temporariamente e **sempre restaura `shadow`** antes do cleanup. A evidência atual recomenda promoção (`promote_active`), mas essa mudança de política não é feita silenciosamente pelo benchmark.
 
-A política `visual-v1` deve começar conservadora:
+## Resultado real de staging
 
-| Situação | Embedding visual |
-| --- | --- |
-| página com `native_text` suficiente | não |
-| `book_clean` sem warning/review | não |
-| `handwriting` | sim |
-| `scan_degraded` | sim |
-| `mixed` | sim |
-| `table_layout` | sim |
-| `math` | sim |
-| qualquer classe com `needsReview = true` | sim |
-| qualquer classe com warnings relevantes | sim |
-| `sparse` | somente se não for quase vazia |
-| `unknown` | somente se houver warning/review ou outro sinal seguro |
+Workflow canônico: `Verify adaptive visual staging`, run `31864249498`, SHA `a254e43d248943fad6ccf71203dc9059e6b40c63`.
 
-O roteador deve retornar uma decisão reproduzível:
+O corpus foi recriado com bytes únicos por execução, sem alterar a geometria visual dos PNGs. Foram exercitados 15 documentos principais, smoke JPEG adicional e consultas negativas.
 
-```ts
-type VisualEmbeddingDecision = {
-  eligible: boolean;
-  reason:
-    | 'native_text'
-    | 'clean_textual_page'
-    | 'handwriting'
-    | 'degraded_scan'
-    | 'mixed_content'
-    | 'table_layout'
-    | 'math'
-    | 'ocr_review'
-    | 'ocr_warning'
-    | 'sparse_content'
-    | 'near_blank'
-    | 'unknown_conservative';
-  routingVersion: 'visual-v1';
-};
-```
+### Shadow / qualidade bruta do índice visual
 
-Não inferir classe por filename, extensão ou tamanho do arquivo.
+- raw visual Recall@1: **85,7%**;
+- raw visual Recall@3: **92,9%**;
+- raw visual MRR: **0,901**;
+- mediana de similaridade esperada: **0,437**;
+- 14/14 consultas visuais esperadas acima de `0.36`;
+- falsos positivos visuais acima do threshold nas negativas: **0**;
+- retries: **0**;
+- erros do RPC visual: **0**;
+- sinal de quota: **não observado**.
 
-### 5.2 Páginas `sparse`
+### Active / ranking entregue
 
-`sparse` não deve significar automaticamente “gaste embedding visual”. Uma página quase vazia não merece uma chamada extra.
+- Recall@1 global: **86,7%**;
+- Recall@3 global: **93,3%**;
+- MRR global: **0,907**;
+- visual Recall@1: **85,7%**;
+- visual Recall@3: **92,9%**;
+- visual MRR: **0,900**;
+- match lexical de controle permaneceu top-1;
+- p95 de latência: **4.882 ms** versus **3.495 ms** no shadow, dentro do gate configurado.
 
-A primeira versão deve usar uma regra local versionada baseada em sinais como:
+Todos os gates de comparação passaram e o relatório final emitiu `recommendation: promote_active`. O cleanup removeu **16/16 documentos** e o fichário temporário, sem falhas. O staging foi restaurado para `shadow` antes do cleanup.
 
-- tamanho do texto efetivo;
-- quantidade de palavras/caixas válidas em `wordGeometry`;
-- existência de warnings;
-- presença de revisão necessária.
+## Comportamento da interface
 
-Os limiares exatos devem ser definidos por fixture/benchmark, não por intuição e não como constante escondida em UI.
+O resultado aponta para a página/documento real, não para a transcrição como destino final. Quando a recuperação é puramente visual, não é inventado excerpt textual nem highlight inexistente. A página correta é aberta sobre a mídia original.
 
-### 5.3 PDFs com texto nativo e diagramas
+Os modos visuais podem ser apresentados como `visual`, `lexical_visual`, `semantic_visual` ou `hybrid_visual`, além dos modos textuais existentes.
 
-Na primeira versão, páginas com texto nativo suficiente devem **continuar sem embedding visual**, mesmo que possam conter figuras.
+## Privacidade e telemetria
 
-Isso deliberadamente favorece economia de cota.
+A telemetria visual registra somente metadados operacionais como modelo, quantidade, bytes, duração, status, motivo de roteamento e versão. Não persiste imagem, OCR, consulta, prompt ou vetor na tabela de eventos.
 
-Uma fase posterior poderá usar sinais locais do PDF — por exemplo densidade de texto, objetos gráficos/raster ou estrutura de página — se `pdf-inspector`/PDF.js fornecerem métricas confiáveis sem chamada de IA. Só então deve ser avaliado se algumas páginas nativas merecem enriquecimento visual.
+O envio de imagem só acontece nas páginas selecionadas pelo roteador. A indisponibilidade do provedor degrada a funcionalidade para os canais textual/fuzzy e semântico textual existentes.
 
-## 6. Unidade de indexação visual
+## Evidência de validação
 
-A unidade deve ser **uma página = um embedding visual**.
+Além do benchmark real:
 
-Não usar um embedding único para um PDF inteiro porque:
-
-- a busca abre páginas específicas;
-- o índice textual já é page-based;
-- documentos longos perderiam granularidade;
-- a invalidação seria muito mais cara;
-- uma página difícil não deve fazer outras páginas do mesmo arquivo consumir cota.
-
-Para PDFs, a rota inicial deve preferir uma representação renderizada da página em PNG/JPEG em vez de enviar o PDF inteiro ao endpoint de embedding.
-
-Isso evita usar o OCR interno obrigatório do embedding de PDF quando o Fichário já possui sua própria transcrição e mantém a indexação alinhada à unidade de página.
-
-## 7. Preparação da mídia
-
-O embedding visual não pode alterar o original do Drive.
-
-### Imagem original
-
-Se a página já for uma imagem PNG/JPEG segura e dentro dos limites técnicos, ela pode ser usada diretamente ou através de um derivado efêmero equivalente.
-
-### Página de PDF
-
-Renderizar somente a página elegível usando o pipeline existente de PDF.js. O resultado enviado ao Embedding 2 deve ser PNG ou JPEG, pois são os formatos de imagem documentados para o modelo.
-
-O projeto já produz derivados temporários para OCR. A implementação deve reutilizar o máximo possível desse trabalho, mas sem assumir que WebP é aceito pelo endpoint de embedding.
-
-Se o derivado OCR for WebP, a rota visual pode:
-
-1. produzir um JPEG/PNG efêmero a partir dos mesmos pixels; ou
-2. escolher JPEG para a página quando a decisão visual já estiver disponível antes da limpeza.
-
-Nenhuma cópia multimodal permanente deve ser criada apenas para essa feature.
-
-## 8. Momento da decisão e lifecycle
-
-A decisão visual pode ocorrer imediatamente após o parse bem-sucedido do OCR, quando `contentClass`, warnings e `needsReview` estão disponíveis.
-
-Fluxo alvo:
-
-```text
-OCR concluído
-   ↓
-persistir texto/telemetria normalmente
-   ↓
-visualEmbeddingDecision(page)
-   ↓
-┌──────────── não ────────────→ fluxo atual termina
-│
-sim
-   ↓
-enfileirar enriquecimento visual
-   ↓
-worker visual gera embedding
-   ↓
-persistir vetor
-```
-
-Falha do enriquecimento visual **nunca pode reverter um OCR válido nem impedir a página de ficar pesquisável**.
-
-O trabalho visual deve ter prioridade abaixo de:
-
-1. OCR necessário para tornar uma página pesquisável;
-2. indexação semântica textual básica;
-3. operações interativas do usuário.
-
-Se a implementação precisar manter um derivado temporário para retry, a limpeza deve preservar apenas o mínimo necessário e removê-lo assim que o job visual atingir um estado terminal. Não criar retenção indefinida.
-
-## 9. Persistência proposta
-
-Não reutilizar `page_semantic_chunks` para vetores visuais. Os dois canais têm granularidade e política de invalidação diferentes.
-
-Tabela proposta:
-
-```text
-page_visual_embeddings
-  id
-  user_id
-  page_id
-  model
-  source_hash
-  routing_version
-  embedding vector(768)
-  created_at
-  updated_at
-```
-
-Propriedades obrigatórias:
-
-- RLS por owner;
-- escrita apenas por RPC/Edge Function validada;
-- uma variante canônica por página/modelo/hash;
-- nenhum byte de imagem, OCR, prompt ou URL persistido na tabela;
-- `source_hash` representa a fonte visual da página, não `page_effective_text`.
-
-O hash visual precisa ser definido a partir de uma identidade estável da página/derivado. Se o schema atual não expuser um hash por página adequado, a implementação deve introduzir um campo/derivação explícita em vez de reutilizar incorretamente o hash textual.
-
-### Jobs/falhas
-
-Se a feature tiver retry durável, usar uma fila própria ou generalizar a quarentena semântica para distinguir canais:
-
-```text
-channel = text | visual
-```
-
-Não permitir que uma página visual problemática bloqueie o backfill textual.
-
-## 10. Cliente Gemini
-
-O cliente atual `gemini-embedding-client.ts` valida apenas entradas textuais:
-
-```ts
-{ text: string; title?: string }
-```
-
-A implementação multimodal deve preservar o caminho textual existente e adicionar um contrato explícito para mídia, por exemplo:
-
-```ts
-type GeminiVisualEmbeddingInput = {
-  mimeType: 'image/png' | 'image/jpeg';
-  bytes: Uint8Array;
-};
-```
-
-Requisitos:
-
-- `gemini-embedding-2` permanece o modelo canônico;
-- `outputDimensionality = 768`;
-- lote visual respeita no máximo seis imagens por request, com margem operacional se benchmarks mostrarem necessidade;
-- resposta precisa ter exatamente um vetor válido por item esperado;
-- vetores continuam normalizados antes da persistência;
-- bytes da imagem nunca entram em logs/telemetria;
-- erros 429 interrompem o lote visual e entram em backoff sem derrubar busca/OCR.
-
-## 11. Recuperação com três canais
-
-A busca passa a ter três fontes independentes:
-
-```text
-1. lexical/fuzzy
-2. embedding textual por chunk
-3. embedding visual por página
-```
-
-A consulta continua textual e gera **um único embedding de consulta** no mesmo `gemini-embedding-2`. Esse vetor pode ser comparado tanto com os chunks textuais quanto com os vetores visuais.
-
-RPC proposta:
-
-```text
-search_pages_visual_semantic
-```
-
-Ela retorna pelo menos:
-
-- página/documento/caderno;
-- similaridade visual;
-- ausência de excerpt inventado.
-
-O canal visual não deve produzir uma “citação textual” falsa. A interface abre a página original; se não houver correspondência lexical, não inventa palavra para destacar.
-
-### Ranking
-
-A fusão deve continuar determinística por RRF, mas não fixar pesos de produção antes de benchmark.
-
-Princípios:
-
-- preservar a força de matches lexicais fortes;
-- preservar o canal textual semântico já validado;
-- começar com contribuição visual limitada;
-- medir ganho de recall antes de aumentar o peso visual;
-- impedir que ruído visual desloque resultados textuais claramente melhores.
-
-A implementação deve adicionar um benchmark determinístico com consultas reais/fixtures representativas antes de promover novos pesos.
-
-## 12. Economia de cota
-
-A feature existe para melhorar qualidade **sem duplicar a carga do corpus inteiro**.
-
-Controles obrigatórios:
-
-- uma página visual recebe no máximo um embedding visual por versão/hash;
-- texto nativo limpo não entra por padrão;
-- `book_clean` sem problemas não entra por padrão;
-- quase vazio não entra;
-- correção textual não invalida vetor visual quando o embedding é image-only;
-- jobs visuais têm prioridade inferior e podem aguardar rate limit;
-- nenhuma falha visual bloqueia FTS/fuzzy ou embedding textual;
-- nenhum teto diário artificial é apresentado como “quota restante”; a resposta real do provedor continua autoridade para bloqueio de quota;
-- nenhuma rota ativa billing ou fallback pago.
-
-Telemetria pode registrar apenas metadados como:
-
-- quantidade de páginas elegíveis;
-- quantidade realmente indexada;
-- `route_reason`;
-- modelo/dimensão;
-- quantidade de chamadas;
-- latência;
-- status/código seguro;
-- tamanho em bytes da entrada;
-- usage metadata oficial quando disponível.
-
-Não registrar mídia nem embeddings em telemetria.
-
-## 13. Invalidação
-
-Os dois canais devem ser invalidados independentemente.
-
-### Texto
-
-Mantém o contrato atual:
-
-```text
-page_effective_text mudou
-→ source_hash textual mudou
-→ chunks textuais ficam obsoletos
-```
-
-### Visual
-
-```text
-representação visual da página mudou
-→ visual source_hash mudou
-→ vetor visual fica obsoleto
-```
-
-Uma correção manual apenas do OCR **não** deve invalidar o visual na fase image-only.
-
-Se uma futura variante usar `imagem + texto`, ela precisa de um hash composto e será um canal/versionamento diferente.
-
-## 14. Rollout recomendado
-
-### Fase A — benchmark offline/staging
-
-- montar fixtures de `book_clean`, `scan_degraded`, `handwriting`, `mixed`, `table_layout`, `math`, `sparse` e páginas nativas;
-- comparar busca textual atual contra canal visual isolado;
-- medir recall útil, falsos positivos, latência, requests e volume;
-- validar consulta textual contra embedding de imagem.
-
-### Fase B — schema e cliente, sem ranking de produção
-
-- criar persistência visual privada;
-- criar roteador `visual-v1` puro/determinístico;
-- adicionar cliente multimodal;
-- adicionar job/worker visual;
-- gravar vetores sem usá-los ainda na busca principal.
-
-### Fase C — shadow retrieval
-
-- consultar canal visual em paralelo;
-- registrar somente métricas agregadas de overlap/posição;
-- não alterar resultados do usuário;
-- calibrar limiar e peso.
-
-### Fase D — RRF em produção
-
-- incorporar canal visual com peso calibrado;
-- preservar fallback completo;
-- observar quota e qualidade;
-- desativação operacional simples sem migração de dados do usuário.
-
-### Fase E — expansão opcional
-
-Somente se dados justificarem:
-
-- avaliar embedding combinado `imagem + texto`;
-- avaliar algumas páginas de PDF com texto nativo e alta carga visual;
-- aprender roteamento por métricas locais adicionais;
-- reduzir ainda mais chamadas onde o visual não acrescenta recall.
-
-## 15. Critérios de aceite
-
-A feature só pode ser marcada como implementada quando:
-
-1. páginas textuais limpas não recebem chamadas visuais por padrão;
-2. páginas elegíveis são decididas sem chamada adicional de IA;
-3. o vetor visual é page-level e separado de `page_semantic_chunks`;
-4. busca textual/fuzzy e embedding textual continuam funcionando sem o canal visual;
-5. falha/quota visual não altera status OCR válido;
-6. mídia original nunca é modificada;
-7. nenhuma mídia é persistida na telemetria;
-8. RLS e RPCs isolam usuário corretamente;
-9. 429/5xx possuem backoff e não criam loop agressivo;
-10. benchmark demonstra ganho real nas classes alvo antes da ativação no ranking;
-11. pesos/limiares do terceiro canal são cobertos por teste determinístico;
-12. staging confirma billing desativado e ausência de fallback pago.
-
-## 16. Fora de escopo da primeira implementação
-
-- substituir OCR por embedding visual;
-- eliminar `page_semantic_chunks`;
-- gerar embedding visual de todas as páginas;
-- enviar PDF inteiro como unidade semântica;
-- usar um modelo generativo para classificar se deve gerar embedding;
-- interpretar similaridade como probabilidade;
-- inventar destaque textual para resultado puramente visual;
-- ativar serviço pago quando a quota gratuita acabar.
-
-## 17. Resumo da arquitetura alvo
-
-```text
-                            PÁGINA
-                               │
-             ┌─────────────────┴─────────────────┐
-             │                                   │
-       texto efetivo                        mídia original
-             │                                   │
-       chunks textuais                    sinais OCR existentes
-             │                                   │
-    Gemini Embedding 2                           │
-             │                             visual-v1 router
-             │                                   │
-             │                              elegível?
-             │                              │      │
-             │                             não    sim
-             │                              │      │
-             │                              │  imagem da página
-             │                              │      │
-             │                              │  Gemini Embedding 2
-             │                              │      │
-             ▼                              │      ▼
- page_semantic_chunks                       │ page_visual_embeddings
-             │                              │      │
-             └───────────────┬──────────────┘      │
-                             │                     │
-consulta → embedding ────────┼─────────────────────┘
-                             ▼
-                   lexical + text + visual
-                             ▼
-                            RRF
-                             ▼
-                       página original
-```
-
-A ideia central é simples: **texto continua sendo o caminho barato e granular; visão entra somente quando há evidência de que pode recuperar informação perdida pela transcrição.**
+- `Offline-Toolchains` run `31863518399`: testes focados + `pnpm verify` + checks Deno/Edge; a suíte executou 318 arquivos e 1.358 testes;
+- validação oficial da `main` run `31863888994`: frontend, source gates, browser/E2E, Edge Functions, banco local/migrations/pgTAP e gate contra verificação incompleta, todos verdes;
+- artifact staging run `31863889014`: build, configuração congelada, pacote e verificação do artifact, todos verdes;
+- deploy Supabase staging run `31864139871`: migrations, Edge Functions, Auth/RLS/Storage, Drive OAuth, pairing desktop e OCR real, todos verdes;
+- benchmark multimodal run `31864249498`: shadow, active, comparação, restauração e cleanup, todos verdes.

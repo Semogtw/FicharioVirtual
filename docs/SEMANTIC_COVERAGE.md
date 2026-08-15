@@ -1,254 +1,147 @@
 # Busca e cobertura semântica
 
-Este documento é o contrato operacional da camada semântica do Fichário Virtual antes do primeiro deploy. A semântica melhora recuperação e cobertura, mas **não é requisito para o produto funcionar**: busca textual/fuzzy permanece como fallback completo quando cota, índice ou Gemini estiverem indisponíveis.
+Este documento descreve o contrato operacional atual da camada semântica do Fichário Virtual. Semântica melhora recuperação e cobertura, mas continua degradável: busca textual/fuzzy permanece disponível quando índice, cota ou Gemini não estiverem disponíveis.
 
-## Contrato de primeira produção
-
-Como ainda não houve deploy, existe um único contrato canônico, sem compatibilidade com variantes antigas:
+## Contrato canônico
 
 - modelo de embeddings: `gemini-embedding-2`;
 - dimensionalidade: `768`;
-- índice persistido: `page_semantic_chunks`;
+- índice textual persistido: `page_semantic_chunks`;
+- índice visual seletivo: `page_visual_embeddings`;
 - distância: cosseno via pgvector;
-- índice ANN: HNSW com `m = 16`, `ef_construction = 64` e `hnsw.ef_search = 80` nas consultas;
-- similaridade mínima da busca global: `0.46`;
+- ANN: HNSW;
+- similaridade mínima da busca textual semântica: `0.46`;
 - similaridade mínima da cobertura: `0.50`;
-- fusão lexical + vetorial: Reciprocal Rank Fusion (RRF), sem somar diretamente rank FTS e cosine.
+- similaridade mínima do canal visual global: `0.36`;
+- fusão determinística por Reciprocal Rank Fusion (RRF), sem misturar diretamente rank textual e cosine.
 
-Os valores compartilhados ficam em `supabase/functions/_shared/semantic-config.ts`. Trocar modelo ou dimensionalidade exige migração e reindexação deliberadas; não existe override de `SEMANTIC_EMBEDDING_MODEL` em runtime.
+Os valores compartilhados ficam em `supabase/functions/_shared/semantic-config.ts`.
 
-## Arquitetura compartilhada
+## Dois índices, responsabilidades diferentes
 
-Busca global, cobertura de tópicos e backfill usam a mesma infraestrutura:
+### Semântica textual
 
-- `_shared/semantic-config.ts` — contrato canônico;
-- `_shared/semantic-chunks.ts` — chunking determinístico;
-- `_shared/semantic-indexer.ts` — indexação de páginas;
-- `_shared/semantic-query-cache.ts` — cache e batching de embeddings de consulta;
-- `_shared/semantic-ranking.ts` — RRF;
-- `_shared/semantic-provider-telemetry.ts` — uso/latência do Gemini;
-- `_shared/semantic-retrieval-telemetry.ts` — métricas de recuperação;
-- `semantic-search` — busca híbrida;
-- `semantic-coverage` — cobertura híbrida e verificação opcional;
-- `semantic-index` — backfill explícito e retomável.
+OCR, texto nativo ou correção da página são normalizados e divididos deterministicamente em chunks. Os chunks são embeddados e persistidos em `page_semantic_chunks` com `source_hash` versionado.
 
-Essa arquitetura evita que cobertura e busca mantenham modelos, dimensões ou indexadores diferentes.
+Esse índice é compartilhado por:
 
-## Chunking e invalidação
+- busca global;
+- cobertura de tópicos;
+- backfill semântico.
 
-O texto efetivo da página é normalizado e dividido de forma determinística:
+### Semântica visual adaptativa
 
-- até 1.800 caracteres por chunk;
-- overlap aproximado de 220 caracteres;
-- preferência por parágrafo/pontuação e depois espaço;
-- até 16 chunks por página;
-- texto enviado pelo RPC de fila limitado a 24.000 caracteres.
+Páginas que se beneficiam de contexto visual podem receber, adicionalmente, **um embedding por página** em `page_visual_embeddings`.
 
-Cada conjunto de chunks guarda `source_hash`, SHA-256 do `page_effective_text` completo. Uma busca só aceita vetores cujo modelo e hash ainda correspondam ao conteúdo atual. Qualquer alteração por OCR, importação ou edição invalida imediatamente os vetores antigos para recuperação.
+O roteador `visual-v1` é local e determinístico. Ele evita custo visual quando há texto nativo suficiente, página de livro limpa ou conteúdo praticamente vazio e favorece manuscritos, scans degradados, conteúdo misto, tabelas/layout, matemática, warnings e revisão.
 
-`replace_page_semantic_chunks` substitui o conjunto de uma página atomicamente. A versão de produção também remove variantes antigas daquela página, porque não existe necessidade de preservar índices de modelos nunca deployados.
+O índice visual é usado pela **busca global**, não substitui `page_semantic_chunks` e não altera o mecanismo de classificação da cobertura de tópicos.
 
-## Indexação e backfill
+## Chunking e invalidação textual
 
-### Oportunista
+O texto efetivo é normalizado e dividido com os limites canônicos do projeto. Cada conjunto de chunks guarda um SHA-256 do conteúdo normalizado/versionado. Mudança de OCR, texto nativo ou correção torna os vetores antigos inelegíveis e permite reindexação segura.
 
-`semantic-search` e `semantic-coverage` podem indexar um pequeno lote antes da recuperação. O padrão é 8 páginas, com concorrência limitada para reduzir rajadas de quota.
+`replace_page_semantic_chunks` substitui o conjunto de uma página atomicamente.
 
-### Backfill explícito
+## Indexação textual e backfill
 
-`semantic-index` executa lotes retomáveis para preencher o índice sem depender de ações do usuário. A função recebe opcionalmente:
+`semantic-search` e `semantic-coverage` podem indexar pequenos lotes oportunisticamente. `semantic-index` fornece backfill retomável com batch e concorrência limitados.
 
-- `notebookId`;
-- `batchSize` (1–24);
-- `maxBatches` (1–32);
-- `concurrency` (1–4).
+`semantic_index_failures` mantém apenas metadados operacionais e `retry_after`; não persiste texto, prompt, embedding ou mensagem bruta do provedor. Falhas usam backoff e não podem monopolizar a fila.
 
-Cada execução tem timeout, informa progresso e pode encerrar por:
+## Indexação visual
 
-- `complete`;
-- `batch_limit`;
-- `rate_limited`;
-- `no_progress`;
-- `timeout`;
-- `provider_error`.
+O fluxo visual usa fila independente e worker de baixa prioridade:
 
-### Quarentena de páginas problemáticas
+- `page_visual_embedding_jobs`;
+- `semantic-visual-worker`;
+- `_shared/background-visual-indexer.ts`;
+- `_shared/gemini-embedding-client.ts`.
 
-`semantic_index_failures` guarda apenas metadados operacionais: usuário, página, modelo, contador, código seguro e `retry_after`. **Nenhum texto, prompt, embedding ou mensagem de erro do provedor é persistido.**
+Regras principais:
 
-Falhas recebem backoff exponencial, limitado a 24 horas. Enquanto `retry_after` estiver no futuro, a página não domina a cabeça da fila. Uma indexação bem-sucedida remove automaticamente a quarentena da página. O backfill encerra um lote que não indexou página alguma em vez de consumir repetidamente o orçamento do provedor.
+- PNG/JPEG;
+- até 6 imagens por request;
+- hash dos bytes reais do input;
+- reuse idempotente quando página/modelo/router/hash não mudam;
+- 429 entra em backoff sem bloquear OCR nem índice textual;
+- derivado temporário é preservado somente enquanto ainda for necessário e removido depois.
 
-## Cache de embeddings de consulta
+## Cache de consultas
 
-`semantic_query_embedding_cache` evita regenerar embeddings para consultas repetidas.
+`semantic_query_embedding_cache` evita gerar novamente o embedding de consultas repetidas.
 
-Privacidade:
+A consulta normalizada não é persistida. A chave é um hash versionado de modelo + consulta normalizada e o cache é privado.
 
-- a consulta normalizada nunca é persistida;
-- a chave é SHA-256 de `modelo + consulta normalizada`;
-- o vetor fica em tabela privada, sem leitura direta por `authenticated`;
-- TTL padrão de 7 dias;
-- entradas expiradas ou inativas são podadas.
+Na busca global, o mesmo embedding de consulta pode alimentar `search_pages_semantic` e `search_pages_visual_semantic`, aproveitando o espaço multimodal comum do modelo.
 
-Na cobertura, misses de vários tópicos são deduplicados e enviados ao Gemini em **um batch**, mantendo o benefício do cache sem criar uma chamada por tópico.
-
-## Recuperação híbrida
+## Recuperação
 
 ### Busca global
 
-`semantic-search` executa a recuperação lexical e vetorial e funde os resultados por página.
+A Edge Function `semantic-search` combina até três sinais:
+
+1. lexical/fuzzy (`search_pages`);
+2. semântico textual (`search_pages_semantic`);
+3. semântico visual por página (`search_pages_visual_semantic`).
+
+`SEMANTIC_VISUAL_MODE` controla o terceiro canal:
+
+- `off`: visual não é consultado;
+- `shadow`: visual é consultado/medido, mas não muda a ordenação entregue;
+- `active`: visual participa do ranking final.
+
+O default versionado permanece `shadow`.
 
 ### Cobertura de tópicos
 
-`semantic-coverage` executa, para cada tópico:
+`semantic-coverage` continua combinando busca lexical e o índice **textual** compartilhado. Para cada tópico, recupera candidatos, faz RRF e pode verificar poucos trechos com o Gemini. O canal visual da busca global não é usado para afirmar que um tópico textual está coberto.
 
-1. `search_pages`;
-2. `search_pages_semantic`;
-3. deduplicação por página;
-4. RRF;
-5. verificação opcional de poucos candidatos pelo Gemini.
+## RRF
 
-A cobertura não possui mais implementação própria de embeddings/indexação; usa os mesmos helpers da busca global.
-
-## Reciprocal Rank Fusion
-
-Arquivo: `_shared/semantic-ranking.ts`.
-
-Parâmetros iniciais:
+O RRF textual mantém:
 
 - `k = 28`;
 - peso lexical `0.48`;
-- peso vetorial `0.52`;
-- bônus quando os dois canais encontram a mesma página `0.012`;
-- similaridade cosseno serve apenas como pequeno desempate.
+- peso vetorial textual `0.52`;
+- bônus textual conjunto `0.012`;
+- cosine apenas como pequeno desempate.
 
-O objetivo é evitar combinar diretamente escalas incompatíveis, como rank de FTS/trigram e cosine. Os parâmetros são travados por benchmark determinístico em `tests/unit/coverage/semantic-production-ranking.test.ts`.
+Quando o visual está ativo, a extensão multimodal usa parâmetros calibrados em staging:
 
-A classificação final de cobertura continua em `src/lib/coverage/semantic-coverage.ts`, com limiares conservadores:
+- peso visual `0.475`;
+- confiança visual `0.04` limitada a margem `0.1` acima do threshold;
+- guarda lexical top-1 `0.0045`.
 
-- `Coberto`: `>= 0.78`;
-- `Parcial`: `>= 0.42`;
-- abaixo disso: `Não encontrado`.
+Texto e imagem correlacionados não são somados integralmente: usa-se o sinal mais forte mais um pequeno bônus de corroboração. Sem visual ativo, o score textual antigo permanece inalterado.
 
-`partial` do verificador não pode virar `Coberto`; `none` de alta confiança reduz o score. A força 0–100 é um sinal operacional, não probabilidade estatística.
+## Telemetria e privacidade
 
-## Verificador Gemini
+Telemetria de provedor e recuperação registra apenas metadados operacionais. O canal visual adiciona `semantic_visual_events`, também sem página, OCR, consulta, prompt ou vetor.
 
-`_shared/gemini-coverage-verifier.ts` recebe apenas um conjunto pequeno dos melhores trechos:
+A chave `GEMINI_API_KEY` permanece somente nas Edge Functions.
 
-- até dois candidatos por tópico;
-- até 24 candidatos no lote;
-- structured output estritamente validado;
-- classificações `strong`, `partial` ou `none`;
-- teto de 2.048 tokens de saída;
-- tamanho de resposta limitado antes do parse.
-
-Trechos recuperados são tratados como **dados não confiáveis, nunca instruções**. Falha do verificador não invalida busca nem embeddings.
-
-## Telemetria
-
-### Provedor
-
-`semantic_provider_usage_events` registra metadados de chamadas de embedding:
-
-- operação;
-- superfície;
-- modelo;
-- contagem e tamanho das entradas;
-- dimensões;
-- latência;
-- status/código seguro.
-
-Não registra conteúdo, prompts ou vetores.
-
-### Recuperação
-
-`semantic_retrieval_events` registra:
-
-- superfície (`global_search`, `topic_coverage`, `indexer`);
-- modo;
-- quantidade de resultados lexicais, semânticos e híbridos;
-- cobertura do índice;
-- latência;
-- cache hit agregado;
-- razão segura de fallback.
-
-A tabela é privada. `semantic_retrieval_stats` é um RPC `SECURITY DEFINER` com autenticação/allowlist explícitas e retorna somente agregados do próprio usuário.
-
-## Banco e migrações
-
-Migrações relevantes para a evolução histórica e para o schema resultante:
-
-- `202608101410_semantic_coverage.sql` — chunks e RPCs base;
-- `202608101411_semantic_coverage_consent.sql` — etapa histórica pré-lançamento;
-- `202608101412_semantic_coverage_hardening.sql`;
-- `202608101413_semantic_coverage_consent_hardening.sql` — etapa histórica pré-lançamento;
-- `202608101414_semantic_coverage_vector_index.sql` — HNSW;
-- `202608101444_semantic_provider_telemetry.sql`;
-- `202608102000_semantic_production_ready.sql` — cache, telemetria de recuperação, limpeza canônica e `ef_search`;
-- `202608102001_semantic_index_retry_hardening.sql` — quarentena/backoff e fronteira segura dos agregados;
-- `202608111345_remove_prelaunch_compatibility.sql` — remove do schema final os RPCs/colunas de consentimento e outras superfícies nunca usadas em produção.
-
-As migrations antigas permanecem no histórico para permitir reconstruir o banco em ordem; elas não definem o contrato público final. Tabelas operacionais privadas não concedem leitura direta a `authenticated`.
-
-## Execução privada e fallback
-
-No uso privado do Fichário, OCR e semântica são executados diretamente quando uma funcionalidade precisa deles. **Não existe marcador de consentimento ou ativação semântica no contrato de lançamento, nem RPC/coluna de compatibilidade que o frontend precise gravar antes da chamada.**
-
-`semantic-search`, `semantic-coverage` e `semantic-index` fazem autenticação/allowlist e seguem para a operação semântica. Se a camada semântica não puder executar com segurança, o fluxo degrada para o mecanismo textual/fuzzy aplicável. OCR só é acionado para imagens ou páginas visuais que realmente precisem de leitura automática.
+## Fallback
 
 Fallbacks esperados:
 
 - sem chave/configuração → lexical;
-- quota/rate limit → lexical;
+- quota/rate limit → lexical ou híbrido textual;
 - Gemini indisponível → lexical;
-- RPC vetorial indisponível → lexical;
-- verificador indisponível → híbrido sem verificação;
-- índice incompleto → híbrido sobre a parte indexada + lexical sobre todo o corpus.
+- RPC vetorial textual indisponível → lexical;
+- RPC visual indisponível → híbrido textual;
+- visual em `off`/`shadow` → nenhum impacto negativo obrigatório no resultado do usuário;
+- índice textual incompleto → híbrido sobre a parte indexada + lexical sobre todo o corpus.
 
-A chave `GEMINI_API_KEY` permanece somente nas Edge Functions.
+## Evidência operacional atual
 
-## Configuração
+SHA validado: `a254e43d248943fad6ccf71203dc9059e6b40c63`.
 
-Obrigatórias para a camada semântica:
+- `Validate current head` `31863888994`: verde em frontend, browser, Edge, banco local/migrations/pgTAP e receipt final;
+- artifact `31863889014`: verde;
+- deploy Supabase staging `31864139871`: verde, incluindo verificações pós-deploy e OCR real;
+- benchmark visual `31864249498`: verde.
 
-- `SUPABASE_URL`;
-- `SUPABASE_ANON_KEY`;
-- `GEMINI_API_KEY`;
-- `APP_ORIGIN`.
+No benchmark visual, `active` obteve Recall@1 global `0.8667`, Recall@3 `0.9333`, MRR `0.9067`, visual Recall@1 `0.8571` e visual MRR `0.9000`, preservando o match lexical de controle e sem candidatos negativos acima do threshold visual. O staging foi restaurado para `shadow` e o corpus temporário foi removido integralmente.
 
-Opcionais:
-
-- `COVERAGE_VERIFY_MODEL` — modelo do verificador;
-- `OCR_MODEL_PRIMARY` — fallback do verificador;
-- `SEMANTIC_INDEX_BATCH_PAGES` — lote oportunista, padrão 8;
-- `SEMANTIC_COVERAGE_TIMEOUT_MS` — padrão 55 s.
-
-`semantic-search`, `semantic-coverage` e `semantic-index` exigem JWT no `supabase/config.toml`.
-
-## Gates para deploy
-
-Antes do primeiro deploy, o SHA candidato deve passar sem mascarar erro:
-
-- Prettier/format;
-- ESLint;
-- TypeScript/Svelte check;
-- testes unitários, incluindo benchmark RRF e contratos semânticos;
-- build;
-- checks offline de segurança do provedor;
-- `deno check` das Edge Functions;
-- Playwright;
-- migrations + pgTAP local, incluindo `semantic_production_contracts.sql`.
-
-O checkout de validação final é feito no `Offline-Toolchains` contra o SHA exato da feature.
-
-## Critérios de produção
-
-A frente semântica só é considerada pronta quando:
-
-1. busca e cobertura compartilham modelo, cache, indexador e ranking;
-2. backfill é retomável e páginas problemáticas não bloqueiam a fila;
-3. nenhuma telemetria persiste conteúdo do usuário;
-4. fallback lexical funciona sem Gemini;
-5. migrations novas passam em banco limpo;
-6. todos os gates do SHA final estão verdes.
+Para detalhes da terceira via, consulte [ADAPTIVE_MULTIMODAL_EMBEDDING.md](./ADAPTIVE_MULTIMODAL_EMBEDDING.md).
