@@ -2,8 +2,8 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { decideVisualEmbedding } from '../../../supabase/functions/_shared/visual-embedding-routing';
 import {
-	hybridReciprocalRankScore,
-	multimodalReciprocalRankScore
+	compareMultimodalRanked,
+	hybridReciprocalRankScore
 } from '../../../supabase/functions/_shared/semantic-ranking';
 
 type Candidate = Readonly<{
@@ -52,13 +52,14 @@ const fixture = JSON.parse(
 function top(candidates: readonly Candidate[], visual: boolean) {
 	return [...candidates]
 		.sort((left, right) => {
-			const leftScore = visual
-				? multimodalReciprocalRankScore(left)
-				: hybridReciprocalRankScore(left);
-			const rightScore = visual
-				? multimodalReciprocalRankScore(right)
-				: hybridReciprocalRankScore(right);
-			const delta = rightScore - leftScore;
+			if (visual) {
+				return compareMultimodalRanked(
+					{ ...left, stableKey: left.id },
+					{ ...right, stableKey: right.id },
+					{ visualChannelActive: true }
+				);
+			}
+			const delta = hybridReciprocalRankScore(right) - hybridReciprocalRankScore(left);
 			return Math.abs(delta) > Number.EPSILON ? delta : left.id.localeCompare(right.id);
 		})
 		.at(0)?.id;

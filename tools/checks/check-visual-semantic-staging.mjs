@@ -18,6 +18,16 @@ const JPEG_BYTES = Uint8Array.from(
 	)
 );
 const PNG_SIG = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10]);
+const SEMANTIC_CONFIG_SOURCE = await readFile(
+	new URL('../../supabase/functions/_shared/semantic-config.ts', import.meta.url),
+	'utf8'
+);
+const VISUAL_THRESHOLD_MATCH = SEMANTIC_CONFIG_SOURCE.match(
+	/SEMANTIC_VISUAL_SEARCH_MIN_SIMILARITY\s*=\s*([0-9.]+)/u
+);
+if (!VISUAL_THRESHOLD_MATCH) throw new Error('Could not resolve visual similarity threshold');
+const VISUAL_THRESHOLD = Number(VISUAL_THRESHOLD_MATCH[1]);
+if (!Number.isFinite(VISUAL_THRESHOLD)) throw new Error('Invalid visual similarity threshold');
 
 function env(name) {
 	const value = process.env[name]?.trim();
@@ -72,7 +82,7 @@ function chunk(type, data) {
 	out.writeUInt32BE(crc32(out.subarray(4, 8 + data.length)), 8 + data.length);
 	return out;
 }
-function patternPng(kind) {
+function patternPng(kind, runNonce) {
 	const w = 640,
 		h = 420,
 		pixels = Buffer.alloc(w * h, 255);
@@ -276,10 +286,12 @@ function patternPng(kind) {
 	ihdr.writeUInt32BE(h, 4);
 	ihdr[8] = 8;
 	ihdr[9] = 0;
+	const benchmarkMetadata = Buffer.from(`benchmark-run\0${runNonce}`, 'utf8');
 	return Uint8Array.from(
 		Buffer.concat([
 			Buffer.from(PNG_SIG),
 			chunk('IHDR', ihdr),
+			chunk('tEXt', benchmarkMetadata),
 			chunk('IDAT', deflateSync(scan)),
 			chunk('IEND', Buffer.alloc(0))
 		])
@@ -635,10 +647,21 @@ function metric(rows) {
 		rawVisualMrr: mrr(visual, rawRank),
 		rawVisualExpectedSimilarityMedian:
 			expectedSimilarities[Math.floor(expectedSimilarities.length / 2)] ?? null,
+		visualSimilarityThreshold: VISUAL_THRESHOLD,
 		rawVisualExpectedAboveCurrentThreshold: visual.filter(
 			(r) =>
-				typeof r.rawVisualExpectedSimilarity === 'number' && r.rawVisualExpectedSimilarity >= 0.5
+				typeof r.rawVisualExpectedSimilarity === 'number' &&
+				r.rawVisualExpectedSimilarity >= VISUAL_THRESHOLD
 		).length,
+		rawVisualNegativeAboveThresholdCount: negatives.reduce(
+			(sum, row) =>
+				sum +
+				row.rawVisualCandidates.filter(
+					(candidate) =>
+						typeof candidate.similarity === 'number' && candidate.similarity >= VISUAL_THRESHOLD
+				).length,
+			0
+		),
 		rawVisualRpcErrors: rows.filter((r) => r.rawVisualError).length,
 		lexicalTop: rank(rows.find((r) => r.kind === 'lexical')) === 1,
 		negativeCount: negatives.reduce((sum, row) => sum + row.resultLabels.length, 0),
@@ -656,24 +679,25 @@ async function setup(db, user, statePath, reportPath) {
 		name: `__visual_benchmark_${notebookId.slice(0, 8)}`
 	});
 	if (notebook.error) throw new Error(`Notebook failed: ${notebook.error.message}`);
-	const state = { notebookId, probes: [], jpegSmoke: null };
+	const runNonce = randomUUID();
+	const state = { notebookId, runNonce, probes: [], jpegSmoke: null };
 	await writeFile(statePath, JSON.stringify(state));
 	for (const [id, bytes] of [
-		['lexical', createOcrProbePng(`visual-${randomUUID()}`)],
-		['table', patternPng('table')],
-		['flow', patternPng('flow')],
-		['bar', patternPng('bar')],
-		['line', patternPng('line')],
-		['pie', patternPng('pie')],
-		['checklist', patternPng('checklist')],
-		['calendar', patternPng('calendar')],
-		['form', patternPng('form')],
-		['mindmap', patternPng('mindmap')],
-		['timeline', patternPng('timeline')],
-		['venn', patternPng('venn')],
-		['hierarchy', patternPng('hierarchy')],
-		['kanban', patternPng('kanban')],
-		['route', patternPng('route')]
+		['lexical', createOcrProbePng(`visual-${runNonce}-${randomUUID()}`)],
+		['table', patternPng('table', runNonce)],
+		['flow', patternPng('flow', runNonce)],
+		['bar', patternPng('bar', runNonce)],
+		['line', patternPng('line', runNonce)],
+		['pie', patternPng('pie', runNonce)],
+		['checklist', patternPng('checklist', runNonce)],
+		['calendar', patternPng('calendar', runNonce)],
+		['form', patternPng('form', runNonce)],
+		['mindmap', patternPng('mindmap', runNonce)],
+		['timeline', patternPng('timeline', runNonce)],
+		['venn', patternPng('venn', runNonce)],
+		['hierarchy', patternPng('hierarchy', runNonce)],
+		['kanban', patternPng('kanban', runNonce)],
+		['route', patternPng('route', runNonce)]
 	]) {
 		const probe = await makeProbe(db, user.id, notebookId, id, bytes, 'image/png');
 		state.probes.push(probe);
@@ -710,6 +734,7 @@ async function setup(db, user, statePath, reportPath) {
 		textIndex,
 		observations,
 		metrics: metric(observations),
+		visualSimilarityThreshold: VISUAL_THRESHOLD,
 		quotaSignalObserved: observations.some((r) => r.reason === 'semantic_quota_or_rate_limit'),
 		pricing: {
 			asOf: '2026-08-14',
@@ -731,6 +756,7 @@ async function measure(db, statePath, reportPath) {
 		status: 'pass',
 		observations,
 		metrics: metric(observations),
+		visualSimilarityThreshold: VISUAL_THRESHOLD,
 		quotaSignalObserved: observations.some((r) => r.reason === 'semantic_quota_or_rate_limit')
 	};
 	await writeFile(reportPath, JSON.stringify(report, null, 2));
@@ -743,9 +769,14 @@ async function compare(shadowPath, activePath, reportPath) {
 	const gates = {
 		noQuotaSignal: !shadow.quotaSignalObserved && !active.quotaSignalObserved,
 		noSearchRetries: shadow.metrics.searchRetries === 0 && active.metrics.searchRetries === 0,
+		noVisualRpcErrors:
+			shadow.metrics.rawVisualRpcErrors === 0 && active.metrics.rawVisualRpcErrors === 0,
 		noRecallRegression: active.metrics.recallAt3 >= shadow.metrics.recallAt3,
 		visualImproved: active.metrics.visualMrr >= shadow.metrics.visualMrr + 0.05,
+		visualTop1Quality: active.metrics.visualRecallAt1 >= 0.8,
+		visualMrrQuality: active.metrics.visualMrr >= 0.8,
 		lexicalPreserved: active.metrics.lexicalTop,
+		noNegativeVisualThresholdHits: active.metrics.rawVisualNegativeAboveThresholdCount === 0,
 		negativeNotWorse: active.metrics.negativeCount <= shadow.metrics.negativeCount,
 		latencyAcceptable:
 			active.metrics.latencyP95Ms <=

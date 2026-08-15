@@ -219,15 +219,18 @@ function matchMode(
 	return 'lexical';
 }
 
-function scoreCandidate(candidate: SearchCandidate) {
+function scoreCandidate(candidate: SearchCandidate, visualChannelActive = false) {
 	candidate.matchMode = matchMode(candidate);
-	candidate.score = multimodalReciprocalRankScore({
-		lexicalRank: candidate.lexicalPosition,
-		semanticRank: candidate.semanticPosition,
-		semanticSimilarity: candidate.semanticSimilarity,
-		visualRank: candidate.visualPosition,
-		visualSimilarity: candidate.visualSimilarity
-	});
+	candidate.score = multimodalReciprocalRankScore(
+		{
+			lexicalRank: candidate.lexicalPosition,
+			semanticRank: candidate.semanticPosition,
+			semanticSimilarity: candidate.semanticSimilarity,
+			visualRank: candidate.visualPosition,
+			visualSimilarity: candidate.visualSimilarity
+		},
+		{ visualChannelActive }
+	);
 }
 
 function publicCandidate(candidate: SearchCandidate) {
@@ -310,6 +313,10 @@ function mergeCandidates(
 		merged.set(row.page_id, candidate);
 	});
 
+	const visualChannelActive = visual.some(
+		(row) => row.visual_similarity >= SEMANTIC_VISUAL_SEARCH_MIN_SIMILARITY
+	);
+
 	visual.forEach((row, index) => {
 		if (row.visual_similarity < SEMANTIC_VISUAL_SEARCH_MIN_SIMILARITY) return;
 		const current = merged.get(row.page_id);
@@ -341,6 +348,8 @@ function mergeCandidates(
 		merged.set(row.page_id, candidate);
 	});
 
+	for (const candidate of merged.values()) scoreCandidate(candidate, visualChannelActive);
+
 	return [...merged.values()].sort((left, right) =>
 		compareMultimodalRanked(
 			{
@@ -358,7 +367,8 @@ function mergeCandidates(
 				visualRank: right.visualPosition,
 				visualSimilarity: right.visualSimilarity,
 				stableKey: right.stableKey
-			}
+			},
+			{ visualChannelActive }
 		)
 	);
 }
