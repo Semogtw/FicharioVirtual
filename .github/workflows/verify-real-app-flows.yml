@@ -99,6 +99,10 @@ jobs:
                   "const correctionBox = page.getByLabel('Texto corrigido da página 1', { exact: true });",
                   "const transcriptTool = page.locator('details.transcript-tool');\n\tif ((await transcriptTool.getAttribute('open')) === null) await transcriptTool.locator('summary').click();\n\tconst correctionBox = page.getByLabel('Texto corrigido da página 1', { exact: true });",
               ),
+              (
+                  "const coverageInput = page.getByLabel('Conteúdos', { exact: true });",
+                  "const coverageInput = page.getByRole('textbox', { name: 'Conteúdos', exact: true });",
+              ),
           ]
           for old, new in replacements:
               if actions.count(old) != 1:
