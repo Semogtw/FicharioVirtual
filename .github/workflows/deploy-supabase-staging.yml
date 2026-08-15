@@ -130,6 +130,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Active is the canonical operating mode. The visual benchmark may
+          # switch to shadow only temporarily and must always restore active.
           supabase secrets set --project-ref "$STAGING_SUPABASE_PROJECT_REF" \
             "APP_ORIGIN=$STAGING_APP_ORIGIN" \
             "APP_ORIGIN_ALLOWLIST=$STAGING_APP_ORIGIN_ALLOWLIST" \
