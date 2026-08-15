@@ -4,6 +4,7 @@ on:
   workflow_run:
     workflows: [Deploy Supabase staging]
     types: [completed]
+  workflow_dispatch:
 
 permissions:
   actions: read
@@ -16,21 +17,28 @@ concurrency:
 jobs:
   gate:
     if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'main'
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       should_run: ${{ steps.deploy.outputs.should_run }}
     steps:
-      - name: Require an actual Supabase runtime deployment
+      - name: Require an actual Supabase runtime deployment or manual benchmark
         id: deploy
         env:
           GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
           DEPLOY_RUN_ID: ${{ github.event.workflow_run.id }}
         shell: bash
         run: |
           set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo 'should_run=true' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           deploy_conclusion="$(
             gh api "/repos/$GITHUB_REPOSITORY/actions/runs/$DEPLOY_RUN_ID/jobs?per_page=100" \
               --jq '[.jobs[] | select(.name == "deploy")][0].conclusion // "missing"'
@@ -44,7 +52,10 @@ jobs:
 
   prepare-shadow:
     needs: gate
-    if: needs.gate.outputs.should_run == 'true'
+    if: >-
+      needs.gate.outputs.should_run == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
+      vars.VISUAL_POST_DEPLOY_BENCHMARK_ENABLED == 'true')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment: staging-deploy
@@ -80,7 +91,7 @@ jobs:
       - name: Checkout deployed main revision
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           persist-credentials: false
 
       - name: Set up pnpm
@@ -122,7 +133,7 @@ jobs:
       STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
     steps:
       - name: Set up Supabase CLI
-        uses: supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf # v2
+        uses: supabase/setup-cli@3c2f5e2ae34c34aea4fa41551a30e30af803 # v2
         with:
           version: 2.111.0
 
@@ -148,7 +159,7 @@ jobs:
       - name: Checkout deployed main revision
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           persist-credentials: false
 
       - name: Download shadow state
@@ -198,7 +209,7 @@ jobs:
       STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
     steps:
       - name: Set up Supabase CLI
-        uses: supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf # v2
+        uses: supabase/setup-cli@3c2f5e2ae34c34aea4fa41551a30e30af803 # v2
         with:
           version: 2.111.0
 
@@ -220,7 +231,7 @@ jobs:
       - name: Checkout deployed main revision
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           persist-credentials: false
 
       - name: Download shadow state and report
