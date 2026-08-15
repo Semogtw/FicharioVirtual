@@ -73,6 +73,8 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Exercise deployed scanned PDF pipeline
+        id: scanned-pdf
+        continue-on-error: true
         working-directory: /tmp/fichario-real-scanned-pdf
         run: node check-real-scanned-pdf-import.mjs
 
@@ -87,3 +89,19 @@ jobs:
           if-no-files-found: error
           compression-level: 6
           retention-days: 7
+
+      - name: Reject any scanned-PDF flow failure
+        if: always()
+        shell: bash
+        env:
+          SCANNED_PDF_OUTCOME: ${{ steps.scanned-pdf.outcome }}
+        run: |
+          set -euo pipefail
+          test "$SCANNED_PDF_OUTCOME" = success
+          node --input-type=module - <<'NODE'
+          import { readFile } from 'node:fs/promises';
+          const report = JSON.parse(await readFile(process.env.REAL_SCANNED_PDF_REPORT_PATH, 'utf8'));
+          if (report.status !== 'pass') throw new Error(`scanned PDF report status is ${report.status}`);
+          if (report.cleanup?.documents !== 'pass') throw new Error('document cleanup did not pass');
+          if (report.cleanup?.importSessions !== 'pass') throw new Error('import-session cleanup did not pass');
+          NODE

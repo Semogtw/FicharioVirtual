@@ -212,7 +212,7 @@ async function waitForQueueEntry(
 	throw new Error(`Timed out waiting for scanned PDF import; last state: ${last}`);
 }
 
-async function searchFor(page, text, expectedDocumentText) {
+async function searchFor(page, text, expectedDocumentId) {
 	await page.goto(new URL(`/search/?q=${encodeURIComponent(text)}`, target).href, {
 		waitUntil: 'domcontentloaded',
 		timeout: 45_000
@@ -222,9 +222,10 @@ async function searchFor(page, text, expectedDocumentText) {
 	await page.getByRole('button', { name: 'Pesquisar', exact: true }).click();
 	const results = page.locator('section.results');
 	await results.waitFor({ state: 'visible', timeout: 45_000 });
-	if (!(await results.innerText()).includes(expectedDocumentText)) {
-		throw new Error('Search did not return the scanned PDF after OCR');
-	}
+	const expectedResult = results
+		.locator(`a[href^="/documents/${expectedDocumentId}/"]`)
+		.first();
+	await expectedResult.waitFor({ state: 'visible', timeout: 45_000 });
 }
 
 function captureImportResumeKey(request, resumeKeys) {
@@ -368,7 +369,7 @@ try {
 	);
 
 	stage('scanned-pdf-search', 'running');
-	await searchFor(page, ocrToken, documentRow.title);
+	await searchFor(page, ocrToken, documentRow.id);
 	stage('scanned-pdf-search', 'pass');
 
 	await page
