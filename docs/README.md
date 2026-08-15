@@ -32,6 +32,7 @@ Ao registrar progresso, prefira atualizar um desses arquivos em vez de adicionar
 
 ## OCR e IA
 
+- [`AZURE_OCR_FALLBACK_IMPLEMENTATION.md`](AZURE_OCR_FALLBACK_IMPLEMENTATION.md) — especificação completa do terceiro fallback `Gemini 3.1 -> Gemini 3.5 -> Azure Vision Read -> fila`, incluindo adapter, limites F0, polling, geometria, erros, telemetria, segurança, testes e rollout.
 - [`DESKTOP_OCR_WORKER.md`](DESKTOP_OCR_WORKER.md) — arquitetura e operação do worker local de OCR.
 - [`DESKTOP_OCR_WORKER_LOCAL_RUNTIME.md`](DESKTOP_OCR_WORKER_LOCAL_RUNTIME.md) — runtime local do worker.
 - [`CHANDRA_OCR2_DESKTOP_INTEGRATION.md`](CHANDRA_OCR2_DESKTOP_INTEGRATION.md) — decisão e integração do Chandra OCR 2.
