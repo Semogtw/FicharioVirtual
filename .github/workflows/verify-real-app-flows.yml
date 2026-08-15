@@ -71,6 +71,19 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
+          notice_old = r"arquivo\(s\) adicionados à fila global"
+          notice_new = r"arquivo\(s\) adicionados\."
+          for verifier, expected_count in [
+              ('check-real-app-flows.mjs', 2),
+              ('check-real-app-actions.mjs', 1),
+              ('check-real-app-exhaustive.mjs', 1),
+          ]:
+              verifier_path = Path('/tmp/fichario-real-flow') / verifier
+              source = verifier_path.read_text(encoding='utf-8')
+              if source.count(notice_old) != expected_count:
+                  raise SystemExit(f'unexpected simplified import notice contract in {verifier}')
+              verifier_path.write_text(source.replace(notice_old, notice_new), encoding='utf-8')
+
           actions_path = Path('/tmp/fichario-real-flow/check-real-app-actions.mjs')
           actions = actions_path.read_text(encoding='utf-8')
           replacements = [
@@ -125,6 +138,11 @@ jobs:
 
           exhaustive_path = Path('/tmp/fichario-real-flow/check-real-app-exhaustive.mjs')
           exhaustive = exhaustive_path.read_text(encoding='utf-8')
+          queue_heading_old = "['/settings/computers/queue/', 'Fila desktop']"
+          queue_heading_new = "['/settings/computers/queue/', 'Fila de leitura']"
+          if exhaustive.count(queue_heading_old) != 1:
+              raise SystemExit('unexpected exhaustive desktop queue heading contract')
+          exhaustive = exhaustive.replace(queue_heading_old, queue_heading_new)
           old = """\tpage.once('dialog', (dialog) => dialog.accept(renamedTagName));
           \tawait page.getByRole('button', { name: 'Renomear', exact: true }).click();
           \tawait page
@@ -200,8 +218,10 @@ jobs:
           exhaustive_path.write_text(exhaustive, encoding='utf-8')
           PY
 
+          node --check /tmp/fichario-real-flow/check-real-app-flows.mjs
           node --check /tmp/fichario-real-flow/check-real-app-actions.mjs
           node --check /tmp/fichario-real-flow/check-real-app-exhaustive.mjs
+          node --check /tmp/fichario-real-flow/check-real-app-special-routes.mjs
 
       - name: Set up Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
