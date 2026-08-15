@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+	compareMultimodalRanked,
 	hybridReciprocalRankScore,
-	multimodalReciprocalRankScore
+	multimodalReciprocalRankScore,
+	type MultimodalRankingSignal
 } from '../../../supabase/functions/_shared/semantic-ranking';
 import { SEMANTIC_VISUAL_SEARCH_MIN_SIMILARITY } from '../../../supabase/functions/_shared/semantic-config';
+
+type RankedSignal = MultimodalRankingSignal & { stableKey: string };
 
 describe('visual semantic RRF benchmark fixtures', () => {
 	it('preserves the previous score exactly when no visual signal exists', () => {
@@ -35,6 +39,24 @@ describe('visual semantic RRF benchmark fixtures', () => {
 			visualSimilarity: SEMANTIC_VISUAL_SEARCH_MIN_SIMILARITY
 		});
 		expect(lexical).toBeGreaterThan(visual);
+	});
+
+	it('keeps an exact lexical hit ahead of even a very strong visual decoy when visual is active', () => {
+		const lexical: RankedSignal = {
+			lexicalRank: 1,
+			semanticRank: null,
+			visualRank: null,
+			visualSimilarity: null,
+			stableKey: 'lexical'
+		};
+		const visual: RankedSignal = {
+			lexicalRank: null,
+			semanticRank: null,
+			visualRank: 1,
+			visualSimilarity: 0.99,
+			stableKey: 'visual'
+		};
+		expect(compareMultimodalRanked(lexical, visual, { visualChannelActive: true })).toBeLessThan(0);
 	});
 
 	it('lets measured strong visual evidence beat a misleading semantic-only candidate', () => {
