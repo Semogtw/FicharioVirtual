@@ -52,13 +52,24 @@
 		}
 	}
 
-	async function refresh(documentId = page.params.id, requestedPageNumber = selectedPageNumber) {
+	async function refresh(
+		documentId: string | undefined = page.params.id,
+		requestedPageNumber = selectedPageNumber
+	) {
 		const version = refreshRequests.next();
 		pageRequests.next();
 		loading = true;
 		pageLoading = false;
 		selectedPage = null;
 		error = null;
+		if (!documentId) {
+			if (refreshRequests.isCurrent(version)) {
+				detail = null;
+				error = 'Não foi possível abrir este documento.';
+				loading = false;
+			}
+			return;
+		}
 		try {
 			const loaded = await loadDocumentDetail(documentId);
 			if (!refreshRequests.isCurrent(version)) return;
