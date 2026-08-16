@@ -7,7 +7,6 @@ import {
 	SEMANTIC_SEARCH_MIN_SIMILARITY,
 	SEMANTIC_VISUAL_SEARCH_MIN_SIMILARITY
 } from '../_shared/semantic-config.ts';
-import { semanticIndexStats } from '../_shared/semantic-index-stats.ts';
 import { getSemanticQueryEmbedding } from '../_shared/semantic-query-cache.ts';
 import {
 	compareMultimodalRanked,
@@ -190,7 +189,7 @@ async function lexicalRows(
 	limit: number,
 	offset: number
 ): Promise<LexicalRow[]> {
-	const { data, error } = await supabase.rpc('search_pages', {
+	const { data, error } = await supabase.rpc('search_documents', {
 		search_query: input.query,
 		notebook_filter: input.notebookId,
 		result_limit: limit,
@@ -276,15 +275,23 @@ function mergeCandidates(
 			stableKey: candidateKey({ documentId: row.document_id, pageNumber: row.page_number })
 		};
 		scoreCandidate(candidate);
-		merged.set(row.page_id, candidate);
+		merged.set(row.document_id, candidate);
 	});
 
 	semantic.forEach((row, index) => {
 		if (row.semantic_similarity < SEMANTIC_SEARCH_MIN_SIMILARITY) return;
-		const current = merged.get(row.page_id);
+		const current = merged.get(row.document_id);
 		if (current) {
 			current.semanticPosition = index + 1;
 			current.semanticSimilarity = row.semantic_similarity;
+			if (current.lexicalPosition === null) {
+				current.pageId = row.page_id;
+				current.pageNumber = row.page_number;
+				current.stableKey = candidateKey({
+					documentId: row.document_id,
+					pageNumber: row.page_number
+				});
+			}
 			if (row.semantic_similarity >= 0.62 && row.excerpt.trim()) {
 				current.excerpt = row.excerpt.slice(0, 2000);
 			}
@@ -310,7 +317,7 @@ function mergeCandidates(
 			stableKey: candidateKey({ documentId: row.document_id, pageNumber: row.page_number })
 		};
 		scoreCandidate(candidate);
-		merged.set(row.page_id, candidate);
+		merged.set(row.document_id, candidate);
 	});
 
 	const visualChannelActive = visual.some(
@@ -319,10 +326,18 @@ function mergeCandidates(
 
 	visual.forEach((row, index) => {
 		if (row.visual_similarity < SEMANTIC_VISUAL_SEARCH_MIN_SIMILARITY) return;
-		const current = merged.get(row.page_id);
+		const current = merged.get(row.document_id);
 		if (current) {
 			current.visualPosition = index + 1;
 			current.visualSimilarity = row.visual_similarity;
+			if (current.lexicalPosition === null && current.semanticPosition === null) {
+				current.pageId = row.page_id;
+				current.pageNumber = row.page_number;
+				current.stableKey = candidateKey({
+					documentId: row.document_id,
+					pageNumber: row.page_number
+				});
+			}
 			scoreCandidate(current);
 			return;
 		}
@@ -345,7 +360,7 @@ function mergeCandidates(
 			stableKey: candidateKey({ documentId: row.document_id, pageNumber: row.page_number })
 		};
 		scoreCandidate(candidate);
-		merged.set(row.page_id, candidate);
+		merged.set(row.document_id, candidate);
 	});
 
 	for (const candidate of merged.values()) scoreCandidate(candidate, visualChannelActive);
@@ -377,11 +392,13 @@ async function recordVisualSearchEvent(input: {
 	supabase: SupabaseClient;
 	visualMode: Exclude<VisualMode, 'off'>;
 	visual: readonly VisualRow[];
-	textualPageIds: ReadonlySet<string>;
+	textualDocumentIds: ReadonlySet<string>;
 	visualRpcFailed: boolean;
 	startedAt: number;
 }) {
-	const overlapCount = input.visual.filter((row) => input.textualPageIds.has(row.page_id)).length;
+	const overlapCount = input.visual.filter((row) =>
+		input.textualDocumentIds.has(row.document_id)
+	).length;
 	try {
 		await input.supabase.rpc('record_semantic_visual_event', {
 			event_operation: input.visualMode === 'active' ? 'search_visible' : 'search_shadow',
@@ -408,22 +425,19 @@ async function fallbackResponse(input: {
 	reason: string;
 	startedAt: number;
 	embeddingModel?: string | null;
-	index?: Awaited<ReturnType<typeof semanticIndexStats>> | null;
 }) {
-	const rows = await lexicalRows(
-		input.supabase,
-		input.parsed,
-		input.parsed.limit,
-		input.parsed.offset
-	);
+	const fetchLimit = Math.min(100, input.parsed.limit + 1);
+	const rows = await lexicalRows(input.supabase, input.parsed, fetchLimit, input.parsed.offset);
+	const hasMore = rows.length > input.parsed.limit;
+	const visibleRows = rows.slice(0, input.parsed.limit);
 	await recordSemanticRetrievalEvent(input.supabase, {
 		surface: 'global_search',
 		mode: 'fallback',
 		model: input.embeddingModel ?? null,
-		resultCount: rows.length,
-		lexicalOnlyCount: rows.length,
-		totalPages: input.index?.totalPages ?? null,
-		indexedPages: input.index?.indexedPages ?? null,
+		resultCount: visibleRows.length,
+		lexicalOnlyCount: visibleRows.length,
+		totalPages: null,
+		indexedPages: null,
 		durationMs: performance.now() - input.startedAt,
 		queryEmbeddingCacheHit: null,
 		fallbackReason: input.reason
@@ -432,9 +446,9 @@ async function fallbackResponse(input: {
 		mode: 'lexical',
 		reason: input.reason,
 		embeddingModel: input.embeddingModel ?? null,
-		index: input.index ?? null,
-		hasMore: rows.length === input.parsed.limit,
-		results: rows.map((row, position) => {
+		index: null,
+		hasMore,
+		results: visibleRows.map((row, position) => {
 			const candidate: SearchCandidate = {
 				pageId: row.page_id,
 				documentId: row.document_id,
@@ -532,7 +546,6 @@ Deno.serve(async (request) => {
 			});
 		} catch (error) {
 			if (error instanceof DOMException && error.name === 'AbortError') throw error;
-			const index = await semanticIndexStats(supabase, parsed.notebookId).catch(() => null);
 			return respond(
 				200,
 				await fallbackResponse({
@@ -543,38 +556,36 @@ Deno.serve(async (request) => {
 							? 'semantic_quota_or_rate_limit'
 							: 'semantic_provider_unavailable',
 					startedAt,
-					embeddingModel: SEMANTIC_EMBEDDING_MODEL,
-					index
+					embeddingModel: SEMANTIC_EMBEDDING_MODEL
 				})
 			);
 		}
 
 		const candidateLimit = Math.min(
 			MAX_HYBRID_WINDOW,
-			Math.max(parsed.offset + parsed.limit + 20, parsed.limit * 2)
+			Math.max(parsed.offset + parsed.limit + 12, parsed.limit * 2)
 		);
 		const visualMode = visualSearchMode();
 		const visualRequest =
 			visualMode === 'off'
 				? Promise.resolve<RpcResponse>({ data: [], error: null })
-				: supabase.rpc('search_pages_visual_semantic', {
+				: supabase.rpc('search_documents_visual_semantic', {
 						query_embedding: queryEmbedding.vectorText,
 						target_model: SEMANTIC_EMBEDDING_MODEL,
 						notebook_filter: parsed.notebookId,
-						result_limit: Math.min(50, candidateLimit)
+						result_limit: candidateLimit
 					});
 		const [lexical, semanticResponse, visualResponse] = await Promise.all([
 			lexicalRows(supabase, parsed, candidateLimit, 0),
-			supabase.rpc('search_pages_semantic', {
+			supabase.rpc('search_documents_semantic', {
 				query_embedding: queryEmbedding.vectorText,
 				target_model: SEMANTIC_EMBEDDING_MODEL,
 				notebook_filter: parsed.notebookId,
-				result_limit: Math.min(50, candidateLimit)
+				result_limit: candidateLimit
 			}),
 			visualRequest
 		]);
 		if (semanticResponse.error) {
-			const index = await semanticIndexStats(supabase, parsed.notebookId).catch(() => null);
 			return respond(
 				200,
 				await fallbackResponse({
@@ -582,8 +593,7 @@ Deno.serve(async (request) => {
 					parsed,
 					reason: 'semantic_rpc_unavailable',
 					startedAt,
-					embeddingModel: SEMANTIC_EMBEDDING_MODEL,
-					index
+					embeddingModel: SEMANTIC_EMBEDDING_MODEL
 				})
 			);
 		}
@@ -601,7 +611,7 @@ Deno.serve(async (request) => {
 				supabase,
 				visualMode,
 				visual,
-				textualPageIds: new Set(textualRanked.map((candidate) => candidate.pageId)),
+				textualDocumentIds: new Set(textualRanked.map((candidate) => candidate.documentId)),
 				visualRpcFailed: Boolean(visualResponse.error),
 				startedAt
 			});
@@ -613,7 +623,6 @@ Deno.serve(async (request) => {
 		const ranked = mergeCandidates(lexical, semantic, visualMode === 'active' ? visual : []);
 		const end = parsed.offset + parsed.limit;
 		const results = ranked.slice(parsed.offset, end).map(publicCandidate);
-		const index = await semanticIndexStats(supabase, parsed.notebookId).catch(() => null);
 		const lexicalOnlyCount = ranked.filter((item) => item.matchMode === 'lexical').length;
 		const semanticOnlyCount = ranked.filter((item) => item.matchMode === 'semantic').length;
 		const hybridCount = ranked.length - lexicalOnlyCount - semanticOnlyCount;
@@ -625,8 +634,8 @@ Deno.serve(async (request) => {
 			lexicalOnlyCount,
 			semanticOnlyCount,
 			hybridCount,
-			totalPages: index?.totalPages ?? null,
-			indexedPages: index?.indexedPages ?? null,
+			totalPages: null,
+			indexedPages: null,
 			durationMs: performance.now() - startedAt,
 			queryEmbeddingCacheHit: queryEmbedding.cacheHit
 		});
@@ -635,9 +644,13 @@ Deno.serve(async (request) => {
 			mode: visualMode === 'active' ? 'multimodal' : 'hybrid',
 			reason: null,
 			embeddingModel: SEMANTIC_EMBEDDING_MODEL,
-			index,
+			index: null,
 			queryEmbeddingCacheHit: queryEmbedding.cacheHit,
-			hasMore: ranked.length > end || lexical.length === candidateLimit,
+			hasMore:
+				ranked.length > end ||
+				lexical.length === candidateLimit ||
+				semantic.length === candidateLimit ||
+				visual.length === candidateLimit,
 			results
 		});
 	} catch (error) {
