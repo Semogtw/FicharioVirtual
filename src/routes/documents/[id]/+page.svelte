@@ -6,13 +6,21 @@
 	import DocumentMediaViewer from '$lib/components/DocumentMediaViewer.svelte';
 	import type { PageDetail } from '$lib/domain/page';
 	import { deleteDocument } from '$lib/services/documents';
-	import { loadDocumentDetail, type DocumentDetail } from '$lib/services/document-detail';
+	import {
+		invalidateDocumentDetail,
+		loadDocumentDetail,
+		loadDocumentPage,
+		prefetchDocumentPages,
+		type DocumentDetail
+	} from '$lib/services/document-detail';
 	import { resumeDocumentOcr } from '$lib/services/ocr-resume';
 	import { RequestVersion } from '$lib/services/request-version';
 
 	let detail = $state<DocumentDetail | null>(null);
+	let selectedPage = $state<PageDetail | null>(null);
 	let selectedPageNumber = $state(1);
 	let loading = $state(true);
+	let pageLoading = $state(false);
 	let retrying = $state(false);
 	let deleting = $state(false);
 	let deleted = $state(false);
@@ -20,16 +28,36 @@
 	let error = $state<string | null>(null);
 	let highlightedQuery = $derived(page.url.searchParams.get('highlight')?.slice(0, 200) ?? '');
 	const refreshRequests = new RequestVersion();
+	const pageRequests = new RequestVersion();
 
-	let selectedPage = $derived(
-		detail?.pages.find((candidate) => candidate.pageNumber === selectedPageNumber) ??
-			detail?.pages[0] ??
-			null
-	);
+	async function loadSelectedPage(documentId: string, pageNumber: number) {
+		const version = pageRequests.next();
+		pageLoading = true;
+		try {
+			const loaded = await loadDocumentPage(documentId, pageNumber);
+			if (!pageRequests.isCurrent(version) || page.params.id !== documentId) return;
+			selectedPage = loaded;
+			const neighborNumbers = [pageNumber - 1, pageNumber + 1].filter(
+				(candidate) => detail?.pages.some((item) => item.pageNumber === candidate) === true
+			);
+			if (neighborNumbers.length > 0) {
+				void prefetchDocumentPages(documentId, neighborNumbers);
+			}
+		} catch (caught) {
+			if (!pageRequests.isCurrent(version) || page.params.id !== documentId) return;
+			selectedPage = null;
+			error = caught instanceof Error ? caught.message : 'Não foi possível abrir esta página.';
+		} finally {
+			if (pageRequests.isCurrent(version) && page.params.id === documentId) pageLoading = false;
+		}
+	}
 
 	async function refresh(documentId = page.params.id, requestedPageNumber = selectedPageNumber) {
 		const version = refreshRequests.next();
+		pageRequests.next();
 		loading = true;
+		pageLoading = false;
+		selectedPage = null;
 		error = null;
 		try {
 			const loaded = await loadDocumentDetail(documentId);
@@ -40,6 +68,7 @@
 			)
 				? requestedPageNumber
 				: (loaded.pages[0]?.pageNumber ?? 1);
+			if (loaded.pages.length > 0) void loadSelectedPage(documentId, selectedPageNumber);
 		} catch (caught) {
 			if (!refreshRequests.isCurrent(version)) return;
 			detail = null;
@@ -50,17 +79,30 @@
 	}
 
 	function pageSaved(saved: PageDetail) {
+		selectedPage = saved;
 		if (!detail) return;
 		detail = Object.freeze({
 			...detail,
 			pages: Object.freeze(
-				detail.pages.map((candidate) => (candidate.id === saved.id ? saved : candidate))
+				detail.pages.map((candidate) =>
+					candidate.id === saved.id
+						? Object.freeze({
+								...candidate,
+								status: saved.status,
+								updatedAt: saved.updatedAt
+							})
+						: candidate
+				)
 			)
 		});
 	}
 
 	function selectPage(pageNumber: number) {
+		if (!detail || pageNumber === selectedPageNumber) return;
 		selectedPageNumber = pageNumber;
+		selectedPage = null;
+		error = null;
+		void loadSelectedPage(detail.id, pageNumber);
 		requestAnimationFrame(() => {
 			document
 				.getElementById(`document-page-${pageNumber}`)
@@ -76,6 +118,7 @@
 		try {
 			await resumeDocumentOcr(documentId);
 			if (page.params.id !== documentId) return;
+			invalidateDocumentDetail(documentId);
 			await refresh(documentId, selectedPageNumber);
 		} catch {
 			if (page.params.id === documentId) {
@@ -102,9 +145,11 @@
 			return;
 		}
 		if (page.params.id !== documentId) return;
+		invalidateDocumentDetail(documentId);
 		confirmDelete = false;
 		deleted = true;
 		detail = null;
+		selectedPage = null;
 		try {
 			await goto('/library/');
 		} catch {
@@ -120,6 +165,7 @@
 		const requestedPage = Number(page.url.searchParams.get('page') ?? '1');
 		const pageNumber = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
 		detail = null;
+		selectedPage = null;
 		selectedPageNumber = pageNumber;
 		retrying = false;
 		deleting = false;
@@ -194,8 +240,8 @@
 				{#each detail.pages as item}
 					<button
 						type="button"
-						class:active={item.pageNumber === selectedPage?.pageNumber}
-						aria-pressed={item.pageNumber === selectedPage?.pageNumber}
+						class:active={item.pageNumber === selectedPageNumber}
+						aria-pressed={item.pageNumber === selectedPageNumber}
 						onclick={() => selectPage(item.pageNumber)}
 					>
 						<span>{item.pageNumber}</span>
@@ -205,7 +251,7 @@
 			</nav>
 		{/if}
 
-		{#if selectedPage}
+		{#if detail.pages.length > 0}
 			<section class="reader" aria-label="Documento completo">
 				<div class="original-panel">
 					<div class="panel-heading">
@@ -219,13 +265,22 @@
 						{/if}
 					</div>
 					<div class="original-body">
-						<DocumentMediaViewer {detail} pages={detail.pages} query={highlightedQuery} />
+						<DocumentMediaViewer
+							{detail}
+							pages={detail.pages}
+							query={highlightedQuery}
+							focusPageNumber={selectedPageNumber}
+						/>
 					</div>
 				</div>
 
-				{#key selectedPage.id}
-					<CorrectionEditor page={selectedPage} onSaved={pageSaved} />
-				{/key}
+				{#if pageLoading}
+					<p class="page-detail-loading" role="status">Carregando esta página…</p>
+				{:else if selectedPage}
+					{#key selectedPage.id}
+						<CorrectionEditor page={selectedPage} onSaved={pageSaved} />
+					{/key}
+				{/if}
 			</section>
 		{/if}
 	{/if}
@@ -389,6 +444,18 @@
 	.original-body {
 		position: relative;
 		min-height: 28rem;
+	}
+
+	.page-detail-loading {
+		min-height: 12rem;
+		display: grid;
+		place-items: center;
+		margin: 0;
+		padding: 1rem;
+		border: 1px solid var(--line);
+		border-radius: var(--radius-md);
+		background: var(--surface);
+		color: var(--muted);
 	}
 
 	.loading {
