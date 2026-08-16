@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { onDestroy } from 'svelte';
 	import Button from '$lib/components/Button.svelte';
+	import { AuthServiceError } from '$lib/services/auth';
 	import { RequestVersion } from '$lib/services/request-version';
 	import { authenticate, sessionState } from '$lib/stores/session.svelte';
 
@@ -9,6 +10,7 @@
 	let password = $state('');
 	let submitting = $state(false);
 	let authenticated = $state(false);
+	let authenticationError = $state<string | null>(null);
 	let navigationError = $state<string | null>(null);
 	const authenticationRequests = new RequestVersion();
 
@@ -17,15 +19,19 @@
 		if (submitting || authenticated) return;
 		const version = authenticationRequests.next();
 		submitting = true;
+		authenticationError = null;
 		navigationError = null;
 		try {
 			try {
 				await authenticate(email, password);
 				if (!authenticationRequests.isCurrent(version)) return;
 				authenticated = true;
-			} catch {
+			} catch (error) {
 				if (!authenticationRequests.isCurrent(version)) return;
-				// The store exposes a safe, user-facing authentication error.
+				authenticationError =
+					error instanceof AuthServiceError
+						? error.message
+						: (sessionState.error ?? 'Não foi possível confirmar o acesso agora. Tente novamente.');
 				return;
 			}
 			try {
@@ -93,8 +99,8 @@
 					/>
 				</div>
 
-				{#if sessionState.error}
-					<p class="error" role="alert">{sessionState.error}</p>
+				{#if authenticationError ?? sessionState.error}
+					<p class="error" role="alert">{authenticationError ?? sessionState.error}</p>
 				{/if}
 
 				<Button
