@@ -18,7 +18,9 @@ describe('login completion', () => {
 	it('keeps a safe authentication error visible when authorization signs the session out', () => {
 		expect(source).toContain('let authenticationError = $state<string | null>(null);');
 		expect(source).toContain('error instanceof AuthServiceError');
-		expect(source).toContain("sessionState.error ?? 'Não foi possível confirmar o acesso agora. Tente novamente.'");
+		expect(source).toContain(
+			"sessionState.error ?? 'Não foi possível confirmar o acesso agora. Tente novamente.'"
+		);
 		expect(source).toContain('{authenticationError ?? sessionState.error}');
 	});
 });
