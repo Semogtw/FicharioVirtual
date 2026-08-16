@@ -119,6 +119,24 @@ export type DatabaseRpcExtensions = {
 					updated_at: string;
 				}>;
 			};
+			search_documents: {
+				Args: {
+					search_query: string;
+					notebook_filter?: string | null;
+					result_limit?: number;
+					result_offset?: number;
+				};
+				Returns: Array<{
+					page_id: string;
+					document_id: string;
+					document_title: string;
+					notebook_id: string | null;
+					notebook_name: string | null;
+					page_number: number;
+					excerpt: string;
+					rank: number;
+				}>;
+			};
 		};
 		Enums: Record<string, never>;
 	};
