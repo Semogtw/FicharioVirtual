@@ -306,12 +306,7 @@
 				return;
 			}
 			if (page.pageNumber === 1 && detail.originalReference.provider === 'supabase') {
-				publishRemotePage(
-					page,
-					detail.originalReference.url,
-					expectedGeneration,
-					expectedRevision
-				);
+				publishRemotePage(page, detail.originalReference.url, expectedGeneration, expectedRevision);
 				return;
 			}
 			if (page.pageNumber === 1 && detail.originalReference.provider === 'google_drive') {
@@ -459,9 +454,13 @@
 	});
 
 	$effect(() => {
-		focusPageNumber;
-		pages;
-		untrack(requestFocusWindow);
+		const focus = focusPageNumber;
+		untrack(() => {
+			if (focus === undefined) return;
+			requestPage(focus);
+			requestPage(focus - 1);
+			requestPage(focus + 1);
+		});
 	});
 
 	onDestroy(() => {
