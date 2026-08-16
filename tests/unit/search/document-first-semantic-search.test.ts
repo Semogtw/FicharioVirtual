@@ -13,7 +13,7 @@ const searchMigration = readFileSync(
 const coverageEdge = readFileSync('supabase/functions/semantic-coverage/index.ts', 'utf8');
 
 describe('document-first semantic search UX', () => {
-	it('deduplicates into one result per document in the backend before pagination', () => {
+	it('deduplicates in the backend and keeps a defensive client boundary before keyed rendering', () => {
 		expect(searchMigration).toContain('create or replace function public.search_documents(');
 		expect(searchMigration).toContain('partition by ranked_pages.document_id');
 		expect(searchMigration).toContain(
@@ -25,7 +25,9 @@ describe('document-first semantic search UX', () => {
 		expect(searchEdge).toContain("supabase.rpc('search_documents'");
 		expect(searchEdge).toContain("supabase.rpc('search_documents_semantic'");
 		expect(searchEdge).toContain("supabase.rpc('search_documents_visual_semantic'");
-		expect(searchPage).not.toContain('appendUniqueDocumentResults');
+		expect(searchPage).toContain('appendUniqueDocumentResults');
+		expect(searchPage).toContain('offset: requestOffset');
+		expect(searchPage).toContain('nextOffset = requestOffset + response.results.length');
 		expect(searchPage).not.toContain('maxRawBatchesPerPage');
 		expect(searchPage).not.toContain('rawBatchSize');
 		expect(searchPage).toContain('{#each results as result (result.documentId)}');
