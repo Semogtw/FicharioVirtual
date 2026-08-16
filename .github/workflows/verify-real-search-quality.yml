@@ -1,0 +1,116 @@
+name: Verify real search quality
+
+on:
+  workflow_run:
+    workflows: [Deploy validated Fichário artifact to Cloudflare Pages]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: staging-contract-verification
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    environment: staging
+    env:
+      TARGET_URL: https://fichario-virtual.pages.dev
+      TARGET_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      STAGING_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+      STAGING_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
+      STAGING_AUTHORIZED_EMAIL: ${{ secrets.STAGING_AUTHORIZED_EMAIL }}
+      STAGING_AUTHORIZED_PASSWORD: ${{ secrets.STAGING_AUTHORIZED_PASSWORD }}
+      SEARCH_QUALITY_REPORT_PATH: /tmp/search-quality-report.json
+      SEARCH_QUALITY_EVIDENCE_DIR: /tmp/search-quality-evidence
+      PLAYWRIGHT_BROWSERS_PATH: /tmp/fichario-search-quality-browsers
+
+    steps:
+      - name: Validate immutable target
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test -n "$STAGING_SUPABASE_URL"
+          test -n "$STAGING_SUPABASE_PUBLISHABLE_KEY"
+          test -n "$STAGING_AUTHORIZED_EMAIL"
+          test -n "$STAGING_AUTHORIZED_PASSWORD"
+
+      - name: Require successful Supabase deployment for the same SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 40); do
+            state="$(
+              gh api "/repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$TARGET_SHA&per_page=100" \
+                --jq '[.workflow_runs[] | select(.name == "Deploy Supabase staging")][0] | if . == null then "missing" else (.status + ":" + (.conclusion // "pending")) end'
+            )"
+            case "$state" in
+              completed:success)
+                echo "Aligned Supabase deployment is green for $TARGET_SHA"
+                exit 0
+                ;;
+              completed:failure|completed:cancelled|completed:timed_out|completed:action_required)
+                echo "Supabase deployment is not green for $TARGET_SHA: $state" >&2
+                exit 1
+                ;;
+            esac
+            sleep 15
+          done
+          echo "No successful Supabase deployment materialized for $TARGET_SHA" >&2
+          exit 1
+
+      - name: Fetch exact-SHA search quality verifier
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/fichario-search-quality
+          curl --fail --silent --show-error --location \
+            "https://raw.githubusercontent.com/Semogtw/FicharioVirtual/${TARGET_SHA}/tools/checks/check-real-search-quality.mjs" \
+            --output /tmp/fichario-search-quality/check-real-search-quality.mjs
+          test -s /tmp/fichario-search-quality/check-real-search-quality.mjs
+          printf '%s\n' '{"private":true,"type":"module"}' > /tmp/fichario-search-quality/package.json
+          node --check /tmp/fichario-search-quality/check-real-search-quality.mjs
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22.16.0
+
+      - name: Install pinned verifier runtime
+        working-directory: /tmp/fichario-search-quality
+        run: >-
+          npm install --no-save --package-lock=false
+          playwright@1.62.1
+          @supabase/supabase-js@2.57.4
+          pdf-lib@1.17.1
+
+      - name: Install Chromium
+        working-directory: /tmp/fichario-search-quality
+        run: npx playwright install --with-deps chromium
+
+      - name: Exercise authenticated search quality
+        working-directory: /tmp/fichario-search-quality
+        run: node check-real-search-quality.mjs
+
+      - name: Upload search quality evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: real-search-quality-${{ env.TARGET_SHA }}
+          path: |
+            /tmp/search-quality-report.json
+            /tmp/search-quality-evidence/
+          if-no-files-found: error
+          compression-level: 6
+          retention-days: 7
