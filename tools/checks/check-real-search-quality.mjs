@@ -51,7 +51,9 @@ function stage(name, status, detail = null) {
 }
 
 function safeError(error) {
-	return error instanceof Error ? `${error.name}: ${error.message}`.slice(0, 900) : String(error).slice(0, 900);
+	return error instanceof Error
+		? `${error.name}: ${error.message}`.slice(0, 900)
+		: String(error).slice(0, 900);
 }
 
 async function persistReport() {
@@ -66,10 +68,14 @@ function trackServerResponse(response) {
 	const endpoint = `${url.origin}${url.pathname}`;
 	const status = response.status();
 	if (status >= 500) {
-		report.browser.serverErrors = report.browser.serverErrors.filter((value) => !value.endsWith(endpoint));
+		report.browser.serverErrors = report.browser.serverErrors.filter(
+			(value) => !value.endsWith(endpoint)
+		);
 		report.browser.serverErrors.push(`${status} ${endpoint}`);
 	} else if (status >= 200 && status < 300) {
-		report.browser.serverErrors = report.browser.serverErrors.filter((value) => !value.endsWith(endpoint));
+		report.browser.serverErrors = report.browser.serverErrors.filter(
+			(value) => !value.endsWith(endpoint)
+		);
 	}
 }
 
@@ -202,10 +208,15 @@ let context = null;
 
 try {
 	stage('backend-auth', 'running');
-	const { data: signIn, error: signInError } = await client.auth.signInWithPassword({ email, password });
-	if (signInError || !signIn.session) throw new Error('Protected staging credentials could not authenticate');
+	const { data: signIn, error: signInError } = await client.auth.signInWithPassword({
+		email,
+		password
+	});
+	if (signInError || !signIn.session)
+		throw new Error('Protected staging credentials could not authenticate');
 	const allowed = await client.rpc('is_authorized_user');
-	if (allowed.error || allowed.data !== true) throw new Error('Protected staging account is not authorized');
+	if (allowed.error || allowed.data !== true)
+		throw new Error('Protected staging account is not authorized');
 	stage('backend-auth', 'pass');
 
 	browser = await chromium.launch({ headless: true });
@@ -218,7 +229,10 @@ try {
 	page.on('response', trackServerResponse);
 
 	stage('browser-login', 'running');
-	await page.goto(new URL('/login/', target).href, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+	await page.goto(new URL('/login/', target).href, {
+		waitUntil: 'domcontentloaded',
+		timeout: 45_000
+	});
 	await page.locator('#email').fill(email);
 	await page.locator('#password').fill(password);
 	await page.getByRole('button', { name: 'Entrar', exact: true }).click();
@@ -226,12 +240,17 @@ try {
 	stage('browser-login', 'pass');
 
 	stage('real-pdf-import', 'running');
-	await page.goto(new URL('/import/', target).href, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+	await page.goto(new URL('/import/', target).href, {
+		waitUntil: 'domcontentloaded',
+		timeout: 45_000
+	});
 	await page
 		.locator('input[type="file"][accept*="application/pdf"]')
 		.first()
 		.setInputFiles({ name: filename, mimeType: 'application/pdf', buffer: await makePdf() });
-	await page.getByText(/arquivo\(s\) adicionados\./i).waitFor({ state: 'visible', timeout: 20_000 });
+	await page
+		.getByText(/arquivo\(s\) adicionados\./i)
+		.waitFor({ state: 'visible', timeout: 20_000 });
 	const queueState = await waitForQueue(page);
 	const document = await waitForRow(client, 'documents', { original_filename: filename });
 	report.created.documents.push(document.id);
@@ -241,7 +260,11 @@ try {
 	stage('semantic-index', 'running');
 	const chunks = await waitForSemanticIndex(client, document.id);
 	report.observed.semanticChunks = chunks.length;
-	stage('semantic-index', 'pass', `${chunks.length} chunk(s) · ${chunks[0]?.model ?? 'unknown model'}`);
+	stage(
+		'semantic-index',
+		'pass',
+		`${chunks.length} chunk(s) · ${chunks[0]?.model ?? 'unknown model'}`
+	);
 
 	stage('exact-search', 'running');
 	const exactResult = await searchResult(page, exactToken, document.id);
@@ -251,12 +274,17 @@ try {
 
 	stage('original-highlight', 'running');
 	await exactResult.click();
-	await page.waitForURL((url) => url.pathname.includes(`/documents/${document.id}/`), { timeout: 30_000 });
-	await page.getByText(/Aberto a partir da busca por/i).waitFor({ state: 'visible', timeout: 30_000 });
+	await page.waitForURL((url) => url.pathname.includes(`/documents/${document.id}/`), {
+		timeout: 30_000
+	});
+	await page
+		.getByText(/Aberto a partir da busca por/i)
+		.waitFor({ state: 'visible', timeout: 30_000 });
 	const marks = page.locator('.geometry-layer mark');
 	await marks.first().waitFor({ state: 'visible', timeout: 60_000 });
 	report.observed.highlightMarks = await marks.count();
-	if (report.observed.highlightMarks < 1) throw new Error('Search opened the original without a visible geometric mark');
+	if (report.observed.highlightMarks < 1)
+		throw new Error('Search opened the original without a visible geometric mark');
 	await page.screenshot({ path: `${evidenceDir}/02-original-highlight.png`, fullPage: true });
 	await assertNoVisibleFailure(page, 'original highlight');
 	stage('original-highlight', 'pass', `${report.observed.highlightMarks} visible mark(s)`);
@@ -283,7 +311,10 @@ try {
 	report.status = 'fail';
 	report.error = safeError(error);
 	stage('failure', 'fail', report.error);
-	await context?.pages()[0]?.screenshot({ path: `${evidenceDir}/failure.png`, fullPage: true }).catch(() => undefined);
+	await context
+		?.pages()[0]
+		?.screenshot({ path: `${evidenceDir}/failure.png`, fullPage: true })
+		.catch(() => undefined);
 	process.exitCode = 1;
 } finally {
 	try {
