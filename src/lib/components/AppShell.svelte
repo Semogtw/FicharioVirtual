@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import type { Snippet } from 'svelte';
 	import DataProcessingNotice from './DataProcessingNotice.svelte';
+	import DriveUploadGate from './DriveUploadGate.svelte';
 	import ImportQueueTray from './ImportQueueTray.svelte';
 	import MobileNavigation from './MobileNavigation.svelte';
 	import NavigationIcon from './NavigationIcon.svelte';
@@ -98,6 +99,7 @@
 	</div>
 
 	<MobileNavigation />
+	<DriveUploadGate />
 </div>
 
 <style>
@@ -193,6 +195,7 @@
 		.profile-link:active {
 			box-shadow: none;
 			transform: translateY(1px) scale(0.94);
+			transition-duration: var(--motion-instant);
 		}
 	}
 
