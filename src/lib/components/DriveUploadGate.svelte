@@ -20,7 +20,12 @@
 	}
 </script>
 
-<dialog bind:this={dialog} class="drive-upload-dialog" oncancel={cancel} aria-labelledby="drive-upload-title">
+<dialog
+	bind:this={dialog}
+	class="drive-upload-dialog"
+	oncancel={cancel}
+	aria-labelledby="drive-upload-title"
+>
 	<div class="dialog-content">
 		<div class="drive-mark" aria-hidden="true">G</div>
 		<div class="copy">
@@ -38,16 +43,14 @@
 
 		<div class="actions">
 			<Button
-				label={
-					driveUploadGate.connecting
-						? 'Aguardando login…'
-						: driveUploadGate.checking
-							? 'Verificando…'
-							: 'Conectar Google Drive'
-				}
-				disabled={
-					!driveUploadGate.configured || driveUploadGate.connecting || driveUploadGate.checking
-				}
+				label={driveUploadGate.connecting
+					? 'Aguardando login…'
+					: driveUploadGate.checking
+						? 'Verificando…'
+						: 'Conectar Google Drive'}
+				disabled={!driveUploadGate.configured ||
+					driveUploadGate.connecting ||
+					driveUploadGate.checking}
 				onclick={() => void connectDriveForUpload()}
 			/>
 			<button class="secondary" type="button" onclick={cancel}>Cancelar envio</button>
