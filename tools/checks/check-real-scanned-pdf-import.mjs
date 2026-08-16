@@ -222,9 +222,7 @@ async function searchFor(page, text, expectedDocumentId) {
 	await page.getByRole('button', { name: 'Pesquisar', exact: true }).click();
 	const results = page.locator('section.results');
 	await results.waitFor({ state: 'visible', timeout: 45_000 });
-	const expectedResult = results
-		.locator(`a[href^="/documents/${expectedDocumentId}/"]`)
-		.first();
+	const expectedResult = results.locator(`a[href^="/documents/${expectedDocumentId}/"]`).first();
 	await expectedResult.waitFor({ state: 'visible', timeout: 45_000 });
 }
 
