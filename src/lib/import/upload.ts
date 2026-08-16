@@ -1,3 +1,4 @@
+import { requireDriveForUpload } from '$lib/stores/drive-upload-gate.svelte';
 import type { PreparedImage } from './image-types';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -96,7 +97,7 @@ export function parseImageImportResult(
 		pageId !== expected.pageId ||
 		typeof ocrJobId !== 'string' ||
 		!UUID.test(ocrJobId) ||
-		ocrJobId !== expected.ocrJobId
+		o crJobId !== expected.ocrJobId
 	) {
 		invalidImageImportResult();
 	}
@@ -104,6 +105,7 @@ export function parseImageImportResult(
 }
 
 export async function uploadPreparedImage(input: UploadPreparedImageInput): Promise<UploadedPage> {
+	await requireDriveForUpload();
 	const { uploadPreparedImageToDrive } = await import('./drive-upload');
 	return uploadPreparedImageToDrive(input);
 }
