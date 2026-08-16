@@ -317,21 +317,35 @@ try {
 		.catch(() => undefined);
 	process.exitCode = 1;
 } finally {
-	try {
-		const { data } = await client.from('documents').select('id').eq('original_filename', filename);
-		const ids = [...new Set([...(data ?? []).map((row) => row.id), ...report.created.documents])];
+	let cleanupError = null;
+	const { data: cleanupRows, error: cleanupDiscoveryError } = await client
+		.from('documents')
+		.select('id')
+		.eq('original_filename', filename);
+	if (cleanupDiscoveryError) cleanupError = cleanupDiscoveryError;
+	const ids = [
+		...new Set([...(cleanupRows ?? []).map((row) => row.id), ...report.created.documents])
+	];
+	if (!cleanupError) {
 		for (const documentId of ids) {
-			const { error } = await client.functions.invoke('delete-document', { body: { documentId } });
-			if (error) throw error;
+			const { error: deleteError } = await client.functions.invoke('delete-document', {
+				body: { documentId }
+			});
+			if (deleteError) {
+				cleanupError = deleteError;
+				break;
+			}
 		}
-		report.cleanup.documents = 'pass';
-	} catch (error) {
-		report.cleanup.documents = `fail: ${safeError(error)}`;
+	}
+	if (cleanupError) {
+		report.cleanup.documents = `fail: ${safeError(cleanupError)}`;
 		if (report.status === 'pass') {
 			report.status = 'fail';
 			report.error = 'Synthetic search-quality cleanup failed';
 			process.exitCode = 1;
 		}
+	} else {
+		report.cleanup.documents = 'pass';
 	}
 	await client.auth.signOut({ scope: 'local' }).catch(() => undefined);
 	await context?.close().catch(() => undefined);
