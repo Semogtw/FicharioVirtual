@@ -202,8 +202,22 @@ function signedUrl(value: string) {
 	return value;
 }
 
-function cacheKey(documentId: string, pageNumber: number) {
-	return `${documentId}:${pageNumber}`;
+function detailCacheKey(userId: string, documentId: string) {
+	return `${userId}:${documentId}`;
+}
+
+function pageCacheKey(userId: string, documentId: string, pageNumber: number) {
+	return `${userId}:${documentId}:${pageNumber}`;
+}
+
+async function currentCacheUserId(client: SupabaseClient<Database>) {
+	try {
+		const { data, error } = await client.auth.getSession();
+		const userId = data.session?.user.id;
+		return !error && typeof userId === 'string' && UUID.test(userId) ? userId : null;
+	} catch {
+		return null;
+	}
 }
 
 function getCached<T>(cache: Map<string, TimedCacheEntry<T>>, key: string) {
@@ -443,13 +457,17 @@ class SupabaseDocumentGateway implements DocumentDetailGateway {
 
 export function invalidateDocumentDetail(documentId: string) {
 	if (!UUID.test(documentId)) return;
-	detailCache.delete(documentId);
-	detailInflight.delete(documentId);
+	for (const key of detailCache.keys()) {
+		if (key.endsWith(`:${documentId}`)) detailCache.delete(key);
+	}
+	for (const key of detailInflight.keys()) {
+		if (key.endsWith(`:${documentId}`)) detailInflight.delete(key);
+	}
 	for (const key of pageCache.keys()) {
-		if (key.startsWith(`${documentId}:`)) pageCache.delete(key);
+		if (key.includes(`:${documentId}:`)) pageCache.delete(key);
 	}
 	for (const key of pageInflight.keys()) {
-		if (key.startsWith(`${documentId}:`)) pageInflight.delete(key);
+		if (key.includes(`:${documentId}:`)) pageInflight.delete(key);
 	}
 }
 
@@ -457,41 +475,39 @@ function invalidatePageById(pageId: string) {
 	for (const [key, entry] of pageCache.entries()) {
 		if (entry.value.id === pageId) pageCache.delete(key);
 	}
-	for (const [documentId, entry] of detailCache.entries()) {
-		if (entry.value.pages.some((page) => page.id === pageId)) detailCache.delete(documentId);
+	for (const [key, entry] of detailCache.entries()) {
+		if (entry.value.pages.some((page) => page.id === pageId)) detailCache.delete(key);
 	}
 }
 
-export function loadDocumentDetail(
+export async function loadDocumentDetail(
 	documentId: string | undefined,
 	client?: SupabaseClient<Database>
 ): Promise<DocumentDetail> {
 	if (!documentId) throw new TypeError('Invalid document identifier');
 	const validatedDocumentId = validId(documentId, 'document');
-	const gateway = new SupabaseDocumentGateway(client ?? getSupabaseClient());
+	const resolvedClient = client ?? getSupabaseClient();
+	const gateway = new SupabaseDocumentGateway(resolvedClient);
 	if (client) return loadDocumentDetailWithGateway(validatedDocumentId, gateway);
 
-	const cached = getCached(detailCache, validatedDocumentId);
-	if (cached) return Promise.resolve(cached);
-	const existing = detailInflight.get(validatedDocumentId);
+	const userId = await currentCacheUserId(resolvedClient);
+	if (!userId) return loadDocumentDetailWithGateway(validatedDocumentId, gateway);
+	const key = detailCacheKey(userId, validatedDocumentId);
+	const cached = getCached(detailCache, key);
+	if (cached) return cached;
+	const existing = detailInflight.get(key);
 	if (existing) return existing;
 	const request = loadDocumentDetailWithGateway(validatedDocumentId, gateway)
 		.then((detail) => {
-			putCached(
-				detailCache,
-				validatedDocumentId,
-				detail,
-				DETAIL_CACHE_TTL_MS,
-				DETAIL_CACHE_MAX_ENTRIES
-			);
+			putCached(detailCache, key, detail, DETAIL_CACHE_TTL_MS, DETAIL_CACHE_MAX_ENTRIES);
 			return detail;
 		})
-		.finally(() => detailInflight.delete(validatedDocumentId));
-	detailInflight.set(validatedDocumentId, request);
+		.finally(() => detailInflight.delete(key));
+	detailInflight.set(key, request);
 	return request;
 }
 
-export function loadDocumentPage(
+export async function loadDocumentPage(
 	documentId: string | undefined,
 	pageNumber: number,
 	client?: SupabaseClient<Database>
@@ -499,12 +515,15 @@ export function loadDocumentPage(
 	if (!documentId) throw new TypeError('Invalid document identifier');
 	const validatedDocumentId = validId(documentId, 'document');
 	const validatedPageNumber = validPageNumber(pageNumber);
-	const gateway = new SupabaseDocumentGateway(client ?? getSupabaseClient());
+	const resolvedClient = client ?? getSupabaseClient();
+	const gateway = new SupabaseDocumentGateway(resolvedClient);
 	if (client) return loadDocumentPageWithGateway(validatedDocumentId, validatedPageNumber, gateway);
 
-	const key = cacheKey(validatedDocumentId, validatedPageNumber);
+	const userId = await currentCacheUserId(resolvedClient);
+	if (!userId) return loadDocumentPageWithGateway(validatedDocumentId, validatedPageNumber, gateway);
+	const key = pageCacheKey(userId, validatedDocumentId, validatedPageNumber);
 	const cached = getCached(pageCache, key);
-	if (cached) return Promise.resolve(cached);
+	if (cached) return cached;
 	const existing = pageInflight.get(key);
 	if (existing) return existing;
 	const request = loadDocumentPageWithGateway(validatedDocumentId, validatedPageNumber, gateway)
