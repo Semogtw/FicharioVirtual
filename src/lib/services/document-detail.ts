@@ -520,7 +520,8 @@ export async function loadDocumentPage(
 	if (client) return loadDocumentPageWithGateway(validatedDocumentId, validatedPageNumber, gateway);
 
 	const userId = await currentCacheUserId(resolvedClient);
-	if (!userId) return loadDocumentPageWithGateway(validatedDocumentId, validatedPageNumber, gateway);
+	if (!userId)
+		return loadDocumentPageWithGateway(validatedDocumentId, validatedPageNumber, gateway);
 	const key = pageCacheKey(userId, validatedDocumentId, validatedPageNumber);
 	const cached = getCached(pageCache, key);
 	if (cached) return cached;
