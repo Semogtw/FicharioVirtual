@@ -194,13 +194,21 @@ async function lexicalFallback(
 	});
 }
 
-function searchCacheKey(input: {
-	normalized: string;
-	notebookId: string | null;
-	limit: number;
-	offset: number;
-}) {
-	return JSON.stringify([input.normalized, input.notebookId, input.limit, input.offset]);
+function searchCacheKey(
+	userId: string,
+	input: { normalized: string; notebookId: string | null; limit: number; offset: number }
+) {
+	return JSON.stringify([userId, input.normalized, input.notebookId, input.limit, input.offset]);
+}
+
+async function currentCacheUserId() {
+	try {
+		const { data, error } = await getSupabaseClient().auth.getSession();
+		const userId = data.session?.user.id;
+		return !error && typeof userId === 'string' && UUID.test(userId) ? userId : null;
+	} catch {
+		return null;
+	}
 }
 
 function cachedSearch(key: string) {
@@ -261,8 +269,10 @@ export async function searchPagesHybrid(
 	if (options.signal?.aborted) throw new DOMException('Search cancelled', 'AbortError');
 
 	const useCache = client === undefined;
-	const cacheKey = searchCacheKey(validated);
-	if (useCache) {
+	const userId = useCache ? await currentCacheUserId() : null;
+	if (options.signal?.aborted) throw new DOMException('Search cancelled', 'AbortError');
+	const cacheKey = userId ? searchCacheKey(userId, validated) : null;
+	if (cacheKey) {
 		const cached = cachedSearch(cacheKey);
 		if (cached) return cached;
 	}
@@ -285,11 +295,11 @@ export async function searchPagesHybrid(
 				options,
 				'semantic_function_unavailable'
 			);
-			if (useCache) cacheSearch(cacheKey, fallback);
+			if (cacheKey) cacheSearch(cacheKey, fallback);
 			return fallback;
 		}
 		const response = parseResponse(data);
-		if (useCache) cacheSearch(cacheKey, response);
+		if (cacheKey) cacheSearch(cacheKey, response);
 		return response;
 	} catch (error) {
 		if (error instanceof DOMException && error.name === 'AbortError') throw error;
@@ -300,7 +310,7 @@ export async function searchPagesHybrid(
 				options,
 				'semantic_function_unavailable'
 			);
-			if (useCache) cacheSearch(cacheKey, fallback);
+			if (cacheKey) cacheSearch(cacheKey, fallback);
 			return fallback;
 		} catch {
 			throw new SemanticSearchServiceError('Não foi possível pesquisar o fichário agora.');
