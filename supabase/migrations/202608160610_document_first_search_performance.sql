@@ -35,8 +35,6 @@ language sql
 stable
 security invoker
 set search_path = ''
-set pg_trgm.word_similarity_threshold = 0.45
-set pg_trgm.strict_word_similarity_threshold = 0.40
 as $$
   with prepared_query as (
     select public.normalize_search_text(search_query) as normalized_query
@@ -96,13 +94,22 @@ as $$
       and (
         p.search_vector @@ q.ts_query
         or p.normalized_text like '%' || q.normalized_query || '%'
-        or q.normalized_query OPERATOR(extensions.<%) p.normalized_text
-        or q.normalized_query OPERATOR(extensions.<<%) p.normalized_text
+        or extensions.word_similarity(q.normalized_query, p.normalized_text) >= 0.45
+        or extensions.strict_word_similarity(q.normalized_query, p.normalized_text) >= 0.40
         or public.normalize_search_text(d.title) like '%' || q.normalized_query || '%'
-        or q.normalized_query OPERATOR(extensions.<%) public.normalize_search_text(d.title)
-        or q.normalized_query OPERATOR(extensions.<<%) public.normalize_search_text(d.title)
+        or extensions.word_similarity(
+          q.normalized_query,
+          public.normalize_search_text(d.title)
+        ) >= 0.45
+        or extensions.strict_word_similarity(
+          q.normalized_query,
+          public.normalize_search_text(d.title)
+        ) >= 0.40
         or public.normalize_search_text(coalesce(n.name, '')) like '%' || q.normalized_query || '%'
-        or q.normalized_query OPERATOR(extensions.<<%) public.normalize_search_text(coalesce(n.name, ''))
+        or extensions.strict_word_similarity(
+          q.normalized_query,
+          public.normalize_search_text(coalesce(n.name, ''))
+        ) >= 0.40
       )
   ),
   best_page_per_document as (
