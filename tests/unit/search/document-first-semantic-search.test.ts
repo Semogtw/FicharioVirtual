@@ -5,14 +5,29 @@ const viewer = readFileSync('src/lib/components/DocumentMediaViewer.svelte', 'ut
 const correctionEditor = readFileSync('src/lib/components/CorrectionEditor.svelte', 'utf8');
 const searchPage = readFileSync('src/routes/search/+page.svelte', 'utf8');
 const searchCard = readFileSync('src/lib/components/SearchDocumentCard.svelte', 'utf8');
+const searchEdge = readFileSync('supabase/functions/semantic-search/index.ts', 'utf8');
+const searchMigration = readFileSync(
+	'supabase/migrations/202608160610_document_first_search_performance.sql',
+	'utf8'
+);
 const coverageEdge = readFileSync('supabase/functions/semantic-coverage/index.ts', 'utf8');
 
 describe('document-first semantic search UX', () => {
-	it('deduplicates page matches into one visible result per document', () => {
-		expect(searchPage).toContain('appendUniqueDocumentResults');
+	it('deduplicates into one result per document in the backend before pagination', () => {
+		expect(searchMigration).toContain('create or replace function public.search_documents(');
+		expect(searchMigration).toContain('partition by ranked_pages.document_id');
+		expect(searchMigration).toContain('create or replace function public.search_documents_semantic(');
+		expect(searchMigration).toContain(
+		'create or replace function public.search_documents_visual_semantic('
+	);
+		expect(searchEdge).toContain("supabase.rpc('search_documents'");
+		expect(searchEdge).toContain("supabase.rpc('search_documents_semantic'");
+		expect(searchEdge).toContain("supabase.rpc('search_documents_visual_semantic'");
+		expect(searchPage).not.toContain('appendUniqueDocumentResults');
+		expect(searchPage).not.toContain('maxRawBatchesPerPage');
+		expect(searchPage).not.toContain('rawBatchSize');
 		expect(searchPage).toContain('{#each results as result (result.documentId)}');
 		expect(searchPage).toContain('documentos</span>');
-		expect(searchPage).not.toContain('{#each results as result (result.pageId)}');
 	});
 
 	it('renders the matching original page instead of transcription snippets or filename-first cards', () => {
@@ -21,16 +36,17 @@ describe('document-first semantic search UX', () => {
 		expect(searchPage).not.toContain('result.excerpt');
 		expect(searchCard).toContain('<DocumentMediaViewer');
 		expect(searchCard).toContain('pages={previewPages}');
-		expect(searchCard).toContain('Object.freeze([previewPage])');
+		expect(searchCard).toContain('loadDocumentPage(result.documentId, result.pageNumber)');
 		expect(searchCard).not.toContain('<strong>{result.documentTitle}</strong>');
 		expect(viewer).toContain('WordGeometryOverlay');
 	});
 
-	it('shows the literal occurrence count when the searched term is present in the document', () => {
-		expect(searchCard).toContain('countDocumentQueryOccurrences');
+	it('counts literal occurrences only on the matching page without loading the whole document text', () => {
+		expect(searchCard).toContain('countExactQueryOccurrences');
 		expect(searchCard).toContain('occurrenceCount > 0');
-		expect(searchCard).toContain('1 ocorrência');
-		expect(searchCard).toContain('ocorrências');
+		expect(searchCard).toContain('1 ocorrência nesta página');
+		expect(searchCard).toContain('ocorrências nesta página');
+		expect(searchCard).not.toContain('countDocumentQueryOccurrences');
 	});
 
 	it('keeps OCR transcription as a collapsed auxiliary tool', () => {
