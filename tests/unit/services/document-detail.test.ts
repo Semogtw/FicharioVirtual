@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
 	loadDocumentDetailWithGateway,
+	loadDocumentPageWithGateway,
 	savePageCorrectionWithGateway,
 	type DocumentDetailGateway,
-	type DocumentDetailRecord
+	type DocumentDetailRecord,
+	type DocumentPageSummaryRecord
 } from '../../../src/lib/services/document-detail';
 import type { PageRecord } from '../../../src/lib/domain/page';
 
@@ -28,8 +30,19 @@ function pageRecord(overrides: Partial<PageRecord> = {}): PageRecord {
 	};
 }
 
+function pageSummary(overrides: Partial<DocumentPageSummaryRecord> = {}): DocumentPageSummaryRecord {
+	return {
+		id: pageId,
+		page_number: 1,
+		status: 'ready',
+		updated_at: '2026-08-02T04:00:00.000Z',
+		...overrides
+	};
+}
+
 function gateway(documentOverrides: Partial<DocumentDetailRecord> = {}) {
 	let correction: Record<string, unknown> | null = null;
+	let fullPageLoads = 0;
 	const value: DocumentDetailGateway = {
 		async loadDocument() {
 			return {
@@ -46,8 +59,12 @@ function gateway(documentOverrides: Partial<DocumentDetailRecord> = {}) {
 				...documentOverrides
 			};
 		},
-		async listPages() {
-			return [pageRecord()];
+		async listPageSummaries() {
+			return [pageSummary()];
+		},
+		async loadPage() {
+			fullPageLoads += 1;
+			return pageRecord();
 		},
 		async createSignedUrl(path) {
 			return `https://private.test/${path}?signed=1`;
@@ -66,12 +83,15 @@ function gateway(documentOverrides: Partial<DocumentDetailRecord> = {}) {
 		value,
 		get correction() {
 			return correction;
+		},
+		get fullPageLoads() {
+			return fullPageLoads;
 		}
 	};
 }
 
 describe('loadDocumentDetailWithGateway', () => {
-	it('returns safe metadata, mapped pages and an expiring URL', async () => {
+	it('returns a lightweight page index and does not fetch OCR text for every page', async () => {
 		const fixture = gateway();
 		const detail = await loadDocumentDetailWithGateway(documentId, fixture.value);
 
@@ -81,12 +101,26 @@ describe('loadDocumentDetailWithGateway', () => {
 			url: detail.originalUrl,
 			driveFileId: null
 		});
-		expect(detail.pages[0]?.text).toBe('Texto nativo');
-		expect(detail.pages[0]?.sourceDriveFileId).toBeNull();
+		expect(detail.pages[0]).toEqual({
+			id: pageId,
+			pageNumber: 1,
+			status: 'ready',
+			updatedAt: '2026-08-02T04:00:00.000Z'
+		});
+		expect(fixture.fullPageLoads).toBe(0);
 		expect(detail).not.toHaveProperty('storagePath');
 	});
 
-	it('maps a Drive original for each image page', async () => {
+	it('loads the selected page separately when its text is actually needed', async () => {
+		const fixture = gateway();
+		const page = await loadDocumentPageWithGateway(documentId, 1, fixture.value);
+
+		expect(page.text).toBe('Texto nativo');
+		expect(page.sourceDriveFileId).toBeNull();
+		expect(fixture.fullPageLoads).toBe(1);
+	});
+
+	it('maps a Drive original for an image without loading every image page', async () => {
 		const fixture = gateway({
 			kind: 'image',
 			storage_path: null,
@@ -94,12 +128,15 @@ describe('loadDocumentDetailWithGateway', () => {
 			physical_state: 'available',
 			original_filename: 'pagina-1.jpg'
 		});
-		fixture.value.listPages = async () => [
-			pageRecord({ extraction_source: 'ocr', source_drive_file_id: pageDriveFileId })
-		];
 		const detail = await loadDocumentDetailWithGateway(documentId, fixture.value);
 
-		expect(detail.pages[0]?.sourceDriveFileId).toBe(pageDriveFileId);
+		expect(detail.pages[0]?.pageNumber).toBe(1);
+		expect(detail.originalReference).toEqual({
+			provider: 'google_drive',
+			url: `https://drive.google.com/file/d/${pageDriveFileId}/view`,
+			driveFileId: pageDriveFileId
+		});
+		expect(fixture.fullPageLoads).toBe(0);
 	});
 
 	it('resolves a Drive reference when no Storage copy exists without persisting a token', async () => {
@@ -156,7 +193,7 @@ describe('savePageCorrectionWithGateway', () => {
 });
 
 describe('document detail response contract', () => {
-	it('rejects a mismatched document or malformed page collection', async () => {
+	it('rejects a mismatched document or malformed page index', async () => {
 		const mismatched = gateway();
 		mismatched.value.loadDocument = async () => ({
 			id: '33333333-3333-4333-8333-333333333333',
@@ -178,19 +215,19 @@ describe('document detail response contract', () => {
 		);
 
 		const malformedPage = gateway();
-		malformedPage.value.listPages = async () => [
-			pageRecord({ warnings: [{ raw: true }] as never })
+		malformedPage.value.listPageSummaries = async () => [
+			pageSummary({ updated_at: '2026-02-30T00:00:00.000Z' })
 		];
 		await expect(
 			loadDocumentDetailWithGateway(documentId, malformedPage.value)
 		).rejects.toMatchObject({ name: 'DocumentDetailError', code: 'unavailable' });
+	});
 
-		const impossibleTimestamp = gateway();
-		impossibleTimestamp.value.listPages = async () => [
-			pageRecord({ updated_at: '2026-02-30T00:00:00.000Z' })
-		];
+	it('rejects malformed page detail separately from the lightweight shell', async () => {
+		const malformedPage = gateway();
+		malformedPage.value.loadPage = async () => pageRecord({ warnings: [{ raw: true }] as never });
 		await expect(
-			loadDocumentDetailWithGateway(documentId, impossibleTimestamp.value)
+			loadDocumentPageWithGateway(documentId, 1, malformedPage.value)
 		).rejects.toMatchObject({ name: 'DocumentDetailError', code: 'unavailable' });
 	});
 

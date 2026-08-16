@@ -5,6 +5,9 @@ import { getSupabaseClient } from './supabase';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MODEL = /^[A-Za-z0-9._-]{3,128}$/;
 const REASON = /^[a-z][a-z0-9_]{1,63}$/;
+const SEARCH_CACHE_TTL_MS = 90_000;
+const SEARCH_FALLBACK_CACHE_TTL_MS = 10_000;
+const SEARCH_CACHE_MAX_ENTRIES = 40;
 
 const resultSchema = z
 	.object({
@@ -104,6 +107,9 @@ type SemanticSearchFunctionClient = {
 	};
 };
 
+type CachedSearch = Readonly<{ expiresAt: number; response: SemanticSearchResponse }>;
+const responseCache = new Map<string, CachedSearch>();
+
 export class SemanticSearchServiceError extends Error {
 	constructor(message = 'A busca semântica não está disponível agora.') {
 		super(message);
@@ -188,10 +194,64 @@ async function lexicalFallback(
 	});
 }
 
+function searchCacheKey(
+	userId: string,
+	input: { normalized: string; notebookId: string | null; limit: number; offset: number }
+) {
+	return JSON.stringify([userId, input.normalized, input.notebookId, input.limit, input.offset]);
+}
+
+async function currentCacheUserId() {
+	try {
+		const { data, error } = await getSupabaseClient().auth.getSession();
+		const userId = data.session?.user.id;
+		return !error && typeof userId === 'string' && UUID.test(userId) ? userId : null;
+	} catch {
+		return null;
+	}
+}
+
+function cachedSearch(key: string) {
+	const cached = responseCache.get(key);
+	if (!cached) return null;
+	if (cached.expiresAt <= Date.now()) {
+		responseCache.delete(key);
+		return null;
+	}
+	responseCache.delete(key);
+	responseCache.set(key, cached);
+	return cached.response;
+}
+
+function cacheSearch(key: string, response: SemanticSearchResponse) {
+	const transientFallback =
+		response.analysis.mode === 'lexical' &&
+		(response.analysis.reason?.includes('unavailable') === true ||
+			response.analysis.reason === 'semantic_quota_or_rate_limit' ||
+			response.analysis.reason === 'semantic_rpc_unavailable');
+	responseCache.set(
+		key,
+		Object.freeze({
+			expiresAt:
+				Date.now() + (transientFallback ? SEARCH_FALLBACK_CACHE_TTL_MS : SEARCH_CACHE_TTL_MS),
+			response
+		})
+	);
+	while (responseCache.size > SEARCH_CACHE_MAX_ENTRIES) {
+		const oldest = responseCache.keys().next().value;
+		if (typeof oldest !== 'string') break;
+		responseCache.delete(oldest);
+	}
+}
+
+export function clearSemanticSearchCache() {
+	responseCache.clear();
+}
+
 export async function searchPagesHybrid(
 	query: string,
 	options: SearchOptions = {},
-	client: SemanticSearchFunctionClient = defaultFunctionClient()
+	client?: SemanticSearchFunctionClient
 ): Promise<SemanticSearchResponse> {
 	const validated = validateOptions(query, options);
 	if (!validated.normalized) {
@@ -208,8 +268,18 @@ export async function searchPagesHybrid(
 	}
 	if (options.signal?.aborted) throw new DOMException('Search cancelled', 'AbortError');
 
+	const useCache = client === undefined;
+	const userId = useCache ? await currentCacheUserId() : null;
+	if (options.signal?.aborted) throw new DOMException('Search cancelled', 'AbortError');
+	const cacheKey = userId ? searchCacheKey(userId, validated) : null;
+	if (cacheKey) {
+		const cached = cachedSearch(cacheKey);
+		if (cached) return cached;
+	}
+
 	try {
-		const { data, error } = await client.functions.invoke('semantic-search', {
+		const gateway = client ?? defaultFunctionClient();
+		const { data, error } = await gateway.functions.invoke('semantic-search', {
 			body: {
 				query: validated.normalized,
 				notebookId: validated.notebookId,
@@ -220,14 +290,28 @@ export async function searchPagesHybrid(
 		});
 		if (error) {
 			if (options.signal?.aborted) throw new DOMException('Search cancelled', 'AbortError');
-			return lexicalFallback(validated.normalized, options, 'semantic_function_unavailable');
+			const fallback = await lexicalFallback(
+				validated.normalized,
+				options,
+				'semantic_function_unavailable'
+			);
+			if (cacheKey) cacheSearch(cacheKey, fallback);
+			return fallback;
 		}
-		return parseResponse(data);
+		const response = parseResponse(data);
+		if (cacheKey) cacheSearch(cacheKey, response);
+		return response;
 	} catch (error) {
 		if (error instanceof DOMException && error.name === 'AbortError') throw error;
 		if (error instanceof SemanticSearchServiceError) throw error;
 		try {
-			return await lexicalFallback(validated.normalized, options, 'semantic_function_unavailable');
+			const fallback = await lexicalFallback(
+				validated.normalized,
+				options,
+				'semantic_function_unavailable'
+			);
+			if (cacheKey) cacheSearch(cacheKey, fallback);
+			return fallback;
 		} catch {
 			throw new SemanticSearchServiceError('Não foi possível pesquisar o fichário agora.');
 		}

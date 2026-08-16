@@ -6,7 +6,6 @@
 	import SearchDocumentCard from '$lib/components/SearchDocumentCard.svelte';
 	import NativeSelect from '$lib/components/ui/native-select/NativeSelect.svelte';
 	import type { NotebookSummary } from '$lib/domain/notebook';
-	import { appendUniqueDocumentResults } from '$lib/search/document-search-results';
 	import { listNotebooks } from '$lib/services/notebooks';
 	import { RequestVersion } from '$lib/services/request-version';
 	import {
@@ -16,16 +15,11 @@
 	} from '$lib/services/semantic-search';
 
 	const pageSize = 18;
-	const rawBatchSize = 50;
-	const maxRawBatchesPerPage = 6;
 	const requests = new RequestVersion();
 	const notebookRequests = new RequestVersion();
 	let query = $state('');
 	let notebookId = $state('');
 	let results = $state<readonly SemanticSearchResult[]>([]);
-	let pendingResults = $state<readonly SemanticSearchResult[]>([]);
-	let rawOffset = $state(0);
-	let rawHasMore = $state(false);
 	let analysis = $state<SemanticSearchAnalysis | null>(null);
 	let notebooks = $state<readonly NotebookSummary[]>([]);
 	let notebookLoading = $state(true);
@@ -46,9 +40,6 @@
 
 	function resetSearchState() {
 		results = [];
-		pendingResults = [];
-		rawOffset = 0;
-		rawHasMore = false;
 		analysis = null;
 		hasMore = false;
 	}
@@ -74,41 +65,16 @@
 		error = null;
 
 		try {
-			const visibleBase = reset ? Object.freeze([]) : results;
-			let pool = reset ? Object.freeze([]) : pendingResults;
-			let offset = reset ? 0 : rawOffset;
-			let canFetch = reset ? true : rawHasMore;
-			let nextAnalysis = reset ? null : analysis;
-			let batches = 0;
-
-			while (pool.length < pageSize && canFetch && batches < maxRawBatchesPerPage) {
-				const response = await searchPagesHybrid(normalized, {
-					notebookId: notebookId || null,
-					limit: rawBatchSize,
-					offset,
-					signal: activeController.signal
-				});
-				if (!requests.isCurrent(version)) return;
-				if (nextAnalysis === null) nextAnalysis = response.analysis;
-
-				const merged = appendUniqueDocumentResults(
-					Object.freeze([...visibleBase, ...pool]),
-					response.results
-				);
-				pool = Object.freeze(merged.slice(visibleBase.length));
-				offset += rawBatchSize;
-				canFetch = response.hasMore;
-				batches += 1;
-			}
-
+			const response = await searchPagesHybrid(normalized, {
+				notebookId: notebookId || null,
+				limit: pageSize,
+				offset: reset ? 0 : results.length,
+				signal: activeController.signal
+			});
 			if (!requests.isCurrent(version)) return;
-			const nextVisible = Object.freeze(pool.slice(0, pageSize));
-			pendingResults = Object.freeze(pool.slice(pageSize));
-			results = reset ? nextVisible : Object.freeze([...visibleBase, ...nextVisible]);
-			rawOffset = offset;
-			rawHasMore = canFetch;
-			analysis = nextAnalysis;
-			hasMore = pendingResults.length > 0 || rawHasMore;
+			results = reset ? response.results : Object.freeze([...results, ...response.results]);
+			analysis = response.analysis;
+			hasMore = response.hasMore;
 		} catch (caught) {
 			if (caught instanceof DOMException && caught.name === 'AbortError') return;
 			if (requests.isCurrent(version)) error = 'Não foi possível concluir esta pesquisa agora.';
@@ -124,7 +90,7 @@
 	function schedule() {
 		cancelPending();
 		const version = requests.next();
-		timer = setTimeout(() => void run(true, version), 650);
+		timer = setTimeout(() => void run(true, version), 450);
 	}
 
 	function semanticStatus() {
@@ -135,7 +101,8 @@
 		if (
 			analysis.reason === 'semantic_quota_or_rate_limit' ||
 			analysis.reason === 'semantic_provider_unavailable' ||
-			analysis.reason === 'semantic_function_unavailable'
+			analysis.reason === 'semantic_function_unavailable' ||
+			analysis.reason === 'semantic_rpc_unavailable'
 		) {
 			return 'Busca textual ativa; a busca por significado está temporariamente indisponível.';
 		}

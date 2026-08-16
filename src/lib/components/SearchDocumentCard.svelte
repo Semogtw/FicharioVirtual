@@ -2,8 +2,13 @@
 	import { onDestroy, onMount } from 'svelte';
 	import DocumentMediaViewer from '$lib/components/DocumentMediaViewer.svelte';
 	import type { PageDetail } from '$lib/domain/page';
-	import { countDocumentQueryOccurrences } from '$lib/search/document-search-results';
-	import { loadDocumentDetail, type DocumentDetail } from '$lib/services/document-detail';
+	import { countExactQueryOccurrences } from '$lib/search/document-search-results';
+	import {
+		loadDocumentDetail,
+		loadDocumentPage,
+		type DocumentDetail,
+		type DocumentPageSummary
+	} from '$lib/services/document-detail';
 	import type { SemanticSearchResult } from '$lib/services/semantic-search';
 
 	interface SearchDocumentCardProps {
@@ -11,29 +16,34 @@
 		query: string;
 	}
 
-	const EMPTY_PREVIEW_PAGES = Object.freeze([]) as readonly PageDetail[];
+	const EMPTY_PREVIEW_PAGES = Object.freeze([]) as readonly DocumentPageSummary[];
 
 	let { result, query }: SearchDocumentCardProps = $props();
 	let host = $state<HTMLElement | null>(null);
 	let detail = $state<DocumentDetail | null>(null);
+	let previewPageDetail = $state<PageDetail | null>(null);
 	let failed = $state(false);
 	let generation = 0;
 
 	let previewPage = $derived(
-		detail?.pages.find((page) => page.pageNumber === result.pageNumber) ?? detail?.pages[0] ?? null
+		detail?.pages.find((page) => page.pageNumber === result.pageNumber) ?? null
 	);
 	let previewPages = $derived(
-		previewPage ? (Object.freeze([previewPage]) as readonly PageDetail[]) : EMPTY_PREVIEW_PAGES
+		previewPage
+			? (Object.freeze([previewPage]) as readonly DocumentPageSummary[])
+			: EMPTY_PREVIEW_PAGES
 	);
 	let previewQuery = $derived(result.matchMode === 'visual' ? '' : query);
-	let occurrenceCount = $derived(detail ? countDocumentQueryOccurrences(detail.pages, query) : 0);
+	let occurrenceCount = $derived(
+		previewPageDetail ? countExactQueryOccurrences(previewPageDetail.text, query) : 0
+	);
 	let href = $derived(
 		result.matchMode === 'visual'
 			? `/documents/${result.documentId}/?page=${result.pageNumber}`
 			: `/documents/${result.documentId}/?page=${result.pageNumber}&highlight=${encodeURIComponent(query.trim())}`
 	);
 	let occurrenceLabel = $derived(
-		occurrenceCount === 1 ? '1 ocorrência' : `${occurrenceCount} ocorrências`
+		occurrenceCount === 1 ? '1 ocorrência nesta página' : `${occurrenceCount} ocorrências nesta página`
 	);
 	let matchLabel = $derived.by(() => {
 		if (result.matchMode === 'visual') return 'Pela página';
@@ -51,7 +61,17 @@
 		try {
 			const loaded = await loadDocumentDetail(result.documentId);
 			if (expectedGeneration !== generation) return;
+			const target = loaded.pages.find((page) => page.pageNumber === result.pageNumber);
+			if (!target) {
+				failed = true;
+				return;
+			}
 			detail = loaded;
+			void loadDocumentPage(result.documentId, result.pageNumber)
+				.then((pageDetail) => {
+					if (expectedGeneration === generation) previewPageDetail = pageDetail;
+				})
+				.catch(() => undefined);
 		} catch {
 			if (expectedGeneration === generation) failed = true;
 		}
@@ -87,7 +107,12 @@
 	>
 		<div class="preview">
 			{#if detail && previewPage}
-				<DocumentMediaViewer {detail} pages={previewPages} query={previewQuery} />
+				<DocumentMediaViewer
+					{detail}
+					pages={previewPages}
+					query={previewQuery}
+					focusPageNumber={result.pageNumber}
+				/>
 			{:else if failed}
 				<div class="preview-state error" role="status">Não foi possível carregar a prévia.</div>
 			{:else}
@@ -95,7 +120,7 @@
 			{/if}
 
 			<div class="badges" role="group" aria-label="Detalhes da correspondência">
-				{#if detail && occurrenceCount > 0}
+				{#if occurrenceCount > 0}
 					<span class="occurrences">{occurrenceLabel}</span>
 				{:else if matchLabel}
 					<span>{matchLabel}</span>
