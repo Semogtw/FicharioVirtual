@@ -40,7 +40,7 @@ type SearchQueryLike = PromiseLike<{ data: unknown; error: unknown }> & {
 
 export type SearchClientLike = {
 	rpc(
-		name: 'search_pages',
+		name: 'search_documents',
 		args: {
 			search_query: string;
 			notebook_filter: string | null;
@@ -109,7 +109,7 @@ export async function searchPages(
 
 	try {
 		const gateway = client ?? defaultClient();
-		let request = gateway.rpc('search_pages', {
+		let request = gateway.rpc('search_documents', {
 			search_query: normalized,
 			notebook_filter: notebookId,
 			result_limit: limit,
