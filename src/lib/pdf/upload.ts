@@ -1,5 +1,6 @@
 import { calculateSha256 } from '$lib/import/hash';
 import { processOcrBatch as runOcrBatch, type OcrBatchRunResult } from '$lib/services/ocr';
+import { requireDriveForUpload } from '$lib/stores/drive-upload-gate.svelte';
 import type { DocumentStatus } from '$lib/types/database';
 import { buildPdfImportPlan, type PdfImportPagePlan } from './import-plan';
 import { inspectPdf } from './inspector-client';
@@ -367,6 +368,7 @@ export async function uploadPdfWithGateway(
 }
 
 export async function uploadPdf(file: File, options: PdfUploadOptions): Promise<UploadedPdf> {
+	await requireDriveForUpload();
 	const { uploadPdfToDrive } = await import('./drive-upload');
 	return uploadPdfToDrive(file, options);
 }
