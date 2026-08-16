@@ -6,6 +6,7 @@
 	import SearchDocumentCard from '$lib/components/SearchDocumentCard.svelte';
 	import NativeSelect from '$lib/components/ui/native-select/NativeSelect.svelte';
 	import type { NotebookSummary } from '$lib/domain/notebook';
+	import { appendUniqueDocumentResults } from '$lib/search/unique-document-results';
 	import { listNotebooks } from '$lib/services/notebooks';
 	import { RequestVersion } from '$lib/services/request-version';
 	import {
@@ -20,6 +21,7 @@
 	let query = $state('');
 	let notebookId = $state('');
 	let results = $state<readonly SemanticSearchResult[]>([]);
+	let nextOffset = $state(0);
 	let analysis = $state<SemanticSearchAnalysis | null>(null);
 	let notebooks = $state<readonly NotebookSummary[]>([]);
 	let notebookLoading = $state(true);
@@ -40,6 +42,7 @@
 
 	function resetSearchState() {
 		results = [];
+		nextOffset = 0;
 		analysis = null;
 		hasMore = false;
 	}
@@ -60,6 +63,7 @@
 		controller?.abort();
 		const activeController = new AbortController();
 		controller = activeController;
+		const requestOffset = reset ? 0 : nextOffset;
 		if (reset) loading = true;
 		else loadingMore = true;
 		error = null;
@@ -68,11 +72,12 @@
 			const response = await searchPagesHybrid(normalized, {
 				notebookId: notebookId || null,
 				limit: pageSize,
-				offset: reset ? 0 : results.length,
+				offset: requestOffset,
 				signal: activeController.signal
 			});
 			if (!requests.isCurrent(version)) return;
-			results = reset ? response.results : Object.freeze([...results, ...response.results]);
+			results = appendUniqueDocumentResults(reset ? [] : results, response.results);
+			nextOffset = requestOffset + response.results.length;
 			analysis = response.analysis;
 			hasMore = response.hasMore;
 		} catch (caught) {
