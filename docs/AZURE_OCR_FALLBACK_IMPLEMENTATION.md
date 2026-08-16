@@ -71,18 +71,18 @@ Criar algo equivalente a:
 export type OcrProviderId = 'gemini' | 'azure_vision';
 
 export type OcrProviderPage = {
-  pageId: string;
-  pageNumber: number;
-  mimeType: string;
-  bytes: Uint8Array;
+	pageId: string;
+	pageNumber: number;
+	mimeType: string;
+	bytes: Uint8Array;
 };
 
 export type OcrProviderOutcome = OcrBatchParseOutcome & {
-  provider: OcrProviderId;
-  model: string;
-  providerModelVersion: string | null;
-  providerResponseId: string | null;
-  usage: ProviderUsage | null;
+	provider: OcrProviderId;
+	model: string;
+	providerModelVersion: string | null;
+	providerResponseId: string | null;
+	usage: ProviderUsage | null;
 };
 ```
 
@@ -170,7 +170,7 @@ Azure já devolve palavras com `boundingBox` e `confidence`. Isso deve ser aprov
 O formato persistido atual é:
 
 ```ts
-[text, left, top, right, bottom]
+[text, left, top, right, bottom];
 ```
 
 com coordenadas inteiras `0..10000`.
@@ -353,16 +353,16 @@ Adicionar classificação provider-independent em `ocr-failure.ts`, sem remover 
 
 Códigos planejados:
 
-| Condição Azure | Código interno | Retry | Ação |
-| --- | --- | --- | --- |
-| 429 | `azure_rate_limited` | sim | fila/backoff |
-| 408/425/5xx | `azure_service_unavailable` | sim | fila/backoff |
-| timeout/transport | `azure_request_failed` | sim | fila/backoff |
-| 401/403 | `azure_authentication_failed` | não | falha operacional visível |
-| 400/415 por request incompatível | `azure_invalid_request` | não para Azure | preservar possibilidade de Gemini futuro |
-| operação assíncrona `failed` transitória | `azure_operation_failed` | conforme código allowlisted | fila ou falha |
-| JSON/status/geometry inválidos | `ocr_response_invalid` | sim até limite existente | fila |
-| bytes/formato não elegíveis ao F0 | `azure_ineligible` | não consumir Azure | fila aguardando Gemini |
+| Condição Azure                           | Código interno                | Retry                       | Ação                                     |
+| ---------------------------------------- | ----------------------------- | --------------------------- | ---------------------------------------- |
+| 429                                      | `azure_rate_limited`          | sim                         | fila/backoff                             |
+| 408/425/5xx                              | `azure_service_unavailable`   | sim                         | fila/backoff                             |
+| timeout/transport                        | `azure_request_failed`        | sim                         | fila/backoff                             |
+| 401/403                                  | `azure_authentication_failed` | não                         | falha operacional visível                |
+| 400/415 por request incompatível         | `azure_invalid_request`       | não para Azure              | preservar possibilidade de Gemini futuro |
+| operação assíncrona `failed` transitória | `azure_operation_failed`      | conforme código allowlisted | fila ou falha                            |
+| JSON/status/geometry inválidos           | `ocr_response_invalid`        | sim até limite existente    | fila                                     |
+| bytes/formato não elegíveis ao F0        | `azure_ineligible`            | não consumir Azure          | fila aguardando Gemini                   |
 
 Não inferir "quota mensal esgotada" de qualquer 429 genérico. Só persistir bloqueio de quota quando o provider fornecer sinal allowlisted e inequívoco. Caso contrário tratar como rate limit transitório.
 
