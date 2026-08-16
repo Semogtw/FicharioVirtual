@@ -37,8 +37,12 @@ describe('document-first semantic search UX', () => {
 	it('uses explicit fuzzy thresholds that hosted Supabase can deploy without privileged GUC changes', () => {
 		expect(searchMigration).not.toContain('set pg_trgm.word_similarity_threshold');
 		expect(searchMigration).not.toContain('set pg_trgm.strict_word_similarity_threshold');
-		expect(searchMigration).toContain('extensions.word_similarity(q.normalized_query, p.normalized_text) >= 0.45');
-		expect(searchMigration).toContain('extensions.strict_word_similarity(q.normalized_query, p.normalized_text) >= 0.40');
+		expect(searchMigration).toContain(
+			'extensions.word_similarity(q.normalized_query, p.normalized_text) >= 0.45'
+		);
+		expect(searchMigration).toContain(
+			'extensions.strict_word_similarity(q.normalized_query, p.normalized_text) >= 0.40'
+		);
 	});
 
 	it('renders the matching original page instead of transcription snippets or filename-first cards', () => {
