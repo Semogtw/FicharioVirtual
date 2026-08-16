@@ -30,7 +30,9 @@ function pageRecord(overrides: Partial<PageRecord> = {}): PageRecord {
 	};
 }
 
-function pageSummary(overrides: Partial<DocumentPageSummaryRecord> = {}): DocumentPageSummaryRecord {
+function pageSummary(
+	overrides: Partial<DocumentPageSummaryRecord> = {}
+): DocumentPageSummaryRecord {
 	return {
 		id: pageId,
 		page_number: 1,
