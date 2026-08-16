@@ -43,16 +43,16 @@ Gemini 3.1 Flash-Lite -> Gemini 3.5 Flash-Lite -> Azure Vision Read -> fila pers
 
 A matriz Azure abaixo é **contrato planejado**, não descrição do runtime atual.
 
-| Condição Azure | Código planejado | Página/job | Retry | Observação |
-| --- | --- | --- | --- | --- |
-| 429 sem sinal inequívoco de quota mensal | `azure_rate_limited` | `retryable` | sim | não confundir automaticamente com franquia mensal esgotada |
-| 408, 425 ou 5xx | `azure_service_unavailable` | `retryable` | sim | volta à fila se os Gemini já falharam |
-| transporte, timeout ou abort | `azure_request_failed` | `retryable` | sim | polling também precisa respeitar timeout/abort |
-| 401 ou 403 | `azure_authentication_failed` | `failed` operacional | não | não mascarar secret/recurso quebrado |
-| 400/415 por request incompatível | `azure_invalid_request` | não encerrar definitivamente o OCR se Gemini puder funcionar depois | não para Azure | preservar possibilidade de retry futuro pelo provider principal |
-| operação assíncrona retorna `failed` | `azure_operation_failed` | depende do código allowlisted | depende | corpo bruto nunca é persistido |
-| JSON/status/geometry inválido | `ocr_response_invalid` | `retryable` até limite existente | sim | mesmo contrato de resposta interna |
-| página acima do teto F0 e sem derivação segura | `azure_ineligible` | `retryable`/fila | sim via Gemini futuro | não transformar limitação Azure em falha permanente do documento |
+| Condição Azure                                 | Código planejado              | Página/job                                                          | Retry                 | Observação                                                       |
+| ---------------------------------------------- | ----------------------------- | ------------------------------------------------------------------- | --------------------- | ---------------------------------------------------------------- |
+| 429 sem sinal inequívoco de quota mensal       | `azure_rate_limited`          | `retryable`                                                         | sim                   | não confundir automaticamente com franquia mensal esgotada       |
+| 408, 425 ou 5xx                                | `azure_service_unavailable`   | `retryable`                                                         | sim                   | volta à fila se os Gemini já falharam                            |
+| transporte, timeout ou abort                   | `azure_request_failed`        | `retryable`                                                         | sim                   | polling também precisa respeitar timeout/abort                   |
+| 401 ou 403                                     | `azure_authentication_failed` | `failed` operacional                                                | não                   | não mascarar secret/recurso quebrado                             |
+| 400/415 por request incompatível               | `azure_invalid_request`       | não encerrar definitivamente o OCR se Gemini puder funcionar depois | não para Azure        | preservar possibilidade de retry futuro pelo provider principal  |
+| operação assíncrona retorna `failed`           | `azure_operation_failed`      | depende do código allowlisted                                       | depende               | corpo bruto nunca é persistido                                   |
+| JSON/status/geometry inválido                  | `ocr_response_invalid`        | `retryable` até limite existente                                    | sim                   | mesmo contrato de resposta interna                               |
+| página acima do teto F0 e sem derivação segura | `azure_ineligible`            | `retryable`/fila                                                    | sim via Gemini futuro | não transformar limitação Azure em falha permanente do documento |
 
 ### Regras adicionais do Azure
 
