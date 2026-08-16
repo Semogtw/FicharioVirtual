@@ -19,11 +19,11 @@ describe('Drive login gate for imports', () => {
 
 	it('checks Drive before both image and PDF upload entrypoints', () => {
 		expect(imageUpload).toMatch(
-		/export async function uploadPreparedImage[\s\S]*await requireDriveForUpload\(\);[\s\S]*uploadPreparedImageToDrive/
-	);
+			/export async function uploadPreparedImage[\s\S]*await requireDriveForUpload\(\);[\s\S]*uploadPreparedImageToDrive/
+		);
 		expect(pdfUpload).toMatch(
-		/export async function uploadPdf[\s\S]*await requireDriveForUpload\(\);[\s\S]*uploadPdfToDrive/
-	);
+			/export async function uploadPdf[\s\S]*await requireDriveForUpload\(\);[\s\S]*uploadPdfToDrive/
+		);
 	});
 
 	it('keeps pending uploads waiting while OAuth runs and releases them after connection', () => {

@@ -58,6 +58,17 @@ async function mockSupabase(context: BrowserContext, counters: RequestCounters) 
 		const path = url.pathname;
 
 		if (path === '/rest/v1/app_users') return json(route, { is_active: true });
+		if (path === '/rest/v1/drive_connections') {
+			return json(route, {
+				status: 'connected',
+				google_email: 'owner@example.test',
+				root_folder_id: 'RootFolder_1234567890',
+				last_sync_started_at: null,
+				last_sync_completed_at: null,
+				last_error_code: null,
+				last_error_message: null
+			});
+		}
 		if (path === '/rest/v1/notebooks') return json(route, []);
 		if (path === '/rest/v1/rpc/list_notebooks_v2') return json(route, []);
 		if (path === '/rest/v1/documents') return json(route, null);
