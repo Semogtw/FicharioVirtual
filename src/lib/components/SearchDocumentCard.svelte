@@ -43,7 +43,9 @@
 			: `/documents/${result.documentId}/?page=${result.pageNumber}&highlight=${encodeURIComponent(query.trim())}`
 	);
 	let occurrenceLabel = $derived(
-		occurrenceCount === 1 ? '1 ocorrência nesta página' : `${occurrenceCount} ocorrências nesta página`
+		occurrenceCount === 1
+			? '1 ocorrência nesta página'
+			: `${occurrenceCount} ocorrências nesta página`
 	);
 	let matchLabel = $derived.by(() => {
 		if (result.matchMode === 'visual') return 'Pela página';

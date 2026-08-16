@@ -16,10 +16,12 @@ describe('document-first semantic search UX', () => {
 	it('deduplicates into one result per document in the backend before pagination', () => {
 		expect(searchMigration).toContain('create or replace function public.search_documents(');
 		expect(searchMigration).toContain('partition by ranked_pages.document_id');
-		expect(searchMigration).toContain('create or replace function public.search_documents_semantic(');
 		expect(searchMigration).toContain(
-		'create or replace function public.search_documents_visual_semantic('
-	);
+			'create or replace function public.search_documents_semantic('
+		);
+		expect(searchMigration).toContain(
+			'create or replace function public.search_documents_visual_semantic('
+		);
 		expect(searchEdge).toContain("supabase.rpc('search_documents'");
 		expect(searchEdge).toContain("supabase.rpc('search_documents_semantic'");
 		expect(searchEdge).toContain("supabase.rpc('search_documents_visual_semantic'");
