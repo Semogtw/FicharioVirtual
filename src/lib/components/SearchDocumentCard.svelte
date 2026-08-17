@@ -3,10 +3,7 @@
 	import DocumentMediaViewer from '$lib/components/DocumentMediaViewer.svelte';
 	import type { PageDetail } from '$lib/domain/page';
 	import { countExactQueryOccurrences } from '$lib/search/document-search-results';
-	import {
-		resultHighlightQuery,
-		searchResultHref
-	} from '$lib/search/search-result-presentation';
+	import { resultHighlightQuery, searchResultHref } from '$lib/search/search-result-presentation';
 	import {
 		loadDocumentDetail,
 		loadDocumentPage,
