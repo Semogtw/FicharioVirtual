@@ -171,6 +171,12 @@ O deploy [`31333367356`](https://github.com/Semogtw/FicharioVirtual/actions/runs
 
 A sequência anterior de sondas mostrou que `responseFormat` e os campos de schema enviados em `generationConfig` eram rejeitados pelo endpoint/modelo real com HTTP 400. O cliente de produção agora envia `responseMimeType: application/json` sem schema de provedor, mantém o contrato JSON explícito no prompt e preserva os parsers locais fail-closed. O `process-ocr` da sonda recebeu e validou uma resposta Gemini real com HTTP 200; a tentativa direta separada atingiu quota do provedor e não foi convertida em sucesso.
 
+### Diagnóstico do fallback OCR em 2026-08-17
+
+A sonda protegida [`32078967959`](https://github.com/Semogtw/FicharioVirtual/actions/runs/32078967959) criou o documento sintético, autenticou e chamou o `process-ocr`, mas terminou com o job pendente por `ocr_provider_rate_queue_full`. O relatório sanitizado registrou o modelo primário `gemini-3.1-flash-lite` e esse erro no limitador local; a ausência de uma segunda linha de telemetria não significava que o fallback não havia sido tentado: o evento primário só é escrito quando o roteador entra no fallback, e a falha final do segundo `reserveProviderSlot` não era registrada.
+
+O checkpoint [`ce34d69`](https://github.com/Semogtw/FicharioVirtual/commit/ce34d69fd2134a4e17c09c9339a09d4bb1ae8db6) corrigiu essa observabilidade nos caminhos síncrono e worker: cada modelo agora registra sua própria falha, rota e código sanitizado. O deploy de staging [`32079625356`](https://github.com/Semogtw/FicharioVirtual/actions/runs/32079625356) aplicou migrations e publicou as Edge Functions com sucesso. Isso resolve a classificação do fallback, não cria quota: quando os dois limitadores locais estão sem capacidade, nenhuma chamada Gemini é feita e o retry permanece agendado para o reset seguro. A confirmação end-to-end após esse deploy ainda é necessária para distinguir um retry bem-sucedido de uma nova espera de capacidade.
+
 ### Cleanup e runtime remoto
 
 O cleanup [`31333977753`](https://github.com/Semogtw/FicharioVirtual/actions/runs/31333977753) terminou com **success**. Ele redeployou o runtime limpo e executou exclusivamente `supabase functions delete ocr-boundary-probe --project-ref ... --yes`. A consulta posterior ao projeto confirma `process-ocr` **ACTIVE v19** com JWT e ausência de `ocr-boundary-probe`; funções Drive/desktop não relacionadas permaneceram presentes.
