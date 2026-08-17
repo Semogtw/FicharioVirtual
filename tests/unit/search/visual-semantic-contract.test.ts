@@ -65,7 +65,7 @@ describe('adaptive visual semantic implementation contract', () => {
 	it('supports shadow visual retrieval and an explicit active three-channel mode', () => {
 		expect(search).toContain("Deno.env.get('SEMANTIC_VISUAL_MODE') ?? 'shadow'");
 		expect(search).toContain("supabase.rpc('search_documents_visual_semantic'");
-		expect(search).toContain("visualMode === 'active' ? visual : []");
+		expect(search).toContain("visualMode === 'active' ? visibleVisual : []");
 		expect(search).toContain("matchMode: 'visual'");
 		expect(search).toContain("excerpt: ''");
 		expect(search).toContain("mode: visualMode === 'active' ? 'multimodal' : 'hybrid'");
