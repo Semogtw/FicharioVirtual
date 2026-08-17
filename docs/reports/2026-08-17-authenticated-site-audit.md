@@ -8,10 +8,12 @@ proprietário. Os fluxos de login, importação, OCR, navegação, busca lexical
 normalização, busca semântica, filtro por caderno, rotas autenticadas e layout
 móvel foram exercitados.
 
-O produto está operacional nos fluxos executados, mas a busca semântica não foi
-aprovada para qualidade de produção: uma consulta negativa retornou documentos
-sem relação evidente. O relatório é evidência de uma execução real, não uma
-garantia de funcionamento universal ou de 100% de cobertura.
+O produto está operacional nos fluxos executados. A primeira rodada encontrou
+uma política semântica permissiva demais e uma marcação de highlight enganosa;
+as correções foram publicadas em checkpoints posteriores. A verificação pessoal
+do fluxo de foto reproduziu importação, OCR assíncrono, extração de 3 assuntos e
+limpeza temporária com sucesso. O relatório é evidência de execuções reais, não
+uma garantia de funcionamento universal ou de 100% de cobertura.
 
 ## Identificação e escopo
 
@@ -32,7 +34,7 @@ pnpm install --frozen-lockfile: PASS (pnpm 10.34.5)
 pnpm verify: PASS
   - Prettier/ESLint: PASS
   - svelte-check: 0 erros, 0 warnings
-  - Vitest: 323 arquivos, 1.377 testes aprovados
+  - Vitest: 326 arquivos, 1.391 testes aprovados
   - build estático, CSP e PWA: PASS
 pnpm test:e2e: PASS (8/8 testes no Chromium/tablet)
 contrato HTTP do deployment: PASS
@@ -40,10 +42,9 @@ UI publicada anônima + service-worker reload: PASS
 gates locais de segurança: PASS, exceto o pin de workflow abaixo
 ```
 
-O `pnpm test:source:offline` falhou de forma determinística somente por causa
-do SHA incompleto em `.github/workflows/verify-adaptive-visual-staging.yml:188`.
-O pin permanece sem correção neste checkpoint, conforme solicitado; a mudança
-necessária está documentada para uma etapa posterior.
+O pin do Supabase CLI foi corrigido no workflow e os gates source/offline
+passaram nos checkpoints de correção. A execução oficial de cada novo SHA ainda
+é a autoridade para confirmar deploy, funções remotas e banco remoto.
 
 ## Evidência manual publicada
 
@@ -85,7 +86,7 @@ Resultados:
 
 ## Achados
 
-### F-01 — P1: precisão semântica insuficiente
+### F-01 — P1: precisão semântica insuficiente — corrigido em código
 
 A consulta negativa `receita de bolo de chocolate` retornou 11 documentos,
 incluindo o PDF sintético de arborização, a imagem de exercícios e documentos
@@ -95,34 +96,36 @@ Isso demonstra que o caminho semântico está operacional, mas o limiar/ranking
 atual não separa adequadamente consultas sem relação do corpus desta conta.
 O resultado não deve ser tratado como prova de qualidade semântica de produção.
 
-Mudança necessária:
+Correção publicada:
 
-- adicionar corpus sintético temporário com consultas positivas, negativas,
-  lexicais e paráfrases;
-- medir Recall@1/3, MRR e taxa de falso positivo por consulta negativa;
-- calibrar limiar, fallback e/ou política de precisão usando essa medição;
-- executar cleanup do corpus temporário e publicar o recibo do benchmark.
+- a política lexical ampla agora restringe somente consultas com token opaco
+  exato e evidência lexical forte;
+- consultas em linguagem natural preservam recall semântico;
+- candidatos semânticos isolados exigem similaridade mínima de `0.72`;
+- o verificador mede Recall@3, MRR e falso positivo negativo zero, mantendo
+  Recall@1 para marcadores opacos;
+- o corpus sintético é limpo ao final e a limpeza visual descobre também
+  documentos criados antes da persistência do estado.
 
-Não foi aplicada uma alteração de ranking especulativa neste checkpoint.
+Na sonda pessoal posterior, a consulta exata ficou em primeiro, a paráfrase
+ficou no top 3 e as três consultas negativas não retornaram falso positivo.
 
-### F-02 — P1: marcação visual possivelmente enganosa em resultado semântico
+### F-02 — P1: marcação visual possivelmente enganosa em resultado semântico — corrigido em código
 
 Ao abrir o resultado semântico do PDF sintético, a UI desenhou marcas geométricas
 em mais de uma página. Algumas marcas tinham títulos `com` e `apenas`, que são
 stopwords ou fragmentos literais da consulta, e não evidência semântica clara.
 
-Mudança necessária:
+Correção publicada:
 
-- distinguir `matchMode` semântico de match lexical na camada de highlight;
-- não desenhar highlight lexical quando o resultado é somente semântico;
-- quando houver evidência textual real, destacar somente tokens e páginas
-  retornados pelo índice correspondente;
-- criar um teste de contrato para impedir highlight inventado em resultado
-  `semantic`/`visual`.
+- o helper de URL/abertura de resultado diferencia o modo híbrido do resultado
+  sem highlight lexical;
+- os testes de interação impedem highlight inventado em resultado semântico ou
+  visual puro.
 
-### F-03 — P1: gate de CI quebrado
+### F-03 — P1: gate de CI quebrado — corrigido
 
-O workflow usava:
+O workflow auditado inicialmente usava:
 
 ```yaml
 supabase/setup-cli@3c2f5e2ae34c34aea4fa41551a30e30af803
@@ -135,25 +138,26 @@ do workflow, é:
 supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf
 ```
 
-O pin não foi alterado nesta etapa. `Validate current head` continua falhando
-no gate offline e os fluxos de app real, busca real e visual permanecem
-`skipped`.
+O pin foi alinhado ao SHA completo usado pelas demais etapas. O gate local e os
+workflows de validação dos checkpoints de correção passaram; a confirmação do
+runtime remoto continua sendo feita pelos workflows pós-deploy.
 
-### F-04 — P2: texto da interface está desatualizado
+### F-04 — P2: texto da interface estava desatualizado — corrigido
 
 A tela publicada afirma `Busca textual sem banco vetorial no MVP`, enquanto o
 caminho atual usa busca semântica textual e possui canal visual em `shadow`.
 
-Mudança necessária: substituir o texto por uma descrição que corresponda aos
-modos realmente disponíveis, sem prometer que o canal visual está ativo quando
-ele permanece em `shadow`.
+O texto foi substituído por uma descrição compatível com busca textual e
+semântica, sem prometer que o canal visual em `shadow` está ativo para ranking.
 
-### F-05 — P2: estado de OCR precisa de SLA explícito
+### F-05 — P2: estado de OCR precisa de SLA explícito — mitigado no verificador
 
 A imagem levou mais de 30 segundos para sair de `Aguardando leitura`, embora
-tenha terminado corretamente depois. O fluxo é funcional, mas a UI/documentação
-deve explicar o estado pendente, o intervalo esperado de polling e o caminho de
-recuperação quando um worker não estiver disponível.
+tenha terminado corretamente depois. A reprodução pessoal confirmou que o
+fluxo chega a `ready` e extrai os assuntos; o workflow agora tolera até cinco
+minutos para a fila assíncrona. A UI continua exibindo o estágio atual e oferece
+cancelamento. Um SLA externo do provedor/worker ainda não pode ser garantido
+por código de frontend.
 
 ## Rotas e responsividade
 
@@ -182,7 +186,9 @@ horizontal (`scrollWidth` observado: 375px) e sem erros de console.
 
 ## Estado após a auditoria
 
-Os três documentos de teste permanecem na conta. A remoção deve ser feita em
-ação separada e explícita, pois é destrutiva. O checkout principal local continua
-intacto; este relatório foi preparado a partir de um worktree limpo baseado no
-`origin/main`, sem correção de código ou workflow.
+Os três documentos da rodada manual original permanecem na conta porque a
+remoção deles não foi autorizada naquela etapa. Os documentos temporários das
+sondas automatizadas posteriores foram limpos e os benchmarks confirmaram a
+ausência de referências residuais ao caderno sintético. O checkout principal
+recebeu as correções em checkpoints separados; nenhum arquivo privado foi
+publicado no repositório.

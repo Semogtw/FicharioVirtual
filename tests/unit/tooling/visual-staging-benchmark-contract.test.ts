@@ -38,6 +38,8 @@ describe('visual staging benchmark contract', () => {
 		expect(script).toContain(".eq('notebook_id', state.notebookId)");
 		expect(script).toContain('documentsAttempted: documentIds.length');
 		expect(script).toContain("id: 'notebook-documents'");
+		expect(script).toContain('body: { documentId }');
+		expect(script).not.toContain('body: { documentId: probe.documentId }');
 	});
 
 	it('uses the production threshold and enforces top-one and negative safety', () => {

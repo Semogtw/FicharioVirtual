@@ -827,7 +827,7 @@ async function cleanup(db, statePath, reportPath) {
 		for (const delay of [0, 500, 1_500, 4_000]) {
 			if (delay) await sleep(delay);
 			const result = await db.functions.invoke('delete-document', {
-				body: { documentId: probe.documentId }
+				body: { documentId }
 			});
 			if (!result.error) {
 				deleted = true;

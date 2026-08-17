@@ -265,6 +265,13 @@ async function cleanupDocuments(client) {
 	if (error) throw error;
 	const ids = [...new Set([...(data ?? []).map((row) => row.id), ...report.created.documents])];
 	report.created.documents = ids;
+	if (ids.length > 0) {
+		const { error: detachError } = await client
+			.from('documents')
+			.update({ notebook_id: null })
+			.in('id', ids);
+		if (detachError) throw detachError;
+	}
 	for (const documentId of ids) {
 		const { error: deleteError } = await client.functions.invoke('delete-document', {
 			body: { documentId }
@@ -613,7 +620,7 @@ try {
 		.first();
 	await photoInput.setInputFiles({ name: photoFilename, mimeType: 'image/png', buffer: syllabus });
 	const photoNotice = page.locator('section.photo-card p.photo-notice');
-	await photoNotice.waitFor({ state: 'visible', timeout: 180_000 });
+	await photoNotice.waitFor({ state: 'visible', timeout: 300_000 });
 	if (!/[1-9]\d* conteúdo\(s\) adicionados/i.test(await photoNotice.innerText())) {
 		throw new Error('Coverage photo OCR did not produce editable topics');
 	}

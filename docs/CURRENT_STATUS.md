@@ -2,7 +2,8 @@
 
 _Atualizado: 2026-08-17_<br>
 _Branch ativa: `main`_<br>
-_Estado: Drive-first e OCR seletivo por lotes seguem integrados. A auditoria autenticada reproduziu e corrigiu a perda de recall semântico causada por uma trava lexical ampla, alinhou os verificadores reais aos contratos atuais da interface e tornou suas dependências reproduzíveis no projeto. Os gates locais estão verdes; o runtime publicado precisa concluir o próximo deploy para receber essa correção. Os gates externos de Drive OAuth, worker desktop, provedor real e dispositivos físicos continuam pendentes. O relatório completo está em [docs/reports/2026-08-17-authenticated-site-audit.md](reports/2026-08-17-authenticated-site-audit.md)._
+_Estado: Drive-first e OCR seletivo por lotes seguem integrados. A auditoria autenticada corrigiu a perda de recall semântico causada por uma trava lexical ampla, alinhou os verificadores reais aos contratos atuais da interface, tornou suas dependências reproduzíveis e corrigiu a limpeza dos benchmarks. A importação real de foto foi reproduzida com sucesso no domínio publicado; o workflow recebeu margem operacional para a latência variável do OCR em segundo plano. Os gates locais do checkpoint estão verdes; os workflows publicados ainda precisam concluir a rodada deste SHA. Os gates externos de Drive OAuth, worker desktop, provedor real e dispositivos físicos continuam pendentes. O relatório completo está em
+[docs/reports/2026-08-17-authenticated-site-audit.md](reports/2026-08-17-authenticated-site-audit.md)._
 
 ## Resumo executivo
 
@@ -148,7 +149,7 @@ O fluxo real de busca foi exercitado com login, importação de PDF sintético, 
 
 A correção agora mantém recall para consultas em linguagem natural, restringe somente tokens opacos de identificador quando há evidência lexical forte e eleva o piso de candidatos semânticos isolados para `0.72`, acima do máximo negativo observado no corpus de staging (`0.7108`). O verificador aceita a posição semântica no top 3 quando o corpus compartilhado já contém uma fonte relevante, mas mantém Recall@1 para marcadores opacos exatos e exige taxa de falso positivo negativa zero. O cleanup visual também descobre documentos criados antes da persistência do estado do teste e confirma que nenhum documento ainda referencia o caderno antes de removê-lo. Os testes de URL visual passaram a validar o helper de apresentação, e os verificadores autenticados usam os textos atuais da fila e da rota de leitura. `pdf-lib` e `playwright` também passaram a ser dependências de desenvolvimento declaradas, removendo a necessidade de instalação ad hoc para executar os scripts locais.
 
-Validação local desta correção: `pnpm verify` passou com 324 arquivos e 1.387 testes; `pnpm test:e2e` passou com 8/8; gates source/offline e benchmark visual-semântico passaram. A validação autenticada contra o domínio publicado antes do deploy desta correção ainda reproduz a falha semântica no runtime antigo; ela deve ser repetida após o deploy do novo commit.
+Validação local do checkpoint atual: `pnpm verify` passou com 326 arquivos e 1.391 testes; `pnpm test:e2e` passou com 8/8; gates source/offline e benchmark visual-semântico passaram. A sonda pessoal autenticada contra o domínio publicado importou uma foto PNG, aguardou a página sair de `processing` para `ready`, extraiu 3 conteúdos e confirmou a limpeza do temporário. A rodada oficial que excedeu o timeout de foto foi tratada como flutuação de latência do OCR em segundo plano: o verificador agora aguarda até 300 segundos e a limpeza desanexa documentos sintéticos antes de removê-los.
 
 ### Checkpoint OCR corrigido
 
