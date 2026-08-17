@@ -184,8 +184,11 @@ A correção faz o kick autenticado chamar o modo síncrono limitado do worker e
 validar o recibo `{ completed: true, hasMore: boolean }` antes de devolver o
 aceite. O worker continua limitado por páginas/bytes/timeout e o encadeamento
 server-to-server e o cron continuam tratando lotes adicionais e retries. O
-contrato unitário cobre o novo cabeçalho e a validação do recibo; a confirmação
-remota da nova função depende do próximo deploy do SHA corrigido.
+contrato unitário cobre o novo cabeçalho e a validação do recibo. O deploy do
+SHA `06b8f46` publicou a função e passou Auth/RLS/pareamento, mas o gate OCR
+seguinte falhou na invocação do provedor por quota diária; portanto a
+confirmação end-to-end limpa dessa correção permanece pendente do reset/limite
+do Gemini, não de uma falha de autenticação ou cleanup.
 
 ## Rotas e responsividade
 
