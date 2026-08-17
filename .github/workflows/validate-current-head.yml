@@ -50,6 +50,7 @@ jobs:
           retention-days: 1
 
       - name: Publish running receipt
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -256,6 +257,7 @@ jobs:
 
       - name: Publish final receipt
         if: always()
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
           FRONTEND_OUTCOME: ${{ steps.frontend.outcome }}
@@ -266,8 +268,8 @@ jobs:
           DATABASE_OUTCOME: ${{ steps.database.outcome }}
         run: |
           if [ -z "${RECEIPT_ISSUE:-}" ]; then
-            echo 'Receipt issue was not created.' >&2
-            exit 1
+            echo 'Receipt issue is unavailable; verification gates remain authoritative.'
+            exit 0
           fi
           cat > /tmp/receipt.md <<EOF
           Status: ${{ job.status }}
