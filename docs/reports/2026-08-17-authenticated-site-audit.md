@@ -159,6 +159,18 @@ minutos para a fila assíncrona. A UI continua exibindo o estágio atual e ofere
 cancelamento. Um SLA externo do provedor/worker ainda não pode ser garantido
 por código de frontend.
 
+### F-06 — P2: benchmark visual desistia antes do estado terminal de OCR — corrigido no verificador
+
+No benchmark visual pós-deploy do checkpoint `d5dc5d7`, o fixture `pie` ainda
+estava em `processing` quando o verificador encerrou as quatro tentativas de
+fila. Isso não foi falha de cleanup nem de ranking: o job de limpeza terminou
+com sucesso e removeu os documentos/caderno sintéticos.
+
+O verificador agora consulta o estado da página até `ready`/`needs_review`,
+reconhece `failed`/`blocked_quota` como falhas terminais e só encerra por
+timeout operacional. A correção é coberta pelo contrato de tooling e será
+confirmada no próximo workflow pós-deploy.
+
 ## Rotas e responsividade
 
 As rotas autenticadas abaixo carregaram com título, `h1`, conteúdo visível e sem

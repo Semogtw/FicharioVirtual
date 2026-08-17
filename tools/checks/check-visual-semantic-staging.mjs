@@ -309,13 +309,31 @@ function retryLater(data, pageId) {
 	);
 }
 async function runOcr(db, pageId) {
-	let result;
 	for (const delay of RETRY_MS) {
 		if (delay) await sleep(delay);
-		result = await db.functions.invoke('process-ocr', { body: { pageIds: [pageId] } });
-		if (result.error || !retryLater(result.data, pageId)) break;
+		const current = await db.from('pages').select('status').eq('id', pageId).maybeSingle();
+		if (current.error) throw new Error(`OCR status lookup failed: ${current.error.message}`);
+		if (['ready', 'needs_review'].includes(current.data?.status)) return;
+		if (['failed', 'blocked_quota'].includes(current.data?.status)) {
+			throw new Error(`OCR reached terminal failure: ${current.data.status}`);
+		}
+		const result = await db.functions.invoke('process-ocr', { body: { pageIds: [pageId] } });
+		if (result.error) throw new Error(`OCR failed: ${result.error.message}`);
+		if (!retryLater(result.data, pageId)) break;
 	}
-	if (result?.error) throw new Error(`OCR failed: ${result.error.message}`);
+	const deadline = Date.now() + WAIT_MS;
+	let lastStatus = null;
+	while (Date.now() < deadline) {
+		const page = await db.from('pages').select('status').eq('id', pageId).maybeSingle();
+		if (page.error) throw new Error(`OCR status lookup failed: ${page.error.message}`);
+		lastStatus = page.data?.status ?? null;
+		if (['ready', 'needs_review'].includes(lastStatus)) return;
+		if (['failed', 'blocked_quota'].includes(lastStatus)) {
+			throw new Error(`OCR reached terminal failure: ${lastStatus}`);
+		}
+		await sleep(POLL_MS);
+	}
+	throw new Error(`OCR timeout status=${lastStatus ?? 'unknown'}`);
 }
 
 async function makeProbe(db, userId, notebookId, id, bytes, mimeType) {
@@ -344,9 +362,6 @@ async function makeProbe(db, userId, notebookId, id, bytes, mimeType) {
 		if (update.error) throw new Error(`${id} notebook assignment failed: ${update.error.message}`);
 	}
 	await runOcr(db, pageId);
-	const page = await db.from('pages').select('status').eq('id', pageId).single();
-	if (page.error || !['ready', 'needs_review'].includes(page.data?.status))
-		throw new Error(`${id} OCR did not finish successfully`);
 	return { id, documentId, pageId, path, mimeType, sha256: hash(bytes) };
 }
 

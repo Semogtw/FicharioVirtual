@@ -42,6 +42,12 @@ describe('visual staging benchmark contract', () => {
 		expect(script).not.toContain('body: { documentId: probe.documentId }');
 	});
 
+	it('waits for terminal OCR state instead of failing on normal queue latency', () => {
+		expect(script).toContain('const deadline = Date.now() + WAIT_MS');
+		expect(script).toContain("['ready', 'needs_review'].includes(lastStatus)");
+		expect(script).toContain('OCR timeout status=');
+	});
+
 	it('uses the production threshold and enforces top-one and negative safety', () => {
 		expect(script).toContain('SEMANTIC_VISUAL_SEARCH_MIN_SIMILARITY');
 		expect(script).toContain('r.rawVisualExpectedSimilarity >= VISUAL_THRESHOLD');
