@@ -2,6 +2,7 @@ import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { RequestBodyTooLargeError, readBoundedJson } from '../_shared/bounded-json.ts';
 import { corsHeaders, parseAppOrigin } from '../_shared/cors.ts';
 import { GeminiEmbeddingHttpError } from '../_shared/gemini-embedding-client.ts';
+import { applyHybridPrecision, hybridPrecisionPolicy } from '../_shared/hybrid-search-policy.ts';
 import {
 	SEMANTIC_EMBEDDING_MODEL,
 	SEMANTIC_SEARCH_MIN_SIMILARITY,
@@ -605,7 +606,16 @@ Deno.serve(async (request) => {
 			!visualResponse.error && Array.isArray(visualResponse.data)
 				? visualResponse.data.filter(validVisualRow)
 				: [];
-		const textualRanked = mergeCandidates(lexical, semantic, []);
+
+		// Exact/substring lexical hits are deliberately precision-first. The SQL
+		// lexical RPC assigns rank >= 1.5 to that evidence, so once it exists we
+		// keep only those documents in the visible hybrid candidate pool instead
+		// of letting vector similarity turn an opaque identifier into unrelated hits.
+		const precisionPolicy = hybridPrecisionPolicy(lexical);
+		const visibleLexical = applyHybridPrecision(lexical, precisionPolicy);
+		const visibleSemantic = applyHybridPrecision(semantic, precisionPolicy);
+		const visibleVisual = applyHybridPrecision(visual, precisionPolicy);
+		const textualRanked = mergeCandidates(visibleLexical, visibleSemantic, []);
 		if (visualMode !== 'off') {
 			await recordVisualSearchEvent({
 				supabase,
@@ -620,7 +630,11 @@ Deno.serve(async (request) => {
 		// Shadow is the production default: visual candidates are measured but
 		// cannot alter user-visible ordering until benchmark calibration promotes
 		// the mode explicitly to active.
-		const ranked = mergeCandidates(lexical, semantic, visualMode === 'active' ? visual : []);
+		const ranked = mergeCandidates(
+			visibleLexical,
+			visibleSemantic,
+			visualMode === 'active' ? visibleVisual : []
+		);
 		const end = parsed.offset + parsed.limit;
 		const results = ranked.slice(parsed.offset, end).map(publicCandidate);
 		const lexicalOnlyCount = ranked.filter((item) => item.matchMode === 'lexical').length;
@@ -648,9 +662,9 @@ Deno.serve(async (request) => {
 			queryEmbeddingCacheHit: queryEmbedding.cacheHit,
 			hasMore:
 				ranked.length > end ||
-				lexical.length === candidateLimit ||
-				semantic.length === candidateLimit ||
-				visual.length === candidateLimit,
+				visibleLexical.length === candidateLimit ||
+				visibleSemantic.length === candidateLimit ||
+				visibleVisual.length === candidateLimit,
 			results
 		});
 	} catch (error) {

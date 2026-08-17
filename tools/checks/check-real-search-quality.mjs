@@ -268,9 +268,14 @@ try {
 
 	stage('exact-search', 'running');
 	const exactResult = await searchResult(page, exactToken, document.id);
+	const exactCards = page.locator('section.results ol > li');
+	const exactCardCount = await exactCards.count();
+	if (exactCardCount !== 1) {
+		throw new Error(`Exact opaque marker returned ${exactCardCount} document cards instead of 1`);
+	}
 	await page.screenshot({ path: `${evidenceDir}/01-exact-search.png`, fullPage: true });
 	await assertNoVisibleFailure(page, 'exact search');
-	stage('exact-search', 'pass');
+	stage('exact-search', 'pass', '1 precise document card');
 
 	stage('original-highlight', 'running');
 	await exactResult.click();
