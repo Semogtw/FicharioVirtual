@@ -4,6 +4,10 @@
 	import type { PageDetail } from '$lib/domain/page';
 	import { countExactQueryOccurrences } from '$lib/search/document-search-results';
 	import {
+		resultHighlightQuery,
+		searchResultHref
+	} from '$lib/search/search-result-presentation';
+	import {
 		loadDocumentDetail,
 		loadDocumentPage,
 		type DocumentDetail,
@@ -33,14 +37,14 @@
 			? (Object.freeze([previewPage]) as readonly DocumentPageSummary[])
 			: EMPTY_PREVIEW_PAGES
 	);
-	let previewQuery = $derived(result.matchMode === 'visual' ? '' : query);
+	let previewQuery = $derived(resultHighlightQuery(result.matchMode, query));
 	let occurrenceCount = $derived(
-		previewPageDetail ? countExactQueryOccurrences(previewPageDetail.text, query) : 0
+		previewPageDetail && previewQuery
+			? countExactQueryOccurrences(previewPageDetail.text, previewQuery)
+			: 0
 	);
 	let href = $derived(
-		result.matchMode === 'visual'
-			? `/documents/${result.documentId}/?page=${result.pageNumber}`
-			: `/documents/${result.documentId}/?page=${result.pageNumber}&highlight=${encodeURIComponent(query.trim())}`
+		searchResultHref(result.documentId, result.pageNumber, result.matchMode, query)
 	);
 	let occurrenceLabel = $derived(
 		occurrenceCount === 1
