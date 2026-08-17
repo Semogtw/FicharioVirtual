@@ -232,7 +232,9 @@ async function searchFor(page, text, expectedDocumentId) {
 	}
 	const expectedLinkCount = await expectedLinks.count();
 	if (expectedLinkCount !== 1) {
-		throw new Error(`Expected exactly one result link for ${expectedDocumentId}, got ${expectedLinkCount}`);
+		throw new Error(
+			`Expected exactly one result link for ${expectedDocumentId}, got ${expectedLinkCount}`
+		);
 	}
 
 	const expectedResult = expectedLinks.first();
