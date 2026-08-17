@@ -6,7 +6,7 @@ const workflow = readFileSync('.github/workflows/verify-adaptive-visual-staging.
 
 describe('visual staging benchmark contract', () => {
 	it('keeps one canonical post-deploy visual benchmark workflow', () => {
-		expect(workflow).toContain('workflows: [Deploy Supabase staging]');
+		expect(workflow).toContain('workflows: [Verify real deployed app flows]');
 		expect(workflow).toContain('check-visual-semantic-staging.mjs');
 		expect(workflow).toContain('SEMANTIC_VISUAL_MODE=shadow');
 		for (const obsolete of [
@@ -18,12 +18,14 @@ describe('visual staging benchmark contract', () => {
 			expect(existsSync(obsolete), obsolete).toBe(false);
 	});
 
-	it('runs the expensive corpus only after an actual Supabase deploy job succeeds', () => {
-		expect(workflow).toContain('actions: read');
-		expect(workflow).toContain('select(.name == "deploy")');
-		expect(workflow).toContain('echo \'should_run=false\' >> "$GITHUB_OUTPUT"');
+	it('runs the expensive corpus only after the complete deployed app audit succeeds', () => {
+		expect(workflow).toContain("github.event.workflow_run.conclusion == 'success'");
+		expect(workflow).toContain("github.event.workflow_run.head_branch == 'main'");
+		expect(workflow).toContain("echo 'should_run=true' >> \"$GITHUB_OUTPUT\"");
 		expect(workflow).toContain("needs.gate.outputs.should_run == 'true'");
+		expect(workflow).toContain("needs.prepare-shadow.result == 'success'");
 		expect(workflow).toContain("needs.shadow.result != 'skipped'");
+		expect(workflow).not.toContain('VISUAL_POST_DEPLOY_BENCHMARK_ENABLED');
 	});
 
 	it('makes synthetic PNG identities unique without changing their visual geometry', () => {
