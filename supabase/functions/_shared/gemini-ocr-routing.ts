@@ -32,6 +32,15 @@ export class LocalOcrProviderRateLimitError extends Error {
 	}
 }
 
+export function localOcrProviderFailureCode(
+	error: unknown
+): 'ocr_provider_rate_queue_full' | 'ocr_rate_limiter_unavailable' | null {
+	if (!(error instanceof LocalOcrProviderRateLimitError)) return null;
+	return error.reason === 'local_queue_full'
+		? 'ocr_provider_rate_queue_full'
+		: 'ocr_rate_limiter_unavailable';
+}
+
 export function parseGeminiRateReservation(value: unknown): GeminiRateReservation | null {
 	if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
 	const record = value as Record<string, unknown>;

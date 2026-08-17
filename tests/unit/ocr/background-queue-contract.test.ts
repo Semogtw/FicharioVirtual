@@ -80,6 +80,8 @@ describe('background OCR queue contract', () => {
 		expect(worker).toContain('shouldFallbackGeminiOcr(attempt.error)');
 		expect(worker).toContain('attemptProvider(settings.fallbackModel, settings.fallbackRpm)');
 		expect(worker).toContain("routeReason = 'fallback_gemini_rate_limit'");
+		expect(worker).toContain('localOcrProviderFailureCode(attempt.error)');
+		expect(worker).toContain('safeErrorCode: code');
 		expect(worker).toContain('DEFAULT_GEMINI_OCR_PRIMARY_MODEL');
 		expect(worker).toContain('DEFAULT_GEMINI_OCR_FALLBACK_MODEL');
 	});

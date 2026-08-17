@@ -10,6 +10,7 @@ import {
 	DEFAULT_GEMINI_OCR_PRIMARY_MODEL,
 	DEFAULT_GEMINI_OCR_RPM,
 	LocalOcrProviderRateLimitError,
+	localOcrProviderFailureCode,
 	parseGeminiRateReservation,
 	retryAtFromRateLimit,
 	shouldFallbackGeminiOcr
@@ -578,11 +579,13 @@ Deno.serve(async (request) => {
 
 		if (!attempt.ok && shouldFallbackGeminiOcr(attempt.error)) {
 			const firstClaim = providerClaims.get(providerPages[0]!.pageId)!;
-			const primaryDecision = planOcrFailure(attempt.error, {
-				attemptCount: firstClaim.attemptCount,
-				failedAt: new Date(),
-				jitterMs: 0
-			});
+			const primaryErrorCode =
+				localOcrProviderFailureCode(attempt.error) ??
+				planOcrFailure(attempt.error, {
+					attemptCount: firstClaim.attemptCount,
+					failedAt: new Date(),
+					jitterMs: 0
+				}).persistence.code;
 			try {
 				await supabase.rpc(
 					'record_ocr_provider_usage',
@@ -596,7 +599,7 @@ Deno.serve(async (request) => {
 						pages: providerPages,
 						outcome: null,
 						status: 'error',
-						safeErrorCode: primaryDecision.persistence.code,
+						safeErrorCode: primaryErrorCode,
 						latencyMs: providerLatencyMs,
 						recordedAt: new Date().toISOString(),
 						routeReason: 'primary_gemini'
@@ -721,10 +724,7 @@ Deno.serve(async (request) => {
 		if (error instanceof LocalOcrProviderRateLimitError) {
 			const failedAt = new Date();
 			const nextRetryAt = retryAtFromRateLimit(failedAt, error.retryAfterMs);
-			const code =
-				error.reason === 'local_queue_full'
-					? 'ocr_provider_rate_queue_full'
-					: 'ocr_rate_limiter_unavailable';
+			const code = localOcrProviderFailureCode(error) ?? 'ocr_rate_limiter_unavailable';
 			const message =
 				error.reason === 'local_queue_full'
 					? 'O OCR está aguardando uma vaga segura no limite de requisições do provedor.'
@@ -738,6 +738,28 @@ Deno.serve(async (request) => {
 					nextRetryAt
 				});
 				pendingPageIds.push(page.pageId);
+			}
+			try {
+				await supabase.rpc(
+					'record_ocr_provider_usage',
+					buildGeminiTelemetryRpcArgs({
+						eventId: telemetryEventId,
+						documentId,
+						batchId: parsedRequest.batchId,
+						model: activeModel,
+						promptVersion,
+						documentKind: document.kind as 'image' | 'pdf',
+						pages: providerPages,
+						outcome: null,
+						status: 'error',
+						safeErrorCode: code,
+						latencyMs: providerLatencyMs,
+						recordedAt: failedAt.toISOString(),
+						routeReason: activeRouteReason
+					})
+				);
+			} catch {
+				// Capacity telemetry must never hide the retryable OCR result.
 			}
 			await finishBatch(parsedRequest.batchId, 'retryable', code, message, nextRetryAt);
 			return respond(

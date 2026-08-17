@@ -55,7 +55,9 @@ describe('process-ocr provider delegation', () => {
 		expect(source).toContain('shouldFallbackGeminiOcr(attempt.error)');
 		expect(source).toContain('attemptProvider(fallbackModel, fallbackRpm)');
 		expect(source).toContain("activeRouteReason = 'fallback_gemini_rate_limit'");
-		expect(source).toContain("code =\n\t\t\t\terror.reason === 'local_queue_full'");
+		expect(source).toContain('localOcrProviderFailureCode(attempt.error)');
+		expect(source).toContain('safeErrorCode: code');
+		expect(source).toContain('const code = localOcrProviderFailureCode(error)');
 	});
 
 	it('keeps aggregate inline bytes inside the Gemini request-size safety envelope', () => {

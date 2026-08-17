@@ -8,6 +8,7 @@ import {
 	DEFAULT_GEMINI_OCR_PRIMARY_MODEL,
 	DEFAULT_GEMINI_OCR_RPM,
 	LocalOcrProviderRateLimitError,
+	localOcrProviderFailureCode,
 	parseGeminiRateReservation,
 	retryAtFromRateLimit,
 	shouldFallbackGeminiOcr
@@ -456,11 +457,13 @@ async function drainOnce(settings: WorkerConfig) {
 		latencyMs = attempt.latencyMs;
 		if (!attempt.ok && shouldFallbackGeminiOcr(attempt.error)) {
 			const firstClaim = providerClaims.get(providerPages[0]!.pageId)!;
-			const primaryDecision = planOcrFailure(attempt.error, {
-				attemptCount: firstClaim.attemptCount,
-				failedAt: new Date(),
-				jitterMs: 0
-			});
+			const primaryErrorCode =
+				localOcrProviderFailureCode(attempt.error) ??
+				planOcrFailure(attempt.error, {
+					attemptCount: firstClaim.attemptCount,
+					failedAt: new Date(),
+					jitterMs: 0
+				}).persistence.code;
 			await runAsUser(admin, first.userId, 'record_provider_usage', {
 				args: buildGeminiTelemetryRpcArgs({
 					eventId,
@@ -472,7 +475,7 @@ async function drainOnce(settings: WorkerConfig) {
 					pages: providerPages,
 					outcome: null,
 					status: 'error',
-					safeErrorCode: primaryDecision.persistence.code,
+					safeErrorCode: primaryErrorCode,
 					latencyMs,
 					recordedAt: new Date().toISOString(),
 					routeReason: 'primary_gemini'
@@ -564,10 +567,7 @@ async function drainOnce(settings: WorkerConfig) {
 		if (error instanceof LocalOcrProviderRateLimitError) {
 			const failedAt = new Date();
 			const nextRetryAt = retryAtFromRateLimit(failedAt, error.retryAfterMs);
-			const code =
-				error.reason === 'local_queue_full'
-					? 'ocr_provider_rate_queue_full'
-					: 'ocr_rate_limiter_unavailable';
+			const code = localOcrProviderFailureCode(error) ?? 'ocr_rate_limiter_unavailable';
 			const message =
 				error.reason === 'local_queue_full'
 					? 'O OCR está aguardando uma vaga segura no limite de requisições do provedor.'
@@ -582,6 +582,23 @@ async function drainOnce(settings: WorkerConfig) {
 					nextRetryAt
 				}).catch(() => undefined);
 			}
+			await runAsUser(admin, first.userId, 'record_provider_usage', {
+				args: buildGeminiTelemetryRpcArgs({
+					eventId,
+					documentId: first.documentId,
+					batchId: first.batchId,
+					model: activeModel,
+					promptVersion: settings.promptVersion,
+					documentKind: first.documentKind,
+					pages: providerPages,
+					outcome: null,
+					status: 'error',
+					safeErrorCode: code,
+					latencyMs,
+					recordedAt: failedAt.toISOString(),
+					routeReason
+				})
+			}).catch(() => undefined);
 		} else {
 			let telemetryCode = 'ocr_request_failed';
 			for (const page of providerPages) {

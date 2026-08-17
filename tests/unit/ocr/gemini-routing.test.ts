@@ -6,6 +6,7 @@ import {
 	DEFAULT_GEMINI_OCR_PRIMARY_MODEL,
 	DEFAULT_GEMINI_OCR_RPM,
 	LocalOcrProviderRateLimitError,
+	localOcrProviderFailureCode,
 	parseGeminiRateReservation,
 	retryAtFromRateLimit,
 	shouldFallbackGeminiOcr
@@ -51,6 +52,20 @@ describe('Gemini OCR routing', () => {
 		const dailyBudget = new LocalOcrProviderRateLimitError('local_queue_full', 14_400_000);
 		expect(dailyBudget.retryAfterMs).toBe(14_400_000);
 		expect(shouldFallbackGeminiOcr(dailyBudget)).toBe(true);
+	});
+
+	it('classifies local provider capacity failures without pretending they were HTTP failures', () => {
+		expect(
+			localOcrProviderFailureCode(
+				new LocalOcrProviderRateLimitError('local_queue_full', 14_400_000)
+			)
+		).toBe('ocr_provider_rate_queue_full');
+		expect(
+			localOcrProviderFailureCode(
+				new LocalOcrProviderRateLimitError('rate_limiter_unavailable', 5_000)
+			)
+		).toBe('ocr_rate_limiter_unavailable');
+		expect(localOcrProviderFailureCode(new Error('network'))).toBeNull();
 	});
 
 	it('preserves long daily-budget deferrals so exhausted fallback work sleeps until reset', () => {
