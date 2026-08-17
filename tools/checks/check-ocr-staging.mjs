@@ -167,6 +167,39 @@ async function readProbePersistence(client, probe) {
 }
 
 /**
+ * Read only the allowlisted provider metadata while the probe still exists.
+ * The document cleanup cascades telemetry, so this must happen before deletion.
+ * @param {ReturnType<typeof createStagingClient>} client
+ * @param {{ documentId: string }} probe
+ */
+async function readProbeProviderAttempts(client, probe) {
+	const [events, metrics] = await Promise.all([
+		client
+			.from('ocr_provider_usage_events')
+			.select('id,model,status,safe_error_code')
+			.eq('document_id', probe.documentId)
+			.order('created_at', { ascending: true }),
+		client
+			.from('ocr_provider_page_metrics')
+			.select('usage_event_id,route_reason')
+			.eq('document_id', probe.documentId)
+	]);
+	if (events.error)
+		throw new Error(`OCR provider telemetry verification failed: ${events.error.message}`);
+	if (metrics.error)
+		throw new Error(`OCR provider route verification failed: ${metrics.error.message}`);
+	const routeByEvent = new Map(
+		(metrics.data ?? []).map((metric) => [metric.usage_event_id, metric.route_reason])
+	);
+	return (events.data ?? []).map((event) => ({
+		model: event.model,
+		status: event.status,
+		safeErrorCode: event.safe_error_code,
+		routeReason: routeByEvent.get(event.id) ?? null
+	}));
+}
+
+/**
  * @param {ReturnType<typeof createStagingClient>} client
  * @param {string} documentId
  */
@@ -208,8 +241,10 @@ async function main() {
 		errorKind: null,
 		providerStatus: null,
 		providerErrorKind: null,
-		providerErrorCode: null
+		providerErrorCode: null,
+		runtimeErrorCode: null
 	};
+	let providerAttempts = [];
 	let currentStage = 'configuration';
 
 	try {
@@ -273,6 +308,20 @@ async function main() {
 		failureStage = currentStage;
 	}
 
+	if (client && probe) {
+		try {
+			const runtimeState = await readProbePersistence(client, probe);
+			diagnostic.runtimeErrorCode = runtimeState.job?.last_error_code ?? null;
+		} catch {
+			// Runtime state is best-effort diagnostics and must not hide the original failure.
+		}
+		try {
+			providerAttempts = await readProbeProviderAttempts(client, probe);
+		} catch {
+			// Provider routing is best-effort diagnostics and must not hide the original failure.
+		}
+	}
+
 	let documentCleanup = probe ? 'failure' : 'not_required';
 	let sessionCleanup = client ? 'failure' : 'not_required';
 	const cleanupResults = await runStagingCleanup({
@@ -302,6 +351,7 @@ async function main() {
 		failureStage,
 		stages,
 		outcome,
+		providerAttempts,
 		diagnostic,
 		cleanup: { document: documentCleanup, session: sessionCleanup }
 	});

@@ -88,12 +88,14 @@ describe('OCR staging contract', () => {
 				attemptCount: 1,
 				tokens: { fichario: true, ocr: true, numericProbe: true }
 			},
+			providerAttempts: [],
 			diagnostic: {
 				httpStatus: null,
 				errorKind: null,
 				providerStatus: null,
 				providerErrorKind: null,
-				providerErrorCode: null
+				providerErrorCode: null,
+				runtimeErrorCode: null
 			},
 			cleanup: { document: 'success', session: 'success' }
 		});
@@ -112,6 +114,61 @@ describe('OCR staging contract', () => {
 		]) {
 			expect(serialized).not.toContain(forbidden);
 		}
+	});
+
+	it('preserves only sanitized provider routing attempts for fallback diagnosis', () => {
+		const report = createOcrStagingReport({
+			status: 'fail',
+			failureStage: 'invocation',
+			stages: {
+				authenticated: true,
+				authorized: true,
+				probeCreated: true,
+				functionCompleted: false,
+				persistenceVerified: false
+			},
+			outcome: {
+				documentStatus: null,
+				pageStatus: null,
+				jobStatus: null,
+				needsReview: null,
+				warningCount: null,
+				attemptCount: null,
+				tokens: { fichario: null, ocr: null, numericProbe: null }
+			},
+			providerAttempts: [
+				{
+					model: 'gemini-3.1-flash-lite',
+					status: 'error',
+					safeErrorCode: 'gemini_daily_quota',
+					routeReason: 'primary_gemini'
+				},
+				{
+					model: 'gemini-3.5-flash-lite',
+					status: 'error',
+					safeErrorCode: 'gemini_daily_quota',
+					routeReason: 'fallback_gemini_rate_limit'
+				}
+			],
+			diagnostic: {},
+			cleanup: { document: 'success', session: 'success' }
+		});
+
+		expect(report.providerAttempts).toEqual([
+			{
+				model: 'gemini-3.1-flash-lite',
+				status: 'error',
+				safeErrorCode: 'gemini_daily_quota',
+				routeReason: 'primary_gemini'
+			},
+			{
+				model: 'gemini-3.5-flash-lite',
+				status: 'error',
+				safeErrorCode: 'gemini_daily_quota',
+				routeReason: 'fallback_gemini_rate_limit'
+			}
+		]);
+		expect(JSON.stringify(report)).not.toContain('provider secret');
 	});
 
 	it('drops an unrecognized failure stage instead of serializing arbitrary text', () => {

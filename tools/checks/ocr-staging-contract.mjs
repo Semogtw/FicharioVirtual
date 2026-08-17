@@ -19,6 +19,15 @@ const PROVIDER_ERROR_KINDS = Object.freeze({
 	gemini_invalid_request: 'invalid_request',
 	gemini_service_unavailable: 'service_unavailable'
 });
+const SAFE_ROUTE_REASONS = Object.freeze(['primary_gemini', 'fallback_gemini_rate_limit']);
+const SAFE_RUNTIME_ERROR_CODES = Object.freeze([
+	...PROVIDER_ERROR_CODES,
+	'ocr_provider_rate_queue_full',
+	'ocr_rate_limiter_unavailable',
+	'ocr_request_failed',
+	'ocr_response_invalid',
+	'ocr_persistence_failed'
+]);
 
 /** @param {unknown} value */
 function safeProviderErrorCode(value) {
@@ -31,6 +40,42 @@ function safeProviderErrorCode(value) {
 function safeProviderErrorKind(value) {
 	const candidate = typeof value === 'string' ? value : '';
 	return Object.values(PROVIDER_ERROR_KINDS).includes(candidate) ? candidate : null;
+}
+
+/** @param {unknown} value */
+function safeModel(value) {
+	return typeof value === 'string' && /^[A-Za-z0-9._-]{3,128}$/.test(value) ? value : null;
+}
+
+/** @param {unknown} value */
+function safeRouteReason(value) {
+	return SAFE_ROUTE_REASONS.includes(typeof value === 'string' ? value : '') ? value : null;
+}
+
+/** @param {unknown} value */
+function safeRuntimeErrorCode(value) {
+	return SAFE_RUNTIME_ERROR_CODES.includes(typeof value === 'string' ? value : '') ? value : null;
+}
+
+/** @param {unknown} value */
+function sanitizeProviderAttempts(value) {
+	if (!Array.isArray(value)) return [];
+	return value.slice(0, 8).flatMap((attempt) => {
+		if (attempt === null || typeof attempt !== 'object' || Array.isArray(attempt)) return [];
+		const record = /** @type {Record<string, unknown>} */ (attempt);
+		const model = safeModel(record.model);
+		const status = record.status === 'success' || record.status === 'error' ? record.status : null;
+		const routeReason = safeRouteReason(record.routeReason);
+		if (!model || !status || !routeReason) return [];
+		return [
+			{
+				model,
+				status,
+				safeErrorCode: safeRuntimeErrorCode(record.safeErrorCode),
+				routeReason
+			}
+		];
+	});
 }
 
 /** @type {Readonly<Record<string, readonly number[]>>} */
@@ -146,12 +191,14 @@ export function createOcrProbePng(nonce) {
  *     attemptCount: unknown;
  *     tokens: { fichario: unknown; ocr: unknown; numericProbe: unknown };
  *   };
+ *   providerAttempts?: unknown;
  *   diagnostic?: {
  *     httpStatus?: unknown;
  *     errorKind?: unknown;
  *     providerStatus?: unknown;
  *     providerErrorKind?: unknown;
  *     providerErrorCode?: unknown;
+ *     runtimeErrorCode?: unknown;
  *   };
  *   cleanup: { document: CleanupStatus; session: CleanupStatus };
  * }} input
@@ -161,6 +208,7 @@ export function createOcrStagingReport({
 	failureStage,
 	stages,
 	outcome,
+	providerAttempts,
 	diagnostic = {},
 	cleanup
 }) {
@@ -223,12 +271,14 @@ export function createOcrStagingReport({
 				numericProbe: nullableBoolean(outcome.tokens.numericProbe)
 			}
 		},
+		providerAttempts: sanitizeProviderAttempts(providerAttempts),
 		diagnostic: {
 			httpStatus: nullableHttpStatus(diagnostic.httpStatus),
 			errorKind: errorKind(diagnostic.errorKind),
 			providerStatus: nullableHttpStatus(diagnostic.providerStatus),
 			providerErrorKind: safeProviderErrorKind(diagnostic.providerErrorKind),
-			providerErrorCode: safeProviderErrorCode(diagnostic.providerErrorCode)
+			providerErrorCode: safeProviderErrorCode(diagnostic.providerErrorCode),
+			runtimeErrorCode: safeRuntimeErrorCode(diagnostic.runtimeErrorCode)
 		},
 		cleanup: {
 			document: cleanupStatus(cleanup.document),
