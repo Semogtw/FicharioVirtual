@@ -1,8 +1,8 @@
 # Estado atual do Fichário Virtual
 
-_Atualizado: 2026-08-11_<br>
+_Atualizado: 2026-08-17_<br>
 _Branch ativa: `main`_<br>
-_Estado: Drive-first e OCR seletivo por lotes seguem integrados. No SHA atual `6ea434f`, `Validate current head` (`31457054179`), a verificação Supabase staging (`31457552460`) e o OCR staging sintético (`31457554164`) passaram; Auth, RLS, Storage privado, pareamento desktop de uso único e OCR real estão comprovados neste checkpoint. O Cloudflare Pages ainda não tem deployment, e o artifact público continua bloqueado pelos secrets Google Picker e pelo token Cloudflare documentados em `DEPLOYMENT_EXTERNAL_BLOCKERS.md`. O Desktop OCR Worker ainda depende de validação real de hardware/modelo. Release continua dependente dos gates externos de Drive, host e dispositivos._
+_Estado: Drive-first e OCR seletivo por lotes seguem integrados. O snapshot público auditado é `7d84408`; o site publicado respondeu com login, importação, OCR, busca e rotas autenticadas funcionais nos fluxos executados. A qualidade semântica ainda tem falso positivo grave em consulta negativa, o CI mantém um pin incompleto documentado como mudança necessária e os gates externos de Drive OAuth, worker desktop, provedor real e dispositivos físicos continuam pendentes. O relatório completo está em [docs/reports/2026-08-17-authenticated-site-audit.md](reports/2026-08-17-authenticated-site-audit.md)._
 
 ## Resumo executivo
 
