@@ -17,7 +17,7 @@ uma garantia de funcionamento universal ou de 100% de cobertura.
 
 ## Identificação e escopo
 
-- snapshot auditado: `origin/main` em `7d84408cde3ec172caa2d43490e3849a6661c9d8`;
+- snapshot auditado: `origin/main` em `55692954bf7d3f7c904c17c371d124432007a3ef`;
 - site auditado: `https://fichario-virtual.pages.dev/`;
 - conta: conta de teste autorizada, sem registrar credenciais neste documento;
 - navegador: Chromium no Browser do Codex;
@@ -170,6 +170,22 @@ O verificador agora consulta o estado da página até `ready`/`needs_review`,
 reconhece `failed`/`blocked_quota` como falhas terminais e só encerra por
 timeout operacional. A correção é coberta pelo contrato de tooling e será
 confirmada no próximo workflow pós-deploy.
+
+### F-07 — P1: disparo do OCR confirmava aceite antes de iniciar o worker — corrigido
+
+Na repetição do workflow real no mesmo SHA, login, importação nativa, ações,
+rotas e busca passaram, mas imagens e PDF escaneado permaneceram em
+`Aguardando leitura` até o timeout. Os relatórios não mostraram erro de browser
+nem falha de limpeza. O comportamento reproduzido era compatível com o
+`ocr-queue-kick` devolver `accepted` assim que o worker assíncrono recebia a
+requisição, sem provar que a execução havia começado.
+
+A correção faz o kick autenticado chamar o modo síncrono limitado do worker e
+validar o recibo `{ completed: true, hasMore: boolean }` antes de devolver o
+aceite. O worker continua limitado por páginas/bytes/timeout e o encadeamento
+server-to-server e o cron continuam tratando lotes adicionais e retries. O
+contrato unitário cobre o novo cabeçalho e a validação do recibo; a confirmação
+remota da nova função depende do próximo deploy do SHA corrigido.
 
 ## Rotas e responsividade
 

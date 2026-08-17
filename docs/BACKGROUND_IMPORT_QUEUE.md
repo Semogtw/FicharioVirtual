@@ -65,6 +65,13 @@ O E2E multitab trava que uma restauração concorrente produz uma única criaç�
 8. reconcilia o estado do lote;
 9. encadeia outra execução curta apenas quando ainda há trabalho imediatamente elegível.
 
+O disparo autenticado pelo navegador (`ocr-queue-kick`) usa o modo síncrono
+limitado do worker para retirar pelo menos um lote da fila antes de confirmar
+`accepted`. A resposta só é aceita quando contém o recibo estrito
+`{ completed: true, hasMore: boolean }`. Isso evita que a UI mostre um aceite
+falso enquanto a chamada assíncrona ainda não iniciou ou já perdeu sua execução;
+o encadeamento e o cron continuam responsáveis por lotes adicionais e retries.
+
 Limites configuráveis por ambiente:
 
 - `OCR_BACKGROUND_MAX_PAGES` — padrão 8 páginas por execução;
@@ -94,7 +101,7 @@ Além do contador preventivo, um evento de telemetria com `gemini_daily_quota` f
 
 ## Wake-up e retries sem navegador
 
-`ocr-queue-kick` é o endpoint autenticado usado pelo aplicativo para acordar o worker. Ele valida a sessão e a allowlist antes de fazer a chamada server-to-server.
+`ocr-queue-kick` é o endpoint autenticado usado pelo aplicativo para acordar o worker. Ele valida a sessão e a allowlist antes de fazer a chamada server-to-server, aguarda a execução síncrona limitada do primeiro lote e só então devolve o aceite à fila do navegador.
 
 Além disso, a migration `202608111705_background_ocr_cron.sql` agenda um wake-up a cada cinco minutos com Supabase Cron + `pg_net`. Trabalho ativo não espera o cron: o worker encadeia outra execução curta quando ainda existem candidatos imediatamente elegíveis. O cron existe para recuperar trabalho diferido, rate limits e filas que ficaram sem um navegador aberto.
 

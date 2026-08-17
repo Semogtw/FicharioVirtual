@@ -64,12 +64,31 @@ Deno.serve(async (request) => {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
-				'X-Fichario-Worker-Key': workerKey
+				'X-Fichario-Worker-Key': workerKey,
+				'X-Fichario-Worker-Mode': 'sync'
 			},
 			body: JSON.stringify({ source: 'authenticated-kick', userId: user.id })
 		});
 		if (!workerResponse.ok) return respond(503, { code: 'ocr_worker_unavailable' });
-		return respond(202, { accepted: true });
+		let receipt: unknown;
+		try {
+			receipt = await workerResponse.json();
+		} catch {
+			return respond(503, { code: 'ocr_worker_unavailable' });
+		}
+		if (
+			receipt === null ||
+			typeof receipt !== 'object' ||
+			Array.isArray(receipt) ||
+			(receipt as Record<string, unknown>).completed !== true ||
+			typeof (receipt as Record<string, unknown>).hasMore !== 'boolean'
+		) {
+			return respond(503, { code: 'ocr_worker_unavailable' });
+		}
+		return respond(202, {
+			accepted: true,
+			hasMore: (receipt as Record<string, unknown>).hasMore
+		});
 	} catch {
 		return respond(503, { code: 'ocr_worker_unavailable' });
 	}

@@ -91,6 +91,8 @@ describe('background OCR queue contract', () => {
 		expect(kick).toContain(".eq('is_active', true)");
 		expect(kick).toContain("Deno.env.get('OCR_BACKGROUND_WORKER_KEY')");
 		expect(kick).toContain("'X-Fichario-Worker-Key': workerKey");
+		expect(kick).toContain("'X-Fichario-Worker-Mode': 'sync'");
+		expect(kick).toContain('(receipt as Record<string, unknown>).completed !== true');
 		expect(kick).not.toContain('SUPABASE_SERVICE_ROLE_KEY');
 	});
 
