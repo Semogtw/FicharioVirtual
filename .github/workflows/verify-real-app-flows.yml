@@ -21,7 +21,7 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 55
     environment: staging
     env:
       TARGET_URL: https://fichario-virtual.pages.dev
@@ -38,6 +38,8 @@ jobs:
       REAL_APP_EXHAUSTIVE_EVIDENCE_DIR: /tmp/real-app-exhaustive-evidence
       REAL_APP_SPECIAL_REPORT_PATH: /tmp/real-app-special-report.json
       REAL_APP_SPECIAL_EVIDENCE_DIR: /tmp/real-app-special-evidence
+      REAL_SCANNED_PDF_REPORT_PATH: /tmp/real-scanned-pdf-import-report.json
+      REAL_SCANNED_PDF_EVIDENCE_DIR: /tmp/real-scanned-pdf-import-evidence
       PLAYWRIGHT_BROWSERS_PATH: /tmp/fichario-real-flow-browsers
 
     steps:
@@ -56,7 +58,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/fichario-real-flow
-          for verifier in check-real-app-flows.mjs check-real-app-actions.mjs check-real-app-exhaustive.mjs check-real-app-special-routes.mjs; do
+          for verifier in check-real-app-flows.mjs check-real-app-actions.mjs check-real-app-exhaustive.mjs check-real-app-special-routes.mjs check-real-scanned-pdf-import.mjs; do
             curl --fail --silent --show-error --location \
               "https://raw.githubusercontent.com/Semogtw/FicharioVirtual/${TARGET_SHA}/tools/checks/${verifier}" \
               --output "/tmp/fichario-real-flow/${verifier}"
@@ -83,6 +85,21 @@ jobs:
               if source.count(notice_old) != expected_count:
                   raise SystemExit(f'unexpected simplified import notice contract in {verifier}')
               verifier_path.write_text(source.replace(notice_old, notice_new), encoding='utf-8')
+
+          core_path = Path('/tmp/fichario-real-flow/check-real-app-flows.mjs')
+          core = core_path.read_text(encoding='utf-8')
+          core_replacements = [
+              (
+                  "expectedOccurrences === 1 ? '1 ocorrência' : `${expectedOccurrences} ocorrências`,",
+                  "expectedOccurrences === 1 ? '1 ocorrência nesta página' : `${expectedOccurrences} ocorrências nesta página`,",
+              ),
+              ('expectedOccurrences: 4', 'expectedOccurrences: 2'),
+          ]
+          for old_core, new_core in core_replacements:
+              if core.count(old_core) != 1:
+                  raise SystemExit(f'unexpected real-app-flow page occurrence contract for: {old_core}')
+              core = core.replace(old_core, new_core)
+          core_path.write_text(core, encoding='utf-8')
 
           actions_path = Path('/tmp/fichario-real-flow/check-real-app-actions.mjs')
           actions = actions_path.read_text(encoding='utf-8')
@@ -226,6 +243,7 @@ jobs:
           node --check /tmp/fichario-real-flow/check-real-app-actions.mjs
           node --check /tmp/fichario-real-flow/check-real-app-exhaustive.mjs
           node --check /tmp/fichario-real-flow/check-real-app-special-routes.mjs
+          node --check /tmp/fichario-real-flow/check-real-scanned-pdf-import.mjs
 
       - name: Set up Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
@@ -268,6 +286,12 @@ jobs:
         working-directory: /tmp/fichario-real-flow
         run: node check-real-app-special-routes.mjs
 
+      - name: Exercise deployed scanned PDF pipeline
+        id: scanned-pdf
+        continue-on-error: true
+        working-directory: /tmp/fichario-real-flow
+        run: node check-real-scanned-pdf-import.mjs
+
       - name: Upload sanitized real-flow evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -282,6 +306,8 @@ jobs:
             /tmp/real-app-exhaustive-evidence/
             /tmp/real-app-special-report.json
             /tmp/real-app-special-evidence/
+            /tmp/real-scanned-pdf-import-report.json
+            /tmp/real-scanned-pdf-import-evidence/
           if-no-files-found: error
           compression-level: 6
           retention-days: 7
@@ -294,9 +320,18 @@ jobs:
           ACTION_OUTCOME: ${{ steps.feature-actions.outcome }}
           EXHAUSTIVE_OUTCOME: ${{ steps.exhaustive-flows.outcome }}
           SPECIAL_OUTCOME: ${{ steps.special-routes.outcome }}
+          SCANNED_PDF_OUTCOME: ${{ steps.scanned-pdf.outcome }}
         run: |
           set -euo pipefail
           test "$CORE_OUTCOME" = success
           test "$ACTION_OUTCOME" = success
           test "$EXHAUSTIVE_OUTCOME" = success
           test "$SPECIAL_OUTCOME" = success
+          test "$SCANNED_PDF_OUTCOME" = success
+          node --input-type=module - <<'NODE'
+          import { readFile } from 'node:fs/promises';
+          const report = JSON.parse(await readFile(process.env.REAL_SCANNED_PDF_REPORT_PATH, 'utf8'));
+          if (report.status !== 'pass') throw new Error(`scanned PDF report status is ${report.status}`);
+          if (report.cleanup?.documents !== 'pass') throw new Error('scanned PDF document cleanup did not pass');
+          if (report.cleanup?.importSessions !== 'pass') throw new Error('scanned PDF import-session cleanup did not pass');
+          NODE
