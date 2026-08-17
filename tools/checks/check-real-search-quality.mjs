@@ -203,8 +203,8 @@ function searchMetrics(results, documentId) {
 		recallAt3: rank !== null && rank <= 3 ? 1 : 0,
 		mrr: rank === null ? 0 : 1 / rank,
 		resultCount: results.length,
-		matchMode: rank === null ? null : results[index]?.matchMode ?? null,
-		semanticSimilarity: rank === null ? null : results[index]?.semanticSimilarity ?? null
+		matchMode: rank === null ? null : (results[index]?.matchMode ?? null),
+		semanticSimilarity: rank === null ? null : (results[index]?.semanticSimilarity ?? null)
 	};
 }
 
@@ -321,7 +321,9 @@ try {
 		throw new Error(`Exact retrieval quality regressed: ${JSON.stringify(report.quality.exact)}`);
 	}
 	if (report.quality.semantic.recallAt1 !== 1 || report.quality.semantic.recallAt3 !== 1) {
-		throw new Error(`Semantic retrieval quality regressed: ${JSON.stringify(report.quality.semantic)}`);
+		throw new Error(
+			`Semantic retrieval quality regressed: ${JSON.stringify(report.quality.semantic)}`
+		);
 	}
 	for (const query of negativeQueries) {
 		const results = await backendSearch(query);
