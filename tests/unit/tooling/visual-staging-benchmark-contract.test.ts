@@ -21,7 +21,7 @@ describe('visual staging benchmark contract', () => {
 	it('runs the expensive corpus only after the complete deployed app audit succeeds', () => {
 		expect(workflow).toContain("github.event.workflow_run.conclusion == 'success'");
 		expect(workflow).toContain("github.event.workflow_run.head_branch == 'main'");
-		expect(workflow).toContain("echo 'should_run=true' >> \"$GITHUB_OUTPUT\"");
+		expect(workflow).toContain('echo \'should_run=true\' >> "$GITHUB_OUTPUT"');
 		expect(workflow).toContain("needs.gate.outputs.should_run == 'true'");
 		expect(workflow).toContain("needs.prepare-shadow.result == 'success'");
 		expect(workflow).toContain("needs.shadow.result != 'skipped'");
