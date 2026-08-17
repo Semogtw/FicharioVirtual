@@ -28,20 +28,41 @@ const filename = `search-quality-${runToken}.pdf`;
 const semanticSource =
 	'A arborização urbana ameniza ilhas térmicas graças ao sombreamento e à evapotranspiração.';
 const semanticQuery = 'por que municípios cheios de árvores costumam ter temperaturas menores';
+const negativeQueries = [
+	'receita de bolo de chocolate com cobertura de brigadeiro',
+	'como trocar o óleo do motor de um carro',
+	'regras para saque no voleibol profissional'
+];
 
 const report = {
-	schemaVersion: 1,
+	schemaVersion: 2,
 	target: target.origin,
 	runToken,
 	exactToken,
 	semanticQuery,
+	negativeQueries,
 	startedAt: new Date().toISOString(),
 	finishedAt: null,
 	status: 'running',
 	stages: [],
 	browser: { pageErrors: [], consoleErrors: [], serverErrors: [] },
 	created: { documents: [] },
-	observed: { highlightMarks: 0, semanticBadge: null, semanticChunks: 0 },
+	observed: {
+		highlightMarks: 0,
+		semanticHighlightMarks: null,
+		semanticBadge: null,
+		semanticChunks: 0
+	},
+	quality: {
+		exact: null,
+		semantic: null,
+		negative: {
+			queryCount: negativeQueries.length,
+			falsePositiveQueries: 0,
+			falsePositiveRate: null,
+			observations: []
+		}
+	},
 	cleanup: { documents: 'pending' },
 	error: null
 };
@@ -173,6 +194,31 @@ async function waitForQueue(page, timeoutMs = 180_000) {
 	throw new Error(`Import queue timed out: ${last}`);
 }
 
+function searchMetrics(results, documentId) {
+	const index = results.findIndex((result) => result.documentId === documentId);
+	const rank = index < 0 ? null : index + 1;
+	return {
+		rank,
+		recallAt1: rank === 1 ? 1 : 0,
+		recallAt3: rank !== null && rank <= 3 ? 1 : 0,
+		mrr: rank === null ? 0 : 1 / rank,
+		resultCount: results.length,
+		matchMode: rank === null ? null : results[index]?.matchMode ?? null,
+		semanticSimilarity: rank === null ? null : results[index]?.semanticSimilarity ?? null
+	};
+}
+
+async function backendSearch(query, limit = 30) {
+	const { data, error } = await client.functions.invoke('semantic-search', {
+		body: { query, notebookId: null, limit, offset: 0 }
+	});
+	if (error) throw new Error(`Semantic search function failed for ${JSON.stringify(query)}`);
+	if (!data || !Array.isArray(data.results)) {
+		throw new Error(`Semantic search returned an invalid result set for ${JSON.stringify(query)}`);
+	}
+	return data.results;
+}
+
 async function searchResult(page, query, documentId) {
 	await page.goto(new URL(`/search/?q=${encodeURIComponent(query)}`, target).href, {
 		waitUntil: 'domcontentloaded',
@@ -266,6 +312,44 @@ try {
 		`${chunks.length} chunk(s) · ${chunks[0]?.model ?? 'unknown model'}`
 	);
 
+	stage('search-quality-metrics', 'running');
+	const exactBackendResults = await backendSearch(exactToken);
+	const semanticBackendResults = await backendSearch(semanticQuery);
+	report.quality.exact = searchMetrics(exactBackendResults, document.id);
+	report.quality.semantic = searchMetrics(semanticBackendResults, document.id);
+	if (report.quality.exact.recallAt1 !== 1 || report.quality.exact.mrr !== 1) {
+		throw new Error(`Exact retrieval quality regressed: ${JSON.stringify(report.quality.exact)}`);
+	}
+	if (report.quality.semantic.recallAt1 !== 1 || report.quality.semantic.recallAt3 !== 1) {
+		throw new Error(`Semantic retrieval quality regressed: ${JSON.stringify(report.quality.semantic)}`);
+	}
+	for (const query of negativeQueries) {
+		const results = await backendSearch(query);
+		const falsePositive = results.some((result) => result.documentId === document.id);
+		if (falsePositive) report.quality.negative.falsePositiveQueries += 1;
+		report.quality.negative.observations.push({
+			query,
+			falsePositive,
+			resultCount: results.length,
+			topSemanticSimilarity:
+				results.length > 0
+					? Math.max(...results.map((result) => Number(result.semanticSimilarity) || 0))
+					: null
+		});
+	}
+	report.quality.negative.falsePositiveRate =
+		report.quality.negative.falsePositiveQueries / negativeQueries.length;
+	if (report.quality.negative.falsePositiveRate !== 0) {
+		throw new Error(
+			`Negative semantic false-positive rate is ${report.quality.negative.falsePositiveRate}`
+		);
+	}
+	stage(
+		'search-quality-metrics',
+		'pass',
+		`Recall@1=${report.quality.semantic.recallAt1} · Recall@3=${report.quality.semantic.recallAt3} · MRR=${report.quality.semantic.mrr.toFixed(3)} · negative FPR=0`
+	);
+
 	stage('exact-search', 'running');
 	const exactResult = await searchResult(page, exactToken, document.id);
 	const exactCards = page.locator('section.results ol > li');
@@ -301,9 +385,33 @@ try {
 	if (!/(Por sentido|Sentido \+ página)/i.test(badges)) {
 		throw new Error(`Paraphrase result was not semantic-only enough: ${badges}`);
 	}
+	const semanticHref = await semanticResult.getAttribute('href');
+	if (!semanticHref || new URL(semanticHref, target).searchParams.has('highlight')) {
+		throw new Error(`Semantic-only result still carried a lexical highlight: ${semanticHref}`);
+	}
 	await page.screenshot({ path: `${evidenceDir}/03-semantic-paraphrase.png`, fullPage: true });
+	await semanticResult.click();
+	await page.waitForURL((url) => url.pathname.includes(`/documents/${document.id}/`), {
+		timeout: 30_000
+	});
+	if (new URL(page.url()).searchParams.has('highlight')) {
+		throw new Error('Semantic-only navigation injected a lexical highlight parameter');
+	}
+	await page.locator('.media-viewer').first().waitFor({ state: 'visible', timeout: 45_000 });
+	await page.waitForTimeout(1_000);
+	report.observed.semanticHighlightMarks = await page.locator('.geometry-layer mark').count();
+	if (report.observed.semanticHighlightMarks !== 0) {
+		throw new Error(
+			`Semantic-only result rendered ${report.observed.semanticHighlightMarks} misleading mark(s)`
+		);
+	}
+	await page.screenshot({ path: `${evidenceDir}/04-semantic-open.png`, fullPage: true });
 	await assertNoVisibleFailure(page, 'semantic paraphrase search');
-	stage('semantic-paraphrase-search', 'pass', badges);
+	stage(
+		'semantic-paraphrase-search',
+		'pass',
+		`${badges} · no lexical highlight in card or original`
+	);
 
 	if (report.browser.pageErrors.length > 0) {
 		throw new Error(`Browser page errors: ${report.browser.pageErrors.join(' | ')}`);
