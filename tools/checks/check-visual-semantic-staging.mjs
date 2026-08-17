@@ -807,7 +807,21 @@ async function cleanup(db, statePath, reportPath) {
 	let count = 0;
 
 	await login(db);
-	for (const probe of probes) {
+	const notebookDocuments = await db
+		.from('documents')
+		.select('id')
+		.eq('notebook_id', state.notebookId);
+	if (notebookDocuments.error) {
+		failures.push({ id: 'notebook-discovery', message: notebookDocuments.error.message });
+	}
+	const documentIds = [
+		...new Set([
+			...probes.map((probe) => probe.documentId),
+			...(notebookDocuments.data ?? []).map((document) => document.id)
+		])
+	];
+
+	for (const documentId of documentIds) {
 		let deleted = false;
 		let lastError = null;
 		for (const delay of [0, 500, 1_500, 4_000]) {
@@ -825,8 +839,8 @@ async function cleanup(db, statePath, reportPath) {
 		}
 		if (!deleted) {
 			failures.push({
-				id: probe.id,
-				documentId: probe.documentId,
+				id: 'document',
+				documentId,
 				status: functionErrorStatus(lastError),
 				message: lastError?.message ?? 'unknown cleanup error'
 			});
@@ -834,6 +848,20 @@ async function cleanup(db, statePath, reportPath) {
 	}
 
 	let notebookDeleted = false;
+	if (failures.length === 0 && state.notebookId) {
+		const remainingDocuments = await db
+			.from('documents')
+			.select('id')
+			.eq('notebook_id', state.notebookId);
+		if (remainingDocuments.error) {
+			failures.push({ id: 'notebook-verification', message: remainingDocuments.error.message });
+		} else if ((remainingDocuments.data ?? []).length > 0) {
+			failures.push({
+				id: 'notebook-documents',
+				message: `${remainingDocuments.data.length} document(s) still reference the benchmark notebook`
+			});
+		}
+	}
 	if (failures.length === 0 && state.notebookId) {
 		const notebook = await db.from('notebooks').delete().eq('id', state.notebookId);
 		if (notebook.error) failures.push({ id: 'notebook', message: notebook.error.message });
@@ -843,7 +871,7 @@ async function cleanup(db, statePath, reportPath) {
 	const report = {
 		status: failures.length === 0 ? 'pass' : 'partial',
 		documentsDeleted: count,
-		documentsAttempted: probes.length,
+		documentsAttempted: documentIds.length,
 		notebookDeleted,
 		failures
 	};

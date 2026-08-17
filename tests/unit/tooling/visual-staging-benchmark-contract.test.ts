@@ -34,6 +34,12 @@ describe('visual staging benchmark contract', () => {
 		expect(script).toContain('const runNonce = randomUUID()');
 	});
 
+	it('discovers and verifies every document before deleting the benchmark notebook', () => {
+		expect(script).toContain(".eq('notebook_id', state.notebookId)");
+		expect(script).toContain('documentsAttempted: documentIds.length');
+		expect(script).toContain("id: 'notebook-documents'");
+	});
+
 	it('uses the production threshold and enforces top-one and negative safety', () => {
 		expect(script).toContain('SEMANTIC_VISUAL_SEARCH_MIN_SIMILARITY');
 		expect(script).toContain('r.rawVisualExpectedSimilarity >= VISUAL_THRESHOLD');
