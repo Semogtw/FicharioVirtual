@@ -82,9 +82,13 @@ jobs:
           ]:
               verifier_path = Path('/tmp/fichario-real-flow') / verifier
               source = verifier_path.read_text(encoding='utf-8')
-              if source.count(notice_old) != expected_count:
+              old_count = source.count(notice_old)
+              new_count = source.count(notice_new)
+              if old_count == expected_count:
+                  source = source.replace(notice_old, notice_new)
+              elif new_count != expected_count:
                   raise SystemExit(f'unexpected simplified import notice contract in {verifier}')
-              verifier_path.write_text(source.replace(notice_old, notice_new), encoding='utf-8')
+              verifier_path.write_text(source, encoding='utf-8')
 
           core_path = Path('/tmp/fichario-real-flow/check-real-app-flows.mjs')
           core = core_path.read_text(encoding='utf-8')
@@ -161,9 +165,11 @@ jobs:
           exhaustive = exhaustive_path.read_text(encoding='utf-8')
           queue_heading_old = "['/settings/computers/queue/', 'Fila desktop']"
           queue_heading_new = "['/settings/computers/queue/', 'Fila de leitura']"
-          if exhaustive.count(queue_heading_old) != 1:
+          queue_heading_count = exhaustive.count(queue_heading_old)
+          if queue_heading_count == 1:
+              exhaustive = exhaustive.replace(queue_heading_old, queue_heading_new)
+          elif exhaustive.count(queue_heading_new) != 1:
               raise SystemExit('unexpected exhaustive desktop queue heading contract')
-          exhaustive = exhaustive.replace(queue_heading_old, queue_heading_new)
           old = """\tpage.once('dialog', (dialog) => dialog.accept(renamedTagName));
           \tawait page.getByRole('button', { name: 'Renomear', exact: true }).click();
           \tawait page

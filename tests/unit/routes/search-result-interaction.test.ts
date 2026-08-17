@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { searchResultHref } from '../../../src/lib/search/search-result-presentation';
 
 const source = readFileSync('src/lib/components/SearchDocumentCard.svelte', 'utf8');
 
@@ -17,9 +18,15 @@ describe('search result interaction states', () => {
 	});
 
 	it('opens pure visual matches without inventing a textual highlight', () => {
-		expect(source).toContain("result.matchMode === 'visual'");
-		expect(source).toContain('? `/documents/${result.documentId}/?page=${result.pageNumber}`');
-		expect(source).toContain("result.matchMode === 'visual' ? '' : query");
+		expect(searchResultHref('document-1', 3, 'visual', 'árvores urbanas')).toBe(
+			'/documents/document-1/?page=3'
+		);
+		expect(searchResultHref('document-1', 3, 'semantic', 'árvores urbanas')).toBe(
+			'/documents/document-1/?page=3'
+		);
+		expect(searchResultHref('document-1', 3, 'hybrid', 'árvores urbanas')).toBe(
+			'/documents/document-1/?page=3&highlight=%C3%A1rvores%20urbanas'
+		);
 		expect(source).toContain("return 'Pela página'");
 	});
 });

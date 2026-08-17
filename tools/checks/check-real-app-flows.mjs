@@ -439,7 +439,7 @@ try {
 		mimeType: 'application/pdf',
 		buffer: await makePdf()
 	});
-	await page.getByText(/arquivo\(s\) adicionados à fila global/i).waitFor({
+	await page.getByText(/arquivo\(s\) adicionados\./i).waitFor({
 		state: 'visible',
 		timeout: 20_000
 	});
@@ -475,7 +475,7 @@ try {
 		mimeType: 'image/png',
 		buffer: imageBuffer
 	});
-	await page.getByText(/arquivo\(s\) adicionados à fila global/i).waitFor({
+	await page.getByText(/arquivo\(s\) adicionados\./i).waitFor({
 		state: 'visible',
 		timeout: 20_000
 	});

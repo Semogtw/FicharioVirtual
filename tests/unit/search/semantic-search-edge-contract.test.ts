@@ -19,7 +19,7 @@ describe('global semantic search edge contract', () => {
 		expect(edge).toContain("visualMode === 'active' ? visibleVisual : []");
 		expect(edge).toContain("matchMode: 'semantic'");
 		expect(edge).toContain('merged.set(row.document_id, candidate)');
-		expect(edge).toContain('hybridPrecisionPolicy(lexical)');
+		expect(edge).toContain('hybridPrecisionPolicy(lexical, parsed.query)');
 		expect(edge).toContain('applyHybridPrecision(semantic, precisionPolicy)');
 	});
 

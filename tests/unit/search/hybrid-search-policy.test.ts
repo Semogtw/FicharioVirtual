@@ -7,12 +7,12 @@ import {
 } from '../../../supabase/functions/_shared/hybrid-search-policy';
 
 describe('hybrid search precision policy', () => {
-	it('locks candidate recall to documents with strong lexical evidence', () => {
+	it('locks candidate recall for opaque exact-token searches', () => {
 		const lexical = [
 			{ document_id: 'exact', rank: STRONG_LEXICAL_RANK_MIN },
 			{ document_id: 'fuzzy', rank: 1.24 }
 		];
-		const policy = hybridPrecisionPolicy(lexical);
+		const policy = hybridPrecisionPolicy(lexical, 'FICHARIO_AUDIT_2026_08_17_ALPHA');
 
 		expect(policy.restricted).toBe(true);
 		expect(applyHybridPrecision(lexical, policy)).toEqual([lexical[0]]);
@@ -25,6 +25,27 @@ describe('hybrid search precision policy', () => {
 				policy
 			)
 		).toEqual([{ document_id: 'exact', semantic_similarity: 0.61 }]);
+	});
+
+	it('keeps semantic recall when a natural-language query has an exact lexical hit elsewhere', () => {
+		const lexical = [{ document_id: 'phrase-hit', rank: STRONG_LEXICAL_RANK_MIN }];
+		const policy = hybridPrecisionPolicy(
+			lexical,
+			'por que municípios cheios de árvores costumam ter temperaturas menores'
+		);
+		const semantic = [
+			{
+				document_id: 'paraphrase',
+				semantic_similarity: SEMANTIC_SEARCH_STANDALONE_MIN_SIMILARITY + 0.08
+			},
+			{
+				document_id: 'semantic-noise',
+				semantic_similarity: SEMANTIC_SEARCH_STANDALONE_MIN_SIMILARITY - 0.01
+			}
+		];
+
+		expect(policy.restricted).toBe(false);
+		expect(applyHybridPrecision(semantic, policy)).toEqual([semantic[0]]);
 	});
 
 	it('keeps lexical recall open while requiring confidence for semantic-only candidates', () => {
@@ -68,9 +89,10 @@ describe('hybrid search precision policy', () => {
 	});
 
 	it('does not treat ordinary fuzzy trigram evidence as a precision lock', () => {
-		const policy = hybridPrecisionPolicy([
-			{ document_id: 'near-match', rank: STRONG_LEXICAL_RANK_MIN - 0.0001 }
-		]);
+		const policy = hybridPrecisionPolicy(
+			[{ document_id: 'near-match', rank: STRONG_LEXICAL_RANK_MIN - 0.0001 }],
+			'FICHARIO_AUDIT_2026_08_17_ALPHA'
+		);
 		expect(policy.restricted).toBe(false);
 	});
 });

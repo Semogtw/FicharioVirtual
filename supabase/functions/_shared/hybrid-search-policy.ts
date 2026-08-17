@@ -11,8 +11,14 @@ export type HybridPrecisionPolicy = Readonly<{
 	strongDocumentIds: ReadonlySet<string>;
 }>;
 
+function isOpaqueExactTokenQuery(query: string): boolean {
+	const normalized = query.trim();
+	return normalized.length >= 8 && !/\s/.test(normalized) && /[\d_#@:/.-]/.test(normalized);
+}
+
 export function hybridPrecisionPolicy(
-	lexical: readonly LexicalEvidenceRow[]
+	lexical: readonly LexicalEvidenceRow[],
+	query = ''
 ): HybridPrecisionPolicy {
 	const strongDocumentIds = new Set(
 		lexical
@@ -20,7 +26,7 @@ export function hybridPrecisionPolicy(
 			.map((row) => row.document_id)
 	);
 	return {
-		restricted: strongDocumentIds.size > 0,
+		restricted: strongDocumentIds.size > 0 && isOpaqueExactTokenQuery(query),
 		strongDocumentIds
 	};
 }

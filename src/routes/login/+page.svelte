@@ -69,7 +69,7 @@
 		</div>
 		<ul>
 			<li>Arquivos mantidos em armazenamento privado</li>
-			<li>Busca textual sem banco vetorial no MVP</li>
+			<li>Busca textual e semântica com índice vetorial</li>
 			<li>Nenhuma ativação automática de plano pago</li>
 		</ul>
 	</section>

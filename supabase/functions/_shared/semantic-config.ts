@@ -10,10 +10,9 @@ export const SEMANTIC_INDEX_MAX_CHUNKS_PER_REQUEST = 64;
 
 export const SEMANTIC_SEARCH_MIN_SIMILARITY = 0.46;
 // Semantic-only cards need stronger evidence than semantic reinforcement of a
-// lexical hit. 0.62 was already the confidence floor used by the merger before
-// replacing a lexical excerpt with semantic evidence, so reuse that established
-// boundary instead of inventing a new unmeasured score.
-export const SEMANTIC_SEARCH_STANDALONE_MIN_SIMILARITY = 0.62;
+// lexical hit. 0.72 is above the 0.7108 maximum observed across the negative
+// natural-language queries in the 2026-08-17 staging audit.
+export const SEMANTIC_SEARCH_STANDALONE_MIN_SIMILARITY = 0.72;
 // Calibrated against the 2026-08-14 real staging visual corpus: the weakest
 // relevant page scored 0.3617 while the strongest negative query candidate
 // scored 0.3494. Keep a small conservative margin without discarding the

@@ -2,7 +2,7 @@
 
 _Atualizado: 2026-08-17_<br>
 _Branch ativa: `main`_<br>
-_Estado: Drive-first e OCR seletivo por lotes seguem integrados. O snapshot público auditado é `7d84408`; o site publicado respondeu com login, importação, OCR, busca e rotas autenticadas funcionais nos fluxos executados. A qualidade semântica ainda tem falso positivo grave em consulta negativa, o CI mantém um pin incompleto documentado como mudança necessária e os gates externos de Drive OAuth, worker desktop, provedor real e dispositivos físicos continuam pendentes. O relatório completo está em [docs/reports/2026-08-17-authenticated-site-audit.md](reports/2026-08-17-authenticated-site-audit.md)._
+_Estado: Drive-first e OCR seletivo por lotes seguem integrados. A auditoria autenticada reproduziu e corrigiu a perda de recall semântico causada por uma trava lexical ampla, alinhou os verificadores reais aos contratos atuais da interface e tornou suas dependências reproduzíveis no projeto. Os gates locais estão verdes; o runtime publicado precisa concluir o próximo deploy para receber essa correção. Os gates externos de Drive OAuth, worker desktop, provedor real e dispositivos físicos continuam pendentes. O relatório completo está em [docs/reports/2026-08-17-authenticated-site-audit.md](reports/2026-08-17-authenticated-site-audit.md)._
 
 ## Resumo executivo
 
@@ -141,6 +141,14 @@ A rota desktop já deixou de ser apenas arquitetura e possui implementação loc
 O estado local `readyToRun` não é selo de benchmark. Ainda não existe modelo padrão aprovado nem backend CPU/Vulkan/ROCm declarado validado em hardware real.
 
 ## Estado de validação
+
+### Correção da auditoria autenticada de 2026-08-17
+
+O fluxo real de busca foi exercitado com login, importação de PDF sintético, indexação Gemini, consultas exata, semântica e negativas, seguido de limpeza dos documentos criados. A regressão encontrada era de política: uma frase exata em qualquer documento ativava uma restrição lexical global e escondia o documento semanticamente relevante; consultas negativas também mostravam candidatos abaixo do limite de confiança.
+
+A correção agora mantém recall para consultas em linguagem natural, restringe somente tokens opacos de identificador quando há evidência lexical forte e eleva o piso de candidatos semânticos isolados para `0.72`, acima do máximo negativo observado no corpus de staging (`0.7108`). Os testes de URL visual passaram a validar o helper de apresentação, e os verificadores autenticados usam os textos atuais da fila e da rota de leitura. `pdf-lib` e `playwright` também passaram a ser dependências de desenvolvimento declaradas, removendo a necessidade de instalação ad hoc para executar os scripts locais.
+
+Validação local desta correção: `pnpm verify` passou com 324 arquivos e 1.387 testes; `pnpm test:e2e` passou com 8/8; gates source/offline e benchmark visual-semântico passaram. A validação autenticada contra o domínio publicado antes do deploy desta correção ainda reproduz a falha semântica no runtime antigo; ela deve ser repetida após o deploy do novo commit.
 
 ### Checkpoint OCR corrigido
 

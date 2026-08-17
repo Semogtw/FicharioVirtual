@@ -6,6 +6,7 @@ import { applyHybridPrecision, hybridPrecisionPolicy } from '../_shared/hybrid-s
 import {
 	SEMANTIC_EMBEDDING_MODEL,
 	SEMANTIC_SEARCH_MIN_SIMILARITY,
+	SEMANTIC_SEARCH_STANDALONE_MIN_SIMILARITY,
 	SEMANTIC_VISUAL_SEARCH_MIN_SIMILARITY
 } from '../_shared/semantic-config.ts';
 import { getSemanticQueryEmbedding } from '../_shared/semantic-query-cache.ts';
@@ -293,7 +294,10 @@ function mergeCandidates(
 					pageNumber: row.page_number
 				});
 			}
-			if (row.semantic_similarity >= 0.62 && row.excerpt.trim()) {
+			if (
+				row.semantic_similarity >= SEMANTIC_SEARCH_STANDALONE_MIN_SIMILARITY &&
+				row.excerpt.trim()
+			) {
 				current.excerpt = row.excerpt.slice(0, 2000);
 			}
 			scoreCandidate(current);
@@ -607,11 +611,10 @@ Deno.serve(async (request) => {
 				? visualResponse.data.filter(validVisualRow)
 				: [];
 
-		// Exact/substring lexical hits are deliberately precision-first. The SQL
-		// lexical RPC assigns rank >= 1.5 to that evidence, so once it exists we
-		// keep only those documents in the visible hybrid candidate pool instead
-		// of letting vector similarity turn an opaque identifier into unrelated hits.
-		const precisionPolicy = hybridPrecisionPolicy(lexical);
+		// Opaque exact-token lexical hits are deliberately precision-first. Natural
+		// language queries keep semantic recall even when another document contains
+		// the exact wording, while identifiers remain protected from vector noise.
+		const precisionPolicy = hybridPrecisionPolicy(lexical, parsed.query);
 		const visibleLexical = applyHybridPrecision(lexical, precisionPolicy);
 		const visibleSemantic = applyHybridPrecision(semantic, precisionPolicy);
 		const visibleVisual = applyHybridPrecision(visual, precisionPolicy);

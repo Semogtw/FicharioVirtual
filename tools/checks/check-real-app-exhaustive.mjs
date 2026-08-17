@@ -221,7 +221,7 @@ try {
 		['/drive/conflicts/', 'Conflitos do Google Drive'],
 		['/drive/jobs/', 'Mudanças locais'],
 		['/settings/computers/', 'Computadores'],
-		['/settings/computers/queue/', 'Fila desktop']
+		['/settings/computers/queue/', 'Fila de leitura']
 	]) {
 		await openRoute(page, route, heading);
 	}
@@ -259,7 +259,7 @@ try {
 			buffer: await makePdf()
 		});
 	await page
-		.getByText(/arquivo\(s\) adicionados à fila global/i)
+		.getByText(/arquivo\(s\) adicionados\./i)
 		.waitFor({ state: 'visible', timeout: 25_000 });
 	const imported = await waitForRow(client, 'documents', { original_filename: pdfFilename });
 	report.created.documents.push(imported.id);

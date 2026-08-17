@@ -470,7 +470,7 @@ try {
 		.locator('input[type="file"][accept*="application/pdf"]')
 		.first()
 		.setInputFiles({ name: pdfFilename, mimeType: 'application/pdf', buffer: mediumPdf });
-	await page.getByText(/arquivo\(s\) adicionados à fila global/i).waitFor({
+	await page.getByText(/arquivo\(s\) adicionados\./i).waitFor({
 		state: 'visible',
 		timeout: 20_000
 	});
