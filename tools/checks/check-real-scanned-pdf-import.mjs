@@ -222,8 +222,26 @@ async function searchFor(page, text, expectedDocumentId) {
 	await page.getByRole('button', { name: 'Pesquisar', exact: true }).click();
 	const results = page.locator('section.results');
 	await results.waitFor({ state: 'visible', timeout: 45_000 });
-	const expectedResult = results.locator(`a[href^="/documents/${expectedDocumentId}/"]`).first();
-	await expectedResult.waitFor({ state: 'visible', timeout: 45_000 });
+	const cards = results.locator('ol > li');
+	const expectedLinks = results.locator(`a[href^="/documents/${expectedDocumentId}/"]`);
+	await expectedLinks.first().waitFor({ state: 'visible', timeout: 45_000 });
+
+	const cardCount = await cards.count();
+	if (cardCount !== 1) {
+		throw new Error(`Opaque OCR marker returned ${cardCount} document cards instead of 1`);
+	}
+	const expectedLinkCount = await expectedLinks.count();
+	if (expectedLinkCount !== 1) {
+		throw new Error(`Expected exactly one result link for ${expectedDocumentId}, got ${expectedLinkCount}`);
+	}
+
+	const expectedResult = expectedLinks.first();
+	await expectedResult.locator('img').first().waitFor({ state: 'visible', timeout: 45_000 });
+	const loading = expectedResult.getByText(/Carregando documento/i);
+	if (await loading.count()) {
+		await loading.first().waitFor({ state: 'hidden', timeout: 45_000 });
+	}
+	return { cardCount, expectedResult };
 }
 
 function captureImportResumeKey(request, resumeKeys) {
@@ -367,8 +385,8 @@ try {
 	);
 
 	stage('scanned-pdf-search', 'running');
-	await searchFor(page, ocrToken, documentRow.id);
-	stage('scanned-pdf-search', 'pass');
+	const search = await searchFor(page, ocrToken, documentRow.id);
+	stage('scanned-pdf-search', 'pass', `${search.cardCount} precise document card`);
 
 	await page
 		.screenshot({ path: `${evidenceDir}/final.png`, fullPage: true })
