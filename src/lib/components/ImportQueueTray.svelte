@@ -52,7 +52,7 @@
 		rendering: 'Preparando páginas',
 		publishing: 'Salvando no fichário',
 		reading: 'Leitura iniciada',
-		waiting: 'Aguardando leitura',
+		waiting: 'Aguardando leitura · atualização automática a cada 10 s',
 		needs_review: 'Pronto para revisão',
 		complete: 'Concluído',
 		duplicate: 'Já existe',
@@ -77,7 +77,7 @@
 	}
 
 	function canRetry(entry: QueueEntry) {
-		return ['failed', 'cancelled'].includes(entry.item.status);
+		return ['failed', 'cancelled', 'waiting'].includes(entry.item.status);
 	}
 
 	function canRemove(entry: QueueEntry) {
