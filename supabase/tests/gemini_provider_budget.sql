@@ -38,10 +38,27 @@ delete from public.ocr_provider_rate_state
 where model in ('gemini-rpd-primary-test', 'gemini-rpd-fallback-test');
 
 select lives_ok(
-  $$
-    select public.reserve_ocr_provider_rate_slot('gemini-rpd-primary-test', 60, 60000)
-    from generate_series(1, 190)
-  $$,
+  $test$
+    do $$
+    declare
+      reservation jsonb;
+      reservation_index integer;
+    begin
+      for reservation_index in 1..190 loop
+        update public.ocr_provider_rate_state
+        set next_available_at = clock_timestamp()
+        where model = 'gemini-rpd-primary-test';
+
+        select public.reserve_ocr_provider_rate_slot('gemini-rpd-primary-test', 60, 0)
+        into reservation;
+
+        if (reservation ->> 'allowed')::boolean is distinct from true then
+          raise exception 'daily reservation % was unexpectedly blocked: %', reservation_index, reservation;
+        end if;
+      end loop;
+    end;
+    $$;
+  $test$,
   'the first 190 daily reservations fit the primary model budget'
 );
 
