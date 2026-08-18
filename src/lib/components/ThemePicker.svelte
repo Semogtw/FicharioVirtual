@@ -66,7 +66,9 @@
 			<p>Escolha uma paleta. A estrutura editorial e a legibilidade permanecem iguais.</p>
 		</div>
 		<span class="current-theme" aria-live="polite">
-			{THEMES.find((theme) => theme.id === activeTheme)?.name ?? 'Arquivo'}
+			{#key activeTheme}
+				<span>{THEMES.find((theme) => theme.id === activeTheme)?.name ?? 'Arquivo'}</span>
+			{/key}
 		</span>
 	</div>
 
@@ -91,7 +93,7 @@
 						<span class="swatch" style={`--swatch: ${swatch}`}></span>
 					{/each}
 				</span>
-				<span class="check" aria-hidden="true">{activeTheme === theme.id ? '✓' : ''}</span>
+				<span class="check" class:visible={activeTheme === theme.id} aria-hidden="true">✓</span>
 			</button>
 		{/each}
 	</div>
@@ -107,6 +109,10 @@
 		background:
 			linear-gradient(135deg, rgb(var(--archive-rgb) / 5%), transparent 48%), var(--surface);
 		box-shadow: var(--shadow-soft);
+		transition:
+			background-color var(--motion-slow) var(--ease-soft),
+			border-color var(--motion-slow) var(--ease-soft),
+			box-shadow var(--motion-slow) var(--ease-soft);
 	}
 
 	.theme-heading {
@@ -148,6 +154,27 @@
 		color: var(--archive);
 		font-size: 0.76rem;
 		font-weight: 760;
+		overflow: hidden;
+		transition:
+			background-color var(--motion-slow) var(--ease-soft),
+			border-color var(--motion-slow) var(--ease-soft),
+			color var(--motion-slow) var(--ease-soft);
+	}
+
+	.current-theme > span {
+		display: block;
+		animation: theme-name-enter var(--motion-base) var(--ease-soft) both;
+	}
+
+	@keyframes theme-name-enter {
+		from {
+			opacity: 0;
+			transform: translateY(0.25rem);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
 	}
 
 	.theme-grid {
@@ -170,15 +197,23 @@
 		color: var(--ink);
 		text-align: left;
 		cursor: pointer;
+		transform: translateY(0) scale(1);
 		transition:
-			border-color 120ms ease,
-			box-shadow 120ms ease,
-			transform 120ms ease;
+			background-color var(--motion-slow) var(--ease-soft),
+			border-color var(--motion-base) var(--ease-standard),
+			box-shadow var(--motion-slow) var(--ease-soft),
+			color var(--motion-slow) var(--ease-soft),
+			transform var(--motion-base) var(--ease-emphasized);
 	}
 
 	button.active {
 		border-color: var(--archive);
 		box-shadow: inset 0 0 0 1px var(--archive);
+	}
+
+	button:active {
+		transform: translateY(1px) scale(0.985);
+		transition-duration: var(--motion-instant);
 	}
 
 	.option-copy {
@@ -213,6 +248,8 @@
 		border-radius: 50%;
 		background: var(--swatch);
 		box-shadow: 0 0 0 1px rgb(var(--ink-rgb) / 12%);
+		transform: translateY(0);
+		transition: transform var(--motion-base) var(--ease-emphasized);
 	}
 
 	.swatch:first-child {
@@ -232,17 +269,36 @@
 		color: white;
 		font-size: 0.72rem;
 		font-weight: 800;
+		opacity: 0;
+		transform: scale(0.55) rotate(-12deg);
+		transition:
+			background-color var(--motion-slow) var(--ease-soft),
+			opacity var(--motion-fast) var(--ease-standard),
+			transform var(--motion-base) var(--ease-emphasized);
 	}
 
-	button:not(.active) .check {
-		background: transparent;
+	.check.visible {
+		opacity: 1;
+		transform: scale(1) rotate(0deg);
 	}
 
 	@media (hover: hover) and (pointer: fine) {
 		button:hover {
 			border-color: var(--line-strong);
-			box-shadow: 0 0.5rem 1.4rem rgb(var(--ink-rgb) / 7%);
-			transform: translateY(-0.08rem);
+			box-shadow: 0 0.6rem 1.6rem rgb(var(--ink-rgb) / 8%);
+			transform: translateY(-0.12rem) scale(1.002);
+		}
+
+		button:hover .swatch:nth-child(1) {
+			transform: translateY(-1px);
+		}
+
+		button:hover .swatch:nth-child(2) {
+			transform: translateY(-2px);
+		}
+
+		button:hover .swatch:nth-child(3) {
+			transform: translateY(-1px);
 		}
 	}
 
