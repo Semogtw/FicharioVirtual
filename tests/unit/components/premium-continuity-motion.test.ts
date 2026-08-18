@@ -14,7 +14,7 @@ describe('premium continuity motion', () => {
 		expect(shell).toContain('startViewTransition');
 		expect(shell).toContain('class:document-route={documentRoute}');
 		expect(shell).toContain('view-transition-name: selected-document');
-		expect(card).toContain("card.dataset.documentTransition = 'selected'");
+		expect(card).toContain('transitioning = true;');
 		expect(card).toContain('view-transition-name: selected-document');
 		expect(globalCss).toContain('::view-transition-group(selected-document)');
 		expect(globalCss).toContain('html:active-view-transition .route-content');

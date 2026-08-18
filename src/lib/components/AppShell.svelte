@@ -14,10 +14,6 @@
 		children: Snippet;
 	}
 
-	interface ViewTransitionDocument extends Document {
-		startViewTransition?: (callback: () => Promise<void> | void) => unknown;
-	}
-
 	let { children }: AppShellProps = $props();
 	let searchQuery = $derived(
 		page.url.pathname.startsWith('/search')
@@ -38,16 +34,15 @@
 
 	onNavigate((navigationEvent) => {
 		if (typeof document === 'undefined' || typeof window === 'undefined') return;
-		const transitionDocument = document as ViewTransitionDocument;
 		if (
-			!transitionDocument.startViewTransition ||
+			!document.startViewTransition ||
 			window.matchMedia('(prefers-reduced-motion: reduce)').matches
 		) {
 			return;
 		}
 
 		return new Promise<void>((resolve) => {
-			transitionDocument.startViewTransition?.(async () => {
+			document.startViewTransition(async () => {
 				resolve();
 				await navigationEvent.complete;
 			});

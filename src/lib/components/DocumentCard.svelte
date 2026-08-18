@@ -8,10 +8,11 @@
 	}
 
 	let {
-		document,
+		document: documentSummary,
 		thumbnailUrl = null,
-		href = `/documents/${document.id}/`
+		href = `/documents/${documentSummary.id}/`
 	}: DocumentCardProps = $props();
+	let transitioning = $state(false);
 
 	const statusLabels = {
 		uploading: 'Enviando',
@@ -42,37 +43,29 @@
 			return;
 		}
 
-		const anchor = event.currentTarget;
-		if (!(anchor instanceof HTMLAnchorElement)) return;
-		const card = anchor.closest<HTMLElement>('.document-card');
-		if (!card) return;
-
-		document
-			.querySelectorAll<HTMLElement>('[data-document-transition="selected"]')
-			.forEach((candidate) => candidate.removeAttribute('data-document-transition'));
-		card.dataset.documentTransition = 'selected';
-		window.setTimeout(() => card.removeAttribute('data-document-transition'), 900);
+		transitioning = true;
+		window.setTimeout(() => (transitioning = false), 900);
 	}
 </script>
 
-<article class="document-card">
+<article class="document-card" class:transitioning>
 	<a {href} onclick={prepareDocumentTransition}>
 		<div class="preview">
 			{#if thumbnailUrl}
 				<img src={thumbnailUrl} alt="" loading="lazy" />
 			{:else}
 				<div class="folio" aria-hidden="true">
-					<span>{document.kind === 'pdf' ? 'PDF' : 'IMG'}</span>
+					<span>{documentSummary.kind === 'pdf' ? 'PDF' : 'IMG'}</span>
 				</div>
 			{/if}
-			<span class={`status ${document.status}`}>{statusLabels[document.status]}</span>
+			<span class={`status ${documentSummary.status}`}>{statusLabels[documentSummary.status]}</span>
 		</div>
 		<div class="body">
-			<h2>{document.title}</h2>
+			<h2>{documentSummary.title}</h2>
 			<p>
-				{document.pageCount}
-				{document.pageCount === 1 ? 'página' : 'páginas'} ·
-				{dateFormatter.format(new Date(document.createdAt))}
+				{documentSummary.pageCount}
+				{documentSummary.pageCount === 1 ? 'página' : 'páginas'} ·
+				{dateFormatter.format(new Date(documentSummary.createdAt))}
 			</p>
 		</div>
 	</a>
@@ -93,7 +86,7 @@
 			transform var(--motion-base) var(--ease-emphasized);
 	}
 
-	.document-card[data-document-transition='selected'] {
+	.document-card.transitioning {
 		view-transition-name: selected-document;
 	}
 

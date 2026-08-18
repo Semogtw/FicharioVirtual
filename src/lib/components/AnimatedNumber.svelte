@@ -8,7 +8,7 @@
 	}
 
 	let { value, locale = 'pt-BR', duration = 520 }: AnimatedNumberProps = $props();
-	let displayedValue = $state<number | null>(value);
+	let displayedValue = $state<number | null>(null);
 	let frame: number | null = null;
 
 	let formattedValue = $derived(
