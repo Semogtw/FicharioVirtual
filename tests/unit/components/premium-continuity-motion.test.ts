@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 const shell = readFileSync('src/lib/components/AppShell.svelte', 'utf8');
 const card = readFileSync('src/lib/components/DocumentCard.svelte', 'utf8');
 const animatedNumber = readFileSync('src/lib/components/AnimatedNumber.svelte', 'utf8');
+const queue = readFileSync('src/lib/components/ImportQueueTray.svelte', 'utf8');
 const home = readFileSync('src/routes/+page.svelte', 'utf8');
 const globalCss = readFileSync('src/lib/design/global.css', 'utf8');
 
@@ -29,11 +30,13 @@ describe('premium continuity motion', () => {
 		expect(home).toContain('<AnimatedNumber value={usage?.totals.reviewPages ?? null} />');
 	});
 
-	it('gives transient dashboard panels both entrance and exit motion', () => {
+	it('gives transient panels both entrance and exit motion', () => {
 		expect(home).toContain("import { fly } from 'svelte/transition';");
 		expect(home.match(/transition:fly=\{\{ y: -6, duration: 220 \}\}/g)?.length).toBeGreaterThanOrEqual(
 			3
 		);
+		expect(queue).toContain("import { fly } from 'svelte/transition';");
+		expect(queue).toContain('transition:fly={{ y: -8, duration: 220 }}');
 	});
 
 	it('keeps view transitions inside the reduced-motion opt-out', () => {
