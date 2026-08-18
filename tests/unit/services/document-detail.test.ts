@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	loadDocumentDetailWithGateway,
+	loadDocumentPreviewWithGateway,
 	loadDocumentPageWithGateway,
 	savePageCorrectionWithGateway,
 	type DocumentDetailGateway,
@@ -111,6 +112,26 @@ describe('loadDocumentDetailWithGateway', () => {
 		});
 		expect(fixture.fullPageLoads).toBe(0);
 		expect(detail).not.toHaveProperty('storagePath');
+	});
+
+	it('loads only the selected page for a search preview', async () => {
+		const fixture = gateway();
+		fixture.value.listPageSummaries = async () => {
+			throw new Error('search preview must not enumerate every page');
+		};
+
+		const preview = await loadDocumentPreviewWithGateway(documentId, 1, fixture.value);
+
+		expect(preview.page.text).toBe('Texto nativo');
+		expect(preview.detail.pages).toEqual([
+			{
+				id: pageId,
+				pageNumber: 1,
+				status: 'ready',
+				updatedAt: '2026-08-02T04:00:00.000Z'
+			}
+		]);
+		expect(fixture.fullPageLoads).toBe(1);
 	});
 
 	it('loads the selected page separately when its text is actually needed', async () => {

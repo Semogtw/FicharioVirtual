@@ -787,12 +787,52 @@
 	}
 
 	@media (max-width: 720px) {
+		.page {
+			display: flex;
+			flex-direction: column;
+			gap: 1rem;
+		}
+
+		header {
+			order: 1;
+		}
+
+		.drop-zone {
+			order: 2;
+		}
+
+		.options {
+			order: 3;
+		}
+
+		.selection-error {
+			order: 4;
+		}
+
+		.photo-builder {
+			order: 5;
+		}
+
+		.selection-message {
+			order: 6;
+		}
+
 		.options {
 			grid-template-columns: 1fr;
 		}
 	}
 
 	@media (max-width: 520px) {
+		.drop-zone {
+			padding: 1.35rem 0.9rem;
+		}
+
+		.drop-icon {
+			width: 2.75rem;
+			height: 2.75rem;
+			font-size: 1.6rem;
+		}
+
 		.options fieldset,
 		.grouping {
 			grid-template-columns: 1fr;

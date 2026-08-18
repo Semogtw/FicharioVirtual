@@ -76,6 +76,53 @@ describe('authorized session loading', () => {
 		expect(fixture.signedOut).toBe(1);
 		expect(fixture.lastSignOutScope).toBe('global');
 	});
+
+	it('shares concurrent allowlist checks during overlapping startup authorization', async () => {
+		let queryCount = 0;
+		let resolveQuery!: (value: { data: unknown; error: null }) => void;
+		const queryResult = new Promise<{ data: unknown; error: null }>((resolve) => {
+			resolveQuery = resolve;
+		});
+		const session = {
+			user: { id: '11111111-1111-4111-8111-111111111111' }
+		} as never;
+		const query = {
+			select() {
+				return this;
+			},
+			eq() {
+				return this;
+			},
+			async maybeSingle() {
+				queryCount += 1;
+				return queryResult;
+			}
+		};
+		const client: AuthClientLike = {
+			auth: {
+				async getSession() {
+					return { data: { session }, error: null };
+				},
+				async signInWithPassword() {
+					return { data: { session }, error: null };
+				},
+				async signOut() {
+					return { error: null };
+				}
+			},
+			from() {
+				return query;
+			}
+		};
+
+		const first = loadAuthorizedSession(client);
+		const second = loadAuthorizedSession(client);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(queryCount).toBe(1);
+		resolveQuery({ data: { is_active: true }, error: null });
+		await expect(Promise.all([first, second])).resolves.toHaveLength(2);
+	});
 });
 
 describe('password sign in', () => {

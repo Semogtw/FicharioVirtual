@@ -51,8 +51,9 @@ describe('document-first semantic search UX', () => {
 		expect(searchPage).not.toContain('result.excerpt');
 		expect(searchCard).toContain('<DocumentMediaViewer');
 		expect(searchCard).toContain('pages={previewPages}');
-		expect(searchCard).toContain('loadDocumentPage(result.documentId, result.pageNumber)');
-		expect(searchCard).not.toContain('<strong>{result.documentTitle}</strong>');
+		expect(searchCard).toContain('loadDocumentPreview(result.documentId, result.pageNumber)');
+		expect(searchCard).toContain('initialPageDetail={previewPageDetail ?? undefined}');
+		expect(searchCard).toContain('<h3>{result.documentTitle}</h3>');
 		expect(viewer).toContain('WordGeometryOverlay');
 	});
 

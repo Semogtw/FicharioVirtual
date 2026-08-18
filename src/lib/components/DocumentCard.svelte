@@ -31,7 +31,7 @@
 </script>
 
 <article class="document-card">
-	<a {href} aria-label={`Abrir ${document.title}`}>
+	<a {href}>
 		<div class="preview">
 			{#if thumbnailUrl}
 				<img src={thumbnailUrl} alt="" loading="lazy" />

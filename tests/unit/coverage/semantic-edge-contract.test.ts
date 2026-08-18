@@ -28,7 +28,8 @@ describe('semantic production Edge Function contracts', () => {
 		expect(queryCache).toContain('export async function getSemanticQueryEmbeddings');
 		expect(queryCache).toContain('const misses = unique.filter');
 		expect(queryCache).toContain('inputs: misses.map');
-		expect(queryCache).toContain('Promise.all(writes)');
+		expect(queryCache).not.toContain('Promise.all(writes)');
+		expect(queryCache).toContain(".catch(() => undefined)");
 	});
 
 	it('keeps document indexing exclusively in the background worker path', () => {

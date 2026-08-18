@@ -145,6 +145,7 @@
 		border-bottom: 1px solid rgb(var(--line-rgb) / 78%);
 		background: rgb(var(--paper-rgb) / 92%);
 		backdrop-filter: blur(0.9rem);
+		touch-action: manipulation;
 	}
 
 	.profile-link {

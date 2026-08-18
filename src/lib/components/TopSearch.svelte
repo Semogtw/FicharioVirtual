@@ -7,7 +7,7 @@
 
 	let {
 		initialValue = '',
-		placeholder = 'Pesquisar páginas, documentos e cadernos',
+		placeholder = 'Pesquisar páginas…',
 		onSearch
 	}: TopSearchProps = $props();
 
@@ -25,7 +25,16 @@
 	<svg class="search-icon" aria-hidden="true" viewBox="0 0 24 24">
 		<path d="m21 21-4.35-4.35m2.35-5.15a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z" />
 	</svg>
-	<input id="global-search" bind:value={query} {placeholder} autocomplete="off" />
+	<input
+		id="global-search"
+		name="q"
+		type="search"
+		inputmode="search"
+		spellcheck="false"
+		bind:value={query}
+		{placeholder}
+		autocomplete="off"
+	/>
 	<button type="submit" aria-label="Executar pesquisa">
 		<span class="submit-label">Buscar</span>
 		<svg class="submit-icon" aria-hidden="true" viewBox="0 0 24 24">

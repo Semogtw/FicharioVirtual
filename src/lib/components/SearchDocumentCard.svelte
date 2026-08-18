@@ -5,8 +5,7 @@
 	import { countExactQueryOccurrences } from '$lib/search/document-search-results';
 	import { resultHighlightQuery, searchResultHref } from '$lib/search/search-result-presentation';
 	import {
-		loadDocumentDetail,
-		loadDocumentPage,
+		loadDocumentPreview,
 		type DocumentDetail,
 		type DocumentPageSummary
 	} from '$lib/services/document-detail';
@@ -62,19 +61,10 @@
 		if (detail || failed) return;
 		const expectedGeneration = ++generation;
 		try {
-			const loaded = await loadDocumentDetail(result.documentId);
+			const preview = await loadDocumentPreview(result.documentId, result.pageNumber);
 			if (expectedGeneration !== generation) return;
-			const target = loaded.pages.find((page) => page.pageNumber === result.pageNumber);
-			if (!target) {
-				failed = true;
-				return;
-			}
-			detail = loaded;
-			void loadDocumentPage(result.documentId, result.pageNumber)
-				.then((pageDetail) => {
-					if (expectedGeneration === generation) previewPageDetail = pageDetail;
-				})
-				.catch(() => undefined);
+			detail = preview.detail;
+			previewPageDetail = preview.page;
 		} catch {
 			if (expectedGeneration === generation) failed = true;
 		}
@@ -92,7 +82,7 @@
 				observer.disconnect();
 				void loadPreview();
 			},
-			{ rootMargin: '700px 0px' }
+			{ rootMargin: '180px 0px' }
 		);
 		observer.observe(element);
 		return () => observer.disconnect();
@@ -104,17 +94,15 @@
 </script>
 
 <article class="document-result" bind:this={host}>
-	<a
-		{href}
-		aria-label={`Abrir ${result.documentTitle}, correspondência na página ${result.pageNumber}`}
-	>
-		<div class="preview">
+	<a {href}>
+		<div class="preview" aria-busy={!detail && !failed}>
 			{#if detail && previewPage}
 				<DocumentMediaViewer
 					{detail}
 					pages={previewPages}
 					query={previewQuery}
 					focusPageNumber={result.pageNumber}
+					initialPageDetail={previewPageDetail ?? undefined}
 				/>
 			{:else if failed}
 				<div class="preview-state error" role="status">Não foi possível carregar a prévia.</div>
@@ -133,9 +121,15 @@
 				<span>Página {result.pageNumber}</span>
 			</div>
 		</div>
-		{#if result.notebookName}
-			<span class="notebook">{result.notebookName}</span>
-		{/if}
+		<div class="result-copy">
+			<h3>{result.documentTitle}</h3>
+			<p>
+				Página {result.pageNumber}
+				{#if matchLabel}
+					· {matchLabel}{/if}
+			</p>
+			{#if result.notebookName}<span class="notebook">{result.notebookName}</span>{/if}
+		</div>
 	</a>
 </article>
 
@@ -209,8 +203,35 @@
 	}
 
 	.notebook {
-		margin: 0.65rem;
+		display: inline-block;
+		margin-top: 0.55rem;
 		box-shadow: none;
+	}
+
+	.result-copy {
+		display: grid;
+		gap: 0.25rem;
+		min-width: 0;
+		padding: 0.8rem 0.9rem 0.9rem;
+	}
+
+	.result-copy h3,
+	.result-copy p {
+		margin: 0;
+	}
+
+	.result-copy h3 {
+		overflow: hidden;
+		font-family: var(--font-heading);
+		font-size: 1.08rem;
+		font-weight: 600;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.result-copy p {
+		color: var(--muted);
+		font-size: 0.78rem;
 	}
 
 	.preview :global(.media-viewer) {

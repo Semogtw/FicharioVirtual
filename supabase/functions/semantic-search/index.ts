@@ -202,6 +202,24 @@ async function lexicalRows(
 	return Array.isArray(data) ? data.filter(validLexicalRow) : [];
 }
 
+async function visualSearchRows(
+	supabase: SupabaseClient,
+	queryEmbedding: string,
+	input: ParsedRequest,
+	resultLimit: number
+): Promise<RpcResponse> {
+	try {
+		return await supabase.rpc('search_documents_visual_semantic', {
+			query_embedding: queryEmbedding,
+			target_model: SEMANTIC_EMBEDDING_MODEL,
+			notebook_filter: input.notebookId,
+			result_limit: resultLimit
+		});
+	} catch (error) {
+		return { data: [], error };
+	}
+}
+
 function candidateKey(input: { documentId: string; pageNumber: number }) {
 	return `${input.documentId}:${String(input.pageNumber).padStart(8, '0')}`;
 }
@@ -438,7 +456,7 @@ async function fallbackResponse(input: {
 	const rows = await lexicalRows(input.supabase, input.parsed, fetchLimit, input.parsed.offset);
 	const hasMore = rows.length > input.parsed.limit;
 	const visibleRows = rows.slice(0, input.parsed.limit);
-	await recordSemanticRetrievalEvent(input.supabase, {
+	void recordSemanticRetrievalEvent(input.supabase, {
 		surface: 'global_search',
 		mode: 'fallback',
 		model: input.embeddingModel ?? null,
@@ -574,24 +592,18 @@ Deno.serve(async (request) => {
 			Math.max(parsed.offset + parsed.limit + 12, parsed.limit * 2)
 		);
 		const visualMode = visualSearchMode();
-		const visualRequest =
-			visualMode === 'off'
-				? Promise.resolve<RpcResponse>({ data: [], error: null })
-				: supabase.rpc('search_documents_visual_semantic', {
-						query_embedding: queryEmbedding.vectorText,
-						target_model: SEMANTIC_EMBEDDING_MODEL,
-						notebook_filter: parsed.notebookId,
-						result_limit: candidateLimit
-					});
-		const [lexical, semanticResponse, visualResponse] = await Promise.all([
+		const activeVisualRequest =
+			visualMode === 'active'
+				? visualSearchRows(supabase, queryEmbedding.vectorText, parsed, candidateLimit)
+				: null;
+		const [lexical, semanticResponse] = await Promise.all([
 			lexicalRows(supabase, parsed, candidateLimit, 0),
 			supabase.rpc('search_documents_semantic', {
 				query_embedding: queryEmbedding.vectorText,
 				target_model: SEMANTIC_EMBEDDING_MODEL,
 				notebook_filter: parsed.notebookId,
 				result_limit: candidateLimit
-			}),
-			visualRequest
+			})
 		]);
 		if (semanticResponse.error) {
 			return respond(
@@ -606,11 +618,15 @@ Deno.serve(async (request) => {
 			);
 		}
 
+		const visualResponse =
+			visualMode === 'active'
+				? await activeVisualRequest!
+				: ({ data: [], error: null } satisfies RpcResponse);
 		const semantic = Array.isArray(semanticResponse.data)
 			? semanticResponse.data.filter(validSemanticRow)
 			: [];
 		const visual =
-			!visualResponse.error && Array.isArray(visualResponse.data)
+			visualMode === 'active' && !visualResponse.error && Array.isArray(visualResponse.data)
 				? visualResponse.data.filter(validVisualRow)
 				: [];
 
@@ -623,8 +639,8 @@ Deno.serve(async (request) => {
 		const visibleVisual = applyHybridPrecision(visual, precisionPolicy);
 		const allowStandaloneVisual = hasVisualSearchIntent(parsed.query);
 		const textualRanked = mergeCandidates(visibleLexical, visibleSemantic, [], false);
-		if (visualMode !== 'off') {
-			await recordVisualSearchEvent({
+		if (visualMode === 'active') {
+			void recordVisualSearchEvent({
 				supabase,
 				visualMode,
 				visual,
@@ -632,6 +648,24 @@ Deno.serve(async (request) => {
 				visualRpcFailed: Boolean(visualResponse.error),
 				startedAt
 			});
+		} else if (visualMode === 'shadow') {
+			// Shadow retrieval is diagnostic only. It must not delay the visible result.
+			void visualSearchRows(supabase, queryEmbedding.vectorText, parsed, candidateLimit).then(
+				(response) => {
+					const shadowVisual =
+						!response.error && Array.isArray(response.data)
+							? response.data.filter(validVisualRow)
+							: [];
+					return recordVisualSearchEvent({
+						supabase,
+						visualMode,
+						visual: shadowVisual,
+						textualDocumentIds: new Set(textualRanked.map((candidate) => candidate.documentId)),
+						visualRpcFailed: Boolean(response.error),
+						startedAt
+					});
+				}
+			);
 		}
 
 		// Shadow is the production default: visual candidates are measured but
@@ -648,7 +682,7 @@ Deno.serve(async (request) => {
 		const lexicalOnlyCount = ranked.filter((item) => item.matchMode === 'lexical').length;
 		const semanticOnlyCount = ranked.filter((item) => item.matchMode === 'semantic').length;
 		const hybridCount = ranked.length - lexicalOnlyCount - semanticOnlyCount;
-		await recordSemanticRetrievalEvent(supabase, {
+		void recordSemanticRetrievalEvent(supabase, {
 			surface: 'global_search',
 			mode: semanticOnlyCount > 0 || hybridCount > 0 ? 'hybrid' : 'lexical',
 			model: SEMANTIC_EMBEDDING_MODEL,

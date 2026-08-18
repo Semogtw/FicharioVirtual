@@ -8,6 +8,8 @@
 		name?: string;
 		id?: string;
 		onchange?: (event: Event) => void;
+		onfocus?: (event: FocusEvent) => void;
+		onpointerdown?: (event: PointerEvent) => void;
 		children: Snippet;
 	}
 
@@ -18,12 +20,23 @@
 		name,
 		id,
 		onchange,
+		onfocus,
+		onpointerdown,
 		children
 	}: NativeSelectProps = $props();
 </script>
 
 <div class="native-select">
-	<select bind:value {disabled} aria-label={ariaLabel} {name} {id} {onchange}>
+	<select
+		bind:value
+		{disabled}
+		aria-label={ariaLabel}
+		{name}
+		{id}
+		{onchange}
+		{onfocus}
+		{onpointerdown}
+	>
 		{@render children()}
 	</select>
 	<svg aria-hidden="true" viewBox="0 0 20 20" fill="none">
