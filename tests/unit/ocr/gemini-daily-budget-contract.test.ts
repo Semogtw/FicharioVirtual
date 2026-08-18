@@ -11,7 +11,7 @@ const raisedBudgetMigration = readFileSync(
 	'utf8'
 );
 const recoveryMigration = readFileSync(
-	new URL('supabase/migrations/20260817130000_reopen_ocr_jobs_after_rpd_raise.sql', root),
+	new URL('supabase/migrations/20260818022127_reopen_ocr_jobs_after_rpd_raise.sql', root),
 	'utf8'
 );
 const worker = readFileSync(new URL('supabase/functions/ocr-queue-worker/index.ts', root), 'utf8');

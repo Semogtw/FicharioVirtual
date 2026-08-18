@@ -1,8 +1,8 @@
 # Estado atual do Fichário Virtual
 
-_Atualizado: 2026-08-17_<br>
+_Atualizado: 2026-08-18_<br>
 _Branch ativa: `main`_<br>
-_Estado: Drive-first e OCR seletivo por lotes seguem integrados. A auditoria autenticada corrigiu a perda de recall semântico causada por uma trava lexical ampla, alinhou os verificadores reais aos contratos atuais da interface, tornou suas dependências reproduzíveis e corrigiu a limpeza dos benchmarks. A repetição remota reproduziu um aceite falso do disparo assíncrono do OCR: a fila recebia `accepted` antes de o worker retirar o primeiro lote. O endpoint autenticado agora exige um recibo síncrono válido do worker antes de confirmar o aceite; encadeamento e cron permanecem responsáveis pelo restante da fila. A função corrigida foi implantada no Supabase e os gates Auth/RLS/desktop passaram, mas a confirmação end-to-end posterior foi bloqueada pelo limite diário do provedor Gemini: OCR direto e os casos de OCR seguintes ficaram pendentes, com cleanup aprovado. O benchmark visual também aguarda estado terminal até o limite operacional. Os gates externos de Drive OAuth, worker desktop, provedor real e dispositivos físicos continuam pendentes. O relatório completo está em
+_Estado: Drive-first e OCR seletivo por lotes seguem integrados. A auditoria autenticada corrigiu o recall e a precisão semântica, a marcação visual, o aceite assíncrono falso e os verificadores de estado terminal. A calibração real elevou o circuit breaker do Gemini para 190 RPD por modelo e reabriu jobs que ainda carregavam o agendamento obsoleto do limite anterior de 15 RPD. Um PDF manuscrito real de cinco páginas comprovou OCR persistido em todas as páginas, com revisão necessária e sem jobs pendentes. O fluxo de retomada no navegador também foi corrigido para não transformar páginas sem metadados de tamanho em um lote artificial que pode expirar; batching permanece disponível somente quando o caller fornece metadados e controle explícitos. A confirmação do frontend atualizado e os gates do SHA final ainda dependem do deploy iniciado nesta rodada. Os gates externos de Drive OAuth, worker desktop e dispositivos físicos continuam pendentes. O relatório completo está em
 [docs/reports/2026-08-17-authenticated-site-audit.md](reports/2026-08-17-authenticated-site-audit.md)._
 
 ## Resumo executivo
@@ -95,6 +95,8 @@ A implementação inclui:
 - distinção entre rate limit temporário e quota diária real;
 - retomada após reload;
 - limpeza do derivado temporário após OCR terminal bem-sucedido, preservando-o quando uma nova tentativa ainda é necessária.
+- retomada foreground sem metadados de tamanho usa páginas individuais, com no máximo duas requisições concorrentes; batching explícito continua disponível para ingestões que possuem planejamento de bytes confiável;
+- jobs diferidos pelo antigo guard de 15 RPD são despertados pela migration `20260818022127_reopen_ocr_jobs_after_rpd_raise` após a elevação para 190 RPD.
 
 ### Google Drive-first
 
@@ -176,6 +178,25 @@ A sequência anterior de sondas mostrou que `responseFormat` e os campos de sche
 A sonda protegida [`32078967959`](https://github.com/Semogtw/FicharioVirtual/actions/runs/32078967959) criou o documento sintético, autenticou e chamou o `process-ocr`, mas terminou com o job pendente por `ocr_provider_rate_queue_full`. O relatório sanitizado registrou o modelo primário `gemini-3.1-flash-lite` e esse erro no limitador local; a ausência de uma segunda linha de telemetria não significava que o fallback não havia sido tentado: o evento primário só é escrito quando o roteador entra no fallback, e a falha final do segundo `reserveProviderSlot` não era registrada.
 
 O checkpoint [`ce34d69`](https://github.com/Semogtw/FicharioVirtual/commit/ce34d69fd2134a4e17c09c9339a09d4bb1ae8db6) corrigiu essa observabilidade nos caminhos síncrono e worker: cada modelo agora registra sua própria falha, rota e código sanitizado. O deploy de staging [`32079625356`](https://github.com/Semogtw/FicharioVirtual/actions/runs/32079625356) aplicou migrations e publicou as Edge Functions com sucesso. A confirmação posterior [`32080815025`](https://github.com/Semogtw/FicharioVirtual/actions/runs/32080815025) comprovou o roteamento: `gemini-3.1-flash-lite` falhou em `primary_gemini` e `gemini-3.5-flash-lite` falhou em `fallback_gemini_rate_limit`, ambos com `ocr_provider_rate_queue_full` e sem HTTP status. Isso resolve a classificação do fallback, não cria quota: os dois limitadores locais estão sem capacidade, portanto nenhuma chamada Gemini foi feita e o retry permanece agendado para o reset seguro.
+
+### Calibração real de quota e PDF manuscrito em 2026-08-18
+
+O teste autenticado com um PDF manuscrito real de cinco páginas separou dois
+problemas que pareciam ser a mesma falha. Primeiro, os jobs criados sob o
+limite antigo de 15 RPD continuavam com `next_retry_at` apontando para o reset
+do Pacífico, mesmo depois de o guard ter sido elevado para 190 RPD. A migration
+`20260818022127_reopen_ocr_jobs_after_rpd_raise` tornou esses jobs elegíveis
+imediatamente; a retomada real os moveu de `retryable` para `processing`.
+
+Depois, a telemetria mostrou uma única requisição primária com timeout de 90 s
+para as cinco páginas. A causa estava no fluxo foreground: ao retomar, ele
+inventava `derivedBytes = 1` e `density = normal`, fazendo o planner agrupar
+todo o manuscrito em um lote sem possuir metadados confiáveis. O código agora
+usa `processPageOcr` por página quando nenhum batching explícito é injetado,
+limitando a concorrência a duas páginas e preservando o batching calibrado dos
+demais caminhos. Na repetição posterior pelo worker, as cinco páginas foram
+persistidas em estado `ready`, com revisão necessária e texto OCR não vazio;
+falta apenas repetir essa prova depois do deploy do novo frontend.
 
 ### Cleanup e runtime remoto
 

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { OcrProcessingError } from '../../../src/lib/services/ocr';
 import {
+	createResumeExecutionOptions,
 	parsePendingOcrPages,
 	resumeDocumentOcrWithGateway,
 	type OcrResumeGateway
@@ -24,6 +25,18 @@ function gateway(
 }
 
 describe('resumeDocumentOcrWithGateway', () => {
+	it('does not opt the default resume flow into synthetic batching', () => {
+		const options = createResumeExecutionOptions({});
+
+		expect('batchProcessor' in options).toBe(false);
+	});
+
+	it('preserves an explicitly injected batch processor for calibrated callers', () => {
+		const batchProcessor = vi.fn();
+
+		expect(createResumeExecutionOptions({ batchProcessor }).batchProcessor).toBe(batchProcessor);
+	});
+
 	it('recovers interrupted claims before selecting resumable pages', async () => {
 		const events: string[] = [];
 

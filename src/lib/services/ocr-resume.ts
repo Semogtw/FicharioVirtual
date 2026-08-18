@@ -3,7 +3,6 @@ import { runPdfOcrBatches } from '$lib/pdf/ocr-batching';
 import type { Database } from '$lib/types/database';
 import {
 	OcrProcessingError,
-	processOcrBatch,
 	processPageOcr,
 	type OcrBatchRunResult,
 	type OcrRunResult
@@ -34,6 +33,16 @@ export type OcrResumeOptions = {
 	batchProcessor?: OcrBatchProcessor;
 	sleep?: (milliseconds: number) => Promise<void>;
 };
+
+export function createResumeExecutionOptions(
+	options: Pick<OcrResumeOptions, 'signal' | 'batchProcessor' | 'sleep'>
+): Pick<OcrResumeOptions, 'signal' | 'batchProcessor' | 'sleep'> {
+	return {
+		signal: options.signal,
+		sleep: options.sleep,
+		...(options.batchProcessor ? { batchProcessor: options.batchProcessor } : {})
+	};
+}
 
 function validId(value: string) {
 	if (!UUID.test(value)) throw new TypeError('Invalid document identifier');
@@ -183,12 +192,6 @@ export function resumeDocumentOcr(documentId: string, options: OcrResumeOptions 
 		documentId,
 		new SupabaseGateway(options.client ?? getSupabaseClient()),
 		processPageOcr,
-		{
-			signal: options.signal,
-			sleep: options.sleep,
-			batchProcessor:
-				options.batchProcessor ??
-				((pageIds, batchOptions) => processOcrBatch(pageIds, undefined, batchOptions))
-		}
+		createResumeExecutionOptions(options)
 	);
 }

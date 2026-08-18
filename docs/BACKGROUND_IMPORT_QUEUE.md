@@ -72,6 +72,14 @@ limitado do worker para retirar pelo menos um lote da fila antes de confirmar
 falso enquanto a chamada assíncrona ainda não iniciou ou já perdeu sua execução;
 o encadeamento e o cron continuam responsáveis por lotes adicionais e retries.
 
+O botão de retomada de um documento segue uma regra diferente do worker: como
+as páginas pendentes não carregam metadados de bytes/densidade no RPC de
+retomada, o frontend usa `processPageOcr` individualmente, com no máximo duas
+páginas concorrentes. Isso evita que um manuscrito inteiro seja classificado
+como um lote de um byte por página e expire no timeout do provedor. Batching
+continua permitido apenas para callers que injetam um planner e seus limites
+calibrados.
+
 Limites configuráveis por ambiente:
 
 - `OCR_BACKGROUND_MAX_PAGES` — padrão 8 páginas por execução;

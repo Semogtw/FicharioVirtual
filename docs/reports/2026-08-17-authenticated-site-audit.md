@@ -190,6 +190,32 @@ seguinte falhou na invocação do provedor por quota diária; portanto a
 confirmação end-to-end limpa dessa correção permanece pendente do reset/limite
 do Gemini, não de uma falha de autenticação ou cleanup.
 
+### F-08 — P1: jobs mantinham o agendamento do limite antigo de RPD — corrigido
+
+Na calibração real posterior, cinco páginas manuscritas permaneceram
+`retryable` apesar de a proteção ter sido elevada de 15 para 190 reservas RPD
+por modelo. A consulta sanitizada confirmou `next_retry_at` no reset antigo do
+Pacífico, enquanto as cinco imagens temporárias ainda existiam. A migration
+`20260818022127_reopen_ocr_jobs_after_rpd_raise` despertou somente jobs com o
+código de fila antigo e tornou-os elegíveis imediatamente. A retomada real
+moveu os cinco jobs para `processing`.
+
+### F-09 — P1: retomada agrupava manuscrito sem metadados e expirava — corrigido
+
+O primeiro retry real depois do wake-up falhou com `ocr_request_failed` após
+90.005 s. A telemetria mostrou uma única chamada ao modelo primário para as
+cinco páginas. O fluxo de retomada preenchia todas as páginas com
+`derivedBytes = 1` e densidade normal apenas para satisfazer o planner; isso
+era uma estimativa inválida e agrupava um manuscrito inteiro em um request.
+
+O fluxo padrão agora não injeta mais `processOcrBatch`: usa `processPageOcr`
+por página, com duas concorrências, e deixa batching apenas para callers que
+fornecem explicitamente o processor calibrado. Os testes unitários cobrem a
+ausência do batching sintético e a preservação do caminho injetado. A execução
+posterior do worker persistiu as cinco páginas com texto OCR não vazio e
+`needs_review`; a repetição foreground após o deploy do novo frontend é a
+prova final dessa mudança.
+
 ## Rotas e responsividade
 
 As rotas autenticadas abaixo carregaram com título, `h1`, conteúdo visível e sem
