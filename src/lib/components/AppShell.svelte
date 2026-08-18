@@ -95,7 +95,11 @@
 		<DataProcessingNotice />
 
 		<main id="main-content">
-			<div class="content">{@render children()}</div>
+			<div class="content">
+				{#key page.url.pathname}
+					<div class="route-content">{@render children()}</div>
+				{/key}
+			</div>
 		</main>
 	</div>
 
@@ -148,6 +152,10 @@
 		background: rgb(var(--paper-rgb) / 92%);
 		backdrop-filter: blur(0.9rem);
 		touch-action: manipulation;
+		transition:
+			background-color var(--motion-slow) var(--ease-soft),
+			border-color var(--motion-slow) var(--ease-soft),
+			box-shadow var(--motion-base) var(--ease-standard);
 	}
 
 	.profile-link {
@@ -168,7 +176,7 @@
 			background-color var(--motion-fast) var(--ease-standard),
 			border-color var(--motion-fast) var(--ease-standard),
 			box-shadow var(--motion-base) var(--ease-standard),
-			transform var(--motion-fast) var(--ease-emphasized);
+			transform var(--motion-base) var(--ease-emphasized);
 	}
 
 	.profile-link:active {
@@ -187,12 +195,30 @@
 		margin-inline: auto;
 	}
 
+	.route-content {
+		transform-origin: 50% 0;
+		animation: route-content-enter var(--motion-page) var(--ease-soft) both;
+	}
+
+	@keyframes route-content-enter {
+		from {
+			opacity: 0;
+			filter: blur(2px);
+			transform: translateY(0.65rem) scale(0.997);
+		}
+		to {
+			opacity: 1;
+			filter: blur(0);
+			transform: translateY(0) scale(1);
+		}
+	}
+
 	@media (hover: hover) and (pointer: fine) {
 		.profile-link:hover {
 			border-color: var(--archive);
 			background: var(--archive-soft);
 			box-shadow: 0 0.35rem 1rem rgb(var(--ink-rgb) / 9%);
-			transform: translateY(-1px);
+			transform: translateY(-1px) scale(1.015);
 		}
 
 		.profile-link:active {
@@ -270,9 +296,9 @@
 			color: var(--muted);
 			transform: translateX(0) scale(1);
 			transition:
-				background-color var(--motion-fast) var(--ease-standard),
+				background-color var(--motion-base) var(--ease-soft),
 				color var(--motion-fast) var(--ease-standard),
-				transform var(--motion-fast) var(--ease-emphasized);
+				transform var(--motion-base) var(--ease-emphasized);
 		}
 
 		.sidebar nav a:hover,
@@ -323,7 +349,7 @@
 		@media (hover: hover) and (pointer: fine) {
 			.sidebar nav a:hover,
 			.settings:hover {
-				transform: translateX(2px);
+				transform: translateX(3px);
 			}
 
 			.sidebar nav a:active,
@@ -332,7 +358,7 @@
 			}
 
 			.brand:hover .brand-mark {
-				transform: translateY(-1px) scale(1.03);
+				transform: translateY(-1px) scale(1.035);
 			}
 		}
 	}

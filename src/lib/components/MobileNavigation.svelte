@@ -52,9 +52,14 @@
 		border-top: 1px solid var(--line);
 		background: rgb(var(--surface-rgb) / 96%);
 		backdrop-filter: blur(0.75rem);
+		transition:
+			background-color var(--motion-slow) var(--ease-soft),
+			border-color var(--motion-slow) var(--ease-soft);
 	}
 
 	a {
+		position: relative;
+		isolation: isolate;
 		display: grid;
 		place-items: center;
 		align-content: center;
@@ -66,20 +71,37 @@
 		touch-action: manipulation;
 		transform: scale(1);
 		transition:
-			background-color var(--motion-fast) var(--ease-standard),
 			color var(--motion-fast) var(--ease-standard),
-			transform var(--motion-fast) var(--ease-emphasized);
+			transform var(--motion-base) var(--ease-emphasized);
+	}
+
+	a::before {
+		position: absolute;
+		z-index: -1;
+		inset: 0.16rem 0.1rem;
+		content: '';
+		border-radius: calc(var(--radius-sm) - 0.05rem);
+		background: var(--archive-soft);
+		opacity: 0;
+		transform: scale(0.84);
+		transition:
+			opacity var(--motion-fast) var(--ease-standard),
+			transform var(--motion-base) var(--ease-emphasized);
 	}
 
 	a:active {
-		background: var(--archive-soft);
 		color: var(--archive);
 		transform: scale(0.94);
 		transition-duration: var(--motion-instant);
 	}
 
+	a:active::before,
+	a.active::before {
+		opacity: 1;
+		transform: scale(1);
+	}
+
 	a.active {
-		background: var(--archive-soft);
 		color: var(--archive);
 		font-weight: 760;
 	}
@@ -92,7 +114,7 @@
 	}
 
 	a.active .icon {
-		transform: translateY(-1px) scale(1.08);
+		transform: translateY(-1px) scale(1.1);
 	}
 
 	small {
@@ -102,6 +124,12 @@
 		font-weight: 720;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+		transform: translateY(0);
+		transition: transform var(--motion-base) var(--ease-emphasized);
+	}
+
+	a.active small {
+		transform: translateY(1px);
 	}
 
 	@media (min-width: 768px) {

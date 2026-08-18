@@ -60,27 +60,39 @@
 		border: 1px solid var(--line);
 		border-radius: var(--radius-md);
 		background: var(--surface);
-		transform: translateY(0);
+		transform: translateY(0) scale(1);
+		animation: document-card-enter var(--motion-slow) var(--ease-soft) both;
 		transition:
 			border-color var(--motion-fast) var(--ease-standard),
-			box-shadow var(--motion-base) var(--ease-standard),
+			box-shadow var(--motion-slow) var(--ease-soft),
 			transform var(--motion-base) var(--ease-emphasized);
+	}
+
+	@keyframes document-card-enter {
+		from {
+			opacity: 0;
+			transform: translateY(0.55rem) scale(0.99);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0) scale(1);
+		}
 	}
 
 	.document-card:focus-within {
 		border-color: var(--line-strong);
 		box-shadow: var(--shadow-soft);
-		transform: translateY(-0.125rem);
+		transform: translateY(-0.18rem) scale(1.002);
 	}
 
 	a {
 		display: block;
 		transform: scale(1);
-		transition: transform var(--motion-fast) var(--ease-emphasized);
+		transition: transform var(--motion-base) var(--ease-emphasized);
 	}
 
 	a:active {
-		transform: scale(0.987);
+		transform: scale(0.986);
 		transition-duration: var(--motion-instant);
 	}
 
@@ -95,12 +107,22 @@
 			var(--paper);
 	}
 
+	.preview::after {
+		position: absolute;
+		inset: 0;
+		content: '';
+		pointer-events: none;
+		background: linear-gradient(180deg, transparent 55%, rgb(var(--ink-rgb) / 5%));
+		opacity: 0;
+		transition: opacity var(--motion-slow) var(--ease-soft);
+	}
+
 	img {
 		width: 100%;
 		height: 100%;
 		object-fit: cover;
 		transform: scale(1);
-		transition: transform var(--motion-base) var(--ease-emphasized);
+		transition: transform var(--motion-slow) var(--ease-soft);
 	}
 
 	.folio {
@@ -114,8 +136,8 @@
 		border-radius: 0.25rem 0.6rem 0.6rem 0.25rem;
 		background: var(--surface-strong);
 		box-shadow: var(--shadow-raised);
-		transform: translateY(0);
-		transition: transform var(--motion-base) var(--ease-emphasized);
+		transform: translateY(0) rotate(0deg);
+		transition: transform var(--motion-slow) var(--ease-emphasized);
 	}
 
 	.folio span {
@@ -127,6 +149,7 @@
 
 	.status {
 		position: absolute;
+		z-index: 1;
 		top: 0.75rem;
 		right: 0.75rem;
 		padding: 0.3rem 0.5rem;
@@ -136,6 +159,11 @@
 		font-size: 0.7rem;
 		font-weight: 760;
 		box-shadow: 0 0.2rem 0.8rem rgb(var(--ink-rgb) / 8%);
+		backdrop-filter: blur(0.45rem);
+		transform: translateY(0);
+		transition:
+			box-shadow var(--motion-base) var(--ease-soft),
+			transform var(--motion-base) var(--ease-emphasized);
 	}
 
 	.status.ready {
@@ -174,16 +202,25 @@
 	@media (hover: hover) and (pointer: fine) {
 		.document-card:hover {
 			border-color: var(--line-strong);
-			box-shadow: var(--shadow-soft);
-			transform: translateY(-0.125rem);
+			box-shadow: var(--shadow-raised);
+			transform: translateY(-0.24rem) scale(1.003);
+		}
+
+		.document-card:hover .preview::after {
+			opacity: 1;
 		}
 
 		.document-card:hover img {
-			transform: scale(1.025);
+			transform: scale(1.035);
 		}
 
 		.document-card:hover .folio {
-			transform: translateY(-0.1rem);
+			transform: translateY(-0.16rem) rotate(-0.35deg);
+		}
+
+		.document-card:hover .status {
+			box-shadow: 0 0.35rem 1rem rgb(var(--ink-rgb) / 11%);
+			transform: translateY(-1px);
 		}
 	}
 </style>
