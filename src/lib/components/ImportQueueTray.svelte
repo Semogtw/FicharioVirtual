@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { fly } from 'svelte/transition';
 	import { publishImportUpdate } from '$lib/import/import-broadcast';
 	import { deleteStoredImageImport } from '$lib/import/resume-store';
 	import { updateImportSession } from '$lib/services/import-sessions';
@@ -244,7 +245,12 @@
 	</button>
 
 	{#if open}
-		<section id="global-import-queue" class="queue-panel" aria-label="Fila de importações">
+		<section
+			id="global-import-queue"
+			class="queue-panel"
+			aria-label="Fila de importações"
+			transition:fly={{ y: -8, duration: 220 }}
+		>
 			<header>
 				<div>
 					<strong>Importações</strong>
