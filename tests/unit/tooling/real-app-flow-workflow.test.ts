@@ -39,7 +39,7 @@ describe('real deployed app flow workflow', () => {
 		expect(source).toContain('playwright@1.62.1');
 		expect(source).toContain('@supabase/supabase-js@2.57.4');
 		expect(source).toContain('pdf-lib@1.17.1');
-		expect(source).toContain('npx playwright install --with-deps chromium');
+		expect(source).toContain('npx playwright install chromium');
 	});
 
 	it('runs core, action, exhaustive and special-route flows independently and rejects any failure', () => {

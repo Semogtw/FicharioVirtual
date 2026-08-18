@@ -215,7 +215,7 @@ jobs:
           cd "$ARTIFACT_ROOT"
           printf '%s\n' '{"private":true,"type":"module"}' > package.json
           npm install --no-save --package-lock=false --ignore-scripts "playwright@${PLAYWRIGHT_VERSION}"
-          npx playwright install --with-deps chromium
+          npx playwright install chromium
           DEPLOYMENT_UI_EVIDENCE_DIR="$GITHUB_WORKSPACE/deployment-ui-evidence/staging-exact" node checks/check-deployed-ui.mjs "$STAGING_URL"
           DEPLOYMENT_UI_EVIDENCE_DIR="$GITHUB_WORKSPACE/deployment-ui-evidence/staging-alias" node checks/check-deployed-ui.mjs "$STAGING_ALIAS"
           DEPLOYMENT_UI_EVIDENCE_DIR="$GITHUB_WORKSPACE/deployment-ui-evidence/production-exact" node checks/check-deployed-ui.mjs "$PRODUCTION_URL"

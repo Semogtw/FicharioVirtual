@@ -64,7 +64,7 @@ jobs:
 
       - name: Install Chromium
         working-directory: /tmp/fichario-real-scanned-pdf
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
       - name: Exercise deployed scanned PDF pipeline
         id: scanned-pdf

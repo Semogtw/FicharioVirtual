@@ -97,7 +97,7 @@ jobs:
 
       - name: Install Chromium
         working-directory: /tmp/fichario-search-quality
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
       - name: Exercise authenticated search quality
         working-directory: /tmp/fichario-search-quality

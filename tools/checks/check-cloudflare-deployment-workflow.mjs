@@ -142,7 +142,7 @@ requireText(
 	'production root must pass the real Chromium rendering smoke'
 );
 requireText(
-	'npx playwright install --with-deps chromium',
+	'npx playwright install chromium',
 	'deployment smoke must install and use real Chromium'
 );
 requireText(

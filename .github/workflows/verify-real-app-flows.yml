@@ -266,7 +266,7 @@ jobs:
 
       - name: Install Chromium
         working-directory: /tmp/fichario-real-flow
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
       - name: Exercise real deployed core flows
         id: core-flows

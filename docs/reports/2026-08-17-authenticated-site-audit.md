@@ -213,8 +213,22 @@ por página, com duas concorrências, e deixa batching apenas para callers que
 fornecem explicitamente o processor calibrado. Os testes unitários cobrem a
 ausência do batching sintético e a preservação do caminho injetado. A execução
 posterior do worker persistiu as cinco páginas com texto OCR não vazio e
-`needs_review`; a repetição foreground após o deploy do novo frontend é a
-prova final dessa mudança.
+`needs_review`. Após o deploy do frontend, a retomada manual com três páginas
+elegíveis gerou uma única chamada primária de 7.108 ms para essas páginas, sem
+reproduzir o timeout de 90 s. Um cenário controlado posterior preservou
+geometria histórica artificial na página 2 e recebeu corretamente
+`ocr_persistence_failed`; esse cenário não representa uma importação limpa,
+foi removido, e a conta terminou sem o documento de teste nem jobs OCR ativos.
+
+### F-10 — P2: workflows reais travavam ao instalar dependências do sistema — corrigido
+
+O workflow de fluxos reais ficava parado na etapa `Install Chromium` porque
+usava `playwright install --with-deps`, que também tentava instalar pacotes do
+sistema no runner. O mesmo padrão já havia travado a validação do frontend.
+Os workflows de validação, busca, fluxos reais, PDF escaneado e deploy visual
+agora instalam somente o navegador (`playwright install chromium`), deixando a
+imagem hospedada cuidar das bibliotecas do sistema. O teste de contrato do
+workflow e os gates source/offline passaram após a mudança.
 
 ## Rotas e responsividade
 
@@ -239,13 +253,15 @@ horizontal (`scrollWidth` observado: 375px) e sem erros de console.
 - permissão física de câmera e digitalização real;
 - análise de cobertura com provedor externo real;
 - instalação/atualização PWA em dispositivo físico;
-- exclusão dos três documentos de teste, que foi deliberadamente evitada.
+- teste de limite superior com PDFs acima de 50 MiB e dispositivos móveis
+  físicos.
 
 ## Estado após a auditoria
 
-Os três documentos da rodada manual original permanecem na conta porque a
-remoção deles não foi autorizada naquela etapa. Os documentos temporários das
-sondas automatizadas posteriores foram limpos e os benchmarks confirmaram a
-ausência de referências residuais ao caderno sintético. O checkout principal
-recebeu as correções em checkpoints separados; nenhum arquivo privado foi
-publicado no repositório.
+O PDF manuscrito usado na calibração foi removido depois da validação, pelo
+identificador exato, sem apagar o original no Drive; a consulta posterior
+encontrou zero documento com aquele nome e zero jobs/páginas OCR ativos. Os
+documentos temporários das sondas automatizadas também foram limpos e os
+benchmarks confirmaram a ausência de referências residuais ao caderno
+sintético. O checkout principal recebeu as correções em checkpoints separados;
+nenhum arquivo privado foi publicado no repositório.

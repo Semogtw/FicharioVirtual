@@ -2,7 +2,7 @@
 
 _Atualizado: 2026-08-18_<br>
 _Branch ativa: `main`_<br>
-_Estado: Drive-first e OCR seletivo por lotes seguem integrados. A auditoria autenticada corrigiu o recall e a precisão semântica, a marcação visual, o aceite assíncrono falso e os verificadores de estado terminal. A calibração real elevou o circuit breaker do Gemini para 190 RPD por modelo e reabriu jobs que ainda carregavam o agendamento obsoleto do limite anterior de 15 RPD. Um PDF manuscrito real de cinco páginas comprovou OCR persistido em todas as páginas, com revisão necessária e sem jobs pendentes. O fluxo de retomada no navegador também foi corrigido para não transformar páginas sem metadados de tamanho em um lote artificial que pode expirar; batching permanece disponível somente quando o caller fornece metadados e controle explícitos. A confirmação do frontend atualizado e os gates do SHA final ainda dependem do deploy iniciado nesta rodada. Os gates externos de Drive OAuth, worker desktop e dispositivos físicos continuam pendentes. O relatório completo está em
+_Estado: Drive-first e OCR seletivo por lotes seguem integrados. A auditoria autenticada corrigiu o recall e a precisão semântica, a marcação visual, o aceite assíncrono falso e os verificadores de estado terminal. A calibração real elevou o circuit breaker do Gemini para 190 RPD por modelo e reabriu jobs que ainda carregavam o agendamento obsoleto do limite anterior de 15 RPD. Um PDF manuscrito real de cinco páginas comprovou OCR persistido em todas as páginas, com revisão necessária e sem jobs pendentes. O fluxo de retomada no navegador também foi corrigido para não transformar páginas sem metadados de tamanho em um lote artificial que pode expirar; batching permanece disponível somente quando o caller fornece metadados e controle explícitos. O frontend foi publicado no domínio Pages e os gates de validação, deploy Supabase, busca semântica e artefato publicado passaram no SHA `af13878`; os workflows reais agora também evitam a instalação de pacotes do sistema que havia travado a etapa de Chromium. Os gates externos de Drive OAuth, worker desktop e dispositivos físicos continuam pendentes. O relatório completo está em
 [docs/reports/2026-08-17-authenticated-site-audit.md](reports/2026-08-17-authenticated-site-audit.md)._
 
 ## Resumo executivo
@@ -151,7 +151,7 @@ O fluxo real de busca foi exercitado com login, importação de PDF sintético, 
 
 A correção agora mantém recall para consultas em linguagem natural, restringe somente tokens opacos de identificador quando há evidência lexical forte e eleva o piso de candidatos semânticos isolados para `0.72`, acima do máximo negativo observado no corpus de staging (`0.7108`). O verificador aceita a posição semântica no top 3 quando o corpus compartilhado já contém uma fonte relevante, mas mantém Recall@1 para marcadores opacos exatos e exige taxa de falso positivo negativa zero. O cleanup visual também descobre documentos criados antes da persistência do estado do teste e confirma que nenhum documento ainda referencia o caderno antes de removê-lo. Os testes de URL visual passaram a validar o helper de apresentação, e os verificadores autenticados usam os textos atuais da fila e da rota de leitura. `pdf-lib` e `playwright` também passaram a ser dependências de desenvolvimento declaradas, removendo a necessidade de instalação ad hoc para executar os scripts locais.
 
-Validação local do checkpoint atual: `pnpm verify` passou com 326 arquivos e 1.391 testes; `pnpm test:e2e` passou com 8/8; gates source/offline passaram. A sonda pessoal autenticada contra o domínio publicado importou uma foto PNG, aguardou a página sair de `processing` para `ready`, extraiu 3 conteúdos e confirmou a limpeza do temporário. O fluxo oficial real passou core, ações, exaustivo, rotas especiais, PDF escaneado e busca semântica; o benchmark visual identificou a necessidade do polling terminal descrito acima.
+Validação local do checkpoint `af13878`: `pnpm test` passou com 327 arquivos e 1.409 testes; `pnpm lint`, `pnpm check`, `pnpm build`, `pnpm test:e2e`, gates source/offline, Edge Functions e banco local + pgTAP passaram. A sonda pessoal autenticada contra o domínio publicado importou uma foto PNG, aguardou a página sair de `processing` para `ready`, extraiu 3 conteúdos e confirmou a limpeza do temporário. A busca semântica oficial passou com positivo relevante e negativo sem falsos positivos. O workflow de fluxos reais da rodada seguinte foi interrompido durante a instalação de Chromium; os workflows dessa etapa foram ajustados para instalar somente o navegador e serão reexecutados no novo SHA.
 
 ### Checkpoint OCR corrigido
 
@@ -195,8 +195,13 @@ todo o manuscrito em um lote sem possuir metadados confiáveis. O código agora
 usa `processPageOcr` por página quando nenhum batching explícito é injetado,
 limitando a concorrência a duas páginas e preservando o batching calibrado dos
 demais caminhos. Na repetição posterior pelo worker, as cinco páginas foram
-persistidas em estado `ready`, com revisão necessária e texto OCR não vazio;
-falta apenas repetir essa prova depois do deploy do novo frontend.
+persistidas em estado `ready`, com revisão necessária e texto OCR não vazio.
+Depois do deploy, a retomada manual com três páginas elegíveis produziu uma
+chamada primária de 7,108 ms para essas três páginas, sem o timeout de 90 s.
+Um segundo cenário controlado deixou geometria histórica artificial na página 2,
+provocou a proteção correta `ocr_persistence_failed` e foi removido
+integralmente; o documento de teste não ficou na conta e a consulta final
+encontrou zero jobs ou páginas OCR ativos.
 
 ### Cleanup e runtime remoto
 
@@ -236,12 +241,12 @@ Ainda são obrigatórios antes de release:
 - regenerar `src/lib/types/database.ts` a partir do schema efetivamente implantado;
 - executar OAuth e Google Drive com conta real;
 - validar `appProperties` e a reconciliação de cópia após interrupção real do navegador;
-- executar smoke Gemini real e lote multipágina;
+- manter smoke Gemini real e lote multipágina no workflow pós-deploy;
 - testar PDFs grandes reais, incluindo arquivos acima de 50 MiB, documentos extensos e páginas com muito texto nativo;
 - validar expiração/takeover do lease em duas sessões reais e confirmar que uma tentativa stale nunca remove nem sobrescreve derivados da nova proprietária;
 - validar hash/identidade do original antes/depois;
 - testar cancelamento/retomada em computador, tablet e celular;
-- validar Cloudflare Pages e headers no domínio final;
+- repetir a verificação de Cloudflare Pages e headers a cada publicação relevante;
 - confirmar administrativamente ausência de billing/fallback pago.
 
 ### Contratos gerados do banco
@@ -263,11 +268,11 @@ A fronteira backend e o runtime local estão implementados em código, incluindo
 
 ## Pendências imediatas
 
-1. executar o fluxo OCR normal em staging com página/job e persistência, além da sonda sintética já aprovada;
+1. manter o fluxo OCR normal em staging com página/job e persistência coberto pelo workflow real;
 2. executar OAuth e Google Drive com conta real, incluindo crash/recovery, ranges e duas sessões concorrentes;
 3. regenerar `src/lib/types/database.ts` pelo schema efetivamente implantado;
 4. validar PDFs grandes reais e dispositivos móveis/tablet;
-5. implantar e verificar Cloudflare Pages e headers no domínio final;
+5. repetir a verificação de Cloudflare Pages e headers em novas publicações;
 6. concluir o pareamento web do Desktop OCR Worker e depois validar runtime/modelo/hardware em staging + CachyOS real.
 
 ## Regras de continuidade
