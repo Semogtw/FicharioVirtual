@@ -3,6 +3,7 @@ import { runPdfOcrBatches } from '$lib/pdf/ocr-batching';
 import type { Database } from '$lib/types/database';
 import {
 	OcrProcessingError,
+	processOcrBatch,
 	processPageOcr,
 	type OcrBatchRunResult,
 	type OcrRunResult
@@ -42,6 +43,10 @@ export function createResumeExecutionOptions(
 		sleep: options.sleep,
 		...(options.batchProcessor ? { batchProcessor: options.batchProcessor } : {})
 	};
+}
+
+export function createProviderBatchProcessor(): OcrBatchProcessor {
+	return (pageIds, options) => processOcrBatch(pageIds, undefined, options);
 }
 
 function validId(value: string) {
