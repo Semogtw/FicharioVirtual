@@ -4,17 +4,15 @@ import { describe, expect, it } from 'vitest';
 const tokens = readFileSync('src/lib/design/tokens.css', 'utf8');
 const globalCss = readFileSync('src/lib/design/global.css', 'utf8');
 const shell = readFileSync('src/lib/components/AppShell.svelte', 'utf8');
-const nativeSelect = readFileSync('src/lib/components/ui/native-select/NativeSelect.svelte', 'utf8');
+const nativeSelect = readFileSync(
+	'src/lib/components/ui/native-select/NativeSelect.svelte',
+	'utf8'
+);
 const themePicker = readFileSync('src/lib/components/ThemePicker.svelte', 'utf8');
 
 describe('refined motion system', () => {
 	it('defines slower layered timings and easing curves centrally', () => {
-		for (const token of [
-			'--motion-slow',
-			'--motion-page',
-			'--ease-soft',
-			'--ease-in-out'
-		]) {
+		for (const token of ['--motion-slow', '--motion-page', '--ease-soft', '--ease-in-out']) {
 			expect(tokens).toContain(token);
 		}
 	});
