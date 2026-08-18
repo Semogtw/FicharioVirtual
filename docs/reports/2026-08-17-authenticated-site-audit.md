@@ -168,8 +168,9 @@ com sucesso e removeu os documentos/caderno sintéticos.
 
 O verificador agora consulta o estado da página até `ready`/`needs_review`,
 reconhece `failed`/`blocked_quota` como falhas terminais e só encerra por
-timeout operacional. A correção é coberta pelo contrato de tooling e será
-confirmada no próximo workflow pós-deploy.
+timeout operacional. A correção é coberta pelo contrato de tooling e foi
+confirmada pelo workflow pós-deploy de fluxos reais e pelo ranking visual
+adaptativo no SHA `e89a870`.
 
 ### F-07 — P1: disparo do OCR confirmava aceite antes de iniciar o worker — corrigido
 
@@ -184,11 +185,10 @@ A correção faz o kick autenticado chamar o modo síncrono limitado do worker e
 validar o recibo `{ completed: true, hasMore: boolean }` antes de devolver o
 aceite. O worker continua limitado por páginas/bytes/timeout e o encadeamento
 server-to-server e o cron continuam tratando lotes adicionais e retries. O
-contrato unitário cobre o novo cabeçalho e a validação do recibo. O deploy do
-SHA `06b8f46` publicou a função e passou Auth/RLS/pareamento, mas o gate OCR
-seguinte falhou na invocação do provedor por quota diária; portanto a
-confirmação end-to-end limpa dessa correção permanece pendente do reset/limite
-do Gemini, não de uma falha de autenticação ou cleanup.
+contrato unitário cobre o novo cabeçalho e a validação do recibo. A primeira
+sonda após o deploy encontrou quota diária real do provedor, mas a calibração
+posterior com o PDF manuscrito e o workflow de fluxos reais confirmaram o
+estado terminal sem erro de Auth/RLS ou cleanup.
 
 ### F-08 — P1: jobs mantinham o agendamento do limite antigo de RPD — corrigido
 
