@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { onDestroy, onMount } from 'svelte';
+	import { fly } from 'svelte/transition';
+	import AnimatedNumber from '$lib/components/AnimatedNumber.svelte';
 	import DocumentCard from '$lib/components/DocumentCard.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import LoadingCollection from '$lib/components/LoadingCollection.svelte';
@@ -97,23 +99,23 @@
 	<section class="overview" aria-label="Resumo da biblioteca" aria-busy={loading || refreshing}>
 		<article>
 			<span>Documentos</span>
-			<strong>{usage ? usage.totals.documents.toLocaleString('pt-BR') : '—'}</strong>
+			<strong><AnimatedNumber value={usage?.totals.documents ?? null} /></strong>
 			<small>Arquivos privados preservados no fichário</small>
 		</article>
 		<article>
 			<span>Páginas no fichário</span>
-			<strong>{usage ? usage.totals.pages.toLocaleString('pt-BR') : '—'}</strong>
+			<strong><AnimatedNumber value={usage?.totals.pages ?? null} /></strong>
 			<small>Texto nativo, leituras e correções manuais</small>
 		</article>
 		<article>
 			<span>Para revisar</span>
-			<strong>{usage ? usage.totals.reviewPages.toLocaleString('pt-BR') : '—'}</strong>
+			<strong><AnimatedNumber value={usage?.totals.reviewPages ?? null} /></strong>
 			<small>Páginas que ainda pedem atenção humana</small>
 		</article>
 	</section>
 
 	{#if warning}
-		<div class="warning" role="status">
+		<div class="warning" role="status" transition:fly={{ y: -6, duration: 220 }}>
 			<p>{warning}</p>
 			<button type="button" disabled={loading || refreshing} onclick={() => void loadDashboard()}>
 				{refreshing ? 'Atualizando…' : 'Tentar atualizar novamente'}
@@ -133,12 +135,12 @@
 		{#if loading}
 			<LoadingCollection count={6} label="Atualizando o resumo do fichário…" />
 		{:else if error}
-			<div class="error" role="alert">
+			<div class="error" role="alert" transition:fly={{ y: -6, duration: 220 }}>
 				<p>{error}</p>
 				<button type="button" onclick={() => void loadDashboard()}>Tentar novamente</button>
 			</div>
 		{:else if !documentsAvailable}
-			<div class="error" role="alert">
+			<div class="error" role="alert" transition:fly={{ y: -6, duration: 220 }}>
 				<p>Os documentos recentes não puderam ser carregados.</p>
 				<button type="button" onclick={() => void loadDashboard()}>Tentar novamente</button>
 			</div>

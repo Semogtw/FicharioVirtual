@@ -123,6 +123,71 @@ p {
 	}
 }
 
+@keyframes route-view-old {
+	to {
+		opacity: 0;
+		filter: blur(1px);
+		transform: translateY(-0.2rem) scale(0.998);
+	}
+}
+
+@keyframes route-view-new {
+	from {
+		opacity: 0;
+		filter: blur(1px);
+		transform: translateY(0.45rem) scale(0.998);
+	}
+	to {
+		opacity: 1;
+		filter: blur(0);
+		transform: translateY(0) scale(1);
+	}
+}
+
+@keyframes selected-document-old {
+	to {
+		opacity: 0.15;
+		filter: blur(1px);
+	}
+}
+
+@keyframes selected-document-new {
+	from {
+		opacity: 0.3;
+		filter: blur(1px);
+	}
+	to {
+		opacity: 1;
+		filter: blur(0);
+	}
+}
+
+::view-transition-group(route-surface),
+::view-transition-group(selected-document) {
+	animation-duration: var(--motion-page);
+	animation-timing-function: var(--ease-emphasized);
+}
+
+::view-transition-old(route-surface) {
+	animation: route-view-old var(--motion-base) var(--ease-standard) both;
+}
+
+::view-transition-new(route-surface) {
+	animation: route-view-new var(--motion-page) var(--ease-soft) both;
+}
+
+::view-transition-old(selected-document) {
+	animation: selected-document-old var(--motion-base) var(--ease-standard) both;
+}
+
+::view-transition-new(selected-document) {
+	animation: selected-document-new var(--motion-page) var(--ease-soft) both;
+}
+
+html:active-view-transition .route-content {
+	animation: none;
+}
+
 main :where([role='alert'], [role='status']):not(.visually-hidden) {
 	animation: ui-soft-enter var(--motion-base) var(--ease-soft) both;
 }
@@ -245,5 +310,11 @@ main
 		animation-duration: 0.01ms !important;
 		animation-iteration-count: 1 !important;
 		transition-duration: 0.01ms !important;
+	}
+
+	::view-transition-group(*),
+	::view-transition-old(*),
+	::view-transition-new(*) {
+		animation-duration: 0.01ms !important;
 	}
 }

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { goto, onNavigate } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { Snippet } from 'svelte';
 	import DataProcessingNotice from './DataProcessingNotice.svelte';
@@ -14,12 +14,17 @@
 		children: Snippet;
 	}
 
+	interface ViewTransitionDocument extends Document {
+		startViewTransition?: (callback: () => Promise<void> | void) => unknown;
+	}
+
 	let { children }: AppShellProps = $props();
 	let searchQuery = $derived(
 		page.url.pathname.startsWith('/search')
 			? (page.url.searchParams.get('q')?.slice(0, 200) ?? '')
 			: ''
 	);
+	let documentRoute = $derived(page.url.pathname.startsWith('/documents/'));
 
 	const navigation = [
 		{ href: '/', label: 'Início', icon: 'home' },
@@ -30,6 +35,24 @@
 		{ href: '/coverage/', label: 'Cobertura', icon: 'coverage' },
 		{ href: '/drive/', label: 'Drive', icon: 'drive' }
 	] as const;
+
+	onNavigate((navigationEvent) => {
+		if (typeof document === 'undefined' || typeof window === 'undefined') return;
+		const transitionDocument = document as ViewTransitionDocument;
+		if (
+			!transitionDocument.startViewTransition ||
+			window.matchMedia('(prefers-reduced-motion: reduce)').matches
+		) {
+			return;
+		}
+
+		return new Promise<void>((resolve) => {
+			transitionDocument.startViewTransition?.(async () => {
+				resolve();
+				await navigationEvent.complete;
+			});
+		});
+	});
 
 	function normalizePath(pathname: string) {
 		const normalized = pathname.replace(/\/+$/, '');
@@ -97,7 +120,9 @@
 		<main id="main-content">
 			<div class="content">
 				{#key page.url.pathname}
-					<div class="route-content">{@render children()}</div>
+					<div class="route-content" class:document-route={documentRoute}>
+						{@render children()}
+					</div>
 				{/key}
 			</div>
 		</main>
@@ -196,8 +221,13 @@
 	}
 
 	.route-content {
+		view-transition-name: route-surface;
 		transform-origin: 50% 0;
 		animation: route-content-enter var(--motion-page) var(--ease-soft) both;
+	}
+
+	.route-content.document-route {
+		view-transition-name: selected-document;
 	}
 
 	@keyframes route-content-enter {

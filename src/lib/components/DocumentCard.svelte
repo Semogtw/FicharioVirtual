@@ -28,10 +28,35 @@
 		month: 'short',
 		year: 'numeric'
 	});
+
+	function prepareDocumentTransition(event: MouseEvent) {
+		if (
+			event.button !== 0 ||
+			event.metaKey ||
+			event.ctrlKey ||
+			event.shiftKey ||
+			event.altKey ||
+			typeof document === 'undefined' ||
+			!('startViewTransition' in document)
+		) {
+			return;
+		}
+
+		const anchor = event.currentTarget;
+		if (!(anchor instanceof HTMLAnchorElement)) return;
+		const card = anchor.closest<HTMLElement>('.document-card');
+		if (!card) return;
+
+		document
+			.querySelectorAll<HTMLElement>('[data-document-transition="selected"]')
+			.forEach((candidate) => candidate.removeAttribute('data-document-transition'));
+		card.dataset.documentTransition = 'selected';
+		window.setTimeout(() => card.removeAttribute('data-document-transition'), 900);
+	}
 </script>
 
 <article class="document-card">
-	<a {href}>
+	<a {href} onclick={prepareDocumentTransition}>
 		<div class="preview">
 			{#if thumbnailUrl}
 				<img src={thumbnailUrl} alt="" loading="lazy" />
@@ -66,6 +91,10 @@
 			border-color var(--motion-fast) var(--ease-standard),
 			box-shadow var(--motion-slow) var(--ease-soft),
 			transform var(--motion-base) var(--ease-emphasized);
+	}
+
+	.document-card[data-document-transition='selected'] {
+		view-transition-name: selected-document;
 	}
 
 	@keyframes document-card-enter {
