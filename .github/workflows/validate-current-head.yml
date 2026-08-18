@@ -132,7 +132,7 @@ jobs:
         id: chromium
         if: always()
         continue-on-error: true
-        run: pnpm exec playwright install --with-deps chromium
+        run: pnpm exec playwright install chromium
 
       - name: Run browser tests
         id: browser
