@@ -29,7 +29,7 @@ A fonte de verdade executável continua sendo:
 
 O atraso efetivo inclui backoff exponencial por `attempt_count`, jitter abaixo de um segundo e teto de uma hora. `attemptCount` ausente, fracionário ou menor que 1 é recusado como `ocr_claim_failed`; ele nunca é convertido silenciosamente em primeira tentativa.
 
-`OCR_DAILY_HARD_LIMIT`, `daily_hard_limit` e equivalentes pertencem somente ao histórico anterior à migração provider-only. Eles são proibidos no runtime ativo pelo gate `tools/checks/check-provider-only-ocr.mjs`. A capacidade diária é determinada pela quota real do provedor; os contadores locais são telemetria, não uma barreira artificial de uso.
+`OCR_DAILY_HARD_LIMIT`, `daily_hard_limit` e equivalentes pertencem somente ao histórico anterior à migração provider-only. Eles são proibidos no runtime ativo pelo gate `tools/checks/check-provider-only-ocr.mjs`. A capacidade diária é determinada pela quota real do provedor; o runtime mantém apenas um circuit breaker preventivo de 190 reservas RPD por modelo, com telemetria do provedor capaz de fechá-lo antes quando a quota real acabar.
 
 Para o caminho inline de imagem, a documentação do Gemini limita a requisição `generateContent` completa — mídia Base64, prompt e JSON — a menos de 20 MB. Por isso o contrato ativo usa teto bruto de 14 MiB para página/lote, deixando margem para a expansão Base64 e o restante do envelope. O padrão de staging continua menor, 12 MiB.
 

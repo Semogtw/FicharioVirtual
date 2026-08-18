@@ -88,16 +88,17 @@ Para os limites atuais do projeto no AI Studio:
 
 - cada modelo possui teto de 15 RPM;
 - o Fichário reserva no máximo 12 RPM por modelo, mantendo margem antes do teto do provedor;
-- cada modelo possui 15 RPD;
+- cada modelo possui um circuit breaker local de 190 RPD, mantendo margem antes
+  do limite esperado de 200 RPD;
 - o banco mantém um contador diário separado por nome de modelo, portanto o orçamento do `gemini-3.1-flash-lite` não consome o orçamento do `gemini-3.5-flash-lite`.
 
-A reserva acontece **antes** da chamada HTTP ao Gemini. Pressão normal de RPM recebe uma espera curta ou volta à fila sem consumir RPD. Ao atingir 15 reservas diárias, novas chamadas daquele modelo são bloqueadas localmente antes de chegar ao provedor.
+A reserva acontece **antes** da chamada HTTP ao Gemini. Pressão normal de RPM recebe uma espera curta ou volta à fila sem consumir RPD. Ao atingir 190 reservas diárias, novas chamadas daquele modelo são bloqueadas localmente antes de chegar ao provedor.
 
 Quando o orçamento diário do modelo primário fecha, uma espera longa é interpretada como indisponibilidade diária e o roteamento pode usar o modelo fallback. Se o fallback também estiver sem orçamento, o job permanece persistido com retry futuro; não existe polling apertado contra o Gemini.
 
 O reset de RPD segue `America/Los_Angeles`, incluindo horário de verão, porque a renovação diária do Gemini ocorre à meia-noite no horário do Pacífico. O cron de cinco minutos continua sendo apenas o despertador: jobs com `next_retry_at` no futuro não são selecionados até a janela correta.
 
-Além do contador preventivo, um evento de telemetria com `gemini_daily_quota` fecha imediatamente o circuit breaker compartilhado daquele modelo até o próximo reset do Pacífico. Isso cobre o caso em que a mesma cota foi consumida fora do Fichário e o provedor acusa esgotamento antes de o contador local chegar a 15.
+Além do contador preventivo, um evento de telemetria com `gemini_daily_quota` fecha imediatamente o circuit breaker compartilhado daquele modelo até o próximo reset do Pacífico. Isso cobre o caso em que a mesma cota foi consumida fora do Fichário e o provedor acusa esgotamento antes de o contador local chegar a 190.
 
 ## Wake-up e retries sem navegador
 

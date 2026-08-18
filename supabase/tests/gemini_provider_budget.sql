@@ -40,15 +40,15 @@ where model in ('gemini-rpd-primary-test', 'gemini-rpd-fallback-test');
 select lives_ok(
   $$
     select public.reserve_ocr_provider_rate_slot('gemini-rpd-primary-test', 60, 60000)
-    from generate_series(1, 15)
+    from generate_series(1, 190)
   $$,
-  'the first 15 daily reservations fit the primary model budget'
+  'the first 190 daily reservations fit the primary model budget'
 );
 
 select is(
   (select daily_request_count from public.ocr_provider_rate_state where model = 'gemini-rpd-primary-test'),
-  15,
-  'the primary model tracks exactly 15 daily provider requests'
+  190,
+  'the primary model tracks exactly 190 daily provider requests'
 );
 
 create temporary table exhausted_primary as
@@ -57,7 +57,7 @@ select public.reserve_ocr_provider_rate_slot('gemini-rpd-primary-test', 60, 6000
 select is(
   ((select reservation from exhausted_primary) ->> 'allowed')::boolean,
   false,
-  'the 16th primary reservation is blocked before contacting Gemini'
+  'the 191st primary reservation is blocked before contacting Gemini'
 );
 
 select ok(

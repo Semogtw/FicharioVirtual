@@ -84,7 +84,7 @@ OCR_BATCH_MAX_BYTES=12582912
 OCR_REQUEST_TIMEOUT_MS=120000
 ```
 
-Os modelos padrão do runtime são Gemini 3.1 Flash-Lite como principal e Gemini 3.5 Flash-Lite como fallback. Os limites locais de RPM mantêm margem abaixo da capacidade nominal configurada; não representam franquia diária.
+Os modelos padrão do runtime são Gemini 3.1 Flash-Lite como principal e Gemini 3.5 Flash-Lite como fallback. Os limites locais de RPM mantêm margem abaixo da capacidade nominal configurada. O circuit breaker preventivo usa 190 RPD por modelo, sem transformar esse contador em uma quota por páginas; a quota real do provider continua sendo a autoridade.
 
 ### Política de quota
 
@@ -101,7 +101,7 @@ O Fichário pode registrar:
 - média de páginas por chamada;
 - provider/modelo/rota efetivamente usados.
 
-Esses contadores não podem impedir uma chamada que ainda seria aceita pelo provider, salvo rate limiting técnico necessário para não exceder RPM/concorrência.
+Esses contadores não podem impedir uma chamada que ainda seria aceita pelo provider, salvo rate limiting técnico necessário para não exceder RPM/concorrência ou o circuit breaker preventivo de 190 RPD configurado para preservar margem operacional.
 
 Estados relevantes:
 
