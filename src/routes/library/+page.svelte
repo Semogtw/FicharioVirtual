@@ -4,6 +4,7 @@
 	import NativeSelect from '$lib/components/ui/native-select/NativeSelect.svelte';
 	import DocumentCard from '$lib/components/DocumentCard.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
+	import LoadingCollection from '$lib/components/LoadingCollection.svelte';
 	import type {
 		DocumentCursor,
 		DocumentKind,
@@ -178,7 +179,7 @@
 			<Button label="Tentar novamente" variant="secondary" onclick={() => void load(true)} />
 		</div>
 	{:else if loading}
-		<p class="loading" role="status">Organizando seus documentos…</p>
+		<LoadingCollection label="Organizando seus documentos…" />
 	{:else if documents.length === 0}
 		<EmptyState
 			title="Nenhum documento neste recorte"
@@ -292,12 +293,6 @@
 	.grid :global(.document-card) {
 		content-visibility: auto;
 		contain-intrinsic-size: auto 20rem;
-	}
-
-	.loading {
-		padding: 3rem;
-		color: var(--muted);
-		text-align: center;
 	}
 
 	.filter-warning,
