@@ -3,6 +3,7 @@
 	import { onDestroy, untrack } from 'svelte';
 	import Button from '$lib/components/Button.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
+	import LoadingCollection from '$lib/components/LoadingCollection.svelte';
 	import SearchDocumentCard from '$lib/components/SearchDocumentCard.svelte';
 	import NativeSelect from '$lib/components/ui/native-select/NativeSelect.svelte';
 	import type { NotebookSummary } from '$lib/domain/notebook';
@@ -239,7 +240,7 @@
 			<Button label="Tentar novamente" variant="secondary" onclick={() => void run(true)} />
 		</div>
 	{:else if loading}
-		<p class="loading" role="status">Procurando nos seus documentos…</p>
+		<LoadingCollection variant="search" count={6} label="Procurando nos seus documentos…" />
 	{:else if query.trim().length === 0}
 		<EmptyState
 			title="Digite algo para pesquisar"
@@ -375,12 +376,6 @@
 
 	li {
 		min-width: 0;
-	}
-
-	.loading {
-		padding: 3rem;
-		color: var(--muted);
-		text-align: center;
 	}
 
 	.filter-warning,

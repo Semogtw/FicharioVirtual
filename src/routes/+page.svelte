@@ -3,6 +3,7 @@
 	import { onDestroy, onMount } from 'svelte';
 	import DocumentCard from '$lib/components/DocumentCard.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
+	import LoadingCollection from '$lib/components/LoadingCollection.svelte';
 	import type { DocumentSummary } from '$lib/domain/document';
 	import { listDocuments } from '$lib/services/documents';
 	import { RequestVersion } from '$lib/services/request-version';
@@ -130,7 +131,7 @@
 		</div>
 
 		{#if loading}
-			<p class="loading" role="status">Atualizando o resumo do fichário…</p>
+			<LoadingCollection count={6} label="Atualizando o resumo do fichário…" />
 		{:else if error}
 			<div class="error" role="alert">
 				<p>{error}</p>
@@ -286,12 +287,6 @@
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
 		gap: 1rem;
-	}
-
-	.loading {
-		padding: 3rem;
-		color: var(--muted);
-		text-align: center;
 	}
 
 	.warning {
