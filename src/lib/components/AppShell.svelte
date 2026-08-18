@@ -4,6 +4,7 @@
 	import type { Snippet } from 'svelte';
 	import DataProcessingNotice from './DataProcessingNotice.svelte';
 	import DriveUploadGate from './DriveUploadGate.svelte';
+	import ImportQueueFlight from './ImportQueueFlight.svelte';
 	import ImportQueueTray from './ImportQueueTray.svelte';
 	import MobileNavigation from './MobileNavigation.svelte';
 	import NavigationIcon from './NavigationIcon.svelte';
@@ -100,6 +101,7 @@
 
 	<MobileNavigation />
 	<DriveUploadGate />
+	<ImportQueueFlight />
 </div>
 
 <style>
