@@ -17,6 +17,15 @@ describe('Drive login gate for imports', () => {
 		expect(dialog).toContain('role="alert"');
 	});
 
+	it('animates both dialog and backdrop without delaying the existing modal semantics', () => {
+		expect(dialog).toContain('@starting-style');
+		expect(dialog).toContain('display var(--motion-base) allow-discrete');
+		expect(dialog).toContain('overlay var(--motion-base) allow-discrete');
+		expect(dialog).toContain('.drive-upload-dialog[open]::backdrop');
+		expect(dialog).toContain('dialog.showModal()');
+		expect(dialog).toContain('dialog.close()');
+	});
+
 	it('checks Drive before both image and PDF upload entrypoints', () => {
 		expect(imageUpload).toMatch(
 			/export async function uploadPreparedImage[\s\S]*await requireDriveForUpload\(\);[\s\S]*uploadPreparedImageToDrive/

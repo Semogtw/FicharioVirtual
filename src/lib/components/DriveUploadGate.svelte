@@ -67,11 +67,50 @@
 		border-radius: var(--radius-lg);
 		background: var(--surface);
 		color: var(--ink);
+		opacity: 0;
+		transform: translateY(0.75rem) scale(0.975);
+		transition:
+			display var(--motion-base) allow-discrete,
+			overlay var(--motion-base) allow-discrete,
+			opacity var(--motion-base) var(--ease-soft),
+			transform var(--motion-base) var(--ease-emphasized),
+			box-shadow var(--motion-slow) var(--ease-soft);
+	}
+
+	.drive-upload-dialog[open] {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+		box-shadow: var(--shadow-raised);
+	}
+
+	@starting-style {
+		.drive-upload-dialog[open] {
+			opacity: 0;
+			transform: translateY(0.75rem) scale(0.975);
+			box-shadow: none;
+		}
 	}
 
 	.drive-upload-dialog::backdrop {
+		background: rgb(var(--ink-rgb) / 0%);
+		backdrop-filter: blur(0);
+		transition:
+			display var(--motion-base) allow-discrete,
+			overlay var(--motion-base) allow-discrete,
+			background-color var(--motion-base) var(--ease-soft),
+			backdrop-filter var(--motion-base) var(--ease-soft);
+	}
+
+	.drive-upload-dialog[open]::backdrop {
 		background: rgb(var(--ink-rgb) / 48%);
 		backdrop-filter: blur(0.2rem);
+	}
+
+	@starting-style {
+		.drive-upload-dialog[open]::backdrop {
+			background: rgb(var(--ink-rgb) / 0%);
+			backdrop-filter: blur(0);
+		}
 	}
 
 	.dialog-content {
@@ -91,6 +130,23 @@
 		font-family: var(--font-heading);
 		font-size: 1.15rem;
 		font-weight: 760;
+		transform: translateY(0) rotate(0deg) scale(1);
+		transition: transform var(--motion-slow) var(--ease-emphasized);
+	}
+
+	.drive-upload-dialog[open] .drive-mark {
+		animation: drive-mark-enter var(--motion-slow) var(--ease-emphasized) both;
+	}
+
+	@keyframes drive-mark-enter {
+		from {
+			opacity: 0;
+			transform: translateY(0.35rem) rotate(-4deg) scale(0.9);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0) rotate(0deg) scale(1);
+		}
 	}
 
 	.copy {
@@ -149,6 +205,27 @@
 		font: inherit;
 		font-weight: 720;
 		cursor: pointer;
+		transform: translateY(0) scale(1);
+		transition:
+			background-color var(--motion-fast) var(--ease-standard),
+			border-color var(--motion-fast) var(--ease-standard),
+			box-shadow var(--motion-base) var(--ease-soft),
+			transform var(--motion-base) var(--ease-emphasized);
+	}
+
+	.secondary:active {
+		box-shadow: none;
+		transform: translateY(1px) scale(0.965);
+		transition-duration: var(--motion-instant);
+	}
+
+	@media (hover: hover) and (pointer: fine) {
+		.secondary:hover {
+			border-color: var(--archive);
+			background: var(--archive-soft);
+			box-shadow: 0 0.45rem 1rem rgb(var(--ink-rgb) / 8%);
+			transform: translateY(-1px) scale(1.005);
+		}
 	}
 
 	@media (max-width: 520px) {
