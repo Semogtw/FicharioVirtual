@@ -13,13 +13,15 @@
 		label = 'Carregando conteúdo…'
 	}: LoadingCollectionProps = $props();
 
-	let items = $derived(Array.from({ length: Math.max(1, Math.min(count, 8)) }));
+	let items = $derived(
+		Array.from({ length: Math.max(1, Math.min(count, 8)) }, (_, index) => index)
+	);
 </script>
 
 <section class={`loading-collection ${variant}`} role="status" aria-busy="true">
 	<span class="visually-hidden">{label}</span>
 	<div class="skeleton-grid" aria-hidden="true">
-		{#each items as _, index}
+		{#each items as index}
 			<article class="skeleton-card" style={`--skeleton-index: ${index}`}>
 				{#if variant === 'notebooks'}
 					<div class="notebook-binding"></div>
