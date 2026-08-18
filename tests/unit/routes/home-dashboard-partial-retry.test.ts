@@ -10,7 +10,9 @@ describe('home dashboard partial recovery', () => {
 		expect(source).toContain('if (hasContent) refreshing = true;');
 		expect(source).toContain('aria-busy={loading || refreshing}');
 		expect(source).toContain('{#if warning}');
-		expect(source).toContain('<div class="warning" role="status">');
+		expect(source).toContain(
+			'<div class="warning" role="status" transition:fly={{ y: -6, duration: 220 }}>'
+		);
 		expect(source).toContain('<p>{warning}</p>');
 		expect(source).toContain('disabled={loading || refreshing}');
 		expect(source).toContain('onclick={() => void loadDashboard()}');
