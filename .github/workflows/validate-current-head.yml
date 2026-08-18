@@ -24,7 +24,7 @@ permissions:
   issues: write
 
 concurrency:
-  group: validate-current-head
+  group: validate-current-head-${{ github.sha }}
   cancel-in-progress: true
 
 jobs:
