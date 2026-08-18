@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { tick } from 'svelte';
+
 	interface TextInputDialogProps {
 		open: boolean;
 		title: string;
@@ -31,7 +33,42 @@
 		onCancel
 	}: TextInputDialogProps = $props();
 
+	let dialog = $state<HTMLDivElement | null>(null);
+	let input = $state<HTMLInputElement | null>(null);
+	let previouslyFocused: HTMLElement | null = null;
+	let dialogWasOpen = false;
+
+	function focusableElements() {
+		if (!dialog) return [];
+		return Array.from(
+			dialog.querySelectorAll<HTMLElement>(
+				'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+			)
+		).filter((element) => element.getAttribute('aria-hidden') !== 'true');
+	}
+
+	function trapFocus(event: KeyboardEvent) {
+		if (!open || event.key !== 'Tab' || !dialog) return;
+		const elements = focusableElements();
+		if (elements.length === 0) {
+			event.preventDefault();
+			dialog.focus();
+			return;
+		}
+		const first = elements[0];
+		const last = elements.at(-1);
+		if (!first || !last) return;
+		if (event.shiftKey && document.activeElement === first) {
+			event.preventDefault();
+			last.focus();
+		} else if (!event.shiftKey && document.activeElement === last) {
+			event.preventDefault();
+			first.focus();
+		}
+	}
+
 	function handleKeydown(event: KeyboardEvent) {
+		trapFocus(event);
 		if (!open || busy) return;
 		if (event.key === 'Escape') {
 			event.preventDefault();
@@ -48,36 +85,65 @@
 	function cancelFromBackdrop(event: MouseEvent) {
 		if (event.target === event.currentTarget && !busy) onCancel();
 	}
+
+	$effect(() => {
+		if (open && !dialogWasOpen) {
+			dialogWasOpen = true;
+			previouslyFocused =
+				document.activeElement instanceof HTMLElement ? document.activeElement : null;
+			void tick().then(() => {
+				const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
+				(coarsePointer ? dialog : input)?.focus({ preventScroll: true });
+			});
+		} else if (!open && dialogWasOpen) {
+			dialogWasOpen = false;
+			const target = previouslyFocused;
+			previouslyFocused = null;
+			if (target?.isConnected) target.focus({ preventScroll: true });
+		}
+	});
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
 {#if open}
 	<div class="backdrop" role="presentation" onclick={cancelFromBackdrop}>
-		<form class="dialog" aria-labelledby="text-dialog-title" onsubmit={submit}>
-			<div class="copy">
-				<p class="eyebrow">Editar</p>
-				<h2 id="text-dialog-title">{title}</h2>
-				{#if description}<p>{description}</p>{/if}
-			</div>
-			<label>
-				<span>{label}</span>
-				<input
-					maxlength={maximumLength}
-					{placeholder}
-					{value}
-					oninput={(event) => onValueChange(event.currentTarget.value)}
-				/>
-			</label>
-			<div class="actions">
-				<button type="button" class="secondary" disabled={busy} onclick={onCancel}>
-					{cancelLabel}
-				</button>
-				<button type="submit" disabled={busy || value.trim().length === 0}>
-					{busy ? 'Aguarde…' : confirmLabel}
-				</button>
-			</div>
-		</form>
+		<div
+			class="dialog"
+			bind:this={dialog}
+			role="dialog"
+			aria-modal="true"
+			tabindex="-1"
+			aria-labelledby="text-dialog-title"
+			aria-describedby={description ? 'text-dialog-description' : undefined}
+		>
+			<form onsubmit={submit}>
+				<div class="copy">
+					<p class="eyebrow">Editar</p>
+					<h2 id="text-dialog-title">{title}</h2>
+					{#if description}<p id="text-dialog-description">{description}</p>{/if}
+				</div>
+				<label>
+					<span>{label}</span>
+					<input
+						type="text"
+						name="value"
+						maxlength={maximumLength}
+						{placeholder}
+						{value}
+						oninput={(event) => onValueChange(event.currentTarget.value)}
+					/>
+				</label>
+				<div class="actions">
+					<button type="button" class="secondary" disabled={busy} onclick={onCancel}>
+						{cancelLabel}
+					</button>
+					<button type="submit" disabled={busy || value.trim().length === 0}>
+						{busy ? 'Aguarde…' : confirmLabel}
+					</button>
+				</div>
+			</form>
+		</div>
 	</div>
 {/if}
 
@@ -91,6 +157,7 @@
 		padding: 1rem;
 		background: rgb(20 20 18 / 58%);
 		backdrop-filter: blur(5px);
+		overscroll-behavior: contain;
 	}
 
 	.dialog {
@@ -102,6 +169,11 @@
 		border-radius: var(--radius-md);
 		background: var(--surface-strong);
 		box-shadow: var(--shadow-soft);
+	}
+
+	.dialog form {
+		display: grid;
+		gap: 1rem;
 	}
 
 	.copy {

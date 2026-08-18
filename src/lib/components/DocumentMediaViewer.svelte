@@ -23,6 +23,7 @@
 		pages: readonly DocumentPageSummary[];
 		query: string;
 		focusPageNumber?: number;
+		initialPageDetail?: PageDetail;
 	}
 
 	type RenderedPage = {
@@ -38,7 +39,8 @@
 	const MAX_BROWSER_DRIVE_IMAGE_BYTES = 64 * 1024 * 1024;
 	const EMPTY_GEOMETRY = Object.freeze([]) as readonly WordGeometry[];
 
-	let { detail, pages, query, focusPageNumber }: DocumentMediaViewerProps = $props();
+	let { detail, pages, query, focusPageNumber, initialPageDetail }: DocumentMediaViewerProps =
+		$props();
 	let renderedPages = $state<RenderedPage[]>([]);
 	let requestedPageNumbers = $state<readonly number[]>([]);
 	let processing = false;
@@ -333,6 +335,7 @@
 		const loaded = await Promise.all(
 			pageNumbers.map(async (pageNumber) => {
 				updateRendered(pageNumber, { loading: true, error: null });
+				if (initialPageDetail?.pageNumber === pageNumber) return initialPageDetail;
 				try {
 					return await loadDocumentPage(detail.id, pageNumber);
 				} catch {

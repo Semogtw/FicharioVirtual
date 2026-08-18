@@ -21,9 +21,12 @@
 
 	type QueueEntry = { kind: 'image'; item: ImportQueueItem } | { kind: 'pdf'; item: PdfQueueItem };
 
-	const REFRESH_INTERVAL_MS = 10_000;
+	const REFRESH_INTERVAL_VISIBLE_MS = 10_000;
+	const REFRESH_INTERVAL_HIDDEN_MS = 30_000;
 	let open = $state(false);
 	let refreshing = false;
+	let pollTimer: ReturnType<typeof setTimeout> | null = null;
+	let mounted = $state(false);
 	let entries = $derived<QueueEntry[]>([
 		...importQueue.items.map((item) => ({ kind: 'image' as const, item })),
 		...pdfImportQueue.items.map((item) => ({ kind: 'pdf' as const, item }))
@@ -188,17 +191,35 @@
 		}
 	}
 
+	function scheduleBackgroundPoll() {
+		if (!mounted) return;
+		if (pollTimer !== null) clearTimeout(pollTimer);
+		pollTimer = null;
+		if (!entries.some((entry) => entry.item.status === 'waiting')) return;
+		const interval =
+			document.visibilityState === 'visible'
+				? REFRESH_INTERVAL_VISIBLE_MS
+				: REFRESH_INTERVAL_HIDDEN_MS;
+		pollTimer = setTimeout(() => {
+			pollTimer = null;
+			void refreshBackgroundOcr().finally(scheduleBackgroundPoll);
+		}, interval);
+	}
+
 	onMount(() => {
-		const poll = setInterval(() => void refreshBackgroundOcr(), REFRESH_INTERVAL_MS);
+		mounted = true;
 		const refreshWhenVisible = () => {
-			if (document.visibilityState === 'visible') void refreshBackgroundOcr();
+			if (document.visibilityState === 'visible') {
+				void refreshBackgroundOcr().finally(scheduleBackgroundPoll);
+			}
 		};
-		const refreshWhenOnline = () => void refreshBackgroundOcr();
+		const refreshWhenOnline = () => void refreshBackgroundOcr().finally(scheduleBackgroundPoll);
 		document.addEventListener('visibilitychange', refreshWhenVisible);
 		window.addEventListener('online', refreshWhenOnline);
-		void refreshBackgroundOcr();
+		void refreshBackgroundOcr().finally(scheduleBackgroundPoll);
 		return () => {
-			clearInterval(poll);
+			mounted = false;
+			if (pollTimer !== null) clearTimeout(pollTimer);
 			document.removeEventListener('visibilitychange', refreshWhenVisible);
 			window.removeEventListener('online', refreshWhenOnline);
 		};

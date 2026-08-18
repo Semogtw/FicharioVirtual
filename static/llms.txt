@@ -1,0 +1,5 @@
+# Fichário Virtual
+
+> Biblioteca pessoal privada para organizar e pesquisar anotações, imagens e PDFs.
+
+- [Fichário Virtual](https://fichario-virtual.pages.dev/): aplicação web privada; páginas e documentos exigem autenticação.

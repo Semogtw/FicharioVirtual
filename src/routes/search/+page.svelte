@@ -24,7 +24,7 @@
 	let nextOffset = $state(0);
 	let analysis = $state<SemanticSearchAnalysis | null>(null);
 	let notebooks = $state<readonly NotebookSummary[]>([]);
-	let notebookLoading = $state(true);
+	let notebookLoading = $state(false);
 	let notebookError = $state<string | null>(null);
 	let loading = $state(false);
 	let loadingMore = $state(false);
@@ -32,6 +32,8 @@
 	let hasMore = $state(false);
 	let timer: ReturnType<typeof setTimeout> | null = null;
 	let controller: AbortController | null = null;
+	let notebookLoadTimer: ReturnType<typeof setTimeout> | null = null;
+	let notebookLoadStarted = false;
 
 	function cancelPending() {
 		if (timer) clearTimeout(timer);
@@ -95,7 +97,15 @@
 	function schedule() {
 		cancelPending();
 		const version = requests.next();
-		timer = setTimeout(() => void run(true, version), 450);
+		timer = setTimeout(() => void run(true, version), 300);
+	}
+
+	function ensureNotebookOptions() {
+		if (notebookLoadTimer) clearTimeout(notebookLoadTimer);
+		notebookLoadTimer = null;
+		if (notebookLoadStarted && !notebookError) return;
+		notebookLoadStarted = true;
+		void loadNotebookOptions();
 	}
 
 	function semanticStatus() {
@@ -131,7 +141,16 @@
 	}
 
 	$effect(() => {
-		void loadNotebookOptions();
+		if (typeof window === 'undefined' || notebookLoadStarted) return;
+		notebookLoadTimer = setTimeout(() => {
+			notebookLoadTimer = null;
+			notebookLoadStarted = true;
+			void loadNotebookOptions();
+		}, 900);
+		return () => {
+			if (notebookLoadTimer) clearTimeout(notebookLoadTimer);
+			notebookLoadTimer = null;
+		};
 	});
 
 	$effect(() => {
@@ -146,6 +165,7 @@
 		requests.next();
 		notebookRequests.next();
 		cancelPending();
+		if (notebookLoadTimer) clearTimeout(notebookLoadTimer);
 	});
 </script>
 
@@ -165,6 +185,9 @@
 			<span class="visually-hidden">Termos da pesquisa</span>
 			<input
 				type="search"
+				name="q"
+				inputmode="search"
+				autocomplete="off"
 				bind:value={query}
 				maxlength="200"
 				placeholder="Ex.: conservação de energia, fotossíntese, capítulo 4"
@@ -176,6 +199,8 @@
 			<NativeSelect
 				bind:value={notebookId}
 				disabled={notebookLoading}
+				onfocus={ensureNotebookOptions}
+				onpointerdown={ensureNotebookOptions}
 				onchange={() => void run(true)}
 			>
 				<option value="">Todos os cadernos</option>

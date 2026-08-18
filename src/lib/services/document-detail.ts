@@ -152,6 +152,11 @@ export type DocumentDetail = {
 	updatedAt: string;
 };
 
+export type DocumentPreview = Readonly<{
+	detail: DocumentDetail;
+	page: PageDetail;
+}>;
+
 export interface DocumentDetailGateway {
 	loadDocument(documentId: string): Promise<DocumentDetailRecord | null>;
 	listPageSummaries(documentId: string): Promise<readonly DocumentPageSummaryRecord[]>;
@@ -181,6 +186,8 @@ export class DocumentDetailError extends Error {
 type TimedCacheEntry<T> = Readonly<{ expiresAt: number; value: T }>;
 const detailCache = new Map<string, TimedCacheEntry<DocumentDetail>>();
 const detailInflight = new Map<string, Promise<DocumentDetail>>();
+const previewCache = new Map<string, TimedCacheEntry<DocumentPreview>>();
+const previewInflight = new Map<string, Promise<DocumentPreview>>();
 const pageCache = new Map<string, TimedCacheEntry<PageDetail>>();
 const pageInflight = new Map<string, Promise<PageDetail>>();
 
@@ -339,6 +346,53 @@ export async function loadDocumentDetailWithGateway(
 	}
 }
 
+export async function loadDocumentPreviewWithGateway(
+	documentId: string,
+	pageNumber: number,
+	gateway: DocumentDetailGateway
+): Promise<DocumentPreview> {
+	const validatedDocumentId = validId(documentId, 'document');
+	const validatedPageNumber = validPageNumber(pageNumber);
+	try {
+		const rawDocument = await gateway.loadDocument(validatedDocumentId);
+		if (rawDocument === null) throw new DocumentDetailError('not_found');
+		const document = documentRecordSchema.parse(rawDocument);
+		if (document.id !== validatedDocumentId) throw new DocumentDetailError('unavailable');
+		const [rawPage, originalReference] = await Promise.all([
+			gateway.loadPage(validatedDocumentId, validatedPageNumber),
+			resolveOriginalReference(document, gateway)
+		]);
+		if (rawPage === null) throw new DocumentDetailError('not_found');
+		const page = pageRecordSchema.parse(rawPage);
+		if (page.page_number !== validatedPageNumber) throw new DocumentDetailError('unavailable');
+		const detail = Object.freeze({
+			id: document.id,
+			title: document.title,
+			kind: document.kind,
+			status: document.status,
+			pageCount: document.page_count,
+			notebookId: document.notebook_id,
+			originalFilename: document.original_filename,
+			originalUrl: originalReference.url,
+			originalReference,
+			physicalState: document.physical_state ?? 'available',
+			pages: Object.freeze([
+				mapPageSummary({
+					id: page.id,
+					page_number: page.page_number,
+					status: page.status,
+					updated_at: page.updated_at
+				})
+			]),
+			createdAt: document.created_at,
+			updatedAt: document.updated_at
+		});
+		return Object.freeze({ detail, page: mapPageRecord(page) });
+	} catch (error) {
+		preserveNotFound(error);
+	}
+}
+
 export async function loadDocumentPageWithGateway(
 	documentId: string,
 	pageNumber: number,
@@ -463,6 +517,12 @@ export function invalidateDocumentDetail(documentId: string) {
 	for (const key of detailInflight.keys()) {
 		if (key.endsWith(`:${documentId}`)) detailInflight.delete(key);
 	}
+	for (const key of previewCache.keys()) {
+		if (key.includes(`:${documentId}:`)) previewCache.delete(key);
+	}
+	for (const key of previewInflight.keys()) {
+		if (key.includes(`:${documentId}:`)) previewInflight.delete(key);
+	}
 	for (const key of pageCache.keys()) {
 		if (key.includes(`:${documentId}:`)) pageCache.delete(key);
 	}
@@ -477,6 +537,9 @@ function invalidatePageById(pageId: string) {
 	}
 	for (const [key, entry] of detailCache.entries()) {
 		if (entry.value.pages.some((page) => page.id === pageId)) detailCache.delete(key);
+	}
+	for (const [key, entry] of previewCache.entries()) {
+		if (entry.value.page.id === pageId) previewCache.delete(key);
 	}
 }
 
@@ -504,6 +567,39 @@ export async function loadDocumentDetail(
 		})
 		.finally(() => detailInflight.delete(key));
 	detailInflight.set(key, request);
+	return request;
+}
+
+export async function loadDocumentPreview(
+	documentId: string | undefined,
+	pageNumber: number,
+	client?: SupabaseClient<Database>
+): Promise<DocumentPreview> {
+	if (!documentId) throw new TypeError('Invalid document identifier');
+	const validatedDocumentId = validId(documentId, 'document');
+	const validatedPageNumber = validPageNumber(pageNumber);
+	const resolvedClient = client ?? getSupabaseClient();
+	const gateway = new SupabaseDocumentGateway(resolvedClient);
+	if (client) {
+		return loadDocumentPreviewWithGateway(validatedDocumentId, validatedPageNumber, gateway);
+	}
+
+	const userId = await currentCacheUserId(resolvedClient);
+	if (!userId) {
+		return loadDocumentPreviewWithGateway(validatedDocumentId, validatedPageNumber, gateway);
+	}
+	const key = `${userId}:${validatedDocumentId}:${validatedPageNumber}`;
+	const cached = getCached(previewCache, key);
+	if (cached) return cached;
+	const existing = previewInflight.get(key);
+	if (existing) return existing;
+	const request = loadDocumentPreviewWithGateway(validatedDocumentId, validatedPageNumber, gateway)
+		.then((preview) => {
+			putCached(previewCache, key, preview, DETAIL_CACHE_TTL_MS, DETAIL_CACHE_MAX_ENTRIES);
+			return preview;
+		})
+		.finally(() => previewInflight.delete(key));
+	previewInflight.set(key, request);
 	return request;
 }
 

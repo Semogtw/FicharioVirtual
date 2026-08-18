@@ -63,6 +63,7 @@
 		min-height: 3.5rem;
 		border-radius: var(--radius-sm);
 		color: var(--muted);
+		touch-action: manipulation;
 		transform: scale(1);
 		transition:
 			background-color var(--motion-fast) var(--ease-standard),
@@ -97,7 +98,7 @@
 	small {
 		max-width: 100%;
 		overflow: hidden;
-		font-size: 0.66rem;
+		font-size: 0.7rem;
 		font-weight: 720;
 		text-overflow: ellipsis;
 		white-space: nowrap;

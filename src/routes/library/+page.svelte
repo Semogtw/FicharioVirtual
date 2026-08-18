@@ -289,6 +289,11 @@
 		gap: 1rem;
 	}
 
+	.grid :global(.document-card) {
+		content-visibility: auto;
+		contain-intrinsic-size: auto 20rem;
+	}
+
 	.loading {
 		padding: 3rem;
 		color: var(--muted);

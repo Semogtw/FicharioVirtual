@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { tick } from 'svelte';
+
 	interface ConfirmDialogProps {
 		open: boolean;
 		title: string;
@@ -23,16 +25,65 @@
 		onCancel
 	}: ConfirmDialogProps = $props();
 
+	let dialog = $state<HTMLDivElement | null>(null);
+	let cancelButton = $state<HTMLButtonElement | null>(null);
+	let previouslyFocused: HTMLElement | null = null;
+	let dialogWasOpen = false;
+
+	function focusableElements() {
+		if (!dialog) return [];
+		return Array.from(
+			dialog.querySelectorAll<HTMLElement>(
+				'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+			)
+		).filter((element) => element.getAttribute('aria-hidden') !== 'true');
+	}
+
+	function trapFocus(event: KeyboardEvent) {
+		if (!open || event.key !== 'Tab' || !dialog) return;
+		const elements = focusableElements();
+		if (elements.length === 0) {
+			event.preventDefault();
+			dialog.focus();
+			return;
+		}
+		const first = elements[0];
+		const last = elements.at(-1);
+		if (!first || !last) return;
+		if (event.shiftKey && document.activeElement === first) {
+			event.preventDefault();
+			last.focus();
+		} else if (!event.shiftKey && document.activeElement === last) {
+			event.preventDefault();
+			first.focus();
+		}
+	}
+
 	function cancelFromBackdrop(event: MouseEvent) {
 		if (event.target === event.currentTarget && !busy) onCancel();
 	}
 
 	function handleKeydown(event: KeyboardEvent) {
+		trapFocus(event);
 		if (event.key === 'Escape' && open && !busy) {
 			event.preventDefault();
 			onCancel();
 		}
 	}
+
+	$effect(() => {
+		if (open && !dialogWasOpen) {
+			dialogWasOpen = true;
+			previouslyFocused =
+				document.activeElement instanceof HTMLElement ? document.activeElement : null;
+			void tick().then(() => cancelButton?.focus({ preventScroll: true }));
+		} else if (!open && dialogWasOpen) {
+			dialogWasOpen = false;
+			const target = previouslyFocused;
+			previouslyFocused = null;
+			if (target?.isConnected) target.focus({ preventScroll: true });
+		}
+	});
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -41,8 +92,10 @@
 	<div class="backdrop" role="presentation" onclick={cancelFromBackdrop}>
 		<div
 			class="dialog"
+			bind:this={dialog}
 			role="alertdialog"
 			aria-modal="true"
+			tabindex="-1"
 			aria-labelledby="confirm-dialog-title"
 			aria-describedby="confirm-dialog-description"
 		>
@@ -52,7 +105,13 @@
 				<p id="confirm-dialog-description">{description}</p>
 			</div>
 			<div class="actions">
-				<button type="button" class="secondary" disabled={busy} onclick={onCancel}>
+				<button
+					bind:this={cancelButton}
+					type="button"
+					class="secondary"
+					disabled={busy}
+					onclick={onCancel}
+				>
 					{cancelLabel}
 				</button>
 				<button type="button" class:danger disabled={busy} onclick={onConfirm}>
@@ -73,6 +132,7 @@
 		padding: 1rem;
 		background: rgb(20 20 18 / 58%);
 		backdrop-filter: blur(5px);
+		overscroll-behavior: contain;
 	}
 
 	.dialog {

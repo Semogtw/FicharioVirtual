@@ -20,11 +20,15 @@ describe('client OCR queue lifecycle', () => {
 			"import { restorePdfImports } from '$lib/stores/pdf-import-queue.svelte';"
 		);
 		expect(hook).toContain('subscribeSessionAuthorization((authorized) => {');
-		expect(hook).toContain(
-			'const ocrQueueLifecycle = createOcrQueueLifecycle(() => kickOcrQueueBestEffort());'
-		);
-		expect(hook).toContain('if (authorized) ocrQueueLifecycle.start();');
-		expect(hook).toContain('else ocrQueueLifecycle.stop();');
+		expect(hook).toContain('const ocrQueueLifecycle = createOcrQueueLifecycle(() => {');
+		expect(hook).toContain('kickOcrQueueBestEffort();');
+		expect(hook).toContain('function scheduleAfterFirstPaint(callback: () => void)');
+		expect(hook).toContain('requestIdleCallback(callback, { timeout: 2000 })');
+		expect(hook).toContain('let deferNextOcrKick = true;');
+		expect(hook).toContain('const scheduledEpoch = authorizationEpoch;');
+		expect(hook).toContain('if (authorized) {');
+		expect(hook).toContain('ocrQueueLifecycle.start();');
+		expect(hook).toContain('ocrQueueLifecycle.stop();');
 		expect(hook).toContain('void restoreImageImports(sessionState.user.id);');
 		expect(hook).toContain('void restorePdfImports(sessionState.user.id);');
 		expect(hook).not.toContain('pauseQueue();');

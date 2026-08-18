@@ -90,7 +90,7 @@ export async function getSemanticQueryEmbeddings(input: {
 			throw new Error('Semantic query embedding count mismatch');
 		}
 
-		const writes = misses.map(async (entry, missIndex) => {
+		for (const [missIndex, entry] of misses.entries()) {
 			const vector = vectors[missIndex];
 			if (!vector) throw new Error('Semantic query embedding missing');
 			const vectorText = embeddingVectorText(vector);
@@ -98,18 +98,15 @@ export async function getSemanticQueryEmbeddings(input: {
 				entry.queryHash,
 				Object.freeze({ vectorText, cacheHit: false, queryHash: entry.queryHash })
 			);
-			try {
-				await input.supabase.rpc('put_cached_semantic_query_embedding', {
+			void input.supabase
+				.rpc('put_cached_semantic_query_embedding', {
 					target_model: SEMANTIC_EMBEDDING_MODEL,
 					target_query_hash: entry.queryHash,
 					embedding_text: vectorText,
 					ttl_seconds: SEMANTIC_QUERY_CACHE_TTL_SECONDS
-				});
-			} catch {
-				// Cache writes are best effort.
-			}
-		});
-		await Promise.all(writes);
+				})
+				.catch(() => undefined);
+		}
 	}
 
 	return Object.freeze(
