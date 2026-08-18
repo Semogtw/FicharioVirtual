@@ -24,6 +24,7 @@
 			? (page.url.searchParams.get('q')?.slice(0, 200) ?? '')
 			: ''
 	);
+	let documentRoute = $derived(page.url.pathname.startsWith('/documents/'));
 
 	const navigation = [
 		{ href: '/', label: 'Início', icon: 'home' },
@@ -119,7 +120,9 @@
 		<main id="main-content">
 			<div class="content">
 				{#key page.url.pathname}
-					<div class="route-content">{@render children()}</div>
+					<div class="route-content" class:document-route={documentRoute}>
+						{@render children()}
+					</div>
 				{/key}
 			</div>
 		</main>
@@ -221,6 +224,10 @@
 		view-transition-name: route-surface;
 		transform-origin: 50% 0;
 		animation: route-content-enter var(--motion-page) var(--ease-soft) both;
+	}
+
+	.route-content.document-route {
+		view-transition-name: selected-document;
 	}
 
 	@keyframes route-content-enter {
