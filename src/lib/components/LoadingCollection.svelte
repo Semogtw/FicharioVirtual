@@ -49,6 +49,11 @@
 		grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
 	}
 
+	.search .skeleton-grid {
+		grid-template-columns: repeat(auto-fill, minmax(min(20rem, 100%), 1fr));
+		gap: 0.9rem;
+	}
+
 	.skeleton-card {
 		position: relative;
 		min-width: 0;
