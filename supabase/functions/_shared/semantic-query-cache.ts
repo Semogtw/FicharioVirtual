@@ -98,18 +98,14 @@ export async function getSemanticQueryEmbeddings(input: {
 				entry.queryHash,
 				Object.freeze({ vectorText, cacheHit: false, queryHash: entry.queryHash })
 			);
-			void (async () => {
-				try {
-					await input.supabase.rpc('put_cached_semantic_query_embedding', {
-						target_model: SEMANTIC_EMBEDDING_MODEL,
-						target_query_hash: entry.queryHash,
-						embedding_text: vectorText,
-						ttl_seconds: SEMANTIC_QUERY_CACHE_TTL_SECONDS
-					});
-				} catch {
-					// Cache writes are best effort and must never block retrieval.
-				}
-			})();
+			void input.supabase
+				.rpc('put_cached_semantic_query_embedding', {
+					target_model: SEMANTIC_EMBEDDING_MODEL,
+					target_query_hash: entry.queryHash,
+					embedding_text: vectorText,
+					ttl_seconds: SEMANTIC_QUERY_CACHE_TTL_SECONDS
+				})
+				.catch(() => undefined);
 		}
 	}
 
