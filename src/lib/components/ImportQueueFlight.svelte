@@ -31,7 +31,7 @@
 	const cleanupTimers = new Set<ReturnType<typeof setTimeout>>();
 
 	function isImportRoute() {
-		return page.url.pathname === '/import' || page.url.pathname.startsWith('/import/');
+		return page.url.pathname.startsWith('/import/');
 	}
 
 	function center(element: Element) {
