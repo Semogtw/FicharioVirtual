@@ -66,14 +66,22 @@
 		background: var(--surface-strong);
 		color: var(--ink);
 		cursor: pointer;
+		transform: translateY(0);
 		transition:
-			border-color 120ms ease,
-			box-shadow 120ms ease,
-			background-color 120ms ease;
+			border-color var(--motion-fast) var(--ease-standard),
+			box-shadow var(--motion-base) var(--ease-soft),
+			background-color var(--motion-fast) var(--ease-standard),
+			transform var(--motion-base) var(--ease-emphasized);
 	}
 
 	select:hover:not(:disabled) {
 		border-color: var(--archive);
+	}
+
+	select:focus-visible {
+		border-color: var(--archive);
+		box-shadow: 0 0.35rem 1rem rgb(var(--ink-rgb) / 7%);
+		transform: translateY(-1px);
 	}
 
 	select:disabled {
@@ -87,9 +95,17 @@
 		right: 0.75rem;
 		width: 1rem;
 		height: 1rem;
-		transform: translateY(-50%);
+		transform: translateY(-50%) rotate(0deg);
 		color: var(--muted-strong);
 		pointer-events: none;
+		transition:
+			color var(--motion-fast) var(--ease-standard),
+			transform var(--motion-base) var(--ease-emphasized);
+	}
+
+	.native-select:focus-within svg {
+		color: var(--archive);
+		transform: translateY(-50%) rotate(180deg);
 	}
 
 	@media (hover: none), (pointer: coarse) {
