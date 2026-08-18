@@ -32,9 +32,9 @@ describe('premium continuity motion', () => {
 
 	it('gives transient panels both entrance and exit motion', () => {
 		expect(home).toContain("import { fly } from 'svelte/transition';");
-		expect(home.match(/transition:fly=\{\{ y: -6, duration: 220 \}\}/g)?.length).toBeGreaterThanOrEqual(
-			3
-		);
+		expect(
+			home.match(/transition:fly=\{\{ y: -6, duration: 220 \}\}/g)?.length
+		).toBeGreaterThanOrEqual(3);
 		expect(queue).toContain("import { fly } from 'svelte/transition';");
 		expect(queue).toContain('transition:fly={{ y: -8, duration: 220 }}');
 	});
