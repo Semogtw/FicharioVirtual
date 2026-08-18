@@ -105,7 +105,12 @@
 		inset: 0;
 		content: '';
 		pointer-events: none;
-		background: linear-gradient(110deg, transparent 20%, rgb(255 255 255 / 5%) 46%, transparent 72%);
+		background: linear-gradient(
+			110deg,
+			transparent 20%,
+			rgb(255 255 255 / 5%) 46%,
+			transparent 72%
+		);
 		opacity: 0;
 		transform: translateX(-10%);
 		transition:
