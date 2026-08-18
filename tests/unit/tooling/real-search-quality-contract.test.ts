@@ -11,4 +11,11 @@ describe('real semantic search quality contract', () => {
 			'if (report.quality.semantic.recallAt1 !== 1 || report.quality.semantic.recallAt3 !== 1)'
 		);
 	});
+
+	it('treats any unrelated returned card as a negative false positive', () => {
+		expect(source).toContain('const falsePositive = results.length > 0;');
+		expect(source).toContain('resultDocumentIds: results.map((result) => result.documentId)');
+		expect(source).toContain('matchModes: results.map((result) => result.matchMode)');
+		expect(source).toContain('como preparar uma receita de bolo de chocolate com cobertura');
+	});
 });

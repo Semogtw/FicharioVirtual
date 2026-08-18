@@ -29,9 +29,11 @@ const semanticSource =
 	'A arborização urbana ameniza ilhas térmicas graças ao sombreamento e à evapotranspiração.';
 const semanticQuery = 'por que municípios cheios de árvores costumam ter temperaturas menores';
 const negativeQueries = [
-	'receita de bolo de chocolate com cobertura de brigadeiro',
+	'como preparar uma receita de bolo de chocolate com cobertura',
 	'como trocar o óleo do motor de um carro',
-	'regras para saque no voleibol profissional'
+	'como plantar tomates em uma horta',
+	'regras para saque no voleibol profissional',
+	'como consertar o freio de uma motocicleta'
 ];
 
 const report = {
@@ -331,12 +333,14 @@ try {
 	}
 	for (const query of negativeQueries) {
 		const results = await backendSearch(query);
-		const falsePositive = results.some((result) => result.documentId === document.id);
+		const falsePositive = results.length > 0;
 		if (falsePositive) report.quality.negative.falsePositiveQueries += 1;
 		report.quality.negative.observations.push({
 			query,
 			falsePositive,
 			resultCount: results.length,
+			resultDocumentIds: results.map((result) => result.documentId),
+			matchModes: results.map((result) => result.matchMode),
 			topSemanticSimilarity:
 				results.length > 0
 					? Math.max(...results.map((result) => Number(result.semanticSimilarity) || 0))

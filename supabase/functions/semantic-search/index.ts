@@ -15,6 +15,7 @@ import {
 	multimodalReciprocalRankScore
 } from '../_shared/semantic-ranking.ts';
 import { recordSemanticRetrievalEvent } from '../_shared/semantic-retrieval-telemetry.ts';
+import { hasVisualSearchIntent } from '../_shared/visual-search-policy.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_REQUEST_BODY_BYTES = 8 * 1024;
@@ -254,7 +255,8 @@ function publicCandidate(candidate: SearchCandidate) {
 function mergeCandidates(
 	lexical: readonly LexicalRow[],
 	semantic: readonly SemanticRow[],
-	visual: readonly VisualRow[]
+	visual: readonly VisualRow[],
+	allowStandaloneVisual: boolean
 ) {
 	const merged = new Map<string, SearchCandidate>();
 	lexical.forEach((row, index) => {
@@ -346,6 +348,7 @@ function mergeCandidates(
 			scoreCandidate(current);
 			return;
 		}
+		if (!allowStandaloneVisual) return;
 		const candidate: SearchCandidate = {
 			pageId: row.page_id,
 			documentId: row.document_id,
@@ -618,7 +621,8 @@ Deno.serve(async (request) => {
 		const visibleLexical = applyHybridPrecision(lexical, precisionPolicy);
 		const visibleSemantic = applyHybridPrecision(semantic, precisionPolicy);
 		const visibleVisual = applyHybridPrecision(visual, precisionPolicy);
-		const textualRanked = mergeCandidates(visibleLexical, visibleSemantic, []);
+		const allowStandaloneVisual = hasVisualSearchIntent(parsed.query);
+		const textualRanked = mergeCandidates(visibleLexical, visibleSemantic, [], false);
 		if (visualMode !== 'off') {
 			await recordVisualSearchEvent({
 				supabase,
@@ -636,7 +640,8 @@ Deno.serve(async (request) => {
 		const ranked = mergeCandidates(
 			visibleLexical,
 			visibleSemantic,
-			visualMode === 'active' ? visibleVisual : []
+			visualMode === 'active' ? visibleVisual : [],
+			allowStandaloneVisual
 		);
 		const end = parsed.offset + parsed.limit;
 		const results = ranked.slice(parsed.offset, end).map(publicCandidate);
