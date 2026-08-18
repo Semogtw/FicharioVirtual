@@ -2,6 +2,7 @@
 	import { onDestroy, onMount } from 'svelte';
 	import Button from '$lib/components/Button.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
+	import LoadingCollection from '$lib/components/LoadingCollection.svelte';
 	import NotebookCard from '$lib/components/NotebookCard.svelte';
 	import type { NotebookSummary } from '$lib/domain/notebook';
 	import { createNotebook, listNotebooks } from '$lib/services/notebooks';
@@ -152,7 +153,7 @@
 	{/if}
 
 	{#if loading && notebooks.length === 0}
-		<p class="loading" role="status">Abrindo seus cadernos…</p>
+		<LoadingCollection variant="notebooks" count={4} label="Abrindo seus cadernos…" />
 	{:else if notebooks.length === 0}
 		{#if !loadError}
 			<EmptyState
@@ -326,12 +327,6 @@
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
 		gap: 1rem;
-	}
-
-	.loading {
-		padding: 3rem;
-		color: var(--muted);
-		text-align: center;
 	}
 
 	.error {
