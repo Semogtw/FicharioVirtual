@@ -4,12 +4,14 @@ import { describe, expect, it } from 'vitest';
 const source = readFileSync('tools/checks/check-real-app-actions.mjs', 'utf8');
 
 describe('real deployed action cleanup contract', () => {
-	it('detaches synthetic documents before deleting them', () => {
-		expect(source).toContain('.update({ notebook_id: null })');
-		expect(source).toContain(".in('id', ids)");
+	it('removes synthetic documents through the authenticated deletion contract before notebooks', () => {
+		expect(source).toContain("client.functions.invoke('delete-document'");
+		expect(source).toContain('body: { documentId: id }');
+		expect(source).toContain("client.rpc('delete_notebook'");
 	});
 
-	it('allows the background OCR-backed coverage photo flow enough time to finish', () => {
-		expect(source).toContain('timeout: 300_000');
+	it('gives background processing and queue completion enough time to settle', () => {
+		expect(source).toContain('waitForUsableDocument(client, documentId, timeoutMs = 180_000)');
+		expect(source).toContain('waitForQueueTerminal(page, filename, timeoutMs = 180_000)');
 	});
 });

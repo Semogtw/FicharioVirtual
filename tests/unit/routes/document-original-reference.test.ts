@@ -32,7 +32,7 @@ describe('document original reference rendering', () => {
 		expect(viewer).toContain('id={`document-page-${rendered.page.pageNumber}`}');
 		expect(detailService).toContain(".select('id,page_number,status,updated_at')");
 		expect(detailService).toContain('prefetchDocumentPages');
-		expect(route).toContain('loadDocumentPage(documentId, pageNumber)');
+		expect(route).toContain('pages={detail.pages}');
 	});
 
 	it('renders a missing original state without creating links or media with a null URL', () => {
