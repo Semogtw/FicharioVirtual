@@ -57,7 +57,7 @@
 		publishing: 'Salvando no fichário',
 		reading: 'Leitura iniciada',
 		waiting: 'Aguardando leitura · atualização automática a cada 10 s',
-		needs_review: 'Pronto para revisão',
+		needs_review: 'Concluído',
 		complete: 'Concluído',
 		duplicate: 'Já existe',
 		failed: 'Falhou',
@@ -118,7 +118,7 @@
 			item.error = 'A leitura automática não pôde ser concluída.';
 			return;
 		}
-		item.status = summary.needsReview > 0 ? 'needs_review' : 'complete';
+		item.status = 'complete';
 		item.error = null;
 		await deleteStoredImageImport(item.id).catch(() => undefined);
 		if (item.sessionId) {
@@ -150,10 +150,7 @@
 			item.error = null;
 		} else if (summary.failed > 0) {
 			item.status = 'failed';
-			item.error = `${summary.failed} página(s) não puderam ser lidas automaticamente.`;
-		} else if (summary.needsReview > 0) {
-			item.status = 'needs_review';
-			item.error = null;
+			item.error = `${summary.failed} ${summary.failed === 1 ? 'página não pôde' : 'páginas não puderam'} ser lida${summary.failed === 1 ? '' : 's'} automaticamente.`;
 		} else {
 			item.status = 'complete';
 			item.error = null;
