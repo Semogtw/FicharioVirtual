@@ -106,13 +106,13 @@
 		<article class="overview-card">
 			<span>Páginas no fichário</span>
 			<strong><AnimatedNumber value={usage?.totals.pages ?? null} /></strong>
-			<small>Texto nativo, leituras e correções manuais</small>
+			<small>Originais preservados e conteúdo preparado para pesquisa</small>
 		</article>
-		<a class="overview-card actionable" href="/review/" aria-label="Abrir páginas para revisar">
-			<span>Para revisar</span>
-			<strong><AnimatedNumber value={usage?.totals.reviewPages ?? null} /></strong>
-			<small>Páginas que ainda pedem atenção humana</small>
-			<b aria-hidden="true">Revisar agora →</b>
+		<a class="overview-card actionable" href="/notebooks/" aria-label="Abrir cadernos">
+			<span>Cadernos</span>
+			<strong><AnimatedNumber value={usage?.totals.notebooks ?? null} /></strong>
+			<small>Conjuntos de documentos organizados do seu jeito</small>
+			<b aria-hidden="true">Abrir cadernos →</b>
 		</a>
 	</section>
 
