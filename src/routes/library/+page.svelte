@@ -167,7 +167,6 @@
 				<option value="">Todos</option>
 				<option value="ready">Pronto</option>
 				<option value="processing">Processando</option>
-				<option value="needs_review">Revisar</option>
 				<option value="failed">Falhou</option>
 			</NativeSelect>
 		</label>
