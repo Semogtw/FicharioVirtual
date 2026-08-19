@@ -6,7 +6,9 @@ import {
 
 const fileId = '1AbCdEfGhIjKlMnOpQrStUvWxYz_123456';
 
-function client(...responses: Array<{ data: unknown; error: unknown }>) {
+type ProxyResponse = { data: unknown; error: unknown; response?: Response };
+
+function client(...responses: ProxyResponse[]) {
 	return {
 		functions: {
 			invoke: vi.fn().mockImplementation(async () => {
@@ -19,11 +21,12 @@ function client(...responses: Array<{ data: unknown; error: unknown }>) {
 }
 
 describe('authenticated browser Drive media proxy', () => {
-	it('downloads a complete file through metadata plus bounded media reads', async () => {
-		const proxy = client(
-			{ data: { size: 3, mimeType: 'application/pdf' }, error: null },
-			{ data: new Blob([new Uint8Array([1, 2, 3])]), error: null }
-		);
+	it('downloads a complete file through one bounded media request and preserves its MIME type', async () => {
+		const proxy = client({
+			data: new Blob([new Uint8Array([1, 2, 3])], { type: 'application/octet-stream' }),
+			error: null,
+			response: new Response(null, { headers: { 'X-Drive-Media-Type': 'image/jpeg' } })
+		});
 
 		const blob = await downloadBrowserDriveFile({
 			client: proxy,
@@ -32,42 +35,28 @@ describe('authenticated browser Drive media proxy', () => {
 		});
 
 		expect(blob.size).toBe(3);
-		expect(blob.type).toBe('application/pdf');
-		expect(proxy.functions.invoke).toHaveBeenNthCalledWith(1, 'drive-media', {
-			body: { operation: 'metadata', fileId }
-		});
-		expect(proxy.functions.invoke).toHaveBeenNthCalledWith(2, 'drive-media', {
-			body: { operation: 'read', fileId, start: 0, endExclusive: 3, totalBytes: 3 }
+		expect(blob.type).toBe('image/jpeg');
+		expect(proxy.functions.invoke).toHaveBeenCalledTimes(1);
+		expect(proxy.functions.invoke).toHaveBeenCalledWith('drive-media', {
+			body: { operation: 'download', fileId, maximumBytes: 20 }
 		});
 	});
 
-	it('splits larger files into one-megabyte proxy reads', async () => {
-		const first = new Uint8Array(1024 * 1024).fill(7);
-		const second = new Uint8Array([8, 9, 10]);
-		const total = first.byteLength + second.byteLength;
-		const proxy = client(
-			{ data: { size: total, mimeType: 'application/pdf' }, error: null },
-			{ data: new Blob([first]), error: null },
-			{ data: new Blob([second]), error: null }
-		);
+	it('keeps larger browser downloads to one authenticated proxy invocation', async () => {
+		const bytes = new Uint8Array(1024 * 1024 + 3).fill(7);
+		const proxy = client({
+			data: new Blob([bytes], { type: 'application/octet-stream' }),
+			error: null
+		});
 
 		const blob = await downloadBrowserDriveFile({
 			client: proxy,
 			fileId,
-			maximumBytes: total
+			maximumBytes: bytes.byteLength
 		});
 
-		expect(blob.size).toBe(total);
-		expect(proxy.functions.invoke).toHaveBeenCalledTimes(3);
-		expect(proxy.functions.invoke).toHaveBeenNthCalledWith(3, 'drive-media', {
-			body: {
-				operation: 'read',
-				fileId,
-				start: 1024 * 1024,
-				endExclusive: total,
-				totalBytes: total
-			}
-		});
+		expect(blob.size).toBe(bytes.byteLength);
+		expect(proxy.functions.invoke).toHaveBeenCalledTimes(1);
 	});
 
 	it('preserves exact PDF.js range boundaries through the proxy', async () => {
@@ -94,20 +83,20 @@ describe('authenticated browser Drive media proxy', () => {
 		});
 	});
 
-	it('rejects a file above the caller limit before transferring media chunks', async () => {
-		const proxy = client({ data: { size: 21, mimeType: 'application/pdf' }, error: null });
+	it('fails closed when the proxy rejects an oversized complete download', async () => {
+		const proxy = client({ data: null, error: new Error('413') });
 
 		await expect(
 			downloadBrowserDriveFile({ client: proxy, fileId, maximumBytes: 20 })
-		).rejects.toThrow('grande demais');
+		).rejects.toThrow('Não foi possível baixar');
 		expect(proxy.functions.invoke).toHaveBeenCalledTimes(1);
 	});
 
-	it('fails closed when the proxy returns a chunk with the wrong size', async () => {
-		const proxy = client(
-			{ data: { size: 4, mimeType: 'application/pdf' }, error: null },
-			{ data: new Blob([new Uint8Array([1, 2, 3])]), error: null }
-		);
+	it('fails closed when the proxy returns an invalid complete download', async () => {
+		const proxy = client({
+			data: new Blob([new Uint8Array(21)]),
+			error: null
+		});
 
 		await expect(
 			downloadBrowserDriveFile({ client: proxy, fileId, maximumBytes: 20 })

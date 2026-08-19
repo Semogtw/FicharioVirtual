@@ -36,6 +36,7 @@ function pageSummary(
 	return {
 		id: pageId,
 		page_number: 1,
+		source_drive_file_id: null,
 		status: 'ready',
 		updated_at: '2026-08-02T04:00:00.000Z',
 		...overrides
@@ -93,6 +94,7 @@ describe('loadDocumentDetailWithGateway', () => {
 		expect(detail.pages[0]).toEqual({
 			id: pageId,
 			pageNumber: 1,
+			sourceDriveFileId: null,
 			status: 'ready',
 			updatedAt: '2026-08-02T04:00:00.000Z'
 		});
@@ -113,6 +115,7 @@ describe('loadDocumentDetailWithGateway', () => {
 			{
 				id: pageId,
 				pageNumber: 1,
+				sourceDriveFileId: null,
 				status: 'ready',
 				updatedAt: '2026-08-02T04:00:00.000Z'
 			}
@@ -129,7 +132,7 @@ describe('loadDocumentDetailWithGateway', () => {
 		expect(fixture.fullPageLoads).toBe(1);
 	});
 
-	it('maps a Drive original for an image without loading every image page', async () => {
+	it('maps a Drive original and page source for an image without loading OCR text', async () => {
 		const fixture = gateway({
 			kind: 'image',
 			storage_path: null,
@@ -137,9 +140,15 @@ describe('loadDocumentDetailWithGateway', () => {
 			physical_state: 'available',
 			original_filename: 'pagina-1.jpg'
 		});
+		fixture.value.listPageSummaries = async () => [
+			pageSummary({ source_drive_file_id: pageDriveFileId })
+		];
 		const detail = await loadDocumentDetailWithGateway(documentId, fixture.value);
 
-		expect(detail.pages[0]?.pageNumber).toBe(1);
+		expect(detail.pages[0]).toMatchObject({
+			pageNumber: 1,
+			sourceDriveFileId: pageDriveFileId
+		});
 		expect(detail.originalReference).toEqual({
 			provider: 'google_drive',
 			url: `https://drive.google.com/file/d/${pageDriveFileId}/view`,
