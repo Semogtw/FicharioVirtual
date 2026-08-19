@@ -44,6 +44,13 @@ describe('manual review removal', () => {
 		expect(documentRoute).not.toContain('transcrição auxiliar');
 	});
 
+	it('does not keep a programmatic manual-correction write path', () => {
+		const detailService = read('src/lib/services/document-detail.ts');
+		expect(detailService).not.toContain('savePageCorrection');
+		expect(detailService).not.toContain('saveCorrection');
+		expect(detailService).not.toContain('invalid_correction');
+	});
+
 	it('never turns low-confidence OCR into a review task in the import tray', () => {
 		const queueTray = read('src/lib/components/ImportQueueTray.svelte');
 		expect(queueTray).not.toContain('Pronto para revisão');
