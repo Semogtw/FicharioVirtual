@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { DocumentSummary } from '$lib/domain/document';
+	import { loadDocumentDetail } from '$lib/services/document-detail';
 
 	interface DocumentCardProps {
 		document: DocumentSummary;
@@ -13,6 +14,7 @@
 		href = `/documents/${documentSummary.id}/`
 	}: DocumentCardProps = $props();
 	let transitioning = $state(false);
+	let detailPrefetched = false;
 
 	const statusLabels = {
 		uploading: 'Enviando',
@@ -29,6 +31,14 @@
 		month: 'short',
 		year: 'numeric'
 	});
+
+	function prefetchDocumentDetail() {
+		if (detailPrefetched) return;
+		detailPrefetched = true;
+		void loadDocumentDetail(documentSummary.id).catch(() => {
+			detailPrefetched = false;
+		});
+	}
 
 	function prepareDocumentTransition(event: MouseEvent) {
 		if (
@@ -49,7 +59,13 @@
 </script>
 
 <article class="document-card" class:transitioning>
-	<a {href} onclick={prepareDocumentTransition}>
+	<a
+		{href}
+		onclick={prepareDocumentTransition}
+		onpointerenter={prefetchDocumentDetail}
+		onpointerdown={prefetchDocumentDetail}
+		onfocus={prefetchDocumentDetail}
+	>
 		<div class="preview">
 			{#if thumbnailUrl}
 				<img src={thumbnailUrl} alt="" loading="lazy" />
