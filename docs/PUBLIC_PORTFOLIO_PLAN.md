@@ -1,18 +1,18 @@
 # Versão pública de portfólio — plano completo
 
-**Status:** planejamento; esta branch não altera o runtime.  
-**Branch:** `plan/public-portfolio`.  
-**Objetivo:** publicar o Fichário Digital completo para terceiros poderem usar e avaliar o projeto, sem tratá-lo como SaaS comercial nem dimensioná-lo para alto tráfego.  
+**Status:** planejamento aprovado para implementação.  
+**Branch de planejamento:** `plan/public-portfolio`.  
+**Objetivo:** tornar o Fichário Digital completo acessível a terceiros, mantendo uma única aplicação e uma única infraestrutura principal, com roteamento de serviços por perfil de usuário.  
 **Base inicial:** `main` em `0f3357c5cda628e7b9b7921a3eb3db506e7204b7`.  
 **Revisão:** 19 de agosto de 2026.
 
-## 1. Escopo correto
+## 1. Escopo
 
-A versão pública **não é uma demo limitada**. Ela deve oferecer a mesma experiência funcional do Fichário Digital normal:
+A versão pública **não é uma demo**. Qualquer usuário cadastrado deve poder usar as funcionalidades normais do Fichário:
 
-- criar conta e entrar;
+- criar conta, entrar e sair;
 - conectar o próprio Google Drive;
-- importar imagens e PDFs;
+- importar imagens e PDFs reais;
 - preservar originais no Drive;
 - extrair texto nativo de PDFs;
 - executar OCR quando necessário;
@@ -22,682 +22,423 @@ A versão pública **não é uma demo limitada**. Ela deve oferecer a mesma expe
 - revisar OCR;
 - usar filas, retomada, cancelamento e processamento assíncrono;
 - consultar estados de processamento;
-- exportar os dados suportados;
-- usar PWA, responsividade, acessibilidade e demais recursos do produto normal.
+- exportar dados suportados;
+- usar PWA, responsividade, acessibilidade e demais recursos normais.
 
-A diferença é operacional: trata-se de um **site público de portfólio com baixa expectativa de tráfego**, não de um serviço comercial que promete escala, SLA, suporte ou armazenamento ilimitado.
+O produto continua sendo um projeto pessoal de portfólio, com expectativa de baixo tráfego. Não há objetivo de oferecer SLA, escala comercial, pagamentos ou suporte de SaaS.
 
-## 2. Não objetivos
+## 2. Decisão arquitetural principal
 
-Não planejar nesta etapa:
+Não manter duas cópias da aplicação, dois bancos ou dois Supabase apenas para diferenciar o uso pessoal do público.
 
-- pagamentos, planos ou cobrança;
-- organizações, equipes ou compartilhamento entre contas;
-- SLA ou suporte comercial;
-- alta disponibilidade multi-região;
-- filas dimensionadas para milhares de usuários concorrentes;
-- capacidade elástica paga;
-- moderação complexa de conteúdo;
-- analytics de marketing invasivo;
-- transformar o Google Drive do autor em armazenamento de terceiros;
-- permitir que usuários públicos usem a cota, o worker desktop ou os secrets da instância pessoal.
-
-O planejamento deve, porém, impedir que um visitante acidental ou malicioso cause custo, vazamento ou indisponibilidade fácil.
-
-## 3. Arquitetura recomendada: mesmo código, ambientes separados
-
-A recomendação é **não abrir a instância pessoal atual diretamente**. O código pode continuar único, mas a versão pública deve ter infraestrutura e credenciais próprias.
+A arquitetura alvo é:
 
 ```text
-Repositório único
+Fichário Digital
 │
-├── perfil privado
-│   ├── Supabase privado existente
-│   ├── credenciais Google existentes
-│   ├── Gemini de maior qualidade
-│   └── worker desktop pessoal
+├── mesmo frontend
+├── mesmo Supabase Auth
+├── mesmo PostgreSQL + RLS
+├── mesmo Storage privado
+├── mesmas filas
+├── mesmo Google Drive OAuth
 │
-└── perfil público/portfolio
-    ├── Supabase público dedicado
-    ├── OAuth Google próprio
-    ├── providers/cotas próprias
-    ├── Azure OCR como rota pública preferencial
-    └── sem worker desktop pessoal
+└── perfil server-side do usuário
+    │
+    ├── owner
+    │   ├── Gemini OCR principal
+    │   ├── Gemini fallback
+    │   ├── embeddings de maior qualidade/configuração pessoal
+    │   └── worker desktop permitido
+    │
+    └── public
+        ├── OCR público de maior franquia, inicialmente Azure
+        ├── fallback gratuito opcional
+        ├── embeddings públicos configurados
+        └── worker desktop pessoal proibido
 ```
 
-### Motivos
+A diferença entre usuário pessoal e usuário público é **quais recursos o backend permite consumir**, não onde a aplicação roda.
 
-1. um erro de RLS ou de função pública não alcança os dados pessoais existentes;
-2. a quota OCR pública não consome a quota privada;
-3. revogar ou derrubar o ambiente público não afeta o uso pessoal;
-4. testes destrutivos e migrations podem ser validados separadamente;
-5. credenciais OAuth e origins ficam mais simples de auditar;
-6. a versão pública pode usar providers de qualidade/custo diferentes sem condicionais espalhadas pelo produto.
+## 3. Perfil de usuário
 
-Se no futuro a manutenção de dois projetos se mostrar desnecessária, a arquitetura pode ser consolidada; o primeiro lançamento deve favorecer isolamento.
+`public.app_users` deixa de representar somente uma allowlist manual e passa a representar o estado da conta dentro do Fichário.
 
-## 4. Perfis de deployment
-
-Criar um conceito explícito de perfil de deployment, resolvido apenas por configuração confiável de ambiente.
-
-Exemplo:
+Campos planejados:
 
 ```text
-APP_DEPLOYMENT_PROFILE=private | public_portfolio
+user_id
+is_active
+provider_profile = owner | public
+created_at
+updated_at
 ```
 
-O perfil não pode ser selecionado por query string, header do usuário ou parâmetro de request.
+O nome `provider_profile` é deliberadamente simples. Se no futuro houver necessidade, pode ser decomposto em `ocr_profile`, `embedding_profile` e permissões específicas.
 
-### `private`
+### `owner`
 
-Preserva o comportamento atual:
+Perfil confiável, destinado à conta pessoal/autorizada:
 
-- allowlist fail-closed;
-- providers atuais;
-- worker desktop quando habilitado;
-- política pessoal de processamento;
-- credenciais e projeto atuais.
+- mantém o comportamento atual de Gemini;
+- pode usar fallback Gemini configurado;
+- pode usar worker desktop quando habilitado;
+- pode receber novas capacidades premium/pessoais sem oferecê-las automaticamente a visitantes.
 
-### `public_portfolio`
+### `public`
 
-Habilita:
+Perfil padrão para novos cadastros:
 
-- cadastro público;
-- contas comuns ativas por padrão depois da validação exigida;
-- providers públicos independentes;
-- limites de proteção conservadores;
-- textos legais mínimos;
-- nenhuma dependência do computador pessoal do autor.
+- usa o provider público de OCR;
+- não usa a chave Gemini pessoal como fallback;
+- não pode reivindicar jobs do worker desktop pessoal;
+- continua com todas as funcionalidades do produto;
+- pode ter limites operacionais de proteção, sem transformar o produto numa demo.
 
-O restante da UI e das funcionalidades deve continuar igual, salvo diferenças necessárias de conta, limites e provider.
+### Autoridade
 
-## 5. Cadastro e autenticação pública
+O frontend **nunca** escolhe o perfil nem o provider.
 
-A maior mudança funcional em relação ao estado privado é substituir a allowlist manual por onboarding self-service **somente no ambiente público**.
+É proibido aceitar algo como:
 
-### Requisitos
-
-- cadastro por e-mail ou provedor suportado pelo Supabase;
-- confirmação de e-mail quando aplicável;
-- login e logout;
-- recuperação de acesso;
-- criação automática do registro de aplicação do usuário;
-- status de conta: `active`, `suspended`, `deleted` (ou equivalente);
-- impedir que o frontend possa ativar a si próprio por uma RPC privilegiada;
-- preservar `auth.uid()` como autoridade de ownership.
-
-### `app_users`
-
-No ambiente privado, `app_users` continua funcionando como allowlist.
-
-No ambiente público, `app_users` passa a representar o estado da conta e deve ser criado automaticamente por trigger/RPC segura após o cadastro.
-
-`is_authorized_user()` pode ser generalizado para uma verificação de conta ativa, sem remover a proteção das policies existentes.
-
-### Antiabuso simples
-
-Como a expectativa de uso é baixa, não é necessário criar uma plataforma anti-fraude. Ainda assim:
-
-- usar os controles de rate limit disponíveis no Auth;
-- exigir confirmação de e-mail se isso reduzir abuso sem prejudicar muito a experiência;
-- limitar criação excessiva de contas por mecanismos do provedor;
-- nunca confiar apenas no frontend para quotas ou autorização.
-
-## 6. Isolamento de dados
-
-A versão pública deve preservar o modelo de segurança atual baseado em ownership.
-
-### Obrigatório antes do lançamento
-
-Auditar todas as tabelas, views, RPCs, Storage policies e Edge Functions para provar:
-
-```text
-usuário A != usuário B
-=> A não lê, busca, enumera, altera, deleta, processa ou obtém URL de recurso de B
+```json
+{ "provider": "gemini" }
 ```
 
-Isso inclui informação indireta, como:
+ou:
 
-- contagem de documentos;
-- existência de IDs;
-- embeddings;
-- texto OCR;
-- resultados de busca;
-- jobs e batches;
-- telemetria de uso;
-- tokens/estado do Drive;
-- nomes de arquivos;
-- signed URLs.
-
-### Teste de segurança obrigatório
-
-Criar E2E com duas contas reais de staging:
-
-1. A importa um documento;
-2. B tenta acessar IDs conhecidos de A por todas as superfícies públicas;
-3. B tenta pesquisa exata e semântica por conteúdo exclusivo de A;
-4. B tenta obter original/thumbnail/signed URL;
-5. B tenta mutações e chamadas de RPC com IDs de A;
-6. todas falham sem revelar conteúdo ou metadados sensíveis.
-
-## 7. Google Drive no ambiente público
-
-A versão pública deve manter o modelo Drive-first completo: cada pessoa conecta **o próprio Google Drive**.
-
-### Separação obrigatória
-
-Criar credenciais OAuth específicas para o deployment público:
-
-```text
-PUBLIC_GOOGLE_CLIENT_ID=<portfolio>
-GOOGLE_CLIENT_ID=<portfolio>
-GOOGLE_CLIENT_SECRET=<portfolio>
-GOOGLE_DRIVE_REDIRECT_URI=<portfolio>
+```json
+{ "profile": "owner" }
 ```
 
-Não reutilizar refresh tokens nem client secrets da instância pessoal quando a separação puder ser feita.
+em requests de usuário.
 
-### Fluxos a validar
+A Edge Function deve obter `auth.uid()`, ler o perfil confiável no banco e derivar internamente o plano de execução.
 
-- OAuth start/callback;
-- PKCE e `state` de uso único;
-- conexão e reconexão;
-- Picker;
-- criação da pasta gerenciada;
-- upload retomável;
-- importação por referência/range;
-- change feed;
-- conflitos;
-- exclusão Drive-first;
-- revogação da integração;
-- uma conta nunca obtém token ou IDs privados de outra.
+## 4. Migração da allowlist para cadastro público
 
-O escopo deve permanecer mínimo (`drive.file`) salvo decisão arquitetural posterior explicitamente documentada.
-
-## 8. Estratégia de OCR para o portfolio público
-
-O deployment público deve usar uma rota de OCR independente da privada e favorecer **franquia/robustez sobre qualidade máxima**, porque seu papel principal é permitir avaliação funcional do projeto.
-
-### Decisão inicial
-
-Usar Azure como primeira opção do perfil público, atrás da camada genérica de provider já planejada em `AZURE_OCR_FALLBACK_IMPLEMENTATION.md`.
-
-O plano atual do repositório para Azure Vision Read v3.2 já descreve:
-
-- adapter isolado;
-- operação assíncrona `POST` + polling;
-- geometria por palavra;
-- normalização para o contrato interno;
-- rate limiting;
-- derivação específica para limites de tamanho/formato;
-- telemetria e falhas sanitizadas.
-
-### Importante: lifecycle do Azure
-
-Em agosto de 2026, a documentação oficial da Microsoft continua permitindo Azure Vision no tier gratuito F0 e informa 20 chamadas/minuto para o free tier da Read API, mas também declara que a API OCR Read v3.2 é legado e recomenda Document Intelligence Read para documentos digitais/digitalizados.
-
-Portanto:
-
-- **não acoplar o produto a `azure_vision`**;
-- implementar `OcrProvider` genérico primeiro;
-- manter Azure Vision v3.2 como candidato inicial de alta franquia somente enquanto o F0 continuar vantajoso;
-- antes de implementação/deploy, revalidar quota, lifecycle e disponibilidade regional;
-- se Document Intelligence ou outro OCR gratuito passar a oferecer melhor combinação de franquia e estabilidade, trocar apenas o adapter/configuração;
-- nenhum provider público pode fazer fallback silencioso para SKU pago.
-
-### Roteamento recomendado por perfil
-
-Privado, inicialmente:
+A função `is_authorized_user()` pode continuar existindo e continuar protegendo as RLS policies. O significado passa a ser:
 
 ```text
-Gemini primário
+usuário autenticado + app_users.is_active = true
+```
+
+Isso preserva a maior parte do banco existente.
+
+### Contas existentes
+
+Na migration inicial:
+
+- contas que já existem em `app_users` são preservadas e recebem `provider_profile = owner`;
+- nenhuma conta existente perde acesso;
+- depois do deploy o administrador pode reclassificar qualquer conta confiável como `public` se desejar.
+
+### Novas contas
+
+Novos registros em `auth.users` devem criar automaticamente:
+
+```text
+app_users.user_id = auth.users.id
+app_users.is_active = true
+app_users.provider_profile = public
+```
+
+A criação deve ocorrer por trigger `SECURITY DEFINER` minimalista, com `search_path` fixo e sem aceitar dados de perfil enviados pelo cliente.
+
+Desativar uma conta continua sendo possível com `is_active = false`.
+
+## 5. Cadastro e autenticação
+
+Implementar self-service no frontend usando Supabase Auth:
+
+- cadastro por e-mail e senha;
+- confirmação de e-mail conforme configuração do projeto;
+- login;
+- logout;
+- recuperação de senha em etapa posterior da mesma entrega;
+- mensagens de erro simples;
+- nenhum passo manual de allowlist.
+
+O fluxo esperado é:
+
+```text
+Criar conta
+ -> Supabase Auth
+ -> trigger cria app_users(public)
+ -> confirmar e-mail, se exigido
+ -> entrar
+ -> conectar Google Drive
+ -> usar o Fichário completo
+```
+
+`loadAuthorizedSession()` continua conferindo que a conta está ativa. O nome interno de funções antigas pode ser refatorado depois; não é necessário reescrever toda a sessão para a primeira entrega.
+
+## 6. Google Drive
+
+Não separar OAuth por perfil apenas porque o site é público.
+
+Todos os usuários usam o mesmo OAuth client do Fichário e cada usuário autoriza **o próprio Google Drive**. Os refresh tokens continuam separados por `user_id` e protegidos no backend.
+
+Requisitos:
+
+- preservar escopo mínimo `drive.file`;
+- nunca usar o Drive do owner para armazenar arquivos de terceiros;
+- continuar com PKCE e `state` de uso único;
+- RLS/contratos devem impedir leitura do token/estado de outro usuário;
+- Picker, upload retomável, ranges, change feed, conflitos e exclusão Drive-first permanecem iguais.
+
+## 7. Roteamento de OCR por perfil
+
+Criar uma camada server-side pequena e testável que transforme um perfil em uma rota de providers.
+
+Contrato conceitual:
+
+```ts
+type ProviderProfile = 'owner' | 'public';
+
+type OcrRoute = {
+  providers: readonly OcrProviderId[];
+  desktopAllowed: boolean;
+};
+```
+
+Rota inicial:
+
+```text
+owner:
+Gemini principal
  -> Gemini fallback
-   -> Azure fallback quando/como aprovado
+   -> Azure fallback opcional
      -> fila persistente
-```
 
-Público:
-
-```text
-Azure/public OCR provider
- -> segundo provider gratuito opcional, se configurado
+public:
+Azure/public provider
+ -> fallback gratuito opcional
    -> fila persistente
 ```
 
-Por padrão, **não usar a chave Gemini privada como fallback da versão pública**.
+A implementação deve ser fail-closed:
 
-Se Gemini for necessário para garantir alguma capacidade específica, usar projeto/chave exclusivos do ambiente público e quota independente.
+- perfil inválido não vira `owner`;
+- falha ao consultar perfil não libera Gemini;
+- usuário sem registro ativo não processa OCR;
+- provider público indisponível não cai silenciosamente na chave pessoal.
 
-### Qualidade
+## 8. Azure como provider público inicial
 
-Resultados Azure podem marcar `needs_review` com mais frequência sem ser considerado erro do produto. O objetivo é manter:
+A documentação existente em `AZURE_OCR_FALLBACK_IMPLEMENTATION.md` continua sendo a referência técnica do adapter Azure.
 
-- transcrição útil;
-- highlight geométrico funcional;
-- busca textual/fuzzy operacional;
-- estados de revisão honestos.
+A versão pública muda somente sua posição no roteamento: para `public`, Azure deixa de ser terceiro fallback e passa a ser candidato principal.
 
-A interface não deve prometer que todos os providers entregam qualidade idêntica.
+O adapter deve continuar genérico e isolado porque o lifecycle de serviços Azure pode mudar.
 
-## 9. Busca semântica e embeddings
+Requisitos já aprovados:
 
-A versão pública deve manter busca semântica completa.
+- nenhuma chave Azure no frontend;
+- `POST` + polling quando a edição escolhida for assíncrona;
+- geometria convertida para o contrato interno atual;
+- uma página Azure por operação quando exigido pelo serviço;
+- scheduler próprio;
+- transformação temporária provider-specific para tamanho/formato;
+- erros sanitizados;
+- nenhuma ativação automática de SKU pago;
+- telemetria por provider.
 
-O provider de embeddings também deve ser isolado por deployment quando houver API externa envolvida.
+Antes de ativar Azure em produção, revalidar preços, limites F0 e serviço recomendado pela Microsoft. A aplicação deve depender da interface interna, não de tipos Azure espalhados pelo orquestrador.
 
-Estratégia:
+## 9. Embeddings e busca semântica
 
-1. preservar o contrato interno atual de embeddings e pgvector;
-2. usar credencial/projeto público próprio para o provider atual, se a franquia for suficiente;
-3. não reutilizar secret privado por conveniência;
-4. se houver necessidade de trocar o modelo na versão pública, validar dimensionalidade, compatibilidade de índice e necessidade de re-embedding;
-5. nunca misturar embeddings produzidos por modelos incompatíveis no mesmo índice sem versão explícita.
+Busca semântica continua disponível para usuários públicos.
 
-O planejamento não aprova uma troca de modelo de embedding sem benchmark. O requisito é isolamento de quota e paridade funcional.
+A mesma ideia de perfil deve ser aplicada a qualquer API externa de embeddings se a cota pessoal precisar ser protegida.
 
-## 10. Filas e limites de proteção
+Primeira etapa:
 
-Baixa expectativa de tráfego permite limites simples, mas eles devem existir no servidor.
+- manter o pipeline atual;
+- introduzir uma decisão server-side de perfil antes de compartilhar uma chave pessoal com usuários públicos;
+- se for necessário trocar o modelo público, versionar explicitamente modelo/dimensão;
+- nunca misturar vetores incompatíveis no mesmo índice sem versão.
 
-### Objetivo
+A implementação de OCR por perfil não deve bloquear a entrega inicial de cadastro; embeddings podem receber o mesmo mecanismo em uma etapa imediatamente posterior.
 
-Evitar que um único visitante ou script consuma toda a franquia gratuita em minutos.
+## 10. Worker desktop
 
-### Controles mínimos
+O computador pessoal nunca deve se tornar infraestrutura pública involuntária.
 
-- limite de uploads/importações concorrentes por conta;
-- limite de jobs OCR concorrentes por conta;
-- scheduler global por provider;
-- rate limit respeitando RPM/RPS oficial com margem;
-- tamanho máximo operacional para upload público;
-- quantidade máxima de páginas por documento público, se necessária para proteção;
-- teto de bytes temporários no Storage;
-- backoff e fila persistente quando provider estiver sem capacidade;
-- circuit breaker quando a quota gratuita acabar;
-- nenhuma transição automática para billing.
+Regra server-side:
 
-### Filosofia
+```text
+provider_profile = owner  -> pode usar desktop, se dispositivo autorizado
+provider_profile = public -> desktop proibido
+```
 
-Os limites devem ser generosos o suficiente para um recrutador/visitante testar documentos reais e restritivos o bastante para evitar abuso óbvio.
+Essa regra deve ser aplicada no banco/worker claim, não apenas escondendo a UI.
 
-Não transformar a UI em painel de quotas. Mostrar mensagens simples como:
+## 11. Isolamento multiusuário
 
-- `O processamento está aguardando disponibilidade.`
-- `Este arquivo é grande demais para a versão pública.`
+A arquitetura atual já usa `auth.uid() = user_id` e Storage privado por pasta de UID. A abertura de cadastro exige transformar isso em gate formal de release.
 
-Valores finais devem ser calibrados com o free tier real antes do deploy e mantidos em configuração, não hardcoded na interface.
+Teste obrigatório com duas contas A e B:
 
-## 11. Retenção e limpeza
+1. A importa um documento real;
+2. B tenta ler documento, páginas, tags, notebooks, OCR, embeddings e jobs de A;
+3. B tenta obter signed URLs de A;
+4. B tenta mutações com IDs de A;
+5. B tenta busca textual/fuzzy/semântica por conteúdo exclusivo de A;
+6. B tenta acionar OCR/reprocessamento usando IDs de A;
+7. todas as superfícies falham sem revelar conteúdo sensível.
 
-Mesmo com baixo tráfego, usuários públicos podem abandonar dados.
+Também auditar todas as funções `SECURITY DEFINER` e qualquer uso de `service_role` em Edge Functions.
 
-### Google Drive
+## 12. Limites simples de proteção
 
-O original é propriedade do próprio usuário e permanece no Drive dele segundo a semântica atual.
+O projeto não precisa de infraestrutura de SaaS, mas um visitante não deve conseguir drenar toda a franquia em minutos.
 
-### Supabase
+Controles mínimos server-side:
 
-Definir retenção para dados auxiliares do ambiente público:
+- rate limiting global por provider;
+- concorrência limitada por conta para jobs caros;
+- tamanho máximo operacional de request já existente preservado;
+- opcionalmente teto generoso de páginas/import concorrente para perfil público;
+- backoff e fila persistente;
+- circuit breaker quando o free tier acabar;
+- nenhuma migração automática para billing.
 
-- derivados temporários continuam sendo removidos após processamento terminal quando possível;
-- imports abandonados devem ser recuperados ou limpos por job seguro;
-- sessões e staging expirados devem ser coletados;
-- uma conta excluída deve ter metadados e derivados removidos após a política definida;
-- nunca apagar arquivo no Drive sem passar pelo fluxo Drive-first autorizado.
+Os limites devem ser calibrados para permitir uso real. Eles existem contra abuso evidente, não para criar uma experiência artificialmente limitada.
 
-Não criar limpeza global que ignore ownership.
+## 13. Exclusão, retenção e privacidade
 
-## 12. Exclusão de conta e revogação
+Antes de divulgar o link publicamente:
 
-Uma versão acessível publicamente precisa de um fluxo mínimo de encerramento de conta.
+- permitir desconectar Drive;
+- permitir solicitar exclusão de conta;
+- invalidar tokens/sessões;
+- remover metadados e derivados do Supabase de forma idempotente;
+- deixar claro que os originais permanecem no Drive do próprio usuário conforme o fluxo existente;
+- manter limpeza de temporários e imports abandonados.
 
-A interface deve permitir:
+Adicionar páginas simples de Privacidade e Termos/Uso experimental, sem reintroduzir telas repetitivas de consentimento.
 
-- desconectar Google Drive;
-- revogar credenciais/tokens armazenados;
-- solicitar exclusão da conta;
-- remover metadados e derivados pertencentes ao usuário;
-- invalidar sessões;
-- deixar claro o comportamento dos arquivos já existentes no Google Drive.
+## 14. Landing pública
 
-A exclusão deve ser idempotente e testada contra falha parcial.
+A raiz pode apresentar o projeto, mas depois do login o usuário entra no produto real.
 
-## 13. Privacidade, termos e UX pública
-
-Não é necessário reintroduzir os antigos consentimentos repetitivos.
-
-Adicionar páginas curtas e estáveis:
-
-- `Privacidade`;
-- `Termos de uso`/`Uso experimental`;
-- contato/repositório.
-
-A UI deve informar de forma concisa que:
-
-- o projeto é um portfolio/experimento pessoal;
-- não há SLA;
-- arquivos podem ser processados por providers externos conforme a política;
-- o usuário controla os originais no próprio Drive;
-- o serviço pode impor limites e ficar temporariamente sem processamento quando as franquias gratuitas acabarem.
-
-Consentimentos específicos só devem aparecer quando tecnicamente/legalmente necessários, não em toda navegação.
-
-## 14. Landing pública sem reduzir o produto
-
-A raiz pública pode apresentar o projeto antes do login, mas depois do cadastro o usuário entra no **produto real**, não numa demo.
-
-Estrutura sugerida:
+Estrutura:
 
 ```text
 /
-├── apresentação curta
-├── screenshots/fluxos reais
+├── apresentação do projeto
+├── screenshots/funcionalidades
 ├── stack e diferenciais
-├── link para GitHub
+├── GitHub
 ├── Entrar
 └── Criar conta
 
 /app/*
-└── aplicação completa autenticada
+└── Fichário completo
 ```
 
-O marketing deve ser leve: o objetivo é permitir que quem recebe o link entenda rapidamente o projeto e o teste.
-
-## 15. Configuração e secrets
+A landing não deve duplicar a aplicação nem usar dados falsos como substituto do produto.
+
+## 15. Telemetria
+
+Registrar provider e perfil de execução sem registrar conteúdo privado.
+
+Mínimo desejado:
+
+- `provider_profile` efetivo;
+- provider/modelo usado;
+- chamadas/páginas;
+- rate limit/quota;
+- fallback;
+- latência;
+- bytes processados;
+- necessidade de revisão.
+
+Isso permite comparar Gemini pessoal e Azure público e decidir futuramente se o provider público precisa mudar.
+
+## 16. Sequência de implementação
+
+### Fase 1 — fundação de conta/perfil
+
+1. adicionar `provider_profile` a `app_users`;
+2. preservar contas existentes como `owner`;
+3. trigger de novos `auth.users` para `public`;
+4. função/RPC de leitura server-side do perfil;
+5. testes pgTAP de defaults, RLS e fail-closed;
+6. adicionar cadastro no serviço de Auth;
+7. adicionar UI de cadastro.
+
+### Fase 2 — roteamento OCR
+
+1. criar tipos genéricos de provider/profile;
+2. resolver perfil por `auth.uid()` dentro da Edge Function;
+3. encapsular rota Gemini atual como `owner` sem regressão;
+4. implementar adapter Azure;
+5. colocar Azure como principal para `public`;
+6. impedir fallback public -> Gemini pessoal;
+7. telemetria por rota;
+8. testes unitários e integração.
+
+### Fase 3 — recursos adicionais por perfil
+
+1. bloquear worker desktop para `public` no backend;
+2. revisar embeddings externos e separar quota se necessário;
+3. calibrar limites públicos simples;
+4. painel/telemetria operacional mínima.
+
+### Fase 4 — readiness público
+
+1. E2E de cadastro;
+2. E2E A vs B;
+3. Drive real com duas contas;
+4. importação real e OCR Azure;
+5. busca textual/fuzzy/semântica;
+6. highlight real;
+7. cancelamento/retomada;
+8. exclusão/desconexão;
+9. revisão de secrets/logs;
+10. páginas públicas e documentação.
+
+## 17. Gates de segurança
+
+A versão pública não está pronta enquanto qualquer item abaixo falhar:
+
+- usuário pode escolher provider por request;
+- perfil desconhecido recebe rota owner;
+- public pode usar chave Gemini pessoal;
+- public pode reivindicar worker desktop;
+- B consegue observar recurso de A;
+- Edge Function confia em `user_id` enviado pelo cliente quando poderia usar `auth.uid()`;
+- service role contorna ownership sem validação explícita;
+- secret aparece no bundle, log ou resposta;
+- provider sem quota ativa billing automaticamente.
+
+## 18. Definição de pronto
+
+A versão pública está pronta quando:
+
+- qualquer pessoa consegue criar uma conta válida;
+- novos usuários recebem `provider_profile = public` automaticamente;
+- contas pessoais selecionadas permanecem `owner`;
+- ambos usam o mesmo frontend, Supabase, banco e Google OAuth;
+- cada usuário usa somente o próprio Drive e os próprios dados;
+- todas as funcionalidades normais continuam disponíveis;
+- OCR de `owner` mantém a rota Gemini atual;
+- OCR de `public` usa a rota pública configurada sem tocar na quota pessoal;
+- worker pessoal permanece inacessível a `public`;
+- testes de isolamento A/B passam;
+- fluxos reais de importação, OCR, busca e highlight passam;
+- a aplicação continua fail-closed em falhas de perfil/provider.
+
+## 19. Primeira entrega de código
+
+A implementação deve começar sem alterar de uma vez todo o `process-ocr`:
+
+1. migration de perfil + auto-enrollment;
+2. helper server-side puro para validar e resolver `owner | public`;
+3. testes desse helper;
+4. integração de leitura do perfil no OCR mantendo Gemini para `owner`;
+5. somente depois inserir Azure na rota `public`.
 
-Separar variáveis por ambiente. Nenhum secret privado deve ser copiado automaticamente para o portfolio.
-
-### Frontend público
-
-```text
-PUBLIC_SUPABASE_URL
-PUBLIC_SUPABASE_PUBLISHABLE_KEY
-PUBLIC_GOOGLE_CLIENT_ID
-PUBLIC_GOOGLE_PICKER_API_KEY
-PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER
-PUBLIC_DEPLOYMENT_PROFILE=public_portfolio
-```
-
-### Backend público
-
-```text
-APP_ORIGIN
-APP_DEPLOYMENT_PROFILE=public_portfolio
-GOOGLE_CLIENT_ID
-GOOGLE_CLIENT_SECRET
-GOOGLE_DRIVE_REDIRECT_URI
-AZURE_VISION_ENDPOINT
-AZURE_VISION_KEY
-OCR_PUBLIC_PROVIDER=azure_vision
-OCR_PUBLIC_RPM=<revalidated>
-OCR_PUBLIC_MAX_IMAGE_BYTES=<revalidated>
-```
-
-Além dos secrets do provider de embeddings público, se necessário.
-
-### Nunca expor ao frontend
-
-- service role;
-- Azure key;
-- Gemini key;
-- Google client secret;
-- refresh tokens;
-- worker credentials;
-- qualquer secret da instância privada.
-
-## 16. Banco e migrations
-
-O projeto público deve nascer de migrations reproduzíveis, não de clone manual do banco privado.
-
-Procedimento:
-
-1. criar projeto Supabase público vazio;
-2. aplicar todas as migrations versionadas;
-3. executar pgTAP/gates;
-4. não copiar linhas de usuários/documentos da produção pessoal;
-5. configurar apenas dados estruturais necessários;
-6. validar RLS antes de cadastrar usuários reais.
-
-Qualquer migration nova para o modo público deve continuar compatível com o perfil privado ou ser explicitamente protegida por uma estratégia de configuração que não fragmente o schema sem necessidade.
-
-## 17. Observabilidade mínima
-
-Não é necessário um painel SaaS completo.
-
-Registrar o suficiente para diagnosticar:
-
-- usuários ativos agregados;
-- imports iniciados/concluídos/falhos;
-- jobs OCR por provider;
-- erros de quota/rate limit;
-- tamanho de fila;
-- bytes temporários;
-- falhas de OAuth;
-- erros de Edge Functions;
-- chamadas/uso de embeddings quando disponível.
-
-Nunca registrar texto OCR, conteúdo de documentos, tokens ou respostas brutas de providers em telemetria geral.
-
-## 18. Segurança específica para publicação
-
-Antes do release público, revisar especialmente:
-
-- funções `SECURITY DEFINER`;
-- grants para `anon` e `authenticated`;
-- policies de Storage;
-- CORS;
-- validação de origin;
-- JWT em Edge Functions;
-- URLs assinadas;
-- parâmetros de RPC com IDs fornecidos pelo cliente;
-- OAuth callback/state/PKCE;
-- endpoints que usam service role;
-- SSRF em providers externos e importação;
-- limites de payload;
-- logs e sanitização de erros;
-- possibilidade de chamar workers/queues sem ownership;
-- secrets presentes em builds e Actions.
-
-Manter scanner de secrets e gates existentes.
-
-## 19. Testes obrigatórios
-
-### Paridade funcional
-
-No ambiente público de staging, testar o mesmo fluxo real exigido da aplicação privada:
-
-1. cadastro;
-2. login;
-3. conexão Google Drive;
-4. import de imagem;
-5. import de PDF textual;
-6. import de PDF digitalizado;
-7. OCR real pelo provider público;
-8. persistência por página;
-9. biblioteca/cadernos/tags;
-10. busca exata;
-11. fuzzy;
-12. busca semântica;
-13. highlight sobre documento;
-14. revisão;
-15. cancelamento e retomada;
-16. exclusão Drive-first;
-17. logout/login e persistência;
-18. desconexão do Drive;
-19. exclusão de conta.
-
-### Multiusuário
-
-Executar com pelo menos duas contas diferentes e provar isolamento em todos os fluxos.
-
-### Provider público
-
-- sucesso real Azure/provider escolhido;
-- manuscrito em português;
-- imagem degradada;
-- geometria/highlight;
-- 429;
-- timeout;
-- 5xx;
-- quota esgotada;
-- arquivo acima do limite do provider;
-- fila e retry sem loop;
-- nenhum fallback para cobrança;
-- nenhum uso da chave privada.
-
-### Gates de código
-
-Manter no mesmo SHA, conforme scripts disponíveis no repositório:
-
-```bash
-pnpm format:check
-pnpm check
-pnpm lint
-pnpm test:unit
-pnpm check:edge
-pnpm check:offline
-pnpm test:db
-pnpm build
-pnpm test:e2e
-```
-
-Além dos workflows reais específicos de staging/deploy já existentes.
-
-## 20. Deploy e domínios
-
-Recomendação:
-
-```text
-portfolio/public -> domínio principal do Fichário
-private          -> subdomínio/endereço não divulgado ou deployment separado
-```
-
-Os nomes exatos podem ser decididos na implementação.
-
-O ambiente público deve ter:
-
-- Cloudflare Pages próprio ou configuração de ambiente própria;
-- Supabase próprio;
-- OAuth redirect próprio;
-- secrets próprios;
-- staging público separado antes de produção.
-
-Deploy da versão pública não pode alterar automaticamente a infraestrutura privada.
-
-## 21. Plano de implementação
-
-### Fase 0 — inventário e contratos
-
-- [ ] mapear toda superfície que chama `is_authorized_user()`;
-- [ ] listar Edge Functions e RPCs com assumptions de conta única/allowlist;
-- [ ] inventariar secrets externos e separar por perfil;
-- [ ] confirmar quais recursos dependem do Gemini além de OCR;
-- [ ] confirmar limites atuais do provider público escolhido;
-- [ ] definir limites operacionais iniciais do portfolio.
-
-### Fase 1 — deployment profile
-
-- [ ] introduzir `APP_DEPLOYMENT_PROFILE` validado fail-closed;
-- [ ] preservar comportamento privado por default;
-- [ ] adicionar testes para os dois perfis;
-- [ ] remover condicionais de provider espalhadas e centralizar configuração.
-
-### Fase 2 — Auth público
-
-- [ ] implementar self-service signup/login;
-- [ ] auto-provisionar `app_users` somente no perfil público;
-- [ ] status de conta e suspensão;
-- [ ] recuperação de acesso;
-- [ ] exclusão de conta;
-- [ ] testes de RLS com duas contas.
-
-### Fase 3 — infraestrutura pública
-
-- [ ] novo projeto Supabase;
-- [ ] migrations limpas;
-- [ ] novo OAuth Google;
-- [ ] novo host/origin;
-- [ ] secrets separados;
-- [ ] staging público.
-
-### Fase 4 — OCR provider abstraction
-
-- [ ] concluir interface genérica `OcrProvider`;
-- [ ] encapsular Gemini atual sem regressão;
-- [ ] implementar adapter público Azure ou substituto revalidado;
-- [ ] scheduler/rate limit específico do provider;
-- [ ] geometria, telemetria e erros comuns;
-- [ ] impedir fallback público para secret privado.
-
-### Fase 5 — embeddings públicos
-
-- [ ] separar credencial/projeto de embedding;
-- [ ] manter mesmo contrato/index quando possível;
-- [ ] validar busca semântica real;
-- [ ] garantir que quota pública não afete privada.
-
-### Fase 6 — limites e operação
-
-- [ ] limites server-side de concorrência/tamanho;
-- [ ] circuit breaker gratuito;
-- [ ] limpeza de staging abandonado;
-- [ ] mensagens UX simples para limite/quota;
-- [ ] observabilidade sanitizada.
-
-### Fase 7 — landing e acabamento público
-
-- [ ] landing curta;
-- [ ] entrar/criar conta;
-- [ ] privacidade e termos mínimos;
-- [ ] manter app completo após login;
-- [ ] revisar mobile/PWA/acessibilidade/animações.
-
-### Fase 8 — validação final
-
-- [ ] todos os gates locais;
-- [ ] migrations + pgTAP em projeto limpo;
-- [ ] fluxo real end-to-end público;
-- [ ] duas contas e ataques cross-tenant;
-- [ ] OAuth real;
-- [ ] OCR real;
-- [ ] busca semântica real;
-- [ ] falhas/quota/retry;
-- [ ] confirmar billing desabilitado/SKU gratuito;
-- [ ] confirmar que nenhuma credencial privada está no deployment público;
-- [ ] revisão manual completa da UX.
-
-## 22. Definição de pronto
-
-A versão pública só deve ser considerada pronta quando uma pessoa sem acesso prévio ao projeto puder:
-
-1. abrir o site;
-2. entender o que é;
-3. criar uma conta;
-4. conectar o próprio Drive;
-5. importar um documento real;
-6. aguardar processamento;
-7. encontrá-lo por busca textual/fuzzy/semântica;
-8. abrir o original e ver a ocorrência marcada;
-9. organizar e revisar o documento;
-10. voltar em outra sessão e encontrar seus próprios dados;
-11. nunca conseguir acessar dados de outra conta;
-12. fazer tudo isso sem consumir secrets, storage ou quotas da instância pessoal.
-
-O site continua sendo um projeto de portfólio mesmo oferecendo a aplicação inteira. A baixa expectativa de tráfego permite evitar complexidade de SaaS, mas não justifica compartilhar secrets pessoais nem afrouxar isolamento de dados.
-
-## 23. Relação com documentação existente
-
-Este arquivo é o documento canônico para a versão pública de portfólio.
-
-Ele deve ser lido junto com:
-
-- `CURRENT_STATUS.md` — estado da aplicação privada/main;
-- `PROJECT_SPEC.md` — arquitetura do produto;
-- `AZURE_OCR_FALLBACK_IMPLEMENTATION.md` — detalhes do adapter Azure;
-- `FREE_TIER_OPERATIONS.md` — política de operação sem cobrança;
-- `GOOGLE_DRIVE_SETUP.md` — integração Drive;
-- `DEPLOYMENT.md` — deploy;
-- `TESTING.md` — gates e validação;
-- `OCR_FAILURE_MATRIX.md` — semântica de falhas OCR.
-
-Enquanto esta branch for apenas de planejamento, nenhum item acima deve ser descrito como já implementado na versão pública.
+Essa ordem permite fazer commits pequenos, manter o comportamento atual intacto e provar a fronteira de autorização antes de acrescentar um novo provider.
