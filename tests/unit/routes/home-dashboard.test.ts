@@ -14,7 +14,8 @@ describe('home dashboard', () => {
 		);
 		expect(source).toContain('<AnimatedNumber value={usage?.totals.documents ?? null} />');
 		expect(source).toContain('<AnimatedNumber value={usage?.totals.pages ?? null} />');
-		expect(source).toContain('<AnimatedNumber value={usage?.totals.reviewPages ?? null} />');
+		expect(source).toContain('<AnimatedNumber value={usage?.totals.notebooks ?? null} />');
+		expect(source).not.toContain('usage?.totals.reviewPages');
 		expect(source).toContain('{#each recentDocuments as document (document.id)}');
 		expect(source).toContain('<DocumentCard {document} />');
 		expect(source).not.toContain('<strong>0</strong>');

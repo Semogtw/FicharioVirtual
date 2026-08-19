@@ -65,7 +65,7 @@
 			<p class="eyebrow">Seu arquivo pessoal</p>
 			<h1 id="login-title">Acesse seu fichário</h1>
 			<p class="summary">
-				Entre com sua conta para consultar, importar e revisar seus documentos em um só lugar.
+				Entre com sua conta para consultar, importar e encontrar seus documentos em um só lugar.
 			</p>
 		</div>
 		<ul>
