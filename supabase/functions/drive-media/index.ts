@@ -83,9 +83,7 @@ function parseBody(value: unknown): MediaRequest | null {
 	}
 	if (body.operation === 'download') {
 		if (
-			!Object.keys(body).every((key) =>
-				['operation', 'fileId', 'maximumBytes'].includes(key)
-			) ||
+			!Object.keys(body).every((key) => ['operation', 'fileId', 'maximumBytes'].includes(key)) ||
 			!safeInteger(body.maximumBytes) ||
 			body.maximumBytes < 1 ||
 			body.maximumBytes > MAX_MEDIA_BYTES
