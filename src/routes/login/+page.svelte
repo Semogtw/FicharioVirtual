@@ -4,15 +4,28 @@
 	import Button from '$lib/components/Button.svelte';
 	import { AuthServiceError } from '$lib/services/auth';
 	import { RequestVersion } from '$lib/services/request-version';
-	import { authenticate, sessionState } from '$lib/stores/session.svelte';
+	import { authenticate, register, sessionState } from '$lib/stores/session.svelte';
 
+	type AuthMode = 'sign_in' | 'sign_up';
+
+	let mode = $state<AuthMode>('sign_in');
 	let email = $state('');
 	let password = $state('');
 	let submitting = $state(false);
 	let authenticated = $state(false);
 	let authenticationError = $state<string | null>(null);
 	let navigationError = $state<string | null>(null);
+	let notice = $state<string | null>(null);
 	const authenticationRequests = new RequestVersion();
+
+	function switchMode(nextMode: AuthMode) {
+		if (submitting || authenticated || mode === nextMode) return;
+		authenticationRequests.next();
+		mode = nextMode;
+		authenticationError = null;
+		navigationError = null;
+		notice = null;
+	}
 
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
@@ -21,10 +34,20 @@
 		submitting = true;
 		authenticationError = null;
 		navigationError = null;
+		notice = null;
 		try {
 			try {
-				await authenticate(email, password);
-				if (!authenticationRequests.isCurrent(version)) return;
+				if (mode === 'sign_up') {
+					const result = await register(email, password);
+					if (!authenticationRequests.isCurrent(version)) return;
+					if (result.confirmationRequired) {
+						notice = 'Conta criada. Confira seu e-mail para confirmar o acesso.';
+						return;
+					}
+				} else {
+					await authenticate(email, password);
+					if (!authenticationRequests.isCurrent(version)) return;
+				}
 				authenticated = true;
 			} catch (error) {
 				if (!authenticationRequests.isCurrent(version)) return;
@@ -51,7 +74,7 @@
 </script>
 
 <svelte:head>
-	<title>Entrar — Fichário Virtual</title>
+	<title>Entrar ou criar conta — Fichário Virtual</title>
 </svelte:head>
 
 <main class="login-page" aria-labelledby="login-title">
@@ -61,20 +84,21 @@
 			<strong>Fichário Virtual</strong>
 		</a>
 		<div>
-			<p class="eyebrow">Arquivo pessoal privado</p>
+			<p class="eyebrow">Seu arquivo digital</p>
 			<h1 id="login-title">Acesse seu fichário</h1>
 			<p class="summary">
-				Entre com a conta autorizada para consultar, importar e revisar suas anotações.
+				Organize documentos, encontre conteúdo por texto ou significado e mantenha os originais no
+				seu próprio Google Drive.
 			</p>
 		</div>
 		<ul>
-			<li>Arquivos mantidos em armazenamento privado</li>
-			<li>Busca textual e semântica com índice vetorial</li>
-			<li>Nenhuma ativação automática de plano pago</li>
+			<li>Arquivos privados e isolados por conta</li>
+			<li>Busca textual, fuzzy e semântica</li>
+			<li>OCR, revisão e organização no mesmo fluxo</li>
 		</ul>
 	</section>
 
-	<section class="form-panel" aria-label="Formulário de acesso">
+	<section class="form-panel" aria-label="Acesso ao Fichário Virtual">
 		{#if authenticated}
 			<div class="authenticated" role="status">
 				<h2>Acesso confirmado.</h2>
@@ -82,10 +106,25 @@
 				<a href="/">Abrir o fichário</a>
 			</div>
 		{:else}
+			<div class="mode-switch" aria-label="Escolha entre entrar e criar conta">
+				<button
+					type="button"
+					class:active={mode === 'sign_in'}
+					aria-pressed={mode === 'sign_in'}
+					onclick={() => switchMode('sign_in')}>Entrar</button
+				>
+				<button
+					type="button"
+					class:active={mode === 'sign_up'}
+					aria-pressed={mode === 'sign_up'}
+					onclick={() => switchMode('sign_up')}>Criar conta</button
+				>
+			</div>
+
 			<form onsubmit={submit}>
 				<div class="field">
 					<label for="email">E-mail</label>
-					<input id="email" type="email" bind:value={email} autocomplete="username" required />
+					<input id="email" type="email" bind:value={email} autocomplete="email" required />
 				</div>
 
 				<div class="field">
@@ -94,7 +133,8 @@
 						id="password"
 						type="password"
 						bind:value={password}
-						autocomplete="current-password"
+						autocomplete={mode === 'sign_up' ? 'new-password' : 'current-password'}
+						minlength={mode === 'sign_up' ? 8 : undefined}
 						required
 					/>
 				</div>
@@ -102,17 +142,27 @@
 				{#if authenticationError ?? sessionState.error}
 					<p class="error" role="alert">{authenticationError ?? sessionState.error}</p>
 				{/if}
+				{#if notice}
+					<p class="notice" role="status">{notice}</p>
+				{/if}
 
 				<Button
-					label={submitting ? 'Confirmando acesso…' : 'Entrar'}
+					label={submitting
+						? mode === 'sign_up'
+							? 'Criando conta…'
+							: 'Confirmando acesso…'
+						: mode === 'sign_up'
+							? 'Criar conta'
+							: 'Entrar'}
 					type="submit"
 					disabled={submitting}
 				/>
 			</form>
 
 			<p class="access-note">
-				Este projeto possui <strong>cadastro público desativado</strong>. Novas contas são
-				adicionadas manualmente pelo proprietário.
+				{mode === 'sign_up'
+					? 'A conta pública usa o mesmo Fichário e mantém seus documentos separados dos demais usuários.'
+					: 'Ainda não tem uma conta? Escolha “Criar conta” acima.'}
 			</p>
 		{/if}
 	</section>
@@ -207,6 +257,33 @@
 		background: var(--surface);
 	}
 
+	.mode-switch {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		width: min(100%, 28rem);
+		padding: 0.25rem;
+		border: 1px solid var(--line);
+		border-radius: var(--radius-sm);
+		background: var(--paper);
+	}
+
+	.mode-switch button {
+		min-height: 2.6rem;
+		border: 0;
+		border-radius: calc(var(--radius-sm) - 0.2rem);
+		background: transparent;
+		color: var(--muted);
+		font: inherit;
+		font-weight: 720;
+		cursor: pointer;
+	}
+
+	.mode-switch button.active {
+		background: var(--surface-strong);
+		color: var(--ink);
+		box-shadow: 0 1px 3px rgb(37 45 40 / 10%);
+	}
+
 	form {
 		display: grid;
 		gap: 1.15rem;
@@ -258,13 +335,23 @@
 		font-weight: 740;
 	}
 
-	.error {
+	.error,
+	.notice {
 		margin: 0;
 		padding: 0.8rem 0.9rem;
+		line-height: 1.45;
+	}
+
+	.error {
 		border-left: 0.25rem solid var(--danger);
 		background: rgb(155 63 54 / 8%);
 		color: var(--danger);
-		line-height: 1.45;
+	}
+
+	.notice {
+		border-left: 0.25rem solid var(--archive);
+		background: var(--archive-soft);
+		color: var(--ink);
 	}
 
 	.access-note {
