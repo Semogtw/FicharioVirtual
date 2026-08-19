@@ -100,7 +100,7 @@ export function parseImageImportResult(
 		pageId !== expected.pageId ||
 		typeof ocrJobId !== 'string' ||
 		!UUID.test(ocrJobId) ||
-		o crJobId !== expected.ocrJobId
+		ocrJobId !== expected.ocrJobId
 	) {
 		invalidImageImportResult();
 	}
