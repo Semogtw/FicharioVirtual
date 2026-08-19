@@ -550,7 +550,8 @@
 				: targets;
 		if (renderTargets.length === 0 || refreshIsStale(expectedGeneration, expectedRevision)) return;
 		if (detail.originalReference.provider === 'missing') {
-			for (const page of renderTargets) failPage(page.pageNumber, 'O original não está disponível.');
+			for (const page of renderTargets)
+				failPage(page.pageNumber, 'O original não está disponível.');
 			return;
 		}
 		try {
