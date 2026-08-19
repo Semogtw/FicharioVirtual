@@ -7,12 +7,14 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
 
-# These flows use the same protected staging account as the Supabase contract
-# verifiers. Serialize them so one run cannot globally revoke another session.
+# These flows share the protected real-flow account with search-quality checks.
+# Keep post-deploy real flows serialized, but do not block the Supabase contract
+# verification that they wait for below.
 concurrency:
-  group: staging-contract-verification
+  group: post-deploy-real-verification
   cancel-in-progress: false
 
 jobs:
@@ -52,6 +54,32 @@ jobs:
           test -n "$STAGING_SUPABASE_PUBLISHABLE_KEY"
           test -n "$STAGING_AUTHORIZED_EMAIL"
           test -n "$STAGING_AUTHORIZED_PASSWORD"
+
+      - name: Require successful Supabase deployment for the same SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 40); do
+            state="$(
+              gh api "/repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$TARGET_SHA&per_page=100" \
+                --jq '[.workflow_runs[] | select(.name == "Deploy Supabase staging")][0] | if . == null then "missing" else (.status + ":" + (.conclusion // "pending")) end'
+            )"
+            case "$state" in
+              completed:success)
+                echo "Aligned Supabase deployment is green for $TARGET_SHA"
+                exit 0
+                ;;
+              completed:failure|completed:cancelled|completed:timed_out|completed:action_required)
+                echo "Supabase deployment is not green for $TARGET_SHA: $state" >&2
+                exit 1
+                ;;
+            esac
+            sleep 15
+          done
+          echo "No successful Supabase deployment materialized for $TARGET_SHA" >&2
+          exit 1
 
       - name: Fetch exact-SHA real-flow verifiers without repository checkout
         shell: bash
