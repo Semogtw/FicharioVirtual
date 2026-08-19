@@ -60,8 +60,10 @@ function streamedMedia(
 		status: 200,
 		headers: {
 			...corsHeaders(appOrigin),
-			'Content-Type': metadata.mimeType || 'application/octet-stream',
+			'Access-Control-Expose-Headers': 'X-Drive-Media-Type',
+			'Content-Type': 'application/octet-stream',
 			'Content-Length': String(metadata.size),
+			'X-Drive-Media-Type': metadata.mimeType,
 			'Cache-Control': 'private, no-store'
 		}
 	});
