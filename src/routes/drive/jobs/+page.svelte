@@ -27,8 +27,8 @@
 		processing: 'Em processamento',
 		retryable: 'Aguardando nova tentativa',
 		synced: 'Sincronizado',
-		conflict: 'Conflito isolado',
-		failed: 'Falha persistente',
+		conflict: 'Conflito',
+		failed: 'Falhou',
 		cancelled: 'Cancelado'
 	};
 	let activeCount = $derived(
@@ -36,6 +36,10 @@
 	);
 	let failedCount = $derived(jobs.filter((job) => job.status === 'failed').length);
 	let conflictCount = $derived(jobs.filter((job) => job.status === 'conflict').length);
+
+	function countLabel(count: number, singular: string, plural: string) {
+		return `${count} ${count === 1 ? singular : plural}`;
+	}
 
 	function formatDate(value: string | null) {
 		if (value === null) return '—';
@@ -55,7 +59,7 @@
 			error =
 				caught instanceof Error
 					? caught.message
-					: 'Não foi possível carregar a fila do Google Drive.';
+					: 'Não foi possível carregar as pendências do Google Drive.';
 		} finally {
 			loading = false;
 		}
@@ -68,13 +72,14 @@
 		message = null;
 		try {
 			const receipt = await runPendingDriveJobs();
-			message = `${receipt.synced} mudança(s) sincronizada(s). ${receipt.retryable + receipt.conflicts} item(ns) ainda precisam de atenção.`;
+			const attentionCount = receipt.retryable + receipt.conflicts;
+			message = `${countLabel(receipt.synced, 'mudança sincronizada', 'mudanças sincronizadas')}. ${countLabel(attentionCount, 'item ainda precisa', 'itens ainda precisam')} de atenção.`;
 			await loadAfterRun();
 		} catch (caught) {
 			error =
 				caught instanceof Error
 					? caught.message
-					: 'Não foi possível executar a fila do Google Drive.';
+					: 'Não foi possível sincronizar as mudanças com o Google Drive.';
 		} finally {
 			running = false;
 		}
@@ -84,7 +89,7 @@
 		try {
 			jobs = await listDriveJobs();
 		} catch {
-			error = 'A fila foi executada, mas o estado atualizado não pôde ser carregado.';
+			error = 'A sincronização terminou, mas o estado atualizado não pôde ser carregado.';
 		}
 	}
 
@@ -94,19 +99,19 @@
 </script>
 
 <svelte:head>
-	<title>Fila do Drive — Fichário Virtual</title>
+	<title>Pendências do Drive — Fichário Virtual</title>
 </svelte:head>
 
 <div class="page" aria-labelledby="page-title">
 	<header>
 		<div>
 			<p class="eyebrow">Google Drive</p>
-			<h1 id="page-title">Mudanças locais</h1>
-			<p>Acompanhe as mudanças que ainda precisam ser sincronizadas com o Google Drive.</p>
+			<h1 id="page-title">Pendências de sincronização</h1>
+			<p>Veja o que ainda precisa ser sincronizado com o Google Drive e tente novamente quando necessário.</p>
 		</div>
 		<div class="header-actions">
 			<Button
-				label={running ? 'Executando fila…' : 'Executar mudanças locais'}
+				label={running ? 'Sincronizando…' : 'Sincronizar agora'}
 				disabled={running || loading || activeCount === 0}
 				onclick={() => void run()}
 			/>
@@ -119,10 +124,10 @@
 		</div>
 	</header>
 
-	<section class="summary" aria-label="Resumo da fila">
+	<section class="summary" aria-label="Resumo da sincronização">
 		<article>
 			<strong>{activeCount}</strong>
-			<span>Pendentes</span>
+			<span>Aguardando</span>
 		</article>
 		<article>
 			<strong>{conflictCount}</strong>
@@ -140,16 +145,16 @@
 	<section class="panel" aria-labelledby="jobs-title">
 		<div class="panel-heading">
 			<div>
-				<p class="eyebrow">Histórico recente</p>
-				<h2 id="jobs-title">Operações</h2>
+				<p class="eyebrow">Atividade recente</p>
+				<h2 id="jobs-title">Mudanças</h2>
 			</div>
 			<span>{jobs.length}</span>
 		</div>
 
 		{#if loading}
-			<p class="empty" role="status">Carregando a fila…</p>
+			<p class="empty" role="status">Carregando pendências…</p>
 		{:else if jobs.length === 0}
-			<p class="empty">Nenhuma mudança local foi enfileirada.</p>
+			<p class="empty">Nenhuma mudança aguarda sincronização.</p>
 		{:else}
 			<ul>
 				{#each jobs as job (job.id)}
@@ -160,7 +165,7 @@
 						</div>
 						<dl>
 							<div>
-								<dt>Tentativa</dt>
+								<dt>Tentativas</dt>
 								<dd>{job.attemptCount}</dd>
 							</div>
 							<div>
