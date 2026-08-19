@@ -107,7 +107,10 @@
 		<div>
 			<p class="eyebrow">Google Drive</p>
 			<h1 id="page-title">Pendências de sincronização</h1>
-			<p>Veja o que ainda precisa ser sincronizado com o Google Drive e tente novamente quando necessário.</p>
+			<p>
+				Veja o que ainda precisa ser sincronizado com o Google Drive e tente novamente quando
+				necessário.
+			</p>
 		</div>
 		<div class="header-actions">
 			<Button
