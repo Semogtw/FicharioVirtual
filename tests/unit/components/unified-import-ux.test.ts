@@ -6,7 +6,9 @@ const source = readFileSync('src/lib/components/UnifiedImportPage.svelte', 'utf8
 describe('Unified import UX', () => {
 	it('keeps pending selections when notebook loading fails and exposes retry', () => {
 		expect(source).toContain("notebookError = 'Não foi possível carregar os cadernos agora.'");
-		expect(source).toContain('Seus arquivos continuam selecionados. Tente carregar os cadernos novamente.');
+		expect(source).toContain(
+			'Seus arquivos continuam selecionados. Tente carregar os cadernos novamente.'
+		);
 		expect(source).toContain('onclick={() => void loadNotebookOptions()}');
 
 		const catchBlock = source.slice(
