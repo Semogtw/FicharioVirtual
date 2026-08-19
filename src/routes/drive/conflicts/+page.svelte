@@ -96,12 +96,12 @@
 		<h2 id="policy-title">O que você pode fazer</h2>
 		<ul>
 			<li>
-				<strong>Tentar novamente:</strong> usa as informações atuais do Fichário para sincronizar o
-				item outra vez.
+				<strong>Tentar novamente:</strong> usa as informações atuais do Fichário para sincronizar o item
+				outra vez.
 			</li>
 			<li>
-				<strong>Manter sem o original:</strong> quando o arquivo foi apagado no Drive, mantém texto,
-				correções e organização disponíveis no Fichário.
+				<strong>Manter sem o original:</strong> quando o arquivo foi apagado no Drive, mantém texto, correções
+				e organização disponíveis no Fichário.
 			</li>
 		</ul>
 	</section>
