@@ -11,12 +11,19 @@
 		extractPdfDocumentWordGeometry,
 		extractPdfFileWordGeometry
 	} from '$lib/pdf/text-geometry';
+	import { createLocalImagePreview } from '$lib/pwa/image-preview';
+	import {
+		readLocalMediaPreview,
+		writeLocalMediaPreview,
+		type MediaPreviewCacheKey
+	} from '$lib/pwa/media-preview-cache';
 	import {
 		loadDocumentPage,
 		type DocumentDetail,
 		type DocumentPageSummary
 	} from '$lib/services/document-detail';
 	import { getSupabaseClient } from '$lib/services/supabase';
+	import { sessionState } from '$lib/stores/session.svelte';
 
 	interface DocumentMediaViewerProps {
 		detail: DocumentDetail;
@@ -35,6 +42,12 @@
 		loading: boolean;
 		metadataLoading: boolean;
 	};
+
+	type CacheablePage = Readonly<{
+		id: string;
+		pageNumber: number;
+		sourceDriveFileId: string | null;
+	}>;
 
 	const MAX_BROWSER_DRIVE_PDF_BYTES = 64 * 1024 * 1024;
 	const MAX_BROWSER_DRIVE_IMAGE_BYTES = 64 * 1024 * 1024;
@@ -99,6 +112,40 @@
 
 	function renderedIndex(pageNumber: number) {
 		return renderedPages.findIndex((rendered) => rendered.page.pageNumber === pageNumber);
+	}
+
+	function localPreviewKey(page: CacheablePage): MediaPreviewCacheKey | null {
+		const ownerId = sessionState.user?.id;
+		if (!ownerId) return null;
+		const sourceId =
+			page.sourceDriveFileId ??
+			detail.originalReference.driveFileId ??
+			(detail.originalReference.provider === 'supabase' ? `supabase:${detail.id}` : null);
+		if (!sourceId) return null;
+		return Object.freeze({
+			ownerId,
+			documentId: detail.id,
+			pageId: page.id,
+			sourceId,
+			kind: detail.kind === 'pdf' ? ('pdf-page' as const) : ('image' as const)
+		});
+	}
+
+	async function readCachedPreview(page: CacheablePage) {
+		const key = localPreviewKey(page);
+		return key ? await readLocalMediaPreview(key) : null;
+	}
+
+	function cachePdfPreview(page: PageDetail, blob: Blob) {
+		const key = localPreviewKey(page);
+		if (key) void writeLocalMediaPreview(key, blob);
+	}
+
+	async function cacheImagePreview(page: DocumentPageSummary, blob: Blob) {
+		const key = localPreviewKey(page);
+		if (!key) return;
+		const preview = await createLocalImagePreview(blob);
+		if (preview) await writeLocalMediaPreview(key, preview);
 	}
 
 	function shouldExtractNativeGeometry(page: PageDetail) {
@@ -263,6 +310,7 @@
 					? await extractPdfFileWordGeometry(file, page.pageNumber)
 					: EMPTY_GEOMETRY;
 				publishPage(page, blob, geometry, expectedGeneration, expectedRevision);
+				cachePdfPreview(page, blob);
 			} catch {
 				if (refreshIsStale(expectedGeneration, expectedRevision)) return;
 				failPage(page.pageNumber, `Não foi possível renderizar a página ${page.pageNumber}.`);
@@ -284,6 +332,7 @@
 					? await extractPdfDocumentWordGeometry(pdfDocument, page.pageNumber)
 					: EMPTY_GEOMETRY;
 				publishPage(page, blob, geometry, expectedGeneration, expectedRevision);
+				cachePdfPreview(page, blob);
 			} catch {
 				if (refreshIsStale(expectedGeneration, expectedRevision)) return;
 				failPage(page.pageNumber, `Não foi possível renderizar a página ${page.pageNumber}.`);
@@ -330,11 +379,15 @@
 		expectedRevision: string
 	) {
 		try {
+			const cached = await readCachedPreview(page);
+			if (refreshIsStale(expectedGeneration, expectedRevision)) return;
+			if (cached) {
+				publishImagePage(page, cached, expectedGeneration, expectedRevision);
+				return;
+			}
 			const pageDriveFileId =
 				page.sourceDriveFileId ??
-				(page.pageNumber === 1 && detail.originalReference.provider === 'google_drive'
-					? detail.originalReference.driveFileId
-					: null);
+				(page.pageNumber === 1 ? detail.originalReference.driveFileId : null);
 			if (pageDriveFileId) {
 				const blob = await downloadBrowserDriveFile({
 					client: getSupabaseClient(),
@@ -342,6 +395,7 @@
 					maximumBytes: MAX_BROWSER_DRIVE_IMAGE_BYTES
 				});
 				publishImagePage(page, blob, expectedGeneration, expectedRevision);
+				void cacheImagePreview(page, blob);
 				return;
 			}
 			if (page.pageNumber === 1 && detail.originalReference.provider === 'supabase') {
@@ -410,6 +464,44 @@
 		return loaded.filter((page): page is PageDetail => page !== null);
 	}
 
+	async function publishCachedPdfSummaries(
+		pageNumbers: readonly number[],
+		expectedGeneration: number,
+		expectedRevision: string
+	) {
+		if (query.trim().length > 0) return pageNumbers;
+		const misses: number[] = [];
+		for (const pageNumber of pageNumbers) {
+			const page = pages.find((candidate) => candidate.pageNumber === pageNumber);
+			if (!page) continue;
+			updateRendered(pageNumber, { loading: true, error: null });
+			const cached = await readCachedPreview(page);
+			if (refreshIsStale(expectedGeneration, expectedRevision)) return [];
+			if (cached) publishImagePage(page, cached, expectedGeneration, expectedRevision);
+			else misses.push(pageNumber);
+		}
+		return Object.freeze(misses);
+	}
+
+	async function publishCachedPdfDetails(
+		targets: readonly PageDetail[],
+		expectedGeneration: number,
+		expectedRevision: string
+	) {
+		const misses: PageDetail[] = [];
+		for (const page of targets) {
+			if (shouldExtractNativeGeometry(page)) {
+				misses.push(page);
+				continue;
+			}
+			const cached = await readCachedPreview(page);
+			if (refreshIsStale(expectedGeneration, expectedRevision)) return [];
+			if (cached) publishPage(page, cached, EMPTY_GEOMETRY, expectedGeneration, expectedRevision);
+			else misses.push(page);
+		}
+		return Object.freeze(misses);
+	}
+
 	async function processImageBatch(
 		pageNumbers: readonly number[],
 		expectedGeneration: number,
@@ -438,27 +530,44 @@
 			return;
 		}
 
-		const targets = await loadRequestedDetails(pageNumbers, expectedGeneration, expectedRevision);
+		const uncachedPageNumbers = await publishCachedPdfSummaries(
+			pageNumbers,
+			expectedGeneration,
+			expectedRevision
+		);
+		if (uncachedPageNumbers.length === 0 || refreshIsStale(expectedGeneration, expectedRevision)) {
+			return;
+		}
+		const targets = await loadRequestedDetails(
+			uncachedPageNumbers,
+			expectedGeneration,
+			expectedRevision
+		);
 		if (targets.length === 0 || refreshIsStale(expectedGeneration, expectedRevision)) return;
+		const renderTargets =
+			query.trim().length > 0
+				? await publishCachedPdfDetails(targets, expectedGeneration, expectedRevision)
+				: targets;
+		if (renderTargets.length === 0 || refreshIsStale(expectedGeneration, expectedRevision)) return;
 		if (detail.originalReference.provider === 'missing') {
-			for (const page of targets) failPage(page.pageNumber, 'O original não está disponível.');
+			for (const page of renderTargets) failPage(page.pageNumber, 'O original não está disponível.');
 			return;
 		}
 		try {
 			if (detail.originalReference.provider === 'supabase') {
 				const file = await ensureSupabasePdfFile();
-				await renderPdfFileTargets(file, targets, expectedGeneration, expectedRevision);
+				await renderPdfFileTargets(file, renderTargets, expectedGeneration, expectedRevision);
 				return;
 			}
 			await renderDrivePdfTargets(
 				detail.originalReference.driveFileId,
-				targets,
+				renderTargets,
 				expectedGeneration,
 				expectedRevision
 			);
 		} catch {
 			if (refreshIsStale(expectedGeneration, expectedRevision)) return;
-			for (const page of targets) {
+			for (const page of renderTargets) {
 				failPage(page.pageNumber, 'Não foi possível preparar o original para visualização.');
 			}
 		}
@@ -551,9 +660,7 @@
 </script>
 
 <div class="media-viewer">
-	{#if detail.originalReference.provider === 'missing' && detail.kind !== 'image'}
-		<p class="status" role="status">O original não está disponível.</p>
-	{:else if renderedPages.length === 0}
+	{#if renderedPages.length === 0}
 		<p class="status" role="status">Este documento ainda não tem páginas disponíveis.</p>
 	{:else}
 		<div class:document-pages={detail.kind === 'pdf'} class:image-pages={detail.kind === 'image'}>
