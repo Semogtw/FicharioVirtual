@@ -6,7 +6,9 @@ import {
 
 const fileId = '1AbCdEfGhIjKlMnOpQrStUvWxYz_123456';
 
-function client(...responses: Array<{ data: unknown; error: unknown }>) {
+type ProxyResponse = { data: unknown; error: unknown; response?: Response };
+
+function client(...responses: ProxyResponse[]) {
 	return {
 		functions: {
 			invoke: vi.fn().mockImplementation(async () => {
@@ -19,10 +21,11 @@ function client(...responses: Array<{ data: unknown; error: unknown }>) {
 }
 
 describe('authenticated browser Drive media proxy', () => {
-	it('downloads a complete file through one bounded media request', async () => {
+	it('downloads a complete file through one bounded media request and preserves its MIME type', async () => {
 		const proxy = client({
-			data: new Blob([new Uint8Array([1, 2, 3])], { type: 'application/pdf' }),
-			error: null
+			data: new Blob([new Uint8Array([1, 2, 3])], { type: 'application/octet-stream' }),
+			error: null,
+			response: new Response(null, { headers: { 'X-Drive-Media-Type': 'image/jpeg' } })
 		});
 
 		const blob = await downloadBrowserDriveFile({
@@ -32,7 +35,7 @@ describe('authenticated browser Drive media proxy', () => {
 		});
 
 		expect(blob.size).toBe(3);
-		expect(blob.type).toBe('application/pdf');
+		expect(blob.type).toBe('image/jpeg');
 		expect(proxy.functions.invoke).toHaveBeenCalledTimes(1);
 		expect(proxy.functions.invoke).toHaveBeenCalledWith('drive-media', {
 			body: { operation: 'download', fileId, maximumBytes: 20 }
@@ -41,7 +44,7 @@ describe('authenticated browser Drive media proxy', () => {
 
 	it('keeps larger browser downloads to one authenticated proxy invocation', async () => {
 		const bytes = new Uint8Array(1024 * 1024 + 3).fill(7);
-		const proxy = client({ data: new Blob([bytes], { type: 'image/jpeg' }), error: null });
+		const proxy = client({ data: new Blob([bytes], { type: 'application/octet-stream' }), error: null });
 
 		const blob = await downloadBrowserDriveFile({
 			client: proxy,
@@ -50,7 +53,6 @@ describe('authenticated browser Drive media proxy', () => {
 		});
 
 		expect(blob.size).toBe(bytes.byteLength);
-		expect(blob.type).toBe('image/jpeg');
 		expect(proxy.functions.invoke).toHaveBeenCalledTimes(1);
 	});
 
