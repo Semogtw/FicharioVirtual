@@ -11,8 +11,10 @@ describe('background OCR retry wakeup', () => {
 	it('replaces the five-minute wakeup with a due-work-only one-minute schedule', () => {
 		expect(migration).toContain("cron.unschedule('fichario-background-ocr-wakeup')");
 		expect(migration).toContain("'fichario-background-ocr-wakeup',\n  '* * * * *'");
-		expect(migration).toContain("job.status in ('pending'::public.ocr_status, 'retryable'::public.ocr_status)");
-		expect(migration).toContain('job.next_retry_at <= timezone(\'utc\', now())');
+		expect(migration).toContain(
+			"job.status in ('pending'::public.ocr_status, 'retryable'::public.ocr_status)"
+		);
+		expect(migration).toContain("job.next_retry_at <= timezone('utc', now())");
 		expect(migration).toContain('and due_work.has_due');
 		expect(migration).toContain("body := jsonb_build_object('source', 'cron-due-work')");
 	});
