@@ -247,8 +247,8 @@ async function searchFor(page, text, { documentId, documentTitle, expectedOccurr
 	await matchingLink.scrollIntoViewIfNeeded();
 	await matchingLink.locator('img').first().waitFor({ state: 'visible', timeout: 45_000 });
 	const visibleCardText = (await matchingLink.innerText()).trim();
-	if (visibleCardText.includes(documentTitle)) {
-		throw new Error('Search exposed the document title instead of keeping the original visible');
+	if (!visibleCardText.includes(documentTitle)) {
+		throw new Error('Search result did not identify the original document by title');
 	}
 	if (expectedOccurrences !== null) {
 		await matchingLink
