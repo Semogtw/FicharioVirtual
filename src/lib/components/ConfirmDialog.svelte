@@ -93,13 +93,13 @@
 		<div
 			class="dialog"
 			bind:this={dialog}
-			role="alertdialog"
+			role="dialog"
 			aria-modal="true"
 			tabindex="-1"
 			aria-labelledby="confirm-dialog-title"
 			aria-describedby="confirm-dialog-description"
 		>
-			<div class="copy">
+			<div class="copy" aria-live="assertive">
 				<p class="eyebrow">Confirmação</p>
 				<h2 id="confirm-dialog-title">{title}</h2>
 				<p id="confirm-dialog-description">{description}</p>
