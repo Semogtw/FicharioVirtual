@@ -1,7 +1,10 @@
+import { writeLocalMediaPreview } from '$lib/pwa/media-preview-cache';
+import { sessionState } from '$lib/stores/session.svelte';
 import { requireDriveForUpload } from '$lib/stores/drive-upload-gate.svelte';
 import type { PreparedImage } from './image-types';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const DRIVE_STORAGE_PATH = /^drive:([A-Za-z0-9_-]{10,256})$/;
 
 export type UploadPreparedImageInput = {
 	prepared: PreparedImage;
@@ -47,7 +50,6 @@ export class ImageUploadError extends Error {
 		} as const;
 		super(messages[code]);
 		this.name = 'ImageUploadError';
-		this.code = code;
 	}
 }
 
@@ -104,8 +106,26 @@ export function parseImageImportResult(
 	return Object.freeze({ documentId, pageId, ocrJobId });
 }
 
+function warmImportedImagePreview(input: UploadPreparedImageInput, uploaded: UploadedPage) {
+	const ownerId = sessionState.user?.id;
+	const driveMatch = DRIVE_STORAGE_PATH.exec(uploaded.storagePath);
+	if (!ownerId || !driveMatch?.[1]) return;
+	void writeLocalMediaPreview(
+		{
+			ownerId,
+			documentId: uploaded.documentId,
+			pageId: uploaded.pageId,
+			sourceId: driveMatch[1],
+			kind: 'image'
+		},
+		input.prepared.image
+	);
+}
+
 export async function uploadPreparedImage(input: UploadPreparedImageInput): Promise<UploadedPage> {
 	await requireDriveForUpload();
 	const { uploadPreparedImageToDrive } = await import('./drive-upload');
-	return uploadPreparedImageToDrive(input);
+	const uploaded = await uploadPreparedImageToDrive(input);
+	warmImportedImagePreview(input, uploaded);
+	return uploaded;
 }
