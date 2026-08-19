@@ -9,6 +9,7 @@ const failures = [];
 const allowedLocalStorage = new Set([
 	'src/lib/components/DataProcessingNotice.svelte',
 	'src/lib/import/browser-exclusive.ts',
+	'src/lib/pwa/media-preview-cache.ts',
 	'src/lib/theme/theme.ts'
 ]);
 const allowedIndexedDb = new Set(['src/lib/import/resume-database.ts']);
