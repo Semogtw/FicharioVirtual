@@ -50,6 +50,7 @@ export class ImageUploadError extends Error {
 		} as const;
 		super(messages[code]);
 		this.name = 'ImageUploadError';
+		this.code = code;
 	}
 }
 
@@ -99,7 +100,7 @@ export function parseImageImportResult(
 		pageId !== expected.pageId ||
 		typeof ocrJobId !== 'string' ||
 		!UUID.test(ocrJobId) ||
-		ocrJobId !== expected.ocrJobId
+		o crJobId !== expected.ocrJobId
 	) {
 		invalidImageImportResult();
 	}
