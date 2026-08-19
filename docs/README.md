@@ -14,7 +14,7 @@ Ao registrar progresso, prefira atualizar um desses arquivos em vez de adicionar
 ## Produto e arquitetura
 
 - [`PROJECT_SPEC.md`](PROJECT_SPEC.md) — especificação canônica do produto e da arquitetura.
-- [`PUBLIC_PORTFOLIO_PLAN.md`](PUBLIC_PORTFOLIO_PLAN.md) — plano canônico da versão pública de portfólio com aplicação completa, self-service Auth, isolamento de infraestrutura/quota, Google Drive por usuário, OCR público e validação multiusuário.
+- [`PUBLIC_PORTFOLIO_PLAN.md`](PUBLIC_PORTFOLIO_PLAN.md) — plano canônico da versão pública completa usando a mesma aplicação/infraestrutura, cadastro self-service, isolamento por RLS e roteamento server-side de providers por perfil de usuário.
 - [`SEARCH_OCR_MATCHING.md`](SEARCH_OCR_MATCHING.md) — busca global híbrida: FTS/fuzzy, embeddings, pgvector, ranking, consentimento e fallback textual.
 - [`UNIT_TOPIC_COVERAGE.md`](UNIT_TOPIC_COVERAGE.md) — cobertura de assuntos por unidade, editor estruturado de conteúdos e importação de ementa por foto/OCR.
 - [`SEMANTIC_COVERAGE.md`](SEMANTIC_COVERAGE.md) — embeddings, índice pgvector compartilhado, score híbrido, consentimento e verificador Gemini da cobertura de conteúdos.
