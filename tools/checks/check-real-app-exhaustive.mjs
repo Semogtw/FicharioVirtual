@@ -274,7 +274,10 @@ try {
 	await page
 		.getByText('Nenhum documento com esses filtros', { exact: true })
 		.waitFor({ state: 'visible', timeout: 20_000 });
-	await page.getByRole('button', { name: 'Limpar filtros', exact: true }).click();
+	await page
+		.getByLabel('Filtrar biblioteca')
+		.getByRole('button', { name: 'Limpar filtros', exact: true })
+		.click();
 	await page
 		.getByText(imported.title, { exact: true })
 		.first()
