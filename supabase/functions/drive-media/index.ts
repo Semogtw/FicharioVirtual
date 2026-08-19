@@ -9,6 +9,7 @@ const RETRY_DELAYS_MS = [250, 750, 1500] as const;
 
 type MediaRequest =
 	| Readonly<{ operation: 'metadata'; fileId: string }>
+	| Readonly<{ operation: 'download'; fileId: string; maximumBytes: number }>
 	| Readonly<{
 			operation: 'read';
 			fileId: string;
@@ -16,6 +17,8 @@ type MediaRequest =
 			endExclusive: number;
 			totalBytes: number;
 	  }>;
+
+type DriveMetadata = Readonly<{ size: number; mimeType: string }>;
 
 function json(status: number, body: Record<string, unknown>, appOrigin: string | null) {
 	return new Response(JSON.stringify(body), {
@@ -48,6 +51,22 @@ function media(bytes: Uint8Array, appOrigin: string | null) {
 	});
 }
 
+function streamedMedia(
+	response: Response,
+	metadata: DriveMetadata,
+	appOrigin: string | null
+): Response {
+	return new Response(response.body, {
+		status: 200,
+		headers: {
+			...corsHeaders(appOrigin),
+			'Content-Type': metadata.mimeType || 'application/octet-stream',
+			'Content-Length': String(metadata.size),
+			'Cache-Control': 'private, no-store'
+		}
+	});
+}
+
 function safeInteger(value: unknown): value is number {
 	return typeof value === 'number' && Number.isSafeInteger(value);
 }
@@ -59,6 +78,23 @@ function parseBody(value: unknown): MediaRequest | null {
 	if (body.operation === 'metadata') {
 		if (!Object.keys(body).every((key) => key === 'operation' || key === 'fileId')) return null;
 		return Object.freeze({ operation: 'metadata', fileId: body.fileId });
+	}
+	if (body.operation === 'download') {
+		if (
+			!Object.keys(body).every((key) =>
+				['operation', 'fileId', 'maximumBytes'].includes(key)
+			) ||
+			!safeInteger(body.maximumBytes) ||
+			body.maximumBytes < 1 ||
+			body.maximumBytes > MAX_MEDIA_BYTES
+		) {
+			return null;
+		}
+		return Object.freeze({
+			operation: 'download',
+			fileId: body.fileId,
+			maximumBytes: body.maximumBytes
+		});
 	}
 	if (body.operation !== 'read') return null;
 	if (
@@ -107,6 +143,41 @@ async function googleFetch(url: string, init: RequestInit): Promise<Response> {
 		await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
 	}
 	throw new Error('Google Drive request exhausted');
+}
+
+async function loadDriveMetadata(base: string, accessToken: string): Promise<DriveMetadata | null> {
+	const url = new URL(base);
+	url.searchParams.set('fields', 'size,mimeType,trashed');
+	url.searchParams.set('supportsAllDrives', 'true');
+	let response: Response;
+	try {
+		response = await googleFetch(url.toString(), {
+			headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' }
+		});
+	} catch {
+		return null;
+	}
+	if (!response.ok) return null;
+	let value: unknown;
+	try {
+		value = await response.json();
+	} catch {
+		return null;
+	}
+	if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+	const record = value as Record<string, unknown>;
+	const size = typeof record.size === 'string' ? Number(record.size) : NaN;
+	const mimeType = typeof record.mimeType === 'string' ? record.mimeType : '';
+	if (
+		record.trashed === true ||
+		!Number.isSafeInteger(size) ||
+		size < 1 ||
+		size > MAX_MEDIA_BYTES ||
+		mimeType.length > 256
+	) {
+		return null;
+	}
+	return Object.freeze({ size, mimeType });
 }
 
 Deno.serve(async (request) => {
@@ -171,42 +242,35 @@ Deno.serve(async (request) => {
 	}
 
 	const base = `https://www.googleapis.com/drive/v3/files/${parsed.fileId}`;
-	if (parsed.operation === 'metadata') {
+	if (parsed.operation === 'metadata' || parsed.operation === 'download') {
+		const metadata = await loadDriveMetadata(base, accessToken);
+		if (!metadata) return respond(502, { code: 'drive_media_unavailable' });
+		if (parsed.operation === 'metadata') {
+			return respond(200, metadata);
+		}
+		if (metadata.size > parsed.maximumBytes) {
+			return respond(413, { code: 'drive_media_too_large_or_invalid' });
+		}
+
 		const url = new URL(base);
-		url.searchParams.set('fields', 'size,mimeType,trashed');
+		url.searchParams.set('alt', 'media');
 		url.searchParams.set('supportsAllDrives', 'true');
 		let response: Response;
 		try {
 			response = await googleFetch(url.toString(), {
-				headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' }
+				headers: { Authorization: `Bearer ${accessToken}` }
 			});
 		} catch {
 			return respond(503, { code: 'drive_media_unavailable' });
 		}
-		if (!response.ok)
+		if (!response.ok || !response.body) {
 			return respond(response.status === 404 ? 404 : 502, { code: 'drive_media_unavailable' });
-		let value: unknown;
-		try {
-			value = await response.json();
-		} catch {
-			return respond(502, { code: 'drive_media_unavailable' });
 		}
-		if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-			return respond(502, { code: 'drive_media_unavailable' });
+		const declaredLength = response.headers.get('Content-Length');
+		if (declaredLength !== null && Number(declaredLength) !== metadata.size) {
+			return respond(502, { code: 'drive_media_invalid_length' });
 		}
-		const record = value as Record<string, unknown>;
-		const size = typeof record.size === 'string' ? Number(record.size) : NaN;
-		const mimeType = typeof record.mimeType === 'string' ? record.mimeType : '';
-		if (
-			record.trashed === true ||
-			!Number.isSafeInteger(size) ||
-			size < 1 ||
-			size > MAX_MEDIA_BYTES ||
-			mimeType.length > 256
-		) {
-			return respond(413, { code: 'drive_media_too_large_or_invalid' });
-		}
-		return respond(200, { size, mimeType });
+		return streamedMedia(response, metadata, appOrigin);
 	}
 
 	const lastByte = parsed.endExclusive - 1;
