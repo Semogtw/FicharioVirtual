@@ -49,14 +49,16 @@ jobs:
           tests/unit/routes/document-original-reference.test.ts
           tests/unit/services/document-detail.test.ts
 
-      - name: Format changed files and show repair
+      - name: Format validation workspace
         run: |
           pnpm exec prettier --write \
             supabase/functions/drive-media/index.ts \
-            tests/unit/drive/browser-download.test.ts
+            tests/unit/drive/browser-download.test.ts \
+            tools/checks/check-deployed-ui.mjs
           git diff -- \
             supabase/functions/drive-media/index.ts \
-            tests/unit/drive/browser-download.test.ts
+            tests/unit/drive/browser-download.test.ts \
+            tools/checks/check-deployed-ui.mjs
 
       - name: Run frontend verification
         run: pnpm verify
