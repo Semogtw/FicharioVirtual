@@ -38,7 +38,11 @@ function browserStorageManager(): StorageManagerWithDirectory | null {
 }
 
 function validKeyPart(value: string, maximumLength: number) {
-	return value.length > 0 && value.length <= maximumLength && !/[\u0000-\u001f]/.test(value);
+	if (value.length < 1 || value.length > maximumLength) return false;
+	return !Array.from(value).some((character) => {
+		const codePoint = character.codePointAt(0);
+		return codePoint !== undefined && codePoint < 0x20;
+	});
 }
 
 function serializeKey(key: MediaPreviewCacheKey) {
