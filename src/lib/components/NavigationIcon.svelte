@@ -1,13 +1,6 @@
 <script lang="ts">
 	export type NavigationIconName =
-		| 'home'
-		| 'library'
-		| 'notebooks'
-		| 'import'
-		| 'coverage'
-		| 'drive'
-		| 'settings'
-		| 'more';
+		'home' | 'library' | 'notebooks' | 'import' | 'coverage' | 'drive' | 'settings' | 'more';
 
 	interface NavigationIconProps {
 		name: NavigationIconName;
