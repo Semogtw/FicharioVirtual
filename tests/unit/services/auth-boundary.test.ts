@@ -41,10 +41,16 @@ function client(
 			async signInWithPassword() {
 				return { data: { session }, error: null };
 			},
+			async signUp() {
+				return { data: { session }, error: null };
+			},
 			async signOut() {
 				return { error: null };
 			},
 			...overrides
+		},
+		async rpc() {
+			return { data: 'owner', error: null };
 		},
 		from() {
 			return query;
@@ -87,7 +93,7 @@ describe('auth service failure boundary', () => {
 		).rejects.toEqual(unavailable());
 	});
 
-	it('fails closed when the allowlist response violates its exact contract', async () => {
+	it('fails closed when the active-account response violates its exact contract', async () => {
 		await expect(loadAuthorizedSession(client({}, { is_active: 'yes' }))).rejects.toEqual(
 			unavailable()
 		);
@@ -96,7 +102,21 @@ describe('auth service failure boundary', () => {
 		).rejects.toEqual(unavailable());
 	});
 
-	it('does not revoke a valid SDK session for transient or malformed allowlist checks', async () => {
+	it('fails closed when public enrollment cannot be confirmed', async () => {
+		const enrollmentFailure = client();
+		enrollmentFailure.rpc = async () => ({
+			data: null,
+			error: { message: 'database detail that must not leak' }
+		});
+
+		await expect(loadAuthorizedSession(enrollmentFailure)).rejects.toEqual(unavailable());
+
+		const malformedEnrollment = client();
+		malformedEnrollment.rpc = async () => ({ data: 'admin', error: null });
+		await expect(loadAuthorizedSession(malformedEnrollment)).rejects.toEqual(unavailable());
+	});
+
+	it('does not revoke a valid SDK session for transient or malformed account checks', async () => {
 		const malformedSignOut = vi.fn(async () => ({ error: null }));
 		await expect(
 			loadAuthorizedSession(client({ signOut: malformedSignOut }, { is_active: 'yes' }))
@@ -106,7 +126,7 @@ describe('auth service failure boundary', () => {
 		const transportSignOut = vi.fn(async () => ({ error: null }));
 		const transport = client({ signOut: transportSignOut });
 		transport.from = () => {
-			throw new Error('allowlist connection reset');
+			throw new Error('account lookup connection reset');
 		};
 		await expect(signIn('owner@example.test', 'password', transport)).rejects.toEqual(
 			unavailable()
@@ -114,7 +134,7 @@ describe('auth service failure boundary', () => {
 		expect(transportSignOut).not.toHaveBeenCalled();
 	});
 
-	it('normalizes allowlist and confirmed unauthorized-session sign-out transport failures', async () => {
+	it('normalizes account lookup and confirmed unauthorized-session sign-out failures', async () => {
 		const allowlistFailure = client();
 		allowlistFailure.from = () => {
 			throw new Error('postgrest internals');
