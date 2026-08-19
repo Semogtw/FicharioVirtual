@@ -15,7 +15,10 @@ const MAX_BATCH_PAGES = 100;
 type PageStateQueryClient = {
 	from(table: 'pages'): {
 		select(columns: 'status'): {
-			eq(column: 'id', value: string): {
+			eq(
+				column: 'id',
+				value: string
+			): {
 				maybeSingle(): Promise<{
 					data: { status: unknown } | null;
 					error: unknown;
