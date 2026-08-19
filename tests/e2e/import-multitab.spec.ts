@@ -72,6 +72,9 @@ async function mockSupabase(context: BrowserContext, counters: RequestCounters) 
 		if (path === '/rest/v1/notebooks') return json(route, []);
 		if (path === '/rest/v1/rpc/list_notebooks_v2') return json(route, []);
 		if (path === '/rest/v1/documents') return json(route, null);
+		if (path === '/rest/v1/pages' && request.method() === 'GET') {
+			return json(route, { status: 'processing' });
+		}
 		if (path === '/rest/v1/rpc/get_document_ocr_summary') {
 			return json(route, [{ total: 1, completed: 0, needs_review: 0, pending: 1, failed: 0 }]);
 		}
