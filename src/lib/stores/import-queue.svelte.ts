@@ -292,7 +292,7 @@ async function processOcr(item: ImportQueueItem, signal?: AbortSignal) {
 			return;
 		}
 		item.status = 'waiting';
-		item.error = 'A leitura ficou pendente e poderá ser retomada sem reenviar o arquivo.';
+		item.error = null;
 		void persistItem(item);
 	} catch (error) {
 		if (error instanceof DOMException && error.name === 'AbortError') throw error;
