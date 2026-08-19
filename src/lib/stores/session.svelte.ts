@@ -219,6 +219,7 @@ export function startSessionTracking(onExternalSessionChange?: () => void): () =
 					onExternalSessionChange?.();
 				}
 			});
+		});
 	});
 
 	return () => {
