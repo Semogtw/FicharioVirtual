@@ -7,13 +7,13 @@
 
 <nav class="review-tabs" aria-label="Seções da revisão">
 	<a href="/review/" aria-current={page.url.pathname === '/review/' ? 'page' : undefined}>
-		Fila remota
+		Para revisar
 	</a>
 	<a
 		href="/review/drafts/"
 		aria-current={page.url.pathname.startsWith('/review/drafts') ? 'page' : undefined}
 	>
-		Rascunhos locais
+		Rascunhos
 	</a>
 </nav>
 
