@@ -135,15 +135,19 @@ Na migration inicial:
 
 ### Novas contas
 
-Novos registros em `auth.users` devem criar automaticamente:
+A criação do registro de aplicação acontece na primeira sessão autenticada válida por uma RPC idempotente `SECURITY DEFINER` sem argumentos de usuário ou perfil:
 
 ```text
-app_users.user_id = auth.users.id
-app_users.is_active = true
-app_users.provider_profile = public
+ensure_current_app_user()
+ -> usa somente auth.uid()
+ -> cria app_users apenas se ainda não existir
+ -> is_active = true
+ -> provider_profile = public
 ```
 
-A criação deve ocorrer por trigger `SECURITY DEFINER` minimalista, com `search_path` fixo e sem aceitar dados de perfil enviados pelo cliente.
+A RPC não aceita `user_id`, `provider_profile` nem flags de privilégio do cliente. `ON CONFLICT DO NOTHING` preserva contas existentes: um `owner` não é rebaixado e uma conta inativa não consegue reativar a si própria. O retorno só confirma perfis ativos conhecidos.
+
+Essa abordagem foi escolhida em vez de um trigger global em `auth.users` porque mantém a fronteira vinculada a uma sessão autenticada, evita acoplamento desnecessário com fixtures/migrations que criam usuários de teste e continua garantindo que o self-service só possa produzir `public`.
 
 Desativar uma conta continua sendo possível com `is_active = false`.
 
@@ -164,14 +168,14 @@ O fluxo esperado é:
 ```text
 Criar conta
  -> Supabase Auth
- -> trigger cria app_users(public)
- -> confirmar e-mail, se exigido
- -> entrar
+ -> se houver sessão imediata: ensure_current_app_user()
+ -> se exigir confirmação: confirmar e-mail e abrir a primeira sessão
+ -> ensure_current_app_user() cria app_users(public)
  -> conectar Google Drive
  -> usar o Fichário completo
 ```
 
-`loadAuthorizedSession()` continua conferindo que a conta está ativa. O nome interno de funções antigas pode ser refatorado depois; não é necessário reescrever toda a sessão para a primeira entrega.
+`loadAuthorizedSession()` continua conferindo que a conta está ativa e executa o enrollment idempotente antes da verificação. O nome interno de funções antigas pode ser refatorado depois; não é necessário reescrever toda a sessão para a primeira entrega.
 
 ## 6. Google Drive
 
@@ -363,9 +367,9 @@ Isso permite comparar Gemini pessoal e Azure público e decidir futuramente se o
 
 1. adicionar `provider_profile` a `app_users`;
 2. preservar contas existentes como `owner`;
-3. trigger de novos `auth.users` para `public`;
+3. criar RPC idempotente de auto-enrollment que só produz `public`;
 4. função/RPC de leitura server-side do perfil;
-5. testes pgTAP de defaults, RLS e fail-closed;
+5. testes pgTAP de enrollment, RLS e fail-closed;
 6. adicionar cadastro no serviço de Auth;
 7. adicionar UI de cadastro.
 
@@ -419,7 +423,7 @@ A versão pública não está pronta enquanto qualquer item abaixo falhar:
 A versão pública está pronta quando:
 
 - qualquer pessoa consegue criar uma conta válida;
-- novos usuários recebem `provider_profile = public` automaticamente;
+- novos usuários recebem `provider_profile = public` automaticamente na primeira sessão autenticada;
 - contas pessoais selecionadas permanecem `owner`;
 - ambos usam o mesmo frontend, Supabase, banco e Google OAuth;
 - cada usuário usa somente o próprio Drive e os próprios dados;
