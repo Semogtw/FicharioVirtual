@@ -204,28 +204,36 @@ export async function readLocalMediaPreview(key: MediaPreviewCacheKey): Promise<
 	if (!directory) return null;
 	const filename = await filenameForSerializedKey(serialized);
 	try {
+		const index = readIndex();
+		const previous = index[filename];
+		if (
+			!previous ||
+			previous.key !== serialized ||
+			!previous.contentType.startsWith('image/') ||
+			!Number.isFinite(previous.bytes) ||
+			previous.bytes < 1 ||
+			previous.bytes > MAX_SINGLE_PREVIEW_BYTES
+		) {
+			return null;
+		}
 		const handle = await directory.getFileHandle(filename);
 		const file = await handle.getFile();
-		if (file.size < 1 || file.size > MAX_SINGLE_PREVIEW_BYTES || !file.type.startsWith('image/')) {
-			const index = readIndex();
+		if (file.size !== previous.bytes || file.size < 1 || file.size > MAX_SINGLE_PREVIEW_BYTES) {
 			await removeEntry(directory, index, filename);
 			writeIndex(index);
 			return null;
 		}
-		const index = readIndex();
-		const previous = index[filename];
-		if (previous && previous.key !== serialized) return null;
+		const blob =
+			file.type.startsWith('image/') && file.type === previous.contentType
+				? file
+				: file.slice(0, file.size, previous.contentType);
 		index[filename] = Object.freeze({
-			key: serialized,
-			filename,
-			bytes: file.size,
-			contentType: file.type,
-			createdAt: previous?.createdAt ?? file.lastModified ?? Date.now(),
+			...previous,
 			lastAccess: Date.now(),
 			ownerId: key.ownerId
 		});
 		writeIndex(index);
-		return file;
+		return blob;
 	} catch {
 		return null;
 	}
