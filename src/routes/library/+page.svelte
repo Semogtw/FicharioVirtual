@@ -134,7 +134,11 @@
 		<a class="primary-action" href="/import/">Importar</a>
 	</header>
 
-	<form class="filters" aria-label="Filtrar biblioteca" onsubmit={(event) => event.preventDefault()}>
+	<form
+		class="filters"
+		aria-label="Filtrar biblioteca"
+		onsubmit={(event) => event.preventDefault()}
+	>
 		<label>
 			<span>Caderno</span>
 			<NativeSelect
@@ -218,7 +222,9 @@
 		<LoadingCollection label="Organizando seus documentos…" />
 	{:else if documents.length === 0}
 		<EmptyState
-			title={hasActiveFilters ? 'Nenhum documento com esses filtros' : 'Sua biblioteca ainda está vazia'}
+			title={hasActiveFilters
+				? 'Nenhum documento com esses filtros'
+				: 'Sua biblioteca ainda está vazia'}
 			description={hasActiveFilters
 				? 'Limpe ou ajuste os filtros para voltar a ver outros documentos.'
 				: 'Importe uma imagem ou PDF para começar sua biblioteca.'}
