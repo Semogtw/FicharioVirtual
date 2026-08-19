@@ -12,13 +12,14 @@ describe('Drive recovery navigation', () => {
 		expect(source).toContain('<NavigationIcon name={item.icon}');
 	});
 
-	it('keeps recovery and coverage reachable from the mobile navigation', () => {
+	it('keeps every major area reachable without overcrowding the mobile bar', () => {
 		const source = readFileSync(mobilePath, 'utf8');
 
+		expect(source).toContain("{ href: '/notebooks/', label: 'Cadernos', icon: 'notebooks' }");
 		expect(source).toContain("{ href: '/coverage/', label: 'Cobertura', icon: 'coverage' }");
-		expect(source).toContain("{ href: '/drive/', label: 'Drive', icon: 'drive' }");
-		expect(source).toContain('href={item.href}');
-		expect(source).toContain('{item.label}');
-		expect(source).toContain('grid-template-columns: repeat(6, minmax(0, 1fr))');
+		expect(source).toContain("{ href: '/drive/', label: 'Google Drive', icon: 'drive' }");
+		expect(source).toContain("{ href: '/settings/', label: 'Configurações', icon: 'settings' }");
+		expect(source).toContain('<summary aria-label="Abrir mais opções de navegação">');
+		expect(source).toContain('grid-template-columns: repeat(5, minmax(0, 1fr))');
 	});
 });
