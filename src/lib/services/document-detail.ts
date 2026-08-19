@@ -68,6 +68,7 @@ const pageSummaryRecordSchema = z
 	.object({
 		id: z.string().regex(UUID),
 		page_number: z.number().int().min(1).max(10_000),
+		source_drive_file_id: driveFileIdSchema.nullable().optional(),
 		status: processingStatusSchema,
 		updated_at: timestamp
 	})
@@ -108,6 +109,7 @@ export type DocumentDetailRecord = {
 export type DocumentPageSummaryRecord = {
 	id: string;
 	page_number: number;
+	source_drive_file_id?: string | null;
 	status: ProcessingStatus;
 	updated_at: string;
 };
@@ -115,6 +117,7 @@ export type DocumentPageSummaryRecord = {
 export type DocumentPageSummary = Readonly<{
 	id: string;
 	pageNumber: number;
+	sourceDriveFileId: string | null;
 	status: ProcessingStatus;
 	updatedAt: string;
 }>;
@@ -285,6 +288,7 @@ function mapPageSummary(record: z.infer<typeof pageSummaryRecordSchema>): Docume
 	return Object.freeze({
 		id: record.id,
 		pageNumber: record.page_number,
+		sourceDriveFileId: record.source_drive_file_id ?? null,
 		status: record.status,
 		updatedAt: record.updated_at
 	});
@@ -375,6 +379,7 @@ export async function loadDocumentPreviewWithGateway(
 				mapPageSummary({
 					id: page.id,
 					page_number: page.page_number,
+					source_drive_file_id: page.source_drive_file_id ?? null,
 					status: page.status,
 					updated_at: page.updated_at
 				})
@@ -424,7 +429,7 @@ class SupabaseDocumentGateway implements DocumentDetailGateway {
 	async listPageSummaries(documentId: string) {
 		const { data, error } = await this.client
 			.from('pages')
-			.select('id,page_number,status,updated_at')
+			.select('id,page_number,source_drive_file_id,status,updated_at')
 			.eq('document_id', validId(documentId, 'document'))
 			.order('page_number', { ascending: true });
 		if (error || !Array.isArray(data)) throw new DocumentDetailError('unavailable');
