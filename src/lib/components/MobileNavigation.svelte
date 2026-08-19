@@ -10,7 +10,6 @@
 	] as const;
 
 	const moreNavigation = [
-		{ href: '/review/', label: 'Revisar', icon: 'review' },
 		{ href: '/coverage/', label: 'Cobertura', icon: 'coverage' },
 		{ href: '/drive/', label: 'Google Drive', icon: 'drive' },
 		{ href: '/settings/', label: 'Configurações', icon: 'settings' }
