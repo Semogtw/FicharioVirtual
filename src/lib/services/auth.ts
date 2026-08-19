@@ -2,10 +2,17 @@ import type { Session } from '@supabase/supabase-js';
 import { getSupabaseClient } from './supabase';
 
 export type AuthServiceErrorCode =
-	'invalid_input' | 'invalid_credentials' | 'not_authorized' | 'auth_unavailable';
+	| 'invalid_input'
+	| 'invalid_credentials'
+	| 'not_authorized'
+	| 'email_in_use'
+	| 'weak_password'
+	| 'signup_failed'
+	| 'auth_unavailable';
 
 type ServiceError = { message: string; status?: number };
 type SignOutScope = 'global' | 'local' | 'others';
+type ProviderProfile = 'owner' | 'public';
 
 type AllowlistQuery = {
 	select(columns: string): AllowlistQuery;
@@ -15,6 +22,11 @@ type AllowlistQuery = {
 
 type PendingAllowlistChecks = Map<string, Promise<boolean | null>>;
 
+export type SignUpResult = Readonly<{
+	session: Session | null;
+	confirmationRequired: boolean;
+}>;
+
 export type AuthClientLike = {
 	auth: {
 		getSession(): Promise<{ data: { session: Session | null }; error: ServiceError | null }>;
@@ -22,8 +34,15 @@ export type AuthClientLike = {
 			email: string;
 			password: string;
 		}): Promise<{ data: { session: Session | null }; error: ServiceError | null }>;
+		signUp(input: {
+			email: string;
+			password: string;
+		}): Promise<{ data: { session: Session | null }; error: ServiceError | null }>;
 		signOut(options?: { scope?: SignOutScope }): Promise<{ error: ServiceError | null }>;
 	};
+	rpc(
+		functionName: 'ensure_current_app_user'
+	): Promise<{ data: unknown; error: ServiceError | null }>;
 	from(table: 'app_users'): AllowlistQuery;
 };
 
@@ -31,6 +50,9 @@ const messages: Record<AuthServiceErrorCode, string> = {
 	invalid_input: 'Informe um e-mail e uma senha válidos.',
 	invalid_credentials: 'E-mail ou senha incorretos.',
 	not_authorized: 'Esta conta não está autorizada a acessar o fichário.',
+	email_in_use: 'Já existe uma conta com este e-mail.',
+	weak_password: 'Use uma senha com pelo menos 8 caracteres.',
+	signup_failed: 'Não foi possível criar a conta agora. Tente novamente.',
 	auth_unavailable: 'Não foi possível confirmar o acesso agora. Tente novamente.'
 };
 
@@ -67,6 +89,12 @@ function normalizeCredentials(email: string, password: string) {
 	return { email: normalizedEmail, password };
 }
 
+function normalizeRegistrationCredentials(email: string, password: string) {
+	const credentials = normalizeCredentials(email, password);
+	if (password.length < 8) throw new AuthServiceError('weak_password');
+	return credentials;
+}
+
 function unavailable(error: unknown): never {
 	if (error instanceof AuthServiceError) throw error;
 	throw new AuthServiceError('auth_unavailable');
@@ -86,10 +114,26 @@ function parseAllowlistRow(data: unknown): boolean | null {
 	return active;
 }
 
+function parseEnrollmentProfile(data: unknown): ProviderProfile | null {
+	if (data === null) return null;
+	if (data === 'owner' || data === 'public') return data;
+	throw new AuthServiceError('auth_unavailable');
+}
+
 async function closeUnauthorizedSession(client: AuthClientLike) {
 	try {
 		const { error } = await client.auth.signOut({ scope: 'global' });
 		if (error) throw new AuthServiceError('auth_unavailable');
+	} catch (error) {
+		unavailable(error);
+	}
+}
+
+async function ensureAppEnrollment(client: AuthClientLike): Promise<ProviderProfile | null> {
+	try {
+		const { data, error } = await client.rpc('ensure_current_app_user');
+		if (error) throw new AuthServiceError('auth_unavailable');
+		return parseEnrollmentProfile(data);
 	} catch (error) {
 		unavailable(error);
 	}
@@ -137,6 +181,9 @@ function getAllowlistCheck(session: Session, client: AuthClientLike): Promise<bo
 }
 
 async function authorizeSession(session: Session, client: AuthClientLike): Promise<Session | null> {
+	// The enrollment RPC is idempotent and can only create the caller as `public`.
+	// Existing owner/inactive rows are never overwritten, so this remains fail-closed.
+	await ensureAppEnrollment(client);
 	const active = await getAllowlistCheck(session, client);
 	if (active === true) return session;
 
@@ -188,6 +235,33 @@ export async function signIn(
 		return authorized;
 	} catch (error) {
 		unavailable(error);
+	}
+}
+
+export async function signUp(
+	email: string,
+	password: string,
+	client?: AuthClientLike
+): Promise<SignUpResult> {
+	const credentials = normalizeRegistrationCredentials(email, password);
+	const gateway = client ?? defaultClient();
+	try {
+		const { data, error } = await gateway.auth.signUp(credentials);
+		if (error) {
+			const emailInUse = /already registered|already exists|user already/i.test(error.message);
+			throw new AuthServiceError(emailInUse ? 'email_in_use' : 'signup_failed');
+		}
+
+		if (data.session === null) {
+			return Object.freeze({ session: null, confirmationRequired: true });
+		}
+
+		const authorized = await authorizeSession(data.session, gateway);
+		if (authorized === null) throw new AuthServiceError('not_authorized');
+		return Object.freeze({ session: authorized, confirmationRequired: false });
+	} catch (error) {
+		if (error instanceof AuthServiceError) throw error;
+		throw new AuthServiceError('signup_failed');
 	}
 }
 
