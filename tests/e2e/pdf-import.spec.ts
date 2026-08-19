@@ -50,8 +50,9 @@ test('uses the unified import surface for PDFs with automatic background OCR', a
 		page.getByRole('checkbox', { name: /Permitir OCR quando uma página não possuir texto/ })
 	).toHaveCount(0);
 	await expect(page.locator(unifiedFileInput)).toBeAttached();
-	await expect(page.getByRole('link', { name: 'Imagens' })).toBeVisible();
-	await expect(page.getByRole('link', { name: 'PDFs' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Escolher arquivos' })).toBeVisible();
+	await expect(page.getByRole('link', { name: 'Imagens' })).toHaveCount(0);
+	await expect(page.getByRole('link', { name: 'PDFs' })).toHaveCount(0);
 });
 
 test('stages multiple photos as one ordered document by default', async ({ page }) => {
@@ -62,7 +63,7 @@ test('stages multiple photos as one ordered document by default', async ({ page 
 		{ name: 'redes-aula-2.png', mimeType: 'image/png', buffer: tinyPng }
 	]);
 
-	await expect(page.getByRole('heading', { name: '2 página(s)' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: '2 páginas' })).toBeVisible();
 	await expect(page.getByRole('radio', { name: /Um documento/ })).toBeChecked();
 	await expect(page.getByRole('radio', { name: /Separadas/ })).not.toBeChecked();
 	await expect(page.getByLabel('Título')).toHaveValue('redes-aula-1');
