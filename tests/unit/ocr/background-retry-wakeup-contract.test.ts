@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 const repositoryRoot = new URL('../../../', import.meta.url);
 const migration = readFileSync(
-	new URL('supabase/migrations/202608192058_background_ocr_retry_wakeup.sql', repositoryRoot),
+	new URL('supabase/migrations/20260819210120_background_ocr_retry_wakeup.sql', repositoryRoot),
 	'utf8'
 );
 
