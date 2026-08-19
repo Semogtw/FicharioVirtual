@@ -7,12 +7,11 @@ describe('AppShell global search', () => {
 	it('opens the real search route and reflects its query in the top field', () => {
 		expect(source).toContain("import { page } from '$app/state';");
 		expect(source).toContain('void goto(`/search/?q=${encodeURIComponent(query)}`);');
+		expect(source).toContain("let searchRoute = $derived(page.url.pathname.startsWith('/search'));");
 		expect(source).toContain(
-			"let searchRoute = $derived(page.url.pathname.startsWith('/search'));"
+			"searchRoute ? (page.url.searchParams.get('q')?.slice(0, 200) ?? '') : ''"
 		);
-		expect(source).toMatch(
-			/let searchQuery = \$derived\([\s\S]*searchRoute \?[\s\S]*page\.url\.searchParams\.get\('q'\)\?\.slice\(0, 200\)[\s\S]*\);/
-		);
+		expect(source).toContain('{#if searchRoute}');
 		expect(source).toContain('<TopSearch initialValue={searchQuery} onSearch={search} />');
 		expect(source).not.toContain('/library/?q=');
 	});

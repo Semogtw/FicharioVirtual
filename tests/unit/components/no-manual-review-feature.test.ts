@@ -21,11 +21,13 @@ describe('manual review removal', () => {
 		}
 	});
 
-	it('does not advertise review as a user destination', () => {
+	it('does not advertise review as a user destination or task', () => {
 		const surfaces = [
 			read('src/lib/components/AppShell.svelte'),
 			read('src/lib/components/MobileNavigation.svelte'),
 			read('src/routes/+page.svelte'),
+			read('src/routes/login/+page.svelte'),
+			read('src/routes/coverage/+page.svelte'),
 			read('src/routes/settings/usage/+page.svelte'),
 			read('src/routes/library/+page.svelte')
 		];
@@ -33,7 +35,11 @@ describe('manual review removal', () => {
 		for (const source of surfaces) {
 			expect(source).not.toContain('/review/');
 			expect(source).not.toContain('Para revisar');
+			expect(source).not.toContain('Pronto para revisão');
 		}
+		expect(read('src/routes/login/+page.svelte')).not.toContain('revisar seus documentos');
+		expect(read('src/routes/coverage/+page.svelte')).not.toContain('>Revisar</span>');
+		expect(read('src/routes/coverage/+page.svelte')).not.toContain('precisam de revisão');
 	});
 
 	it('keeps document viewing original-first without a correction surface', () => {

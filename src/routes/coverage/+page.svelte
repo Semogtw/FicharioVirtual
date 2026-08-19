@@ -26,7 +26,7 @@
 		text: string;
 		source: 'manual' | 'ocr';
 		confidence: TopicImportConfidence;
-		reviewRequired: boolean;
+		checkRecommended: boolean;
 		level: number;
 	};
 
@@ -142,7 +142,7 @@
 			text,
 			source: 'manual',
 			confidence: 'high',
-			reviewRequired: false,
+			checkRecommended: false,
 			level: 0
 		};
 	}
@@ -153,7 +153,7 @@
 			text: candidate.text,
 			source: 'ocr',
 			confidence: candidate.confidence,
-			reviewRequired: candidate.reviewRequired,
+			checkRecommended: candidate.reviewRequired,
 			level: candidate.level
 		};
 	}
@@ -294,7 +294,7 @@
 			const notes = [`${merged.added} conteúdo(s) adicionados.`];
 			if (merged.duplicates > 0) notes.push(`${merged.duplicates} repetido(s) foram ignorados.`);
 			if (merged.truncated || result.truncated) notes.push(`O limite de ${MAX_UNIT_TOPICS} assuntos foi atingido.`);
-			if (result.topics.some((topic) => topic.reviewRequired)) notes.push('Alguns conteúdos precisam de revisão.');
+			if (result.topics.some((topic) => topic.reviewRequired)) notes.push('Alguns conteúdos merecem uma conferida.');
 			photoNotice = notes.join(' ');
 		} catch (caught) {
 			if (caught instanceof DOMException && caught.name === 'AbortError') return;
@@ -438,7 +438,7 @@
 				{#if topics.length > 0}
 					<ol class="editable-topics">
 						{#each topics as topic, index (topic.id)}
-							<li class:needs-review={topic.reviewRequired} style={`--topic-level: ${topic.level}`}>
+							<li class:needs-check={topic.checkRecommended} style={`--topic-level: ${topic.level}`}>
 								<div class="topic-index" aria-hidden="true">{index + 1}</div>
 								<div class="editable-topic-main">
 									<label>
@@ -452,7 +452,7 @@
 											onkeydown={(event) => handleTopicKeydown(event, index)}
 										/>
 									</label>
-									{#if topic.reviewRequired}<span class="review-badge">Revisar</span>{/if}
+									{#if topic.checkRecommended}<span class="check-badge">Conferir</span>{/if}
 								</div>
 								<div class="topic-controls" aria-label={`Ações do conteúdo ${index + 1}`}>
 									<button
@@ -865,7 +865,7 @@
 		background: var(--paper);
 	}
 
-	.editable-topics li.needs-review {
+	.editable-topics li.needs-check {
 		border-left: 0.3rem solid var(--accent);
 	}
 
@@ -890,7 +890,7 @@
 		background: var(--surface-strong);
 	}
 
-	.review-badge {
+	.check-badge {
 		justify-self: start;
 		padding: 0.2rem 0.45rem;
 		border-radius: 999px;
