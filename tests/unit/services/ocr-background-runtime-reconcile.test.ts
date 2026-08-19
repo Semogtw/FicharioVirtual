@@ -9,7 +9,9 @@ const source = readFileSync(
 describe('background OCR completion reconciliation', () => {
 	it('re-reads the page after the synchronous worker kick', () => {
 		expect(source).toContain("import { getSupabaseClient } from './supabase';");
-		expect(source).toContain("client.from('pages').select('status').eq('id', pageId).maybeSingle()");
+		expect(source).toMatch(
+			/client\s*\.from\('pages'\)\s*\.select\('status'\)\s*\.eq\('id', pageId\)\s*\.maybeSingle\(\)/
+		);
 		expect(source).toMatch(
 			/await kick\(options\.signal\);\s*const completed = await readCompletedPageState\(pageId\);\s*if \(options\.signal\?\.aborted\) throw abortError\(\);\s*if \(completed\) return completed;/
 		);
