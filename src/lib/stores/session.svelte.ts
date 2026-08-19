@@ -4,7 +4,9 @@ import {
 	loadAuthorizedSession,
 	loadPersistedSession,
 	signIn,
-	signOut
+	signOut,
+	signUp,
+	type SignUpResult
 } from '$lib/services/auth';
 import { getSupabaseClient } from '$lib/services/supabase';
 
@@ -134,6 +136,27 @@ export async function authenticate(email: string, password: string): Promise<Ses
 	}
 }
 
+export async function register(email: string, password: string): Promise<SignUpResult> {
+	explicitSignInOperations += 1;
+	const version = beginOperation();
+	if (isCurrentOperation(version)) sessionState.error = null;
+	try {
+		const result = await signUp(email, password);
+		if (!isCurrentOperation(version)) throw supersededError();
+		applySession(result.session);
+		return result;
+	} catch (error) {
+		if (isCurrentOperation(version)) {
+			applySession(null);
+			sessionState.error = message(error);
+		}
+		throw error;
+	} finally {
+		if (isCurrentOperation(version)) sessionState.loading = false;
+		explicitSignInOperations -= 1;
+	}
+}
+
 export async function endSession(): Promise<void> {
 	explicitSignOutOperations += 1;
 	const version = beginOperation();
@@ -196,7 +219,6 @@ export function startSessionTracking(onExternalSessionChange?: () => void): () =
 					onExternalSessionChange?.();
 				}
 			});
-		});
 	});
 
 	return () => {
