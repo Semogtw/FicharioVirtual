@@ -81,8 +81,7 @@
 
 	function changed(row: EditableDocument) {
 		row.dirty =
-			row.title.trim() !== row.document.title ||
-			row.notebookId !== (row.document.notebookId ?? '');
+			row.title.trim() !== row.document.title || row.notebookId !== (row.document.notebookId ?? '');
 		row.saved = false;
 		row.error = null;
 	}
