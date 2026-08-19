@@ -12,7 +12,7 @@ import { isIsoTimestamp } from '$lib/validation/iso-timestamp';
 import { getSupabaseClient } from './supabase';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const MAX_CORRECTION_LENGTH = 1_000_000;
+const MAX_PAGE_TEXT_LENGTH = 1_000_000;
 const DETAIL_CACHE_TTL_MS = 60_000;
 const PAGE_CACHE_TTL_MS = 120_000;
 const DETAIL_CACHE_MAX_ENTRIES = 40;
@@ -52,9 +52,9 @@ const pageRecordSchema = z
 	.object({
 		id: z.string().regex(UUID),
 		page_number: z.number().int().min(1).max(10_000),
-		native_text: z.string().max(MAX_CORRECTION_LENGTH).nullable(),
-		ocr_raw_text: z.string().max(MAX_CORRECTION_LENGTH).nullable(),
-		corrected_text: z.string().max(MAX_CORRECTION_LENGTH).nullable(),
+		native_text: z.string().max(MAX_PAGE_TEXT_LENGTH).nullable(),
+		ocr_raw_text: z.string().max(MAX_PAGE_TEXT_LENGTH).nullable(),
+		corrected_text: z.string().max(MAX_PAGE_TEXT_LENGTH).nullable(),
 		extraction_source: z.enum(['native_pdf', 'ocr', 'manual']).nullable(),
 		source_drive_file_id: driveFileIdSchema.nullable().optional(),
 		ocr_word_geometry: wordGeometrySchema.optional().default([]),
@@ -162,20 +162,15 @@ export interface DocumentDetailGateway {
 	listPageSummaries(documentId: string): Promise<readonly DocumentPageSummaryRecord[]>;
 	loadPage(documentId: string, pageNumber: number): Promise<PageRecord | null>;
 	createSignedUrl(storagePath: string): Promise<string>;
-	saveCorrection(
-		pageId: string,
-		input: { correctedText: string | null; status: ProcessingStatus }
-	): Promise<PageRecord | null>;
 }
 
 export class DocumentDetailError extends Error {
-	readonly code: 'not_found' | 'unavailable' | 'invalid_correction';
+	readonly code: 'not_found' | 'unavailable';
 
 	constructor(code: DocumentDetailError['code']) {
 		const messages = {
 			not_found: 'Este documento não existe ou não está disponível.',
-			unavailable: 'Não foi possível abrir o documento agora.',
-			invalid_correction: 'A correção excede o limite permitido.'
+			unavailable: 'Não foi possível abrir o documento agora.'
 		} as const;
 		super(messages[code]);
 		this.name = 'DocumentDetailError';
@@ -411,36 +406,6 @@ export async function loadDocumentPageWithGateway(
 	}
 }
 
-export async function savePageCorrectionWithGateway(
-	pageId: string,
-	text: string,
-	gateway: DocumentDetailGateway
-): Promise<PageDetail> {
-	const validatedPageId = validId(pageId, 'page');
-	if (typeof text !== 'string' || text.length > MAX_CORRECTION_LENGTH) {
-		throw new DocumentDetailError('invalid_correction');
-	}
-	const correctedText = text.trim().length > 0 ? text : null;
-	const status: ProcessingStatus = correctedText === null ? 'needs_review' : 'ready';
-	try {
-		const rawPage = await gateway.saveCorrection(validatedPageId, { correctedText, status });
-		if (rawPage === null) throw new DocumentDetailError('not_found');
-		const page = pageRecordSchema.parse(rawPage);
-		if (
-			page.id !== validatedPageId ||
-			page.corrected_text !== correctedText ||
-			page.extraction_source !== 'manual' ||
-			page.status !== status ||
-			page.was_manually_reviewed !== true
-		) {
-			throw new DocumentDetailError('unavailable');
-		}
-		return mapPageRecord(page);
-	} catch (error) {
-		preserveNotFound(error);
-	}
-}
-
 class SupabaseDocumentGateway implements DocumentDetailGateway {
 	constructor(private readonly client: SupabaseClient<Database>) {}
 
@@ -486,27 +451,6 @@ class SupabaseDocumentGateway implements DocumentDetailGateway {
 		if (error || !data?.signedUrl) throw new DocumentDetailError('unavailable');
 		return data.signedUrl;
 	}
-
-	async saveCorrection(
-		pageId: string,
-		input: { correctedText: string | null; status: ProcessingStatus }
-	) {
-		const { data, error } = await this.client
-			.from('pages')
-			.update({
-				corrected_text: input.correctedText,
-				extraction_source: 'manual',
-				was_manually_reviewed: true,
-				status: input.status
-			})
-			.eq('id', validId(pageId, 'page'))
-			.select(
-				'id,page_number,native_text,ocr_raw_text,corrected_text,extraction_source,source_drive_file_id,ocr_word_geometry,warnings,status,was_manually_reviewed,updated_at'
-			)
-			.maybeSingle();
-		if (error) throw new DocumentDetailError('unavailable');
-		return data as unknown as PageRecord | null;
-	}
 }
 
 export function invalidateDocumentDetail(documentId: string) {
@@ -528,18 +472,6 @@ export function invalidateDocumentDetail(documentId: string) {
 	}
 	for (const key of pageInflight.keys()) {
 		if (key.includes(`:${documentId}:`)) pageInflight.delete(key);
-	}
-}
-
-function invalidatePageById(pageId: string) {
-	for (const [key, entry] of pageCache.entries()) {
-		if (entry.value.id === pageId) pageCache.delete(key);
-	}
-	for (const [key, entry] of detailCache.entries()) {
-		if (entry.value.pages.some((page) => page.id === pageId)) detailCache.delete(key);
-	}
-	for (const [key, entry] of previewCache.entries()) {
-		if (entry.value.page.id === pageId) previewCache.delete(key);
 	}
 }
 
@@ -636,18 +568,4 @@ export async function loadDocumentPage(
 export async function prefetchDocumentPages(documentId: string, pageNumbers: readonly number[]) {
 	const unique = [...new Set(pageNumbers.filter((pageNumber) => Number.isInteger(pageNumber)))];
 	await Promise.allSettled(unique.map((pageNumber) => loadDocumentPage(documentId, pageNumber)));
-}
-
-export async function savePageCorrection(
-	pageId: string,
-	text: string,
-	client: SupabaseClient<Database> = getSupabaseClient()
-) {
-	const page = await savePageCorrectionWithGateway(
-		pageId,
-		text,
-		new SupabaseDocumentGateway(client)
-	);
-	invalidatePageById(pageId);
-	return page;
 }
