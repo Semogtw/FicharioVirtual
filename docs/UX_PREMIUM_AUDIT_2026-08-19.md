@@ -13,8 +13,7 @@ Tratar o Fichário Virtual como um produto pronto para uso cotidiano, não apena
 - Cadernos, detalhe de caderno e inclusão de documentos existentes.
 - Importação de imagens/PDFs, captura por câmera e documento de fotos.
 - Pesquisa textual/por significado e abertura de resultado no documento original.
-- Documento, navegação entre páginas, correção e exclusão.
-- Fila de revisão e rascunhos.
+- Documento, navegação entre páginas e exclusão.
 - Cobertura de conteúdo e entrada por foto.
 - Google Drive, importação, pendências, conflitos e recuperação.
 - Configurações e telas avançadas de processamento/uso.
@@ -23,12 +22,12 @@ Tratar o Fichário Virtual como um produto pronto para uso cotidiano, não apena
 
 ### Navegação
 
-- A barra inferior mobile deixa de espremer seis destinos e passa a priorizar Início, Biblioteca, Cadernos e Importar, mantendo Revisar, Cobertura, Drive e Configurações em “Mais”.
+- A barra inferior mobile deixa de espremer seis destinos e passa a priorizar Início, Biblioteca, Cadernos e Importar, mantendo Cobertura, Drive e Configurações em “Mais”.
 - Cadernos e Configurações deixam de ficar escondidos no celular.
 - A tela de organização em lote passa a ser descobrível pela navegação da Biblioteca.
 - O topo da tela de Pesquisa não mostra uma segunda caixa de busca concorrente.
 - O falso avatar “A”, que na verdade abria Configurações, foi substituído por um ícone com significado correto.
-- “Fila remota” e “Rascunhos locais” foram simplificados para “Para revisar” e “Rascunhos”.
+- A área de revisão manual foi retirada da navegação e do produto em vez de permanecer como um fluxo sem uso.
 
 ### Importação
 
@@ -38,6 +37,7 @@ Tratar o Fichário Virtual como um produto pronto para uso cotidiano, não apena
 - Descartar um documento de fotos com várias páginas agora exige confirmação; remover uma página individual continua direto para não criar atrito excessivo.
 - Mensagens de quantidade usam pluralização natural em vez de `foto(s)`, `arquivo(s)`, `página(s)` e `documento(s)`.
 - “Entrada unificada” foi trocado por “Importar”, evitando expor uma decisão de arquitetura como título de produto.
+- OCR concluído com baixa confiança não cria mais uma tarefa de revisão: a importação é apresentada como concluída e o sinal técnico permanece apenas disponível internamente.
 
 ### Biblioteca
 
@@ -46,6 +46,7 @@ Tratar o Fichário Virtual como um produto pronto para uso cotidiano, não apena
 - O estado vazio de um recorte filtrado deixa de sugerir que o usuário importe um novo arquivo; primeiro oferece desfazer o filtro.
 - “Estado” foi substituído por “Status”, termo mais natural nesse contexto.
 - Intervalos de data invertidos são detectados antes da consulta, com os dois campos marcados como inválidos e mensagem explicando a correção necessária.
+- O filtro “Pronto” inclui documentos concluídos que o backend marcou internamente como baixa confiança, evitando expor a antiga semântica de revisão.
 
 ### Pesquisa
 
@@ -56,7 +57,18 @@ Tratar o Fichário Virtual como um produto pronto para uso cotidiano, não apena
 ### Documento
 
 - A faixa de páginas não expõe mais estados internos como `pending`, `uploading`, `processing`, `ready` ou `failed`; todos são apresentados em português com rótulos curtos e consistentes.
+- Documentos com OCR de baixa confiança são apresentados como prontos, sem transformar o estado interno em trabalho para o usuário.
+- A superfície de correção manual foi removida. O documento abre diretamente no original, ocupando a largura útil da tela e sem carregar um editor/transcrição paralela.
 - A exclusão continua protegida por diálogo de confirmação e mantém recuperação caso a navegação posterior falhe.
+
+### Revisão manual removida
+
+- Removidas as rotas `/review/` e `/review/drafts/`.
+- Removidos editor de correção, armazenamento de rascunhos locais, índice de rascunhos, serviços da fila de revisão e executor de salvamento manual.
+- Home, Biblioteca, Uso, navegação desktop/mobile e fila de importação não oferecem mais destinos ou métricas de revisão manual.
+- Estados internos de baixa confiança continuam aceitos para compatibilidade do processamento e diagnóstico, mas não aparecem como uma obrigação na experiência do usuário.
+- Os testes específicos da feature removida foram substituídos por um contrato que impede que rotas, editor ou chamadas de revisão voltem acidentalmente.
+- Gates E2E reais foram alinhados ao novo fluxo original-first e deixam de esperar correções manuais/rascunhos.
 
 ### Google Drive
 
@@ -76,9 +88,9 @@ Tratar o Fichário Virtual como um produto pronto para uso cotidiano, não apena
 
 ### Prioridade média
 
-1. Trocar carregamentos textuais remanescentes em Revisar, Organizar, Tags e detalhe de Caderno pelos padrões de skeleton/loading já usados nas telas principais.
-2. Tornar cartões de resumo da tela inicial acionáveis quando houver destino natural: Documentos → Biblioteca e Para revisar → Revisar.
-3. Simplificar subtítulos ainda técnicos em telas secundárias, por exemplo “Metadados em lote” e “Organização transversal”.
+1. Trocar carregamentos textuais remanescentes em Organizar, Tags e detalhe de Caderno pelos padrões de skeleton/loading já usados nas telas principais.
+2. Simplificar subtítulos ainda técnicos em telas secundárias, por exemplo “Metadados em lote” e “Organização transversal”.
+3. Garantir que Tags e qualquer outra lista secundária nunca mostrem status internos crus do documento.
 4. No construtor de fotos, ocultar ou contextualizar o campo de título quando o modo “Separadas” estiver ativo, já que cada foto seguirá como documento independente.
 
 ### Prioridade baixa / acabamento
@@ -101,6 +113,6 @@ Tratar o Fichário Virtual como um produto pronto para uso cotidiano, não apena
 ## Validação esperada antes do merge
 
 - `pnpm verify:full` no SHA final da branch.
-- Contratos unitários para navegação mobile, importação unificada, preservação do rascunho, shell de pesquisa/configurações e recuperação do Drive.
+- Contratos unitários para navegação mobile, importação unificada, remoção da revisão manual, preservação do rascunho de importação, shell de pesquisa/configurações e recuperação do Drive.
 - Smoke dos fluxos principais em viewport desktop e mobile sempre que o ambiente de staging/autenticação estiver disponível.
 - Conferir regressões de teclado, foco, estados vazios, botões desabilitados e mensagens de erro durante importação, pesquisa e sincronização.
