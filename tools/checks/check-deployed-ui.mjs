@@ -117,7 +117,9 @@ async function runAttempt(attempt) {
 			throw new Error(`Browser console errors: ${consoleErrors.join(' | ')}`);
 		}
 		if (failedCriticalRequests.length > 0) {
-			throw new Error(`Critical same-origin requests failed: ${failedCriticalRequests.join(' | ')}`);
+			throw new Error(
+				`Critical same-origin requests failed: ${failedCriticalRequests.join(' | ')}`
+			);
 		}
 	}
 
