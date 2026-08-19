@@ -12,8 +12,9 @@ describe('real deployed app flow workflow', () => {
 		expect(source).toContain('TARGET_URL: https://fichario-virtual.pages.dev');
 	});
 
-	it('serializes use of the shared protected staging account', () => {
-		expect(source).toContain('group: staging-contract-verification');
+	it('serializes protected post-deploy flows without blocking the Supabase contract gate', () => {
+		expect(source).toContain('group: post-deploy-real-verification');
+		expect(source).not.toContain('group: staging-contract-verification');
 		expect(source).toContain('cancel-in-progress: false');
 	});
 
