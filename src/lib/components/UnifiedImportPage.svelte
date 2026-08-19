@@ -285,7 +285,8 @@
 				notebookError = 'Não foi possível carregar os cadernos agora.';
 				notebookOptionsReady = false;
 				if (pendingSelections.length > 0) {
-					selectionMessage = 'Seus arquivos continuam selecionados. Tente carregar os cadernos novamente.';
+					selectionMessage =
+						'Seus arquivos continuam selecionados. Tente carregar os cadernos novamente.';
 				}
 			}
 		} finally {
@@ -341,7 +342,10 @@
 			</label>
 			<label class="choice">
 				<input type="radio" name="image-mode" value="high-definition" bind:group={mode} />
-				<span><strong>Alta definição</strong><small>Preserva mais detalhe para letras pequenas.</small></span>
+				<span
+					><strong>Alta definição</strong><small>Preserva mais detalhe para letras pequenas.</small
+					></span
+				>
 			</label>
 		</fieldset>
 	</section>
@@ -397,7 +401,9 @@
 					<h2 id="photo-builder-title">{countLabel(photoDraft.length, 'página', 'páginas')}</h2>
 				</div>
 				{#if !savingPhotoDraft}
-					<button class="text-button" type="button" onclick={requestClearPhotoDraft}>Descartar</button>
+					<button class="text-button" type="button" onclick={requestClearPhotoDraft}
+						>Descartar</button
+					>
 				{/if}
 			</div>
 
