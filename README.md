@@ -32,10 +32,9 @@ Os arquivos originais continuam no seu **Google Drive**, enquanto o Fichário cu
 | 🔤 **Lidar melhor com erros de OCR**        | A busca fuzzy tolera pequenas diferenças, acentos e erros comuns de reconhecimento de texto.                     |
 | ✨ **Ver onde a busca encontrou**           | Trechos relevantes são exibidos e correspondências textuais podem ser destacadas ao abrir o material.            |
 | 🎯 **Verificar cobertura de assuntos**      | Compare uma lista de tópicos ou uma ementa com seu fichário e veja o que já possui material relacionado.         |
-| ✍️ **Ler conteúdo manuscrito ou escaneado** | O OCR transforma conteúdo visual em texto pesquisável e revisável.                                               |
+| ✍️ **Ler conteúdo manuscrito ou escaneado** | O OCR transforma conteúdo visual em texto pesquisável automaticamente.                                           |
 | 📄 **Aproveitar o texto de PDFs**           | PDFs que já possuem texto utilizam o conteúdo original sem OCR desnecessário.                                    |
 | ☁️ **Manter os originais no Drive**         | Seus documentos permanecem no Google Drive em vez de ficarem presos à aplicação.                                 |
-| 📝 **Revisar e corrigir resultados**        | O texto reconhecido pode ser conferido e corrigido quando necessário.                                            |
 | 📱 **Usar em diferentes telas**             | A interface é uma PWA pensada para computador, tablet e celular.                                                 |
 | 📦 **Exportar seus dados**                  | Metadados e informações do fichário podem ser exportados de forma portátil.                                      |
 
@@ -57,7 +56,7 @@ A camada semântica é opcional. Se ela estiver desativada, indisponível ou sem
 
 Além de pesquisar livremente, o Fichário pode comparar uma **ementa, unidade ou lista de assuntos** com os materiais já armazenados.
 
-Você pode digitar os tópicos ou extraí-los de uma foto, revisar a lista e verificar quais assuntos estão **cobertos**, **parcialmente cobertos** ou ainda **não foram encontrados**, sempre com acesso às páginas usadas como evidência.
+Você pode digitar os tópicos ou extraí-los de uma foto, conferir a lista e verificar quais assuntos estão **cobertos**, **parcialmente cobertos** ou ainda **não foram encontrados**, sempre com acesso às páginas usadas como evidência.
 
 Essa análise pode usar a mesma combinação de busca textual/fuzzy e relação semântica da pesquisa global.
 
