@@ -137,7 +137,7 @@ jobs:
             /tmp/real-app-special-report.json
             /tmp/real-app-special-evidence/
             /tmp/real-scanned-pdf-import-report.json
-            /tmp/real-scanned-pdf-evidence/
+            /tmp/real-scanned-pdf-import-evidence/
           if-no-files-found: error
           compression-level: 6
           retention-days: 7
