@@ -16,6 +16,15 @@
 	import { resumeDocumentOcr } from '$lib/services/ocr-resume';
 	import { RequestVersion } from '$lib/services/request-version';
 
+	const pageStatusLabels = {
+		pending: 'Na fila',
+		uploading: 'Enviando',
+		processing: 'Processando',
+		ready: 'Pronta',
+		needs_review: 'Revisar',
+		failed: 'Falhou'
+	} as const;
+
 	let detail = $state<DocumentDetail | null>(null);
 	let selectedPage = $state<PageDetail | null>(null);
 	let selectedPageNumber = $state(1);
@@ -256,7 +265,7 @@
 						onclick={() => selectPage(item.pageNumber)}
 					>
 						<span>{item.pageNumber}</span>
-						<small>{item.status === 'needs_review' ? 'Revisar' : item.status}</small>
+						<small>{pageStatusLabels[item.status]}</small>
 					</button>
 				{/each}
 			</nav>
