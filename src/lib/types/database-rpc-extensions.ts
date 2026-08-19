@@ -10,6 +10,14 @@ import type { Json } from './database';
 export type DatabaseRpcExtensions = {
 	public: {
 		Functions: {
+			ensure_current_app_user: {
+				Args: Record<string, never>;
+				Returns: 'owner' | 'public' | null;
+			};
+			current_provider_profile: {
+				Args: Record<string, never>;
+				Returns: 'owner' | 'public' | null;
+			};
 			list_notebooks_v2: {
 				Args: Record<string, never>;
 				Returns: Array<{
