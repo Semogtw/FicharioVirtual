@@ -5,9 +5,11 @@ export type DriveMediaClientLike = {
 		invoke(
 			name: 'drive-media',
 			options: { body: Record<string, unknown> }
-		): Promise<{ data: unknown; error: unknown }>;
+		): Promise<{ data: unknown; error: unknown; response?: Response }>;
 	};
 };
+
+type DriveMediaInvocation = Readonly<{ data: unknown; response?: Response }>;
 
 function validDriveId(value: string): string {
 	if (!DRIVE_ID.test(value)) throw new TypeError('Invalid Google Drive file identifier');
@@ -38,10 +40,10 @@ function validDriveDownloadRange(start: number, endExclusive: number, totalBytes
 async function invokeDriveMedia(
 	client: DriveMediaClientLike,
 	body: Record<string, unknown>
-): Promise<unknown> {
-	const { data, error } = await client.functions.invoke('drive-media', { body });
+): Promise<DriveMediaInvocation> {
+	const { data, error, response } = await client.functions.invoke('drive-media', { body });
 	if (error) throw new Error('drive media request failed');
-	return data;
+	return Object.freeze({ data, ...(response ? { response } : {}) });
 }
 
 async function readDriveMediaRange({
@@ -57,7 +59,7 @@ async function readDriveMediaRange({
 	endExclusive: number;
 	totalBytes: number;
 }): Promise<Blob> {
-	const data = await invokeDriveMedia(client, {
+	const { data } = await invokeDriveMedia(client, {
 		operation: 'read',
 		fileId,
 		start,
@@ -82,7 +84,7 @@ export async function downloadBrowserDriveFile({
 	const safeFileId = validDriveId(fileId);
 	const safeMaximumBytes = validMaximumBytes(maximumBytes);
 	try {
-		const data = await invokeDriveMedia(client, {
+		const { data, response } = await invokeDriveMedia(client, {
 			operation: 'download',
 			fileId: safeFileId,
 			maximumBytes: safeMaximumBytes
@@ -90,7 +92,10 @@ export async function downloadBrowserDriveFile({
 		if (!(data instanceof Blob) || data.size < 1 || data.size > safeMaximumBytes) {
 			throw new Error('invalid drive media response');
 		}
-		return data;
+		const mediaType = response?.headers.get('X-Drive-Media-Type')?.trim() ?? '';
+		return mediaType.length > 0 && mediaType.length <= 256 && mediaType.includes('/')
+			? data.slice(0, data.size, mediaType)
+			: data;
 	} catch (error) {
 		if (error instanceof TypeError && error.message.startsWith('Invalid Google Drive')) throw error;
 		throw new Error('Não foi possível baixar o arquivo selecionado no Google Drive.');
