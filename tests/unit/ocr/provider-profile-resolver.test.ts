@@ -4,7 +4,10 @@ import {
 	type ProviderProfileRpcClient
 } from '../../../supabase/functions/_shared/provider-profile-resolver';
 
-function client(data: unknown, error: { message?: string } | null = null): ProviderProfileRpcClient {
+function client(
+	data: unknown,
+	error: { message?: string } | null = null
+): ProviderProfileRpcClient {
 	return {
 		async rpc(functionName) {
 			expect(functionName).toBe('current_provider_profile');

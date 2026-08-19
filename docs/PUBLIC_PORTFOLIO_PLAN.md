@@ -201,8 +201,8 @@ Contrato conceitual:
 type ProviderProfile = 'owner' | 'public';
 
 type OcrRoute = {
-  providers: readonly OcrProviderId[];
-  desktopAllowed: boolean;
+	providers: readonly OcrProviderId[];
+	desktopAllowed: boolean;
 };
 ```
 

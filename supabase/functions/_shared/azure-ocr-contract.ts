@@ -28,10 +28,7 @@ function record(value: unknown): Record<string, unknown> | null {
 }
 
 function safeDimension(value: unknown): number | null {
-	return typeof value === 'number' &&
-		Number.isFinite(value) &&
-		value > 0 &&
-		value <= MAX_DIMENSION
+	return typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= MAX_DIMENSION
 		? value
 		: null;
 }
@@ -138,14 +135,23 @@ function parseSucceededPage(
 	reviewConfidence: number | null
 ): OcrBatchPagePayload | null {
 	const analyzeResult = record(payload.analyzeResult);
-	if (!analyzeResult || !Array.isArray(analyzeResult.readResults) || analyzeResult.readResults.length !== 1) {
+	if (
+		!analyzeResult ||
+		!Array.isArray(analyzeResult.readResults) ||
+		analyzeResult.readResults.length !== 1
+	) {
 		return null;
 	}
 	const readResult = record(analyzeResult.readResults[0]);
 	if (!readResult) return null;
 	const width = safeDimension(readResult.width);
 	const height = safeDimension(readResult.height);
-	if (width === null || height === null || !Array.isArray(readResult.lines) || readResult.lines.length > MAX_LINES) {
+	if (
+		width === null ||
+		height === null ||
+		!Array.isArray(readResult.lines) ||
+		readResult.lines.length > MAX_LINES
+	) {
 		return null;
 	}
 
@@ -169,7 +175,11 @@ function parseSucceededPage(
 			if (!box) return null;
 			geometry.push(box);
 			const wordConfidence = confidence(word.confidence);
-			if (reviewConfidence !== null && wordConfidence !== null && wordConfidence < reviewConfidence) {
+			if (
+				reviewConfidence !== null &&
+				wordConfidence !== null &&
+				wordConfidence < reviewConfidence
+			) {
 				uncertain = true;
 			}
 		}
@@ -179,7 +189,9 @@ function parseSucceededPage(
 	if (text.length > MAX_TEXT_LENGTH) return null;
 	const warnings: Array<Readonly<{ code: string; message: string }>> = [];
 	if (text.length === 0) {
-		warnings.push(Object.freeze({ code: 'empty_page', message: 'Nenhum texto legível foi detectado.' }));
+		warnings.push(
+			Object.freeze({ code: 'empty_page', message: 'Nenhum texto legível foi detectado.' })
+		);
 	}
 	if (uncertain) {
 		warnings.push(

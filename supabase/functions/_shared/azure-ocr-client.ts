@@ -107,7 +107,8 @@ function operationIdFromLocation(value: string | null, endpoint: URL) {
 	} catch {
 		return null;
 	}
-	if (location.origin !== endpoint.origin || location.search !== '' || location.hash !== '') return null;
+	if (location.origin !== endpoint.origin || location.search !== '' || location.hash !== '')
+		return null;
 	const prefix = '/vision/v3.2/read/analyzeResults/';
 	if (!location.pathname.startsWith(prefix)) return null;
 	const operationId = location.pathname.slice(prefix.length);
@@ -147,7 +148,8 @@ export function createAzureOcrProvider(options: AzureOcrProviderOptions): OcrPro
 	const maxImageBytes = positiveInteger(options.maxImageBytes, DEFAULT_MAX_IMAGE_BYTES, 3_999_999);
 	const pollIntervalMs = positiveInteger(options.pollIntervalMs, DEFAULT_POLL_INTERVAL_MS, 60_000);
 	const pollTimeoutMs = positiveInteger(options.pollTimeoutMs, DEFAULT_POLL_TIMEOUT_MS, 180_000);
-	if (pollTimeoutMs < pollIntervalMs) throw new TypeError('Invalid Azure OCR polling configuration');
+	if (pollTimeoutMs < pollIntervalMs)
+		throw new TypeError('Invalid Azure OCR polling configuration');
 	const reviewConfidence = parseReviewConfidence(options.reviewConfidence);
 	const fetchImpl = options.fetchImpl ?? fetch;
 	const sleepImpl = options.sleepImpl ?? defaultSleep;

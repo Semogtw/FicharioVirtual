@@ -92,12 +92,8 @@ describe('Azure OCR provider client', () => {
 			`${ENDPOINT}/vision/v3.2/read/analyze`,
 			`${ENDPOINT}/vision/v3.2/read/analyzeResults/${OPERATION_ID}`
 		]);
-		expect(calls[0]?.init).toEqual(
-			expect.objectContaining({ method: 'POST', redirect: 'error' })
-		);
-		expect(calls[1]?.init).toEqual(
-			expect.objectContaining({ method: 'GET', redirect: 'error' })
-		);
+		expect(calls[0]?.init).toEqual(expect.objectContaining({ method: 'POST', redirect: 'error' }));
+		expect(calls[1]?.init).toEqual(expect.objectContaining({ method: 'GET', redirect: 'error' }));
 		expect(outcome).toEqual(
 			expect.objectContaining({
 				valid: true,
@@ -153,7 +149,11 @@ describe('Azure OCR provider client', () => {
 		});
 
 		await expect(
-			provider.requestBatch({ model: 'read-v3.2', promptVersion: 1, pages: [page(undefined, 'image/webp')] })
+			provider.requestBatch({
+				model: 'read-v3.2',
+				promptVersion: 1,
+				pages: [page(undefined, 'image/webp')]
+			})
 		).rejects.toBeInstanceOf(AzureOcrEligibilityError);
 		await expect(
 			provider.requestBatch({
@@ -210,7 +210,10 @@ describe('Azure OCR provider client', () => {
 			createAzureOcrProvider({ endpoint: 'https://example.com', apiKey: 'key' })
 		).toThrow(TypeError);
 		expect(() =>
-			createAzureOcrProvider({ endpoint: 'http://westus.api.cognitive.microsoft.com', apiKey: 'key' })
+			createAzureOcrProvider({
+				endpoint: 'http://westus.api.cognitive.microsoft.com',
+				apiKey: 'key'
+			})
 		).toThrow(TypeError);
 	});
 });

@@ -196,11 +196,7 @@ describe('password sign in', () => {
 describe('public sign up', () => {
 	it('normalizes credentials and enrolls immediately when Supabase returns a session', async () => {
 		const fixture = clientFixture({ enrollmentProfile: 'public' });
-		const result = await signUp(
-			'  NEW.USER@EXAMPLE.TEST ',
-			'public-password',
-			fixture.client
-		);
+		const result = await signUp('  NEW.USER@EXAMPLE.TEST ', 'public-password', fixture.client);
 
 		expect(fixture.signUpCredentials).toEqual({
 			email: 'new.user@example.test',
