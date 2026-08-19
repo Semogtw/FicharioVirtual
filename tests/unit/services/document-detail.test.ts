@@ -3,7 +3,6 @@ import {
 	loadDocumentDetailWithGateway,
 	loadDocumentPreviewWithGateway,
 	loadDocumentPageWithGateway,
-	savePageCorrectionWithGateway,
 	type DocumentDetailGateway,
 	type DocumentDetailRecord,
 	type DocumentPageSummaryRecord
@@ -44,7 +43,6 @@ function pageSummary(
 }
 
 function gateway(documentOverrides: Partial<DocumentDetailRecord> = {}) {
-	let correction: Record<string, unknown> | null = null;
 	let fullPageLoads = 0;
 	const value: DocumentDetailGateway = {
 		async loadDocument() {
@@ -71,22 +69,10 @@ function gateway(documentOverrides: Partial<DocumentDetailRecord> = {}) {
 		},
 		async createSignedUrl(path) {
 			return `https://private.test/${path}?signed=1`;
-		},
-		async saveCorrection(_pageId, input) {
-			correction = input;
-			return pageRecord({
-				corrected_text: input.correctedText,
-				extraction_source: 'manual',
-				status: input.status,
-				was_manually_reviewed: true
-			});
 		}
 	};
 	return {
 		value,
-		get correction() {
-			return correction;
-		},
 		get fullPageLoads() {
 			return fullPageLoads;
 		}
@@ -197,24 +183,6 @@ describe('loadDocumentDetailWithGateway', () => {
 	});
 });
 
-describe('savePageCorrectionWithGateway', () => {
-	it('saves non-empty text as a reviewed manual source', async () => {
-		const fixture = gateway();
-		const page = await savePageCorrectionWithGateway(pageId, 'Texto\n corrigido', fixture.value);
-
-		expect(fixture.correction).toEqual({ correctedText: 'Texto\n corrigido', status: 'ready' });
-		expect(page.wasManuallyReviewed).toBe(true);
-		expect(page.text).toBe('Texto\n corrigido');
-	});
-
-	it('stores an empty correction as null and keeps the page in review', async () => {
-		const fixture = gateway();
-		await savePageCorrectionWithGateway(pageId, '   ', fixture.value);
-
-		expect(fixture.correction).toEqual({ correctedText: null, status: 'needs_review' });
-	});
-});
-
 describe('document detail response contract', () => {
 	it('rejects a mismatched document or malformed page index', async () => {
 		const mismatched = gateway();
@@ -251,22 +219,6 @@ describe('document detail response contract', () => {
 		malformedPage.value.loadPage = async () => pageRecord({ warnings: [{ raw: true }] as never });
 		await expect(
 			loadDocumentPageWithGateway(documentId, 1, malformedPage.value)
-		).rejects.toMatchObject({ name: 'DocumentDetailError', code: 'unavailable' });
-	});
-
-	it('rejects a correction response that does not match the requested page', async () => {
-		const fixture = gateway();
-		fixture.value.saveCorrection = async (_pageId, input) =>
-			pageRecord({
-				id: '33333333-3333-4333-8333-333333333333',
-				corrected_text: input.correctedText,
-				extraction_source: 'manual',
-				status: input.status,
-				was_manually_reviewed: true
-			});
-
-		await expect(
-			savePageCorrectionWithGateway(pageId, 'Corrigido', fixture.value)
 		).rejects.toMatchObject({ name: 'DocumentDetailError', code: 'unavailable' });
 	});
 
