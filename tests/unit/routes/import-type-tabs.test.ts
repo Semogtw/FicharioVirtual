@@ -1,19 +1,19 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const source = readFileSync('src/routes/import/+layout.svelte', 'utf8');
+const layoutSource = readFileSync('src/routes/import/+layout.svelte', 'utf8');
+const imagePageSource = readFileSync('src/routes/import/+page.svelte', 'utf8');
+const pdfPageSource = readFileSync('src/routes/import/pdf/+page.svelte', 'utf8');
 
-describe('import type tabs', () => {
-	it('keeps image and PDF import actions clearly separate', () => {
-		expect(source).toContain('Imagens e câmera');
-		expect(source).toContain('JPG, PNG ou WebP');
-		expect(source).toContain('PDFs e arquivos');
-		expect(source).toContain('Selecionar PDF');
+describe('unified import navigation', () => {
+	it('does not present image and PDF routes as different import experiences', () => {
+		expect(layoutSource).not.toContain('Imagens e câmera');
+		expect(layoutSource).not.toContain('PDFs e arquivos');
+		expect(layoutSource).not.toContain('import-tabs');
 	});
 
-	it('expands the picker tabs across narrow mobile screens', () => {
-		expect(source).toContain('@media (max-width: 600px)');
-		expect(source).toContain('width: 100%');
-		expect(source).toContain('flex: 1');
+	it('keeps old image and PDF routes on the same unified import surface', () => {
+		expect(imagePageSource).toContain('<UnifiedImportPage />');
+		expect(pdfPageSource).toContain('<UnifiedImportPage />');
 	});
 });
