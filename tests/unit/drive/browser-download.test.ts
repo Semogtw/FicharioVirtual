@@ -44,7 +44,10 @@ describe('authenticated browser Drive media proxy', () => {
 
 	it('keeps larger browser downloads to one authenticated proxy invocation', async () => {
 		const bytes = new Uint8Array(1024 * 1024 + 3).fill(7);
-		const proxy = client({ data: new Blob([bytes], { type: 'application/octet-stream' }), error: null });
+		const proxy = client({
+			data: new Blob([bytes], { type: 'application/octet-stream' }),
+			error: null
+		});
 
 		const blob = await downloadBrowserDriveFile({
 			client: proxy,
