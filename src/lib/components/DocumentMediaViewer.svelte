@@ -33,6 +33,7 @@
 		nativeGeometry: readonly WordGeometry[];
 		error: string | null;
 		loading: boolean;
+		metadataLoading: boolean;
 	};
 
 	const MAX_BROWSER_DRIVE_PDF_BYTES = 64 * 1024 * 1024;
@@ -58,7 +59,7 @@
 			reference.provider,
 			reference.url,
 			reference.driveFileId,
-			pages.map((page) => [page.id, page.pageNumber, page.updatedAt])
+			pages.map((page) => [page.id, page.pageNumber, page.sourceDriveFileId, page.updatedAt])
 		]);
 	});
 
@@ -82,11 +83,12 @@
 				: null;
 		renderedPages = pages.map((page) => ({
 			page,
-			detail: null,
+			detail: initialPageDetail?.pageNumber === page.pageNumber ? initialPageDetail : null,
 			url: page.pageNumber === 1 ? directImageUrl : null,
 			nativeGeometry: EMPTY_GEOMETRY,
 			error: null,
-			loading: false
+			loading: false,
+			metadataLoading: false
 		}));
 		requestedPageNumbers = [];
 	}
@@ -143,15 +145,33 @@
 		});
 	}
 
-	function publishRemotePage(
-		page: PageDetail,
+	function publishImagePage(
+		page: DocumentPageSummary,
+		blob: Blob,
+		expectedGeneration: number,
+		expectedRevision: string
+	) {
+		if (refreshIsStale(expectedGeneration, expectedRevision)) return;
+		const existingUrl = ownedObjectUrls.get(page.id);
+		if (existingUrl) URL.revokeObjectURL(existingUrl);
+		const url = URL.createObjectURL(blob);
+		ownedObjectUrls.set(page.id, url);
+		updateRendered(page.pageNumber, {
+			url,
+			nativeGeometry: EMPTY_GEOMETRY,
+			error: null,
+			loading: false
+		});
+	}
+
+	function publishRemoteImagePage(
+		page: DocumentPageSummary,
 		url: string,
 		expectedGeneration: number,
 		expectedRevision: string
 	) {
 		if (refreshIsStale(expectedGeneration, expectedRevision)) return;
 		updateRendered(page.pageNumber, {
-			detail: page,
 			url,
 			nativeGeometry: EMPTY_GEOMETRY,
 			error: null,
@@ -166,13 +186,15 @@
 	function requestPage(pageNumber: number) {
 		const index = renderedIndex(pageNumber);
 		const rendered = renderedPages[index];
-		if (!rendered) return;
-		const needsImageMetadata =
-			detail.kind === 'image' &&
-			rendered.url !== null &&
-			query.trim().length > 0 &&
-			rendered.detail === null;
-		if ((!needsImageMetadata && rendered.url) || rendered.error || rendered.loading) return;
+		if (!rendered || rendered.error) return;
+		if (detail.kind === 'image') {
+			const needsMedia = rendered.url === null && !rendered.loading;
+			const needsMetadata =
+				query.trim().length > 0 && rendered.detail === null && !rendered.metadataLoading;
+			if (!needsMedia && !needsMetadata) return;
+		} else if (rendered.url || rendered.loading) {
+			return;
+		}
 		if (requestedPageNumbers.includes(pageNumber)) return;
 		requestedPageNumbers = Object.freeze([...requestedPageNumbers, pageNumber]);
 	}
@@ -303,31 +325,32 @@
 	}
 
 	async function renderImageTarget(
-		page: PageDetail,
+		page: DocumentPageSummary,
 		expectedGeneration: number,
 		expectedRevision: string
 	) {
 		try {
-			if (page.sourceDriveFileId) {
+			const pageDriveFileId =
+				page.sourceDriveFileId ??
+				(page.pageNumber === 1 && detail.originalReference.provider === 'google_drive'
+					? detail.originalReference.driveFileId
+					: null);
+			if (pageDriveFileId) {
 				const blob = await downloadBrowserDriveFile({
 					client: getSupabaseClient(),
-					fileId: page.sourceDriveFileId,
+					fileId: pageDriveFileId,
 					maximumBytes: MAX_BROWSER_DRIVE_IMAGE_BYTES
 				});
-				publishPage(page, blob, EMPTY_GEOMETRY, expectedGeneration, expectedRevision);
+				publishImagePage(page, blob, expectedGeneration, expectedRevision);
 				return;
 			}
 			if (page.pageNumber === 1 && detail.originalReference.provider === 'supabase') {
-				publishRemotePage(page, detail.originalReference.url, expectedGeneration, expectedRevision);
-				return;
-			}
-			if (page.pageNumber === 1 && detail.originalReference.provider === 'google_drive') {
-				const blob = await downloadBrowserDriveFile({
-					client: getSupabaseClient(),
-					fileId: detail.originalReference.driveFileId,
-					maximumBytes: MAX_BROWSER_DRIVE_IMAGE_BYTES
-				});
-				publishPage(page, blob, EMPTY_GEOMETRY, expectedGeneration, expectedRevision);
+				publishRemoteImagePage(
+					page,
+					detail.originalReference.url,
+					expectedGeneration,
+					expectedRevision
+				);
 				return;
 			}
 			failPage(page.pageNumber, `O original da página ${page.pageNumber} não está disponível.`);
@@ -335,6 +358,34 @@
 			if (refreshIsStale(expectedGeneration, expectedRevision)) return;
 			failPage(page.pageNumber, `Não foi possível preparar a página ${page.pageNumber}.`);
 		}
+	}
+
+	async function hydrateImageMetadata(
+		pageNumbers: readonly number[],
+		expectedGeneration: number,
+		expectedRevision: string
+	) {
+		if (query.trim().length === 0) return;
+		await Promise.allSettled(
+			pageNumbers.map(async (pageNumber) => {
+				const rendered = renderedPages[renderedIndex(pageNumber)];
+				if (!rendered || rendered.detail || rendered.metadataLoading) return;
+				updateRendered(pageNumber, { metadataLoading: true });
+				try {
+					const page =
+						initialPageDetail?.pageNumber === pageNumber
+							? initialPageDetail
+							: await loadDocumentPage(detail.id, pageNumber);
+					if (!refreshIsStale(expectedGeneration, expectedRevision)) {
+						updateRendered(pageNumber, { detail: page, metadataLoading: false });
+					}
+				} catch {
+					if (!refreshIsStale(expectedGeneration, expectedRevision)) {
+						updateRendered(pageNumber, { metadataLoading: false });
+					}
+				}
+			})
+		);
 	}
 
 	async function loadRequestedDetails(
@@ -359,28 +410,36 @@
 		return loaded.filter((page): page is PageDetail => page !== null);
 	}
 
+	async function processImageBatch(
+		pageNumbers: readonly number[],
+		expectedGeneration: number,
+		expectedRevision: string
+	) {
+		const targets = pageNumbers
+			.map((pageNumber) => pages.find((page) => page.pageNumber === pageNumber) ?? null)
+			.filter((page): page is DocumentPageSummary => page !== null);
+		for (const page of targets) {
+			const rendered = renderedPages[renderedIndex(page.pageNumber)];
+			if (!rendered?.url && !rendered?.loading) {
+				updateRendered(page.pageNumber, { loading: true, error: null });
+				void renderImageTarget(page, expectedGeneration, expectedRevision);
+			}
+		}
+		void hydrateImageMetadata(pageNumbers, expectedGeneration, expectedRevision);
+	}
+
 	async function processBatch(
 		pageNumbers: readonly number[],
 		expectedGeneration: number,
 		expectedRevision: string
 	) {
-		const targets = await loadRequestedDetails(pageNumbers, expectedGeneration, expectedRevision);
-		if (targets.length === 0 || refreshIsStale(expectedGeneration, expectedRevision)) return;
 		if (detail.kind === 'image') {
-			for (const page of targets) {
-				const rendered = renderedPages[renderedIndex(page.pageNumber)];
-				if (
-					rendered?.url &&
-					page.pageNumber === 1 &&
-					detail.originalReference.provider === 'supabase'
-				) {
-					updateRendered(page.pageNumber, { detail: page, error: null, loading: false });
-					continue;
-				}
-				await renderImageTarget(page, expectedGeneration, expectedRevision);
-			}
+			await processImageBatch(pageNumbers, expectedGeneration, expectedRevision);
 			return;
 		}
+
+		const targets = await loadRequestedDetails(pageNumbers, expectedGeneration, expectedRevision);
+		if (targets.length === 0 || refreshIsStale(expectedGeneration, expectedRevision)) return;
 		if (detail.originalReference.provider === 'missing') {
 			for (const page of targets) failPage(page.pageNumber, 'O original não está disponível.');
 			return;
