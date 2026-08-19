@@ -52,8 +52,7 @@ function validLocalText(value: string, minimum: number, maximum: number) {
 	return true;
 }
 
-function validOriginalReference(value: string, userId: string): boolean {
-	if (value.startsWith(`${userId}/`)) return validLocalText(value, 3, 1024);
+function validOriginalReference(value: string): boolean {
 	if (!value.startsWith('drive:')) return false;
 	return DRIVE_ID.test(value.slice('drive:'.length));
 }
@@ -85,7 +84,7 @@ function parseUploadedPage(data: unknown, userId: string): UploadedPage | null {
 		typeof sha256 !== 'string' ||
 		!SHA256.test(sha256) ||
 		typeof storagePath !== 'string' ||
-		!validOriginalReference(storagePath, userId) ||
+		!validOriginalReference(storagePath) ||
 		typeof thumbnailPath !== 'string' ||
 		!thumbnailPath.startsWith(`${userId}/`) ||
 		!validLocalText(thumbnailPath, 3, 1024)

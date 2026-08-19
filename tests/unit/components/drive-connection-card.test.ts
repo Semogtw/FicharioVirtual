@@ -14,21 +14,24 @@ describe('Drive connection settings', () => {
 		expect(card).toContain('isDriveOAuthConfigured');
 		expect(card).toContain('aria-live="polite"');
 		expect(card).toContain('window.location.assign(authorizationUrl)');
+		expect(card).toContain("url.searchParams.get('drive')");
+		expect(card).toContain('refreshAfterAuthorization');
 		expect(card).not.toContain('localStorage');
 		expect(card).not.toContain('sessionStorage');
 		expect(card).not.toContain('refresh_token');
 		expect(card).not.toContain('access_token');
 	});
 
-	it('places the Drive connection card in Settings before exports', () => {
+	it('places the Drive connection card in Settings before data download actions', () => {
 		const settings = readFileSync(settingsPath, 'utf8');
 
 		expect(settings).toContain(
 			"import DriveConnectionCard from '$lib/components/DriveConnectionCard.svelte';"
 		);
 		expect(settings).toContain('<DriveConnectionCard />');
+		expect(settings).toContain('Baixar meus dados');
 		expect(settings.indexOf('<DriveConnectionCard />')).toBeLessThan(
-			settings.indexOf('Exportação portátil')
+			settings.indexOf('Baixar meus dados')
 		);
 	});
 });

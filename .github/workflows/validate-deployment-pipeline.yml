@@ -7,6 +7,7 @@ on:
       - .github/workflows/build-deployment-artifact.yml
       - .github/workflows/deploy-cloudflare-pages.yml
       - .github/workflows/validate-deployment-pipeline.yml
+      - .github/workflows/verify-staging-artifact-config.yml
       - package.json
       - pnpm-lock.yaml
       - svelte.config.js
@@ -17,12 +18,16 @@ on:
       - tools/checks/check-deployed-site.mjs
       - tools/checks/check-deployment-artifact.mjs
       - tools/checks/check-deployment-artifact-workflow.mjs
+      - tools/checks/check-staging-public-config.mjs
       - tools/checks/deployment-contract.mjs
       - tools/checks/validate-pages-deploy-output.mjs
       - tools/deploy/**
       - tests/unit/tooling/deployment-artifact-contract.test.ts
+      - tests/unit/tooling/deployment-artifact-workflow.test.ts
       - tests/unit/tooling/deployment-contract.test.ts
       - tests/unit/tooling/pages-deploy-output.test.ts
+      - tests/unit/tooling/staging-artifact-config-workflow.test.ts
+      - tests/unit/tooling/staging-public-config.test.ts
   workflow_dispatch:
 
 permissions:
@@ -40,6 +45,10 @@ jobs:
       TARGET_ENVIRONMENT: staging
       PUBLIC_SUPABASE_URL: https://ci-deploy-contract.supabase.co
       PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_deploy_contract_1234567890
+      PUBLIC_GOOGLE_CLIENT_ID: 123456789012-ci-deploy-contract.apps.googleusercontent.com
+      PUBLIC_GOOGLE_PICKER_API_KEY_PREFIX: AI
+      PUBLIC_GOOGLE_PICKER_API_KEY_SUFFIX: zaCiDeployContract1234567890
+      PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER: 123456789012
 
     steps:
       - name: Checkout repository
@@ -62,23 +71,36 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Compose synthetic Google Picker API key
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'PUBLIC_GOOGLE_PICKER_API_KEY=%s%s\n' \
+            "$PUBLIC_GOOGLE_PICKER_API_KEY_PREFIX" \
+            "$PUBLIC_GOOGLE_PICKER_API_KEY_SUFFIX" >> "$GITHUB_ENV"
+
       - name: Check deployment source formatting
         run: |
           pnpm exec prettier --check \
             .github/workflows/build-deployment-artifact.yml \
             .github/workflows/deploy-cloudflare-pages.yml \
             .github/workflows/validate-deployment-pipeline.yml \
+            .github/workflows/verify-staging-artifact-config.yml \
             tools/checks/check-artifact-reproducibility.mjs \
             tools/checks/check-built-pwa.mjs \
             tools/checks/check-cloudflare-deployment-workflow.mjs \
             tools/checks/check-deployed-site.mjs \
             tools/checks/check-deployment-artifact.mjs \
             tools/checks/check-deployment-artifact-workflow.mjs \
+            tools/checks/check-staging-public-config.mjs \
             tools/checks/deployment-contract.mjs \
             tools/checks/validate-pages-deploy-output.mjs \
             tests/unit/tooling/deployment-artifact-contract.test.ts \
+            tests/unit/tooling/deployment-artifact-workflow.test.ts \
             tests/unit/tooling/deployment-contract.test.ts \
-            tests/unit/tooling/pages-deploy-output.test.ts
+            tests/unit/tooling/pages-deploy-output.test.ts \
+            tests/unit/tooling/staging-artifact-config-workflow.test.ts \
+            tests/unit/tooling/staging-public-config.test.ts
 
       - name: Check deployment shell syntax
         run: bash -n tools/deploy/package-static-artifact.sh
@@ -90,12 +112,18 @@ jobs:
           node tools/checks/check-deployment-artifact-workflow.mjs
           node tools/checks/check-artifact-reproducibility.mjs
 
+      - name: Verify staging public release configuration contract
+        run: node tools/checks/check-staging-public-config.mjs
+
       - name: Run deployment contract unit tests
         run: |
           pnpm exec vitest run \
             tests/unit/tooling/deployment-artifact-contract.test.ts \
+            tests/unit/tooling/deployment-artifact-workflow.test.ts \
             tests/unit/tooling/deployment-contract.test.ts \
-            tests/unit/tooling/pages-deploy-output.test.ts
+            tests/unit/tooling/pages-deploy-output.test.ts \
+            tests/unit/tooling/staging-artifact-config-workflow.test.ts \
+            tests/unit/tooling/staging-public-config.test.ts
 
       - name: Build static site with non-deployable CI public config
         run: pnpm build
@@ -108,6 +136,9 @@ jobs:
           set -euo pipefail
           grep -R -F -- "$PUBLIC_SUPABASE_URL" build >/dev/null
           grep -R -F -- "$PUBLIC_SUPABASE_PUBLISHABLE_KEY" build >/dev/null
+          grep -R -F -- "$PUBLIC_GOOGLE_CLIENT_ID" build >/dev/null
+          grep -R -F -- "$PUBLIC_GOOGLE_PICKER_API_KEY" build >/dev/null
+          grep -R -F -- "$PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER" build >/dev/null
 
       - name: Package staging artifact twice
         run: |
@@ -141,6 +172,7 @@ jobs:
             echo
             echo "- Source SHA: \`${GITHUB_SHA}\`"
             echo '- Target contract: `staging` only'
+            echo '- Public config: complete Supabase + Google Drive release contract validated with synthetic CI-only values'
             echo '- Reproducibility: two independent package operations compared byte-for-byte at manifest/checksum identity level'
             echo '- Artifacts: throwaway CI packages; never uploaded or deployable as release artifacts'
             echo '- Secrets used: none'

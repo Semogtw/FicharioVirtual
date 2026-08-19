@@ -4,6 +4,7 @@
 	import NativeSelect from '$lib/components/ui/native-select/NativeSelect.svelte';
 	import DocumentCard from '$lib/components/DocumentCard.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
+	import LoadingCollection from '$lib/components/LoadingCollection.svelte';
 	import type {
 		DocumentCursor,
 		DocumentKind,
@@ -31,9 +32,33 @@
 	let status = $state<DocumentStatus | ''>('');
 	let createdFrom = $state('');
 	let createdTo = $state('');
+	let hasActiveFilters = $derived(
+		Boolean(notebookId || kind || status || createdFrom || createdTo)
+	);
+	let dateRangeError = $derived(
+		createdFrom && createdTo && createdFrom > createdTo
+			? 'A data inicial precisa ser anterior ou igual à data final.'
+			: null
+	);
+
+	function clearFilters() {
+		notebookId = '';
+		kind = '';
+		status = '';
+		createdFrom = '';
+		createdTo = '';
+		void load(true);
+	}
 
 	async function load(reset: boolean) {
 		if (!reset && loadingMore) return;
+		if (dateRangeError) {
+			requests.next();
+			loading = false;
+			loadingMore = false;
+			error = null;
+			return;
+		}
 		const requestVersion = reset ? requests.next() : requests.current();
 		if (reset) loading = true;
 		else loadingMore = true;
@@ -104,7 +129,7 @@
 		<div>
 			<p class="eyebrow">Arquivo pesquisável</p>
 			<h1 id="page-title">Biblioteca</h1>
-			<p>Consulte os originais, acompanhe o processamento e organize tudo por caderno.</p>
+			<p>Consulte seus documentos e organize tudo por caderno.</p>
 		</div>
 		<a class="primary-action" href="/import/">Importar</a>
 	</header>
@@ -117,6 +142,7 @@
 		<label>
 			<span>Caderno</span>
 			<NativeSelect
+				ariaLabel="Caderno"
 				bind:value={notebookId}
 				disabled={notebookLoading}
 				onchange={() => void load(true)}
@@ -129,30 +155,50 @@
 		</label>
 		<label>
 			<span>Tipo</span>
-			<NativeSelect bind:value={kind} onchange={() => void load(true)}>
+			<NativeSelect ariaLabel="Tipo" bind:value={kind} onchange={() => void load(true)}>
 				<option value="">Todos</option>
 				<option value="image">Imagem</option>
 				<option value="pdf">PDF</option>
 			</NativeSelect>
 		</label>
 		<label>
-			<span>Estado</span>
-			<NativeSelect bind:value={status} onchange={() => void load(true)}>
+			<span>Status</span>
+			<NativeSelect ariaLabel="Status" bind:value={status} onchange={() => void load(true)}>
 				<option value="">Todos</option>
 				<option value="ready">Pronto</option>
 				<option value="processing">Processando</option>
-				<option value="needs_review">Revisar</option>
 				<option value="failed">Falhou</option>
 			</NativeSelect>
 		</label>
 		<label>
 			<span>De</span>
-			<input type="date" bind:value={createdFrom} onchange={() => void load(true)} />
+			<input
+				type="date"
+				aria-label="De"
+				aria-invalid={dateRangeError ? 'true' : undefined}
+				bind:value={createdFrom}
+				onchange={() => void load(true)}
+			/>
 		</label>
 		<label>
 			<span>Até</span>
-			<input type="date" bind:value={createdTo} onchange={() => void load(true)} />
+			<input
+				type="date"
+				aria-label="Até"
+				aria-invalid={dateRangeError ? 'true' : undefined}
+				bind:value={createdTo}
+				onchange={() => void load(true)}
+			/>
 		</label>
+		{#if dateRangeError}
+			<p class="filter-validation" role="alert">{dateRangeError}</p>
+		{/if}
+		{#if hasActiveFilters}
+			<div class="filter-actions">
+				<span>Filtros ativos</span>
+				<Button label="Limpar filtros" variant="quiet" onclick={clearFilters} />
+			</div>
+		{/if}
 	</form>
 
 	{#if notebookError}
@@ -172,13 +218,17 @@
 			<Button label="Tentar novamente" variant="secondary" onclick={() => void load(true)} />
 		</div>
 	{:else if loading}
-		<p class="loading" role="status">Organizando seus documentos…</p>
+		<LoadingCollection label="Organizando seus documentos…" />
 	{:else if documents.length === 0}
 		<EmptyState
-			title="Nenhum documento neste recorte"
-			description="Ajuste os filtros ou importe um novo arquivo para começar sua biblioteca."
-			actionLabel="Importar documento"
-			onAction={() => (window.location.href = '/import/')}
+			title={hasActiveFilters
+				? 'Nenhum documento com esses filtros'
+				: 'Sua biblioteca ainda está vazia'}
+			description={hasActiveFilters
+				? 'Limpe ou ajuste os filtros para voltar a ver outros documentos.'
+				: 'Importe uma imagem ou PDF para começar sua biblioteca.'}
+			actionLabel={hasActiveFilters ? 'Limpar filtros' : 'Importar documento'}
+			onAction={hasActiveFilters ? clearFilters : () => (window.location.href = '/import/')}
 		/>
 	{:else}
 		<section class="grid" aria-label="Documentos">
@@ -186,7 +236,6 @@
 				<DocumentCard {document} />
 			{/each}
 		</section>
-
 		{#if nextCursor}
 			<div class="load-more">
 				<Button
@@ -277,16 +326,38 @@
 		color: var(--ink);
 	}
 
+	input[aria-invalid='true'] {
+		border-color: var(--danger);
+	}
+
+	.filter-validation {
+		grid-column: 1 / -1;
+		margin: 0;
+		color: var(--danger);
+		font-size: 0.78rem;
+	}
+
+	.filter-actions {
+		grid-column: 1 / -1;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		padding-top: 0.15rem;
+		border-top: 1px solid var(--line);
+		color: var(--muted);
+		font-size: 0.78rem;
+	}
+
 	.grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
 		gap: 1rem;
 	}
 
-	.loading {
-		padding: 3rem;
-		color: var(--muted);
-		text-align: center;
+	.grid :global(.document-card) {
+		content-visibility: auto;
+		contain-intrinsic-size: auto 20rem;
 	}
 
 	.filter-warning,

@@ -1,0 +1,195 @@
+name: Verify real deployed app flows
+
+on:
+  workflow_run:
+    workflows: [Deploy validated Fichário artifact to Cloudflare Pages]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+# These flows share the protected real-flow account with search-quality checks.
+# Keep post-deploy real flows serialized, but do not block the Supabase contract
+# verification that they wait for below.
+concurrency:
+  group: post-deploy-real-verification
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    environment: staging
+    env:
+      TARGET_URL: https://fichario-virtual.pages.dev
+      TARGET_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      STAGING_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+      STAGING_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
+      STAGING_AUTHORIZED_EMAIL: ${{ secrets.STAGING_AUTHORIZED_EMAIL }}
+      STAGING_AUTHORIZED_PASSWORD: ${{ secrets.STAGING_AUTHORIZED_PASSWORD }}
+      REAL_APP_REPORT_PATH: /tmp/real-app-flow-report.json
+      REAL_APP_EVIDENCE_DIR: /tmp/real-app-flow-evidence
+      REAL_APP_ACTION_REPORT_PATH: /tmp/real-app-action-report.json
+      REAL_APP_ACTION_EVIDENCE_DIR: /tmp/real-app-action-evidence
+      REAL_APP_EXHAUSTIVE_REPORT_PATH: /tmp/real-app-exhaustive-report.json
+      REAL_APP_EXHAUSTIVE_EVIDENCE_DIR: /tmp/real-app-exhaustive-evidence
+      REAL_APP_SPECIAL_REPORT_PATH: /tmp/real-app-special-report.json
+      REAL_APP_SPECIAL_EVIDENCE_DIR: /tmp/real-app-special-evidence
+      REAL_SCANNED_PDF_REPORT_PATH: /tmp/real-scanned-pdf-import-report.json
+      REAL_SCANNED_PDF_EVIDENCE_DIR: /tmp/real-scanned-pdf-import-evidence
+      PLAYWRIGHT_BROWSERS_PATH: /tmp/fichario-real-flow-browsers
+
+    steps:
+      - name: Validate immutable test target
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test -n "$STAGING_SUPABASE_URL"
+          test -n "$STAGING_SUPABASE_PUBLISHABLE_KEY"
+          test -n "$STAGING_AUTHORIZED_EMAIL"
+          test -n "$STAGING_AUTHORIZED_PASSWORD"
+
+      - name: Require successful Supabase deployment for the same SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 40); do
+            state="$(
+              gh api "/repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$TARGET_SHA&per_page=100" \
+                --jq '[.workflow_runs[] | select(.name == "Deploy Supabase staging")][0] | if . == null then "missing" else (.status + ":" + (.conclusion // "pending")) end'
+            )"
+            case "$state" in
+              completed:success)
+                echo "Aligned Supabase deployment is green for $TARGET_SHA"
+                exit 0
+                ;;
+              completed:failure|completed:cancelled|completed:timed_out|completed:action_required)
+                echo "Supabase deployment is not green for $TARGET_SHA: $state" >&2
+                exit 1
+                ;;
+            esac
+            sleep 15
+          done
+          echo "No successful Supabase deployment materialized for $TARGET_SHA" >&2
+          exit 1
+
+      - name: Fetch exact-SHA real-flow verifiers without repository checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/fichario-real-flow
+          for verifier in check-real-app-flows.mjs check-real-app-actions.mjs check-real-app-exhaustive.mjs check-real-app-special-routes.mjs check-real-scanned-pdf-import.mjs; do
+            curl --fail --silent --show-error --location \
+              "https://raw.githubusercontent.com/Semogtw/FicharioVirtual/${TARGET_SHA}/tools/checks/${verifier}" \
+              --output "/tmp/fichario-real-flow/${verifier}"
+            test -s "/tmp/fichario-real-flow/${verifier}"
+          done
+          printf '%s\n' '{"private":true,"type":"module"}' > /tmp/fichario-real-flow/package.json
+
+          # The verifier committed at TARGET_SHA is the contract. Do not rewrite it
+          # in CI to fit an older UI, otherwise the deployed product and its tests
+          # can silently diverge.
+          node --check /tmp/fichario-real-flow/check-real-app-flows.mjs
+          node --check /tmp/fichario-real-flow/check-real-app-actions.mjs
+          node --check /tmp/fichario-real-flow/check-real-app-exhaustive.mjs
+          node --check /tmp/fichario-real-flow/check-real-app-special-routes.mjs
+          node --check /tmp/fichario-real-flow/check-real-scanned-pdf-import.mjs
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22.16.0
+
+      - name: Install pinned real-flow runtime
+        working-directory: /tmp/fichario-real-flow
+        run: >-
+          npm install --no-save --package-lock=false
+          playwright@1.62.1
+          @supabase/supabase-js@2.57.4
+          pdf-lib@1.17.1
+
+      - name: Install Chromium
+        working-directory: /tmp/fichario-real-flow
+        run: npx playwright install chromium
+
+      - name: Exercise real deployed core flows
+        id: core-flows
+        continue-on-error: true
+        working-directory: /tmp/fichario-real-flow
+        run: node check-real-app-flows.mjs
+
+      - name: Exercise real deployed feature actions
+        id: feature-actions
+        continue-on-error: true
+        working-directory: /tmp/fichario-real-flow
+        run: node check-real-app-actions.mjs
+
+      - name: Exercise exhaustive deployed feature flows
+        id: exhaustive-flows
+        continue-on-error: true
+        working-directory: /tmp/fichario-real-flow
+        run: node check-real-app-exhaustive.mjs
+
+      - name: Exercise special import entry routes
+        id: special-routes
+        continue-on-error: true
+        working-directory: /tmp/fichario-real-flow
+        run: node check-real-app-special-routes.mjs
+
+      - name: Exercise deployed scanned PDF pipeline
+        id: scanned-pdf
+        continue-on-error: true
+        working-directory: /tmp/fichario-real-flow
+        run: node check-real-scanned-pdf-import.mjs
+
+      - name: Upload sanitized real-flow evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: real-app-flow-${{ env.TARGET_SHA }}
+          path: |
+            /tmp/real-app-flow-report.json
+            /tmp/real-app-flow-evidence/
+            /tmp/real-app-action-report.json
+            /tmp/real-app-action-evidence/
+            /tmp/real-app-exhaustive-report.json
+            /tmp/real-app-exhaustive-evidence/
+            /tmp/real-app-special-report.json
+            /tmp/real-app-special-evidence/
+            /tmp/real-scanned-pdf-import-report.json
+            /tmp/real-scanned-pdf-import-evidence/
+          if-no-files-found: error
+          compression-level: 6
+          retention-days: 7
+
+      - name: Reject any real-flow failure
+        if: always()
+        shell: bash
+        env:
+          CORE_OUTCOME: ${{ steps.core-flows.outcome }}
+          ACTION_OUTCOME: ${{ steps.feature-actions.outcome }}
+          EXHAUSTIVE_OUTCOME: ${{ steps.exhaustive-flows.outcome }}
+          SPECIAL_OUTCOME: ${{ steps.special-routes.outcome }}
+          SCANNED_PDF_OUTCOME: ${{ steps.scanned-pdf.outcome }}
+        run: |
+          set -euo pipefail
+          test "$CORE_OUTCOME" = success
+          test "$ACTION_OUTCOME" = success
+          test "$EXHAUSTIVE_OUTCOME" = success
+          test "$SPECIAL_OUTCOME" = success
+          test "$SCANNED_PDF_OUTCOME" = success
+          node --input-type=module - <<'NODE'
+          import { readFile } from 'node:fs/promises';
+          const report = JSON.parse(await readFile(process.env.REAL_SCANNED_PDF_REPORT_PATH, 'utf8'));
+          if (report.status !== 'pass') throw new Error(`scanned PDF report status is ${report.status}`);
+          if (report.cleanup?.documents !== 'pass') throw new Error('scanned PDF document cleanup did not pass');
+          if (report.cleanup?.importSessions !== 'pass') throw new Error('scanned PDF import-session cleanup did not pass');
+          NODE

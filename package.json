@@ -9,7 +9,7 @@
 	},
 	"scripts": {
 		"dev": "vite dev",
-		"build": "vite build && node tools/checks/check-built-pwa.mjs",
+		"build": "vite build && node tools/deploy/finalize-static-csp.mjs && node tools/checks/check-built-pwa.mjs",
 		"preview": "vite preview",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"lint": "prettier --check . && eslint .",
@@ -19,7 +19,7 @@
 		"test:coverage": "vitest run --coverage",
 		"test:e2e": "playwright test",
 		"test:source:offline": "bash tools/checks/run-offline-source-gates.sh",
-		"test:functions:check": "bash tools/checks/check-edge-functions.sh",
+		"test:functions:check": "find supabase/functions -type f -name '*.ts' -print0 | sort -z | xargs -0 -n 1 deno check --no-config",
 		"test:db:local": "bash tools/checks/run-local-db-gates.sh",
 		"test:ocr:faults:local": "node tools/checks/check-ocr-fault-injection.mjs",
 		"test:deployment": "node tools/checks/check-deployed-site.mjs",
@@ -28,7 +28,8 @@
 		"test:staging:ocr": "node tools/checks/check-ocr-staging.mjs",
 		"test:staging:desktop-ocr-pairing": "node tools/checks/check-desktop-ocr-pairing-staging.mjs",
 		"verify": "pnpm lint && pnpm check && pnpm test && pnpm build",
-		"verify:full": "pnpm verify && pnpm test:e2e && pnpm test:source:offline && pnpm test:functions:check && pnpm test:db:local"
+		"verify:full": "pnpm verify && pnpm test:e2e && pnpm test:source:offline && pnpm test:functions:check && pnpm test:db:local",
+		"benchmark:visual-semantic": "vitest run tests/unit/search/visual-semantic-benchmark.test.ts tests/unit/search/visual-semantic-ranking.test.ts"
 	},
 	"dependencies": {
 		"@firecrawl/pdf-inspector-wasm": "0.1.1",
@@ -43,12 +44,14 @@
 		"@sveltejs/kit": "^2.0.0",
 		"@sveltejs/vite-plugin-svelte": "^6.0.0",
 		"@types/node": "^24.0.0",
-		"@vitest/coverage-v8": "^4.0.0",
 		"@vite-pwa/sveltekit": "^1.1.0",
+		"@vitest/coverage-v8": "^4.0.0",
 		"eslint": "^9.0.0",
 		"eslint-config-prettier": "^10.0.0",
 		"eslint-plugin-svelte": "^3.0.0",
 		"globals": "^16.0.0",
+		"pdf-lib": "1.17.1",
+		"playwright": "1.62.1",
 		"prettier": "^3.0.0",
 		"prettier-plugin-svelte": "^3.0.0",
 		"svelte": "^5.0.0",
@@ -57,10 +60,5 @@
 		"typescript-eslint": "^8.0.0",
 		"vite": "^7.0.0",
 		"vitest": "^4.0.0"
-	},
-	"pnpm": {
-		"overrides": {
-			"nanoid": "3.3.17"
-		}
 	}
 }

@@ -1,8 +1,11 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
 	import Button from '$lib/components/Button.svelte';
+	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
-	import type { DocumentSummary } from '$lib/domain/document';
+	import LoadingCollection from '$lib/components/LoadingCollection.svelte';
+	import TextInputDialog from '$lib/components/TextInputDialog.svelte';
+	import type { DocumentStatus, DocumentSummary } from '$lib/domain/document';
 	import { listAllDocuments } from '$lib/services/documents';
 	import { RequestVersion } from '$lib/services/request-version';
 	import {
@@ -32,8 +35,21 @@
 	let error = $state<string | null>(null);
 	let assignmentError = $state<string | null>(null);
 	let message = $state<string | null>(null);
+	let renameDialogOpen = $state(false);
+	let renameValue = $state('');
+	let deleteDialogOpen = $state(false);
 
 	let activeTag = $derived(tags.find((tag) => tag.id === activeTagId) ?? null);
+
+	const statusLabels: Record<DocumentStatus, string> = {
+		uploading: 'Enviando',
+		pending: 'Na fila',
+		processing: 'Processando',
+		ready: 'Pronto',
+		partially_ready: 'Parcialmente pronto',
+		needs_review: 'Pronto',
+		failed: 'Falhou'
+	};
 
 	async function refreshTags(
 		preferredId: string | null = activeTagId,
@@ -124,18 +140,29 @@
 		}
 	}
 
+	function openRenameDialog() {
+		if (!activeTag || saving || pendingDocumentId) return;
+		renameValue = activeTag.name;
+		renameDialogOpen = true;
+	}
+
 	async function renameActiveTag() {
 		if (!activeTag || saving || pendingDocumentId) return;
-		const requested = window.prompt('Novo nome da tag', activeTag.name);
-		if (requested === null || requested.trim() === activeTag.name) return;
+		const requested = renameValue.trim();
+		if (!requested || requested === activeTag.name) {
+			renameDialogOpen = false;
+			return;
+		}
+		const tagId = activeTag.id;
 		const version = mutationRequests.next();
 		saving = true;
 		error = null;
 		try {
-			await renameTag(activeTag.id, requested);
+			await renameTag(tagId, requested);
 			if (!mutationRequests.isCurrent(version)) return;
-			await refreshTags(activeTag.id, version);
+			await refreshTags(tagId, version);
 			if (!mutationRequests.isCurrent(version)) return;
+			renameDialogOpen = false;
 			message = 'Tag renomeada.';
 		} catch (caught) {
 			if (mutationRequests.isCurrent(version)) {
@@ -148,16 +175,16 @@
 
 	async function removeActiveTag() {
 		if (!activeTag || saving || pendingDocumentId) return;
-		if (!window.confirm(`Excluir a tag “${activeTag.name}”? Os documentos não serão apagados.`))
-			return;
+		const tagId = activeTag.id;
 		const version = mutationRequests.next();
 		saving = true;
 		error = null;
 		try {
-			await deleteTag(activeTag.id);
+			await deleteTag(tagId);
 			if (!mutationRequests.isCurrent(version)) return;
 			await refreshTags(null, version);
 			if (!mutationRequests.isCurrent(version)) return;
+			deleteDialogOpen = false;
 			message = 'Tag excluída.';
 		} catch (caught) {
 			if (mutationRequests.isCurrent(version)) {
@@ -216,9 +243,9 @@
 <div class="page" aria-labelledby="page-title">
 	<header>
 		<div>
-			<p class="eyebrow">Organização transversal</p>
+			<p class="eyebrow">Organização por temas</p>
 			<h1 id="page-title">Tags</h1>
-			<p>Associe o mesmo documento a temas diferentes sem duplicar arquivos ou páginas.</p>
+			<p>Agrupe o mesmo documento em diferentes temas sem duplicar arquivos ou páginas.</p>
 		</div>
 	</header>
 
@@ -251,7 +278,7 @@
 	{#if message}<p class="message" role="status">{message}</p>{/if}
 
 	{#if loading}
-		<p class="loading" role="status">Carregando tags e documentos…</p>
+		<LoadingCollection count={4} label="Carregando tags e documentos…" />
 	{:else if tags.length === 0}
 		<EmptyState
 			title="Nenhuma tag criada"
@@ -290,13 +317,13 @@
 						<button
 							type="button"
 							disabled={saving || pendingDocumentId !== null}
-							onclick={() => void renameActiveTag()}>Renomear</button
+							onclick={openRenameDialog}>Renomear</button
 						>
 						<button
 							class="danger"
 							type="button"
 							disabled={saving || pendingDocumentId !== null}
-							onclick={() => void removeActiveTag()}
+							onclick={() => (deleteDialogOpen = true)}
 						>
 							Excluir
 						</button>
@@ -304,7 +331,7 @@
 				</div>
 
 				{#if loadingAssignments}
-					<p class="loading">Verificando associações…</p>
+					<LoadingCollection count={4} label="Carregando documentos desta tag…" />
 				{:else if assignmentError && activeTag}
 					<div class="assignment-error" role="alert">
 						<p>{assignmentError}</p>
@@ -334,7 +361,9 @@
 									/>
 									<span>
 										<strong>{document.title}</strong>
-										<small>{document.kind === 'pdf' ? 'PDF' : 'Imagem'} · {document.status}</small>
+										<small>
+											{document.kind === 'pdf' ? 'PDF' : 'Imagem'} · {statusLabels[document.status]}
+										</small>
 									</span>
 								</label>
 								<a href={`/documents/${document.id}/`}>Abrir</a>
@@ -346,6 +375,33 @@
 		</div>
 	{/if}
 </div>
+
+<TextInputDialog
+	open={renameDialogOpen && activeTag !== null}
+	title="Renomear tag"
+	description={activeTag ? `Altere o nome de “${activeTag.name}”.` : ''}
+	label="Novo nome"
+	value={renameValue}
+	maximumLength={120}
+	confirmLabel="Renomear"
+	busy={saving}
+	onValueChange={(value) => (renameValue = value)}
+	onConfirm={() => void renameActiveTag()}
+	onCancel={() => (renameDialogOpen = false)}
+/>
+
+<ConfirmDialog
+	open={deleteDialogOpen && activeTag !== null}
+	title="Excluir tag?"
+	description={activeTag
+		? `A tag “${activeTag.name}” será excluída. Os documentos associados não serão apagados.`
+		: ''}
+	confirmLabel="Excluir"
+	busy={saving}
+	danger
+	onConfirm={() => void removeActiveTag()}
+	onCancel={() => (deleteDialogOpen = false)}
+/>
 
 <style>
 	.page {

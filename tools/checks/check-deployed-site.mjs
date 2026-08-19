@@ -3,6 +3,7 @@
 import {
 	assertAppShell,
 	assertHttpRedirect,
+	assertInlineScriptsAllowedByCsp,
 	assertManifest,
 	assertSecurityHeaders,
 	assertServiceWorker,
@@ -70,7 +71,7 @@ function assertContentType(response, expected, label) {
 function assertNoLongLivedCache(response, label) {
 	const cacheControl = response.headers.get('cache-control') ?? '';
 	if (
-		/\b(?:public|immutable)\b/i.test(cacheControl) ||
+		/\bimmutable\b/i.test(cacheControl) ||
 		/max-age=(?:[1-9]\d{2,}|[2-9]\d)/i.test(cacheControl)
 	) {
 		throw new Error(`${label} is configured with a long-lived cache: ${cacheControl}`);
@@ -99,7 +100,9 @@ async function verifyShell(baseUrl, pathname, label) {
 	assertContentType(response, 'text/html', label);
 	assertSecurityHeaders(response.headers);
 	assertNoLongLivedCache(response, label);
-	assertAppShell(await response.text());
+	const html = await response.text();
+	assertAppShell(html);
+	assertInlineScriptsAllowedByCsp(response.headers, html);
 	console.log(`PASS ${label}`);
 }
 

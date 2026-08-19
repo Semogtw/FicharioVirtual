@@ -2,13 +2,16 @@
 	import { goto } from '$app/navigation';
 	import { onDestroy } from 'svelte';
 	import Button from '$lib/components/Button.svelte';
+	import { AuthServiceError } from '$lib/services/auth';
 	import { RequestVersion } from '$lib/services/request-version';
 	import { authenticate, sessionState } from '$lib/stores/session.svelte';
 
 	let email = $state('');
 	let password = $state('');
+	let showPassword = $state(false);
 	let submitting = $state(false);
 	let authenticated = $state(false);
+	let authenticationError = $state<string | null>(null);
 	let navigationError = $state<string | null>(null);
 	const authenticationRequests = new RequestVersion();
 
@@ -17,15 +20,19 @@
 		if (submitting || authenticated) return;
 		const version = authenticationRequests.next();
 		submitting = true;
+		authenticationError = null;
 		navigationError = null;
 		try {
 			try {
 				await authenticate(email, password);
 				if (!authenticationRequests.isCurrent(version)) return;
 				authenticated = true;
-			} catch {
+			} catch (error) {
 				if (!authenticationRequests.isCurrent(version)) return;
-				// The store exposes a safe, user-facing authentication error.
+				authenticationError =
+					error instanceof AuthServiceError
+						? error.message
+						: (sessionState.error ?? 'Não foi possível confirmar o acesso agora. Tente novamente.');
 				return;
 			}
 			try {
@@ -55,16 +62,16 @@
 			<strong>Fichário Virtual</strong>
 		</a>
 		<div>
-			<p class="eyebrow">Arquivo pessoal privado</p>
+			<p class="eyebrow">Seu arquivo pessoal</p>
 			<h1 id="login-title">Acesse seu fichário</h1>
 			<p class="summary">
-				Entre com a conta autorizada para consultar, importar e revisar suas anotações.
+				Entre com sua conta para consultar, importar e encontrar seus documentos em um só lugar.
 			</p>
 		</div>
 		<ul>
-			<li>Arquivos mantidos em armazenamento privado</li>
-			<li>Busca textual sem banco vetorial no MVP</li>
-			<li>Nenhuma ativação automática de plano pago</li>
+			<li>Seus arquivos originais continuam preservados</li>
+			<li>Encontre documentos por palavras, trechos ou ideias</li>
+			<li>Acesso restrito às contas autorizadas</li>
 		</ul>
 	</section>
 
@@ -84,17 +91,28 @@
 
 				<div class="field">
 					<label for="password">Senha</label>
-					<input
-						id="password"
-						type="password"
-						bind:value={password}
-						autocomplete="current-password"
-						required
-					/>
+					<div class="password-input">
+						<input
+							id="password"
+							type={showPassword ? 'text' : 'password'}
+							bind:value={password}
+							autocomplete="current-password"
+							required
+						/>
+						<button
+							type="button"
+							class="password-toggle"
+							aria-pressed={showPassword}
+							aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+							onclick={() => (showPassword = !showPassword)}
+						>
+							{showPassword ? 'Ocultar' : 'Mostrar'}
+						</button>
+					</div>
 				</div>
 
-				{#if sessionState.error}
-					<p class="error" role="alert">{sessionState.error}</p>
+				{#if authenticationError ?? sessionState.error}
+					<p class="error" role="alert">{authenticationError ?? sessionState.error}</p>
 				{/if}
 
 				<Button
@@ -105,8 +123,7 @@
 			</form>
 
 			<p class="access-note">
-				Este projeto possui <strong>cadastro público desativado</strong>. Novas contas são
-				adicionadas manualmente pelo proprietário.
+				O acesso é privado e novas contas precisam ser autorizadas pelo proprietário do fichário.
 			</p>
 		{/if}
 	</section>
@@ -218,12 +235,42 @@
 	}
 
 	input {
+		width: 100%;
 		min-height: 3.2rem;
 		padding: 0.75rem 0.9rem;
 		border: 1px solid var(--line-strong);
 		border-radius: var(--radius-sm);
 		background: var(--surface-strong);
 		color: var(--ink);
+	}
+
+	.password-input {
+		position: relative;
+	}
+
+	.password-input input {
+		padding-right: 5.2rem;
+	}
+
+	.password-toggle {
+		position: absolute;
+		top: 50%;
+		right: 0.45rem;
+		min-height: 2.3rem;
+		padding: 0.4rem 0.65rem;
+		border: 0;
+		border-radius: calc(var(--radius-sm) - 0.15rem);
+		background: transparent;
+		color: var(--archive);
+		font: inherit;
+		font-size: 0.78rem;
+		font-weight: 740;
+		cursor: pointer;
+		transform: translateY(-50%);
+	}
+
+	.password-toggle:hover {
+		background: var(--archive-soft);
 	}
 
 	.authenticated {

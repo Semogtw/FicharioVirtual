@@ -18,7 +18,8 @@ const completion = {
 	contentType: 'handwritten',
 	warnings: [{ code: 'low_contrast', message: 'Baixo contraste detectado.' }],
 	needsReview: true,
-	timingMs: 1432
+	timingMs: 1432,
+	wordGeometry: [] as const
 } as const;
 
 describe('desktop worker request contract', () => {
@@ -36,15 +37,22 @@ describe('desktop worker request contract', () => {
 		});
 	});
 
-	it('accepts a bounded legacy completion payload without mutating OCR text', () => {
+	it('accepts the launch completion payload without mutating OCR text', () => {
 		const parsed = parseDesktopWorkerRequest(completion);
-		expect(parsed).toEqual({ ...completion, wordGeometry: [] });
+		expect(parsed).toEqual(completion);
 		if (parsed?.action === 'complete') {
 			expect(parsed.rawText).toBe('Texto OCR local');
 			expect(parsed.contentType).toBe('handwritten');
 			expect(parsed.warnings).toEqual(completion.warnings);
 			expect(parsed.wordGeometry).toEqual([]);
 		}
+	});
+
+	it('rejects completion payloads that omit launch geometry', () => {
+		const withoutGeometry = Object.fromEntries(
+			Object.entries(completion).filter(([key]) => key !== 'wordGeometry')
+		);
+		expect(parseDesktopWorkerRequest(withoutGeometry)).toBeNull();
 	});
 
 	it('accepts bounded normalized geometry on a completion payload', () => {

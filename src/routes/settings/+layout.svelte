@@ -19,7 +19,7 @@
 		href="/settings/computers/queue/"
 		aria-current={page.url.pathname.startsWith('/settings/computers/queue') ? 'page' : undefined}
 	>
-		Fila OCR
+		Fila de leitura
 	</a>
 	<a
 		href="/settings/usage/"

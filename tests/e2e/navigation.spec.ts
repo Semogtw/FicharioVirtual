@@ -46,3 +46,19 @@ test('shows persistent library navigation on the tablet viewport', async ({ page
 	await expect(navigation.getByRole('link', { name: 'Importar', exact: true })).toBeVisible();
 	await expect(page.getByRole('search')).toBeVisible();
 });
+
+test('keeps hydrated controls clickable in the persistent shell', async ({ page }) => {
+	await page.goto('/');
+
+	const queueTrigger = page.getByRole('button', { name: 'Fila de importações' });
+	const queuePanel = page.locator('#global-import-queue');
+
+	await expect(queueTrigger).toBeVisible();
+	await queueTrigger.click();
+	await expect(queuePanel).toBeVisible();
+	await expect(queueTrigger).toHaveAttribute('aria-expanded', 'true');
+
+	await queueTrigger.click();
+	await expect(queuePanel).toBeHidden();
+	await expect(queueTrigger).toHaveAttribute('aria-expanded', 'false');
+});

@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(25);
+select plan(18);
 
 select has_schema('private', 'private OAuth schema exists');
 select has_table('private', 'drive_oauth_states', 'OAuth states are stored outside public');
@@ -30,59 +30,19 @@ select ok(
   'authenticated users cannot read Drive credentials'
 );
 
+select ok(
+  to_regprocedure('public.store_drive_oauth_state(uuid,text,text,timestamptz)') is null,
+  'pre-PKCE OAuth state writer is absent at launch'
+);
+select ok(
+  to_regprocedure('public.consume_drive_oauth_state(text,timestamptz)') is null,
+  'pre-PKCE OAuth callback state consumer is absent at launch'
+);
+
 insert into auth.users (id, email)
 values ('11111111-1111-4111-8111-111111111111', 'oauth-owner@example.test');
 insert into public.app_users (user_id, is_active)
 values ('11111111-1111-4111-8111-111111111111', true);
-
-select is(
-  public.store_drive_oauth_state(
-    '11111111-1111-4111-8111-111111111111',
-    repeat('a', 43),
-    repeat('b', 43),
-    timezone('utc', now()) + interval '10 minutes'
-  ),
-  true,
-  'service path stores a valid one-time OAuth state'
-);
-
-select results_eq(
-  $$
-    select user_id, nonce
-    from public.consume_drive_oauth_state(repeat('a', 43), timezone('utc', now()))
-  $$,
-  $$
-    values ('11111111-1111-4111-8111-111111111111'::uuid, repeat('b', 43)::text)
-  $$,
-  'valid OAuth state is consumed with its user and nonce'
-);
-
-select is_empty(
-  $$
-    select user_id, nonce
-    from public.consume_drive_oauth_state(repeat('a', 43), timezone('utc', now()))
-  $$,
-  'OAuth state cannot be replayed'
-);
-
-select is(
-  public.store_drive_oauth_state(
-    '11111111-1111-4111-8111-111111111111',
-    repeat('c', 43),
-    repeat('d', 43),
-    timezone('utc', now()) - interval '1 second'
-  ),
-  true,
-  'expired state can be inserted for deterministic expiry testing'
-);
-
-select is_empty(
-  $$
-    select user_id, nonce
-    from public.consume_drive_oauth_state(repeat('c', 43), timezone('utc', now()))
-  $$,
-  'expired OAuth state is rejected and removed'
-);
 
 select is(
   public.store_drive_oauth_state_pkce(
@@ -94,14 +54,6 @@ select is(
   ),
   true,
   'service path stores a PKCE-bound OAuth state'
-);
-
-select is_empty(
-  $$
-    select user_id, nonce
-    from public.consume_drive_oauth_state(repeat('e', 43), timezone('utc', now()))
-  $$,
-  'legacy callback cannot consume a PKCE-bound OAuth state'
 );
 
 select results_eq(
@@ -125,36 +77,6 @@ select is_empty(
     from public.consume_drive_oauth_state_pkce(repeat('e', 43), timezone('utc', now()))
   $$,
   'PKCE-bound OAuth state cannot be replayed'
-);
-
-select is(
-  public.store_drive_oauth_state(
-    '11111111-1111-4111-8111-111111111111',
-    repeat('g', 43),
-    repeat('h', 43),
-    timezone('utc', now()) + interval '10 minutes'
-  ),
-  true,
-  'legacy state can coexist during a staggered rollout'
-);
-
-select is_empty(
-  $$
-    select user_id, nonce, code_verifier
-    from public.consume_drive_oauth_state_pkce(repeat('g', 43), timezone('utc', now()))
-  $$,
-  'PKCE callback cannot consume a legacy state without a verifier'
-);
-
-select results_eq(
-  $$
-    select user_id, nonce
-    from public.consume_drive_oauth_state(repeat('g', 43), timezone('utc', now()))
-  $$,
-  $$
-    values ('11111111-1111-4111-8111-111111111111'::uuid, repeat('h', 43)::text)
-  $$,
-  'legacy callback can still consume only its own legacy state'
 );
 
 select is(

@@ -7,7 +7,7 @@ import {
 	type CoveragePhotoImportDependencies,
 	type CoveragePhotoSourcePage
 } from '../../../src/lib/services/coverage-photo-import';
-import type { OcrRunResult } from '../../../src/lib/services/ocr';
+import { OcrProcessingError, type OcrRunResult } from '../../../src/lib/services/ocr';
 
 const DOCUMENT_ID = '11111111-1111-4111-8111-111111111111';
 const PAGE_ID = '22222222-2222-4222-8222-222222222222';
@@ -59,7 +59,6 @@ function dependencies(
 	overrides: Partial<CoveragePhotoImportDependencies> = {}
 ): CoveragePhotoImportDependencies {
 	return {
-		recordConsent: vi.fn(async () => undefined),
 		prepare: vi.fn(async () => prepared(file)),
 		upload: vi.fn(async () => ({
 			documentId: DOCUMENT_ID,
@@ -72,13 +71,13 @@ function dependencies(
 		process: vi.fn(
 			async (): Promise<OcrRunResult> => ({
 				state: 'complete',
-				needsReview: false,
-				warningCount: 0
+				needsReview: false
 			})
 		),
 		loadPage: vi.fn(async () => sourcePage()),
 		loadFirstPage: vi.fn(async () => sourcePage()),
 		deleteTemporaryDocument: vi.fn(async () => undefined),
+		wait: vi.fn(async () => undefined),
 		...overrides
 	};
 }
@@ -100,6 +99,25 @@ describe('coverage photo topic import', () => {
 		expect(stages).toEqual(['preparing', 'uploading', 'reading', 'extracting', 'cleaning_up']);
 	});
 
+	it('waits for background OCR after the queue accepts the page', async () => {
+		const file = new File(['photo'], 'ementa.jpg', { type: 'image/jpeg' });
+		const loadPage = vi
+			.fn()
+			.mockResolvedValueOnce(sourcePage({ status: 'processing', text: '' }))
+			.mockResolvedValueOnce(sourcePage());
+		const deps = dependencies(file, {
+			process: vi.fn(async (): Promise<OcrRunResult> => ({ state: 'retry_later' })),
+			loadPage
+		});
+
+		const result = await extractTopicsFromPhotoWithDependencies(file, deps);
+
+		expect(result.topics.map((topic) => topic.text)).toEqual(['Temperatura', 'Calor específico']);
+		expect(loadPage).toHaveBeenCalledTimes(2);
+		expect(deps.wait).toHaveBeenCalledTimes(1);
+		expect(deps.deleteTemporaryDocument).toHaveBeenCalledWith(DOCUMENT_ID);
+	});
+
 	it('reuses a duplicate document without deleting the user original', async () => {
 		const file = new File(['photo'], 'ementa.jpg', { type: 'image/jpeg' });
 		const deps = dependencies(file, {
@@ -107,7 +125,7 @@ describe('coverage photo topic import', () => {
 				throw new DuplicateImageError(DOCUMENT_ID);
 			}),
 			process: vi.fn(
-				async (): Promise<OcrRunResult> => ({ state: 'already_complete', needsReview: false })
+				async (): Promise<OcrRunResult> => ({ state: 'complete', needsReview: false })
 			)
 		});
 
@@ -131,10 +149,25 @@ describe('coverage photo topic import', () => {
 		expect(result.topics).toHaveLength(2);
 	});
 
-	it('cleans up temporary data when provider quota prevents extraction', async () => {
+	it('cleans up temporary data when background OCR remains pending', async () => {
 		const file = new File(['photo'], 'ementa.jpg', { type: 'image/jpeg' });
 		const deps = dependencies(file, {
-			process: vi.fn(async (): Promise<OcrRunResult> => ({ state: 'quota_exhausted' }))
+			process: vi.fn(async (): Promise<OcrRunResult> => ({ state: 'retry_later' })),
+			loadPage: vi.fn(async () => sourcePage({ status: 'processing', text: '' }))
+		});
+
+		await expect(extractTopicsFromPhotoWithDependencies(file, deps)).rejects.toMatchObject({
+			name: 'CoveragePhotoImportError',
+			code: 'ocr_pending'
+		} satisfies Partial<CoveragePhotoImportError>);
+		expect(deps.deleteTemporaryDocument).toHaveBeenCalledWith(DOCUMENT_ID);
+	});
+
+	it('maps a background quota block to the coverage quota state', async () => {
+		const file = new File(['photo'], 'ementa.jpg', { type: 'image/jpeg' });
+		const deps = dependencies(file, {
+			process: vi.fn(async (): Promise<OcrRunResult> => ({ state: 'retry_later' })),
+			loadPage: vi.fn(async () => sourcePage({ status: 'blocked_quota', text: '' }))
 		});
 
 		await expect(extractTopicsFromPhotoWithDependencies(file, deps)).rejects.toMatchObject({
@@ -142,5 +175,20 @@ describe('coverage photo topic import', () => {
 			code: 'quota_exhausted'
 		} satisfies Partial<CoveragePhotoImportError>);
 		expect(deps.deleteTemporaryDocument).toHaveBeenCalledWith(DOCUMENT_ID);
+	});
+
+	it('keeps the provider quota message when it arrives as an OCR processing error', async () => {
+		const file = new File(['photo'], 'ementa.jpg', { type: 'image/jpeg' });
+		const deps = dependencies(file, {
+			process: vi.fn(async () => {
+				throw new OcrProcessingError('gemini_daily_quota', false, 'Cota do provedor atingida.');
+			})
+		});
+
+		await expect(extractTopicsFromPhotoWithDependencies(file, deps)).rejects.toMatchObject({
+			name: 'CoveragePhotoImportError',
+			code: 'quota_exhausted',
+			message: 'Cota do provedor atingida.'
+		} satisfies Partial<CoveragePhotoImportError>);
 	});
 });

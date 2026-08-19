@@ -47,10 +47,6 @@ vi.mock('$lib/services/import-sessions', () => ({
 	createImportSession: dependencies.createImportSession
 }));
 
-vi.mock('$lib/services/ocr-consent', () => ({
-	recordOcrConsent: vi.fn(async () => undefined)
-}));
-
 vi.mock('$lib/services/ocr', async (importOriginal) => {
 	const original = await importOriginal<typeof import('$lib/services/ocr')>();
 	return { ...original, processPageOcr: dependencies.processPageOcr };
@@ -103,7 +99,7 @@ const uploadedPage = {
 	pageId,
 	ocrJobId: '66666666-6666-4666-8666-666666666666',
 	sha256: 'a'.repeat(64),
-	storagePath: `${userId}/document/original.webp`,
+	storagePath: 'drive:2AbCdEfGhIjKlMnOpQrStUvWxYz_123456',
 	thumbnailPath: `${userId}/document/thumbnail.webp`
 };
 
@@ -161,7 +157,7 @@ describe('image import queue restoration', () => {
 	it('resumes OCR without preparing or uploading an already published page', async () => {
 		const store = new MemoryStore(storedRecord(uploadedPage));
 		dependencies.processPageOcr.mockResolvedValue({
-			state: 'already_complete',
+			state: 'complete',
 			needsReview: false
 		});
 		const queue = await import('../../../src/lib/stores/import-queue.svelte');

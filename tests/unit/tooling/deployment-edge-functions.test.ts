@@ -7,6 +7,7 @@ const driveSetup = readFileSync('docs/GOOGLE_DRIVE_SETUP.md', 'utf8');
 const desktopWorker = readFileSync('docs/DESKTOP_OCR_WORKER.md', 'utf8');
 const desktopWorkerAuth = readFileSync('supabase/functions/_shared/desktop-worker-auth.ts', 'utf8');
 const ocrRollout = readFileSync('docs/OCR_MIGRATION_ROLLOUT.md', 'utf8');
+const retiredSemanticIndex = readFileSync('supabase/functions/semantic-index/index.ts', 'utf8');
 
 const versionedFunctions = readdirSync('supabase/functions', { withFileTypes: true })
 	.filter((entry) => entry.isDirectory() && entry.name !== '_shared')
@@ -24,12 +25,16 @@ const requiredOcrMigrations = [
 
 describe('Edge Function deployment contract', () => {
 	it('keeps every versioned application Edge Function covered by config and the all-functions deploy flow', () => {
-		expect(versionedFunctions).toHaveLength(12);
+		expect(versionedFunctions).toContain('semantic-coverage');
+		expect(versionedFunctions).toContain('semantic-search');
+		expect(versionedFunctions).toContain('semantic-index');
 		for (const functionName of versionedFunctions) {
 			expect(config).toContain(`[functions.${functionName}]`);
 		}
 		expect(config).toContain('[functions.semantic-coverage]\nverify_jwt = true');
 		expect(config).toContain('[functions.semantic-search]\nverify_jwt = true');
+		expect(config).toContain('[functions.semantic-index]\nverify_jwt = true');
+		expect(retiredSemanticIndex).toContain('semantic_index_retired');
 		expect(staging).toContain(
 			'supabase functions deploy --project-ref "$STAGING_SUPABASE_PROJECT_REF"'
 		);
@@ -52,6 +57,8 @@ describe('Edge Function deployment contract', () => {
 		expect(config).toContain('[functions.process-ocr]\nverify_jwt = true');
 		expect(config).toContain('[functions.semantic-coverage]\nverify_jwt = true');
 		expect(config).toContain('[functions.semantic-search]\nverify_jwt = true');
+		expect(config).toContain('[functions.semantic-index]\nverify_jwt = true');
+		expect(retiredSemanticIndex).toContain('semantic_index_retired');
 		expect(config).toContain('[functions.delete-document]\nverify_jwt = true');
 		expect(staging).toContain('Não use `--no-verify-jwt` global');
 		expect(driveSetup).toContain('drive-oauth-callback');

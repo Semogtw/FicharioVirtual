@@ -39,10 +39,6 @@ vi.mock('$lib/services/import-sessions', () => ({
 	listActiveImportSessions: vi.fn(async () => [])
 }));
 
-vi.mock('$lib/services/ocr-consent', () => ({
-	recordOcrConsent: vi.fn(async () => undefined)
-}));
-
 vi.mock('$lib/services/ocr', async (importOriginal) => {
 	const original = await importOriginal<typeof import('$lib/services/ocr')>();
 	return { ...original, processPageOcr: dependencies.processPageOcr };

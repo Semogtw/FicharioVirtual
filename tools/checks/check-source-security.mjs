@@ -174,13 +174,15 @@ if (!/injectRegister:\s*false/.test(pwaConfig)) {
 	fail(viteConfigPath, 'csp', 'automatic PWA registration must stay disabled');
 }
 if (
-	!/<link\s+rel=["']manifest["']\s+href=["']%sveltekit\.assets%\/manifest\.webmanifest["']\s*\/>/.test(
+	!/<link\s+rel=["']manifest["']\s+href=["'](?:%sveltekit\.assets%|)\/manifest\.webmanifest["']\s*\/>/.test(
 		appHtml
 	)
 ) {
 	fail(appHtmlPath, 'pwa-manifest', 'the application template must link the generated manifest');
 }
-if (!/<script\s+src=["']%sveltekit\.assets%\/registerSW\.js["']\s+defer><\/script>/.test(appHtml)) {
+if (
+	!/<script\s+src=["'](?:%sveltekit\.assets%|)\/registerSW\.js["']\s+defer><\/script>/.test(appHtml)
+) {
 	fail(appHtmlPath, 'csp', 'PWA registration must use an external deferred script');
 }
 

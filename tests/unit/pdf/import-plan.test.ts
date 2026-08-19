@@ -40,7 +40,7 @@ describe('buildPdfImportPlan', () => {
 				pageNumber: 2,
 				nativeText: null,
 				needsOcr: true,
-				temporaryImagePath: 'document-id/pages/2.webp',
+				temporaryImagePath: 'document-id/pages/2.jpg',
 				jobId: expect.any(String)
 			},
 			{

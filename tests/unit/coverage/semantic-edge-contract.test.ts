@@ -1,37 +1,51 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const edge = readFileSync('supabase/functions/semantic-coverage/index.ts', 'utf8');
-const verifier = readFileSync(
-	'supabase/functions/_shared/gemini-coverage-verifier.ts',
+const coverageEdge = readFileSync('supabase/functions/semantic-coverage/index.ts', 'utf8');
+const queryCache = readFileSync('supabase/functions/_shared/semantic-query-cache.ts', 'utf8');
+const backgroundIndexer = readFileSync(
+	'supabase/functions/_shared/background-semantic-indexer.ts',
+	'utf8'
+);
+const retiredIndexEdge = readFileSync('supabase/functions/semantic-index/index.ts', 'utf8');
+const retryMigration = readFileSync(
+	'supabase/migrations/202608102001_semantic_index_retry_hardening.sql',
 	'utf8'
 );
 
-describe('semantic coverage Edge Function source contracts', () => {
-	it('indexes only complete page chunk sets within the per-run budget', () => {
-		expect(edge).toContain('const chunks = chunkSemanticText(page.source_text);');
-		expect(edge).toContain(
-		'if (flattened.length + chunks.length > MAX_INDEX_CHUNKS_PER_RUN) break;'
-	);
-		expect(edge).not.toContain(
-		'if (flattened.length >= MAX_INDEX_CHUNKS_PER_RUN) break;\n\t\t\tflattened.push'
-	);
+describe('semantic production Edge Function contracts', () => {
+	it('uses query embeddings and RRF without indexing documents during coverage', () => {
+		expect(coverageEdge).toContain("from '../_shared/semantic-query-cache.ts'");
+		expect(coverageEdge).toContain("from '../_shared/semantic-ranking.ts'");
+		expect(coverageEdge).toContain('SEMANTIC_EMBEDDING_MODEL');
+		expect(coverageEdge).toContain('getSemanticQueryEmbeddings({');
+		expect(coverageEdge).toContain('compareHybridRanked');
+		expect(coverageEdge).not.toContain('indexNextSemanticBatch');
+		expect(coverageEdge).not.toContain('requestGeminiCoverageVerification');
 	});
 
-	it('returns complete index metadata when query embeddings fall back to lexical search', () => {
-		expect(edge).toContain(
-		'const stats = await indexStats(supabase, embeddingModel, parsed.notebookId);'
-	);
-		expect(edge).toContain('index: stats ? { ...stats, indexedThisRun: 0 } : null');
+	it('batches cold query embeddings while preserving per-query cache keys', () => {
+		expect(queryCache).toContain('export async function getSemanticQueryEmbeddings');
+		expect(queryCache).toContain('const misses = unique.filter');
+		expect(queryCache).toContain('inputs: misses.map');
+		expect(queryCache).not.toContain('Promise.all(writes)');
+		expect(queryCache).toContain(".catch(() => undefined)");
 	});
 
-	it('keeps semantic provider telemetry wired into document and query embedding calls', () => {
-		expect(edge).toContain("from '../_shared/semantic-provider-telemetry.ts'");
-		expect(edge).toContain("operation: 'document_embedding'");
-		expect(edge).toContain("operation: 'query_embedding'");
+	it('keeps document indexing exclusively in the background worker path', () => {
+		expect(backgroundIndexer).toContain("taskType: 'RETRIEVAL_DOCUMENT'");
+		expect(backgroundIndexer).toContain("'replace'");
+		expect(backgroundIndexer).toContain("'record_failure'");
+		expect(retiredIndexEdge).toContain("code: 'semantic_index_retired'");
+		expect(retiredIndexEdge).toContain('410');
 	});
 
-	it('bounds Gemini verifier output tokens', () => {
-		expect(verifier).toContain('maxOutputTokens: 2_048');
+	it('keeps retry state private', () => {
+		expect(retryMigration).toContain('create table public.semantic_index_failures');
+		expect(retryMigration).toContain('retry_after > now()');
+		expect(retryMigration).toContain('record_semantic_index_failure');
+		expect(retryMigration).toContain(
+			'revoke all on table public.semantic_index_failures from public, anon, authenticated'
+		);
 	});
 });

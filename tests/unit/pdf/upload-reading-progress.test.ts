@@ -52,7 +52,7 @@ function pdf() {
 }
 
 describe('PDF OCR progress', () => {
-	it('announces the reading phase before starting the first OCR request', async () => {
+	it('announces the reading phase before starting the first OCR batch', async () => {
 		const progress: Array<{ phase: string; completed: number; total: number }> = [];
 		let observedBeforeRequest: (typeof progress)[number] | undefined;
 		const dependencies: PdfUploadDependencies = {
@@ -65,17 +65,23 @@ describe('PDF OCR progress', () => {
 			async calculateSha256() {
 				return 'a'.repeat(64);
 			},
-			async recordOcrConsent() {},
-			async processPageOcr() {
+			async processOcrBatch(pageIds) {
 				observedBeforeRequest = progress.at(-1);
-				return { state: 'complete', needsReview: false, warningCount: 0 };
+				return {
+					state: 'complete',
+					completedPageIds: pageIds,
+					reviewPageIds: [],
+					pendingPageIds: [],
+					failedPageIds: [],
+					splitRequiredPageIds: [],
+					unexpectedResultPageIds: []
+				};
 			}
 		};
 
 		await uploadPdfWithGateway(
 			pdf(),
 			{
-				consentGranted: true,
 				onProgress(update) {
 					progress.push(update);
 				}

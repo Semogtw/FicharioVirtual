@@ -29,7 +29,7 @@ const requiredByFile = new Map([
 			".from('ocr_batches')",
 			'ocr_batch_manifest_mismatch',
 			"supabase.rpc('finish_ocr_batch'",
-			"supabase.rpc('complete_ocr_job'"
+			"supabase.rpc('complete_ocr_job_with_geometry'"
 		]
 	],
 	['src/lib/pdf/upload.ts', ['runPdfOcrBatches', 'MAX_DERIVED_PAGE_BYTES', 'processOcrBatch']],

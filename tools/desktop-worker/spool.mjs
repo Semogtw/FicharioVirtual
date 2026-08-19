@@ -1,10 +1,34 @@
-import { chmod } from 'node:fs/promises';
+import { closeSync, constants, fchmodSync, fstatSync, openSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { requireCompletionRequest } from './contract.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SAFE_CODE = /^[a-z0-9_]{3,96}$/;
 const MAX_RESULT_BYTES = 2 * 1024 * 1024;
+
+function prepareSpoolFile(path) {
+	const noFollow = constants.O_NOFOLLOW ?? 0;
+	let descriptor;
+	try {
+		descriptor = openSync(path, constants.O_RDWR | noFollow);
+	} catch (error) {
+		if (!(error instanceof Error) || !('code' in error) || error.code !== 'ENOENT') throw error;
+		descriptor = openSync(
+			path,
+			constants.O_RDWR | constants.O_CREAT | constants.O_EXCL | noFollow,
+			0o600
+		);
+	}
+
+	try {
+		if (!fstatSync(descriptor).isFile()) {
+			throw new Error('Desktop worker spool path must be a regular file');
+		}
+		fchmodSync(descriptor, 0o600);
+	} finally {
+		closeSync(descriptor);
+	}
+}
 
 function validateResult(result) {
 	const parsed = requireCompletionRequest(result);
@@ -50,6 +74,7 @@ export class ResultSpool {
 	#database;
 
 	constructor(path) {
+		prepareSpoolFile(path);
 		this.#database = new DatabaseSync(path);
 		this.#database.exec(`
 			PRAGMA foreign_keys = ON;
@@ -82,7 +107,6 @@ export class ResultSpool {
 			CREATE INDEX IF NOT EXISTS result_dead_letter_rejected_idx
 				ON result_dead_letter (rejected_at, job_id);
 		`);
-		chmod(path, 0o600).catch(() => undefined);
 	}
 
 	close() {
@@ -229,7 +253,7 @@ export class ResultSpool {
 						job_id, source_sha256, model_id, model_version, result_json,
 						attempt_count, created_at, rejected_at, reason_code
 					) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-					`
+				`
 				)
 				.run(
 					pending.job_id,

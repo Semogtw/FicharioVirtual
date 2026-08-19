@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 /**
  * @param {string} message
  * @returns {never}
@@ -45,6 +47,31 @@ function requireCspDirective(directives, name, requiredValues) {
 		if (!values.has(value)) fail(`Content-Security-Policy ${name} must include ${value}`);
 	}
 	return values;
+}
+
+/**
+ * @param {string} html
+ * @returns {string[]}
+ */
+function inlineScriptSources(html) {
+	const sources = [];
+	const pattern = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
+	for (const match of html.matchAll(pattern)) {
+		const attributes = match[1] ?? '';
+		const source = match[2] ?? '';
+		if (/\bsrc\s*=/i.test(attributes) || source.trim() === '') continue;
+		sources.push(source);
+	}
+	return sources;
+}
+
+/**
+ * @param {string} source
+ * @returns {string}
+ */
+function cspScriptHash(source) {
+	const digest = createHash('sha256').update(source, 'utf8').digest('base64');
+	return `'sha256-${digest}'`;
 }
 
 /**
@@ -130,6 +157,22 @@ export function assertSecurityHeaders(headers) {
 	}
 	if (requireHeader(headers, 'cross-origin-resource-policy').toLowerCase() !== 'same-origin') {
 		fail('Cross-Origin-Resource-Policy must be same-origin');
+	}
+}
+
+/**
+ * @param {Headers} headers
+ * @param {unknown} html
+ */
+export function assertInlineScriptsAllowedByCsp(headers, html) {
+	if (typeof html !== 'string' || html.trim() === '') fail('app shell HTML is empty');
+	const csp = parseCspDirectives(requireHeader(headers, 'content-security-policy'));
+	const scripts = requireCspDirective(csp, 'script-src', []);
+	for (const source of inlineScriptSources(html)) {
+		const hash = cspScriptHash(source);
+		if (!scripts.has(hash)) {
+			fail(`Content-Security-Policy script-src does not authorize inline bootstrap ${hash}`);
+		}
 	}
 }
 

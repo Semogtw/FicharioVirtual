@@ -1,6 +1,7 @@
 import { deflateSync } from 'node:zlib';
 
 const PNG_SIGNATURE = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10]);
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PROVIDER_ERROR_CODES = Object.freeze([
 	'gemini_daily_quota',
 	'gemini_rate_limited',
@@ -18,6 +19,15 @@ const PROVIDER_ERROR_KINDS = Object.freeze({
 	gemini_invalid_request: 'invalid_request',
 	gemini_service_unavailable: 'service_unavailable'
 });
+const SAFE_ROUTE_REASONS = Object.freeze(['primary_gemini', 'fallback_gemini_rate_limit']);
+const SAFE_RUNTIME_ERROR_CODES = Object.freeze([
+	...PROVIDER_ERROR_CODES,
+	'ocr_provider_rate_queue_full',
+	'ocr_rate_limiter_unavailable',
+	'ocr_request_failed',
+	'ocr_response_invalid',
+	'ocr_persistence_failed'
+]);
 
 /** @param {unknown} value */
 function safeProviderErrorCode(value) {
@@ -30,6 +40,42 @@ function safeProviderErrorCode(value) {
 function safeProviderErrorKind(value) {
 	const candidate = typeof value === 'string' ? value : '';
 	return Object.values(PROVIDER_ERROR_KINDS).includes(candidate) ? candidate : null;
+}
+
+/** @param {unknown} value */
+function safeModel(value) {
+	return typeof value === 'string' && /^[A-Za-z0-9._-]{3,128}$/.test(value) ? value : null;
+}
+
+/** @param {unknown} value */
+function safeRouteReason(value) {
+	return SAFE_ROUTE_REASONS.includes(typeof value === 'string' ? value : '') ? value : null;
+}
+
+/** @param {unknown} value */
+function safeRuntimeErrorCode(value) {
+	return SAFE_RUNTIME_ERROR_CODES.includes(typeof value === 'string' ? value : '') ? value : null;
+}
+
+/** @param {unknown} value */
+function sanitizeProviderAttempts(value) {
+	if (!Array.isArray(value)) return [];
+	return value.slice(0, 8).flatMap((attempt) => {
+		if (attempt === null || typeof attempt !== 'object' || Array.isArray(attempt)) return [];
+		const record = /** @type {Record<string, unknown>} */ (attempt);
+		const model = safeModel(record.model);
+		const status = record.status === 'success' || record.status === 'error' ? record.status : null;
+		const routeReason = safeRouteReason(record.routeReason);
+		if (!model || !status || !routeReason) return [];
+		return [
+			{
+				model,
+				status,
+				safeErrorCode: safeRuntimeErrorCode(record.safeErrorCode),
+				routeReason
+			}
+		];
+	});
 }
 
 /** @type {Readonly<Record<string, readonly number[]>>} */
@@ -121,7 +167,7 @@ export function createOcrProbePng(nonce) {
 
 /**
  * @typedef {'pass' | 'fail' | 'not_run'} OcrReportStatus
- * @typedef {'configuration' | 'authentication' | 'authorization' | 'consent' | 'import' | 'invocation' | 'persistence' | 'cleanup' | 'confirmation' | null} OcrFailureStage
+ * @typedef {'configuration' | 'authentication' | 'authorization' | 'probe' | 'invocation' | 'persistence' | 'cleanup' | 'confirmation' | null} OcrFailureStage
  * @typedef {'success' | 'failure' | 'not_required'} CleanupStatus
  */
 
@@ -132,8 +178,7 @@ export function createOcrProbePng(nonce) {
  *   stages: {
  *     authenticated: unknown;
  *     authorized: unknown;
- *     consentRecorded: unknown;
- *     importCreated: unknown;
+ *     probeCreated: unknown;
  *     functionCompleted: unknown;
  *     persistenceVerified: unknown;
  *   };
@@ -146,12 +191,14 @@ export function createOcrProbePng(nonce) {
  *     attemptCount: unknown;
  *     tokens: { fichario: unknown; ocr: unknown; numericProbe: unknown };
  *   };
+ *   providerAttempts?: unknown;
  *   diagnostic?: {
  *     httpStatus?: unknown;
  *     errorKind?: unknown;
  *     providerStatus?: unknown;
  *     providerErrorKind?: unknown;
  *     providerErrorCode?: unknown;
+ *     runtimeErrorCode?: unknown;
  *   };
  *   cleanup: { document: CleanupStatus; session: CleanupStatus };
  * }} input
@@ -161,6 +208,7 @@ export function createOcrStagingReport({
 	failureStage,
 	stages,
 	outcome,
+	providerAttempts,
 	diagnostic = {},
 	cleanup
 }) {
@@ -190,8 +238,7 @@ export function createOcrStagingReport({
 			'configuration',
 			'authentication',
 			'authorization',
-			'consent',
-			'import',
+			'probe',
 			'invocation',
 			'persistence',
 			'cleanup',
@@ -201,14 +248,13 @@ export function createOcrStagingReport({
 			: null;
 
 	return {
-		schemaVersion: 2,
+		schemaVersion: 3,
 		status: status === 'pass' || status === 'not_run' ? status : 'fail',
 		failureStage: sanitizedFailureStage(failureStage),
 		stages: {
 			authenticated: stages.authenticated === true,
 			authorized: stages.authorized === true,
-			consentRecorded: stages.consentRecorded === true,
-			importCreated: stages.importCreated === true,
+			probeCreated: stages.probeCreated === true,
 			functionCompleted: stages.functionCompleted === true,
 			persistenceVerified: stages.persistenceVerified === true
 		},
@@ -225,12 +271,14 @@ export function createOcrStagingReport({
 				numericProbe: nullableBoolean(outcome.tokens.numericProbe)
 			}
 		},
+		providerAttempts: sanitizeProviderAttempts(providerAttempts),
 		diagnostic: {
 			httpStatus: nullableHttpStatus(diagnostic.httpStatus),
 			errorKind: errorKind(diagnostic.errorKind),
 			providerStatus: nullableHttpStatus(diagnostic.providerStatus),
 			providerErrorKind: safeProviderErrorKind(diagnostic.providerErrorKind),
-			providerErrorCode: safeProviderErrorCode(diagnostic.providerErrorCode)
+			providerErrorCode: safeProviderErrorCode(diagnostic.providerErrorCode),
+			runtimeErrorCode: safeRuntimeErrorCode(diagnostic.runtimeErrorCode)
 		},
 		cleanup: {
 			document: cleanupStatus(cleanup.document),
@@ -324,27 +372,70 @@ export function normalizeOcrProbeText(text) {
 		.trim();
 }
 
+/** @param {Record<string, unknown>} record @param {readonly string[]} expected */
+function hasExactKeys(record, expected) {
+	const actual = Object.keys(record).sort();
+	const wanted = [...expected].sort();
+	return actual.length === wanted.length && actual.every((key, index) => key === wanted[index]);
+}
+
+/** @param {unknown} value */
+function parseIdArray(value) {
+	if (
+		!Array.isArray(value) ||
+		value.some((entry) => typeof entry !== 'string' || !UUID.test(entry)) ||
+		new Set(value).size !== value.length
+	) {
+		throw new Error('OCR staging contract failed: Edge Function returned an invalid page list');
+	}
+	return /** @type {string[]} */ (value);
+}
+
 /**
- * @param {{ data: unknown }} input
+ * @param {{ data: unknown; pageId: string }} input
+ * @returns {{ needsReview: boolean }}
  */
-export function assertOcrInvocation({ data }) {
+export function assertOcrInvocation({ data, pageId }) {
+	if (!UUID.test(pageId)) throw new TypeError('Invalid OCR staging page identifier');
 	if (!data || typeof data !== 'object' || Array.isArray(data)) {
 		throw new Error('OCR staging contract failed: Edge Function returned an invalid body');
 	}
-	const result = /** @type {{ state?: unknown; needsReview?: unknown; warningCount?: unknown }} */ (
-		data
-	);
-	if (result.state !== 'complete') {
+	const result = /** @type {Record<string, unknown>} */ (data);
+	if (
+		!hasExactKeys(result, [
+			'completedPageIds',
+			'failedPageIds',
+			'pendingPageIds',
+			'reviewPageIds',
+			'splitRequiredPageIds',
+			'state',
+			'unexpectedResultPageIds'
+		]) ||
+		result.state !== 'complete'
+	) {
 		throw new Error(
 			`OCR staging contract failed: unexpected function state ${String(result.state)}`
 		);
 	}
-	if (typeof result.needsReview !== 'boolean') {
-		throw new Error('OCR staging contract failed: needsReview is not boolean');
+	const completed = parseIdArray(result.completedPageIds);
+	const review = parseIdArray(result.reviewPageIds);
+	const pending = parseIdArray(result.pendingPageIds);
+	const failed = parseIdArray(result.failedPageIds);
+	const split = parseIdArray(result.splitRequiredPageIds);
+	const unexpected = parseIdArray(result.unexpectedResultPageIds);
+	if (
+		completed.length !== 1 ||
+		completed[0] !== pageId ||
+		review.length > 1 ||
+		(review.length === 1 && review[0] !== pageId) ||
+		pending.length !== 0 ||
+		failed.length !== 0 ||
+		split.length !== 0 ||
+		unexpected.length !== 0
+	) {
+		throw new Error('OCR staging contract failed: Edge Function page sets do not match the probe');
 	}
-	if (!Number.isInteger(result.warningCount) || Number(result.warningCount) < 0) {
-		throw new Error('OCR staging contract failed: warningCount is invalid');
-	}
+	return { needsReview: review.includes(pageId) };
 }
 
 /**

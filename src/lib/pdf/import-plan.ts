@@ -49,7 +49,7 @@ export function buildPdfImportPlan(
 			pageNumber,
 			nativeText: needsOcr ? null : (nativeText.get(pageNumber) ?? ''),
 			needsOcr,
-			temporaryImagePath: needsOcr ? `${storageRoot}/pages/${pageNumber}.webp` : null,
+			temporaryImagePath: needsOcr ? `${storageRoot}/pages/${pageNumber}.jpg` : null,
 			jobId: needsOcr ? uuid() : null
 		});
 	});

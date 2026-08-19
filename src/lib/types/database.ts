@@ -33,8 +33,6 @@ type TableDefinition<Row, Insert, Update> = {
 type AppUserRow = {
 	user_id: string;
 	is_active: boolean;
-	ocr_consent_at: string | null;
-	ocr_consent_version: number | null;
 	created_at: string;
 	updated_at: string;
 };
@@ -207,8 +205,6 @@ export type Database = {
 				{
 					user_id: string;
 					is_active?: boolean;
-					ocr_consent_at?: string | null;
-					ocr_consent_version?: number | null;
 					created_at?: string;
 					updated_at?: string;
 				},
@@ -401,19 +397,6 @@ export type Database = {
 				Args: { target_page_id: string; target_model: string; claimed_at: string };
 				Returns: Json;
 			};
-			complete_drive_legacy_migration: {
-				Args: {
-					target_document_id: string;
-					expected_storage_path: string;
-					target_drive_file_id: string;
-					target_drive_parent_folder_id: string;
-					target_drive_mime_type: string;
-					target_drive_modified_time: string;
-					target_drive_version: string;
-					target_drive_md5_checksum: string | null;
-				};
-				Returns: boolean;
-			};
 			complete_ocr_job: {
 				Args: {
 					target_page_id: string;
@@ -423,27 +406,6 @@ export type Database = {
 					completed_at: string;
 				};
 				Returns: boolean;
-			};
-			create_drive_image_import: {
-				Args: {
-					target_document_id: string;
-					target_page_id: string;
-					target_job_id: string;
-					target_notebook_id: string | null;
-					document_title: string;
-					original_filename: string;
-					target_drive_file_id: string;
-					target_drive_parent_folder_id: string;
-					target_drive_mime_type: string;
-					target_drive_modified_time: string;
-					target_drive_version: string;
-					target_drive_md5_checksum: string | null;
-					thumbnail_storage_path: string;
-					prepared_sha256: string;
-					source_created_at?: string | null;
-					prompt_version?: number;
-				};
-				Returns: Array<{ document_id: string; page_id: string; ocr_job_id: string }>;
 			};
 			create_drive_pdf_import: {
 				Args: {
@@ -464,35 +426,16 @@ export type Database = {
 				};
 				Returns: Json;
 			};
-			create_image_import: {
+			create_ocr_staging_probe: {
 				Args: {
 					target_document_id: string;
 					target_page_id: string;
 					target_job_id: string;
-					target_notebook_id: string | null;
-					document_title: string;
-					original_filename: string;
-					original_storage_path: string;
-					thumbnail_storage_path: string;
+					image_storage_path: string;
 					prepared_sha256: string;
-					source_created_at?: string | null;
 					prompt_version?: number;
 				};
 				Returns: Array<{ document_id: string; page_id: string; ocr_job_id: string }>;
-			};
-			create_pdf_import: {
-				Args: {
-					target_document_id: string;
-					target_notebook_id: string | null;
-					document_title: string;
-					original_filename: string;
-					original_storage_path: string;
-					prepared_sha256: string;
-					source_created_at: string | null;
-					page_descriptors: Json;
-					prompt_version?: number;
-				};
-				Returns: Json;
 			};
 			create_ocr_worker_pairing_code: {
 				Args: Record<string, never>;
@@ -506,14 +449,6 @@ export type Database = {
 			delete_notebook: { Args: { target_notebook_id: string }; Returns: boolean };
 			delete_tag: { Args: { target_tag_id: string }; Returns: boolean };
 			export_portable_manifest: { Args: Record<string, never>; Returns: Json };
-			finalize_drive_pdf_reference_import: {
-				Args: {
-					target_document_id: string;
-					page_descriptors: Json;
-					prompt_version?: number;
-				};
-				Returns: Json;
-			};
 			finish_ocr_batch: {
 				Args: {
 					target_batch_id: string;
@@ -632,7 +567,6 @@ export type Database = {
 				Args: { target_batch_id: string; attempted_pages: number; called_at: string };
 				Returns: boolean;
 			};
-			record_ocr_consent: { Args: { consent_version?: number }; Returns: boolean };
 			recover_stale_ocr_jobs: { Args: Record<string, never>; Returns: number };
 			register_ocr_batch: {
 				Args: {

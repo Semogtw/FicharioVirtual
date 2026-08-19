@@ -44,9 +44,7 @@ describe('OcrJobRunner', () => {
 				return { state: 'complete' as const, needsReview: false, warningCount: 0 };
 			})
 		};
-		const runner = new OcrJobRunner(gateway, coordinator(), {
-			wait: vi.fn(async () => undefined)
-		});
+		const runner = new OcrJobRunner(gateway, coordinator());
 
 		await runner.startQueue();
 
@@ -94,33 +92,18 @@ describe('OcrJobRunner', () => {
 		expect(runner.state).toBe('paused');
 	});
 
-	it('uses the bounded backoff schedule for transient work', async () => {
-		const wait = vi.fn(async () => undefined);
-		const gateway: OcrQueueGateway = {
-			listRunnableJobs: vi.fn().mockResolvedValueOnce([jobs[0]]).mockResolvedValueOnce([]),
-			processJob: vi.fn(async () => ({ state: 'retry_later' as const }))
-		};
-		const runner = new OcrJobRunner(gateway, coordinator(), { wait });
-
-		await runner.startQueue();
-
-		expect(wait).toHaveBeenCalledTimes(1);
-		expect(wait).toHaveBeenCalledWith(5_000, expect.any(AbortSignal));
-		expect(gateway.listRunnableJobs).toHaveBeenCalledTimes(2);
-	});
-
-	it('does not loop automatically after a daily quota result', async () => {
-		const wait = vi.fn(async () => undefined);
+	it('leaves retry scheduling to the background worker instead of looping in the browser', async () => {
 		const gateway: OcrQueueGateway = {
 			listRunnableJobs: vi.fn().mockResolvedValueOnce([jobs[0]]),
-			processJob: vi.fn(async () => ({ state: 'quota_exhausted' as const }))
+			processJob: vi.fn(async () => ({ state: 'retry_later' as const }))
 		};
-		const runner = new OcrJobRunner(gateway, coordinator(), { wait });
+		const runner = new OcrJobRunner(gateway, coordinator());
 
 		await runner.startQueue();
 
-		expect(wait).not.toHaveBeenCalled();
 		expect(gateway.listRunnableJobs).toHaveBeenCalledOnce();
+		expect(gateway.processJob).toHaveBeenCalledOnce();
+		expect(runner.state).toBe('idle');
 	});
 
 	it('closes cross-tab resources when disposed', () => {

@@ -15,6 +15,10 @@ function record(overrides: Record<string, unknown> = {}) {
 		name: 'Biologia',
 		description: null,
 		cover_style: 'linen',
+		parent_notebook_id: null,
+		banner_path: null,
+		banner_position_x: 50,
+		banner_position_y: 50,
 		created_at: '2026-08-02T01:00:00.000Z',
 		updated_at: '2026-08-02T02:00:00.000Z',
 		...overrides
@@ -26,10 +30,10 @@ function summary(overrides: Record<string, unknown> = {}) {
 }
 
 describe('notebook response contract', () => {
-	it('accepts and freezes exact notebook summaries', () => {
-		const result = parseNotebookRecords([summary()]);
+	it('accepts and freezes exact notebook summaries including parent identity', () => {
+		const result = parseNotebookRecords([summary({ parent_notebook_id: otherId })]);
 
-		expect(result).toEqual([summary()]);
+		expect(result).toEqual([summary({ parent_notebook_id: otherId })]);
 		expect(Object.isFrozen(result)).toBe(true);
 		expect(result.every(Object.isFrozen)).toBe(true);
 	});
@@ -49,6 +53,9 @@ describe('notebook response contract', () => {
 		expect(() => parseNotebookRecords([summary({ id: 'bad-id' })])).toThrow(
 			'Invalid notebook response'
 		);
+		expect(() => parseNotebookRecords([summary({ parent_notebook_id: 'bad-id' })])).toThrow(
+			'Invalid notebook response'
+		);
 		expect(() => parseNotebookRecords([summary({ document_count: -1 })])).toThrow(
 			'Invalid notebook response'
 		);
@@ -63,15 +70,24 @@ describe('notebook response contract', () => {
 });
 
 describe('notebook input contract', () => {
-	it('normalizes create and update inputs', () => {
+	it('normalizes create and update inputs with optional parents', () => {
 		expect(
 			parseNewNotebookInput({
 				name: '  Biologia  ',
 				description: '  Células e genética  ',
-				coverStyle: ' linen '
+				coverStyle: ' linen ',
+				parentNotebookId: otherId
 			})
-		).toEqual({ name: 'Biologia', description: 'Células e genética', coverStyle: 'linen' });
-		expect(parseNotebookUpdate({ description: '   ' })).toEqual({ description: null });
+		).toEqual({
+			name: 'Biologia',
+			description: 'Células e genética',
+			coverStyle: 'linen',
+			parentNotebookId: otherId
+		});
+		expect(parseNotebookUpdate({ description: '   ', parentNotebookId: null })).toEqual({
+			description: null,
+			parentNotebookId: null
+		});
 	});
 
 	it('rejects unsafe or empty notebook changes', () => {
@@ -83,6 +99,9 @@ describe('notebook input contract', () => {
 			parseNewNotebookInput({ name: 'Biologia', description: 'x'.repeat(2_001) })
 		).toThrow('Invalid notebook input');
 		expect(() => parseNewNotebookInput({ name: 'Biologia', coverStyle: '   ' })).toThrow(
+			'Invalid notebook input'
+		);
+		expect(() => parseNewNotebookInput({ name: 'Biologia', parentNotebookId: 'bad-id' })).toThrow(
 			'Invalid notebook input'
 		);
 		expect(() => parseNotebookUpdate({})).toThrow('Invalid notebook input');

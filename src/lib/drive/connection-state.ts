@@ -58,15 +58,6 @@ export function parseDriveConnection(data: unknown): DriveConnection {
 	return Object.freeze(result.data);
 }
 
-function formatSyncTime(value: string | null): string | null {
-	if (value === null) return null;
-	return new Intl.DateTimeFormat('pt-BR', {
-		dateStyle: 'short',
-		timeStyle: 'short',
-		timeZone: 'UTC'
-	}).format(new Date(value));
-}
-
 export function driveConnectionPresentation({
 	configured,
 	connection
@@ -77,8 +68,8 @@ export function driveConnectionPresentation({
 	if (!configured) {
 		return Object.freeze({
 			kind: 'configuration_required',
-			title: 'Google Drive ainda não configurado',
-			detail: 'Cadastre o cliente OAuth e os secrets no ambiente antes de conectar.',
+			title: 'Indisponível',
+			detail: 'O Google Drive está temporariamente indisponível. Tente novamente mais tarde.',
 			canConnect: false,
 			canSynchronize: false
 		});
@@ -87,8 +78,8 @@ export function driveConnectionPresentation({
 	if (connection === null || connection.status === 'disconnected') {
 		return Object.freeze({
 			kind: 'disconnected',
-			title: 'Google Drive desconectado',
-			detail: 'Conecte sua conta para criar ou localizar a pasta Fichário Digital.',
+			title: 'Não conectado',
+			detail: 'Conecte sua conta para guardar e sincronizar seus arquivos.',
 			canConnect: true,
 			canSynchronize: false
 		});
@@ -97,8 +88,8 @@ export function driveConnectionPresentation({
 	if (connection.status === 'connecting') {
 		return Object.freeze({
 			kind: 'connecting',
-			title: 'Conectando ao Google Drive',
-			detail: 'A autorização está sendo concluída com o escopo mínimo drive.file.',
+			title: 'Conectando…',
+			detail: 'Estamos terminando de conectar sua conta.',
 			canConnect: false,
 			canSynchronize: false
 		});
@@ -107,19 +98,20 @@ export function driveConnectionPresentation({
 	if (connection.status === 'syncing') {
 		return Object.freeze({
 			kind: 'syncing',
-			title: 'Sincronizando Google Drive',
-			detail: 'Aplicando mudanças sem bloquear os demais itens da fila.',
+			title: 'Sincronizando…',
+			detail: 'Seus arquivos estão sendo atualizados.',
 			canConnect: false,
 			canSynchronize: false
 		});
 	}
 
 	if (connection.status === 'connected') {
-		const syncedAt = formatSyncTime(connection.last_sync_completed_at);
 		return Object.freeze({
 			kind: 'connected',
-			title: 'Google Drive conectado',
-			detail: `${connection.google_email ?? 'Conta conectada'}${syncedAt ? ` · última sincronização em ${syncedAt}` : ' · sincronização inicial pendente'}`,
+			title: 'Conectado',
+			detail: connection.google_email
+				? `${connection.google_email} está conectado ao Fichário.`
+				: 'Sua conta está conectada ao Fichário.',
 			canConnect: false,
 			canSynchronize: true
 		});
@@ -128,8 +120,8 @@ export function driveConnectionPresentation({
 	if (connection.status === 'revoked') {
 		return Object.freeze({
 			kind: 'revoked',
-			title: 'Acesso ao Google Drive revogado',
-			detail: 'Reconecte a conta. Os metadados e textos permanecem preservados.',
+			title: 'Conexão encerrada',
+			detail: 'Conecte novamente para continuar usando o Google Drive.',
 			canConnect: true,
 			canSynchronize: false
 		});
@@ -137,8 +129,8 @@ export function driveConnectionPresentation({
 
 	return Object.freeze({
 		kind: 'error',
-		title: 'Google Drive requer atenção',
-		detail: connection.last_error_message ?? 'A sincronização falhou sem apagar o trabalho local.',
+		title: 'Não foi possível conectar',
+		detail: 'Tente conectar novamente. Seus arquivos no Fichário continuam preservados.',
 		canConnect: true,
 		canSynchronize: false
 	});

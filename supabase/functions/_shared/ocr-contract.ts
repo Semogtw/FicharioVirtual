@@ -15,7 +15,6 @@ export type OcrClaimState =
 	| 'busy'
 	| 'retry_later'
 	| 'quota_exhausted'
-	| 'consent_required'
 	| 'not_authorized'
 	| 'not_found'
 	| 'invalid_configuration'
@@ -27,7 +26,6 @@ const OCR_CLAIM_STATES = Object.freeze<OcrClaimState[]>([
 	'busy',
 	'retry_later',
 	'quota_exhausted',
-	'consent_required',
 	'not_authorized',
 	'not_found',
 	'invalid_configuration',
@@ -41,7 +39,7 @@ export function parseOcrClaimState(value: unknown): OcrClaimState | null {
 }
 
 export type OcrClaimResult =
-	| { state: 'not_authorized' | 'consent_required' | 'invalid_configuration' | 'not_found' }
+	| { state: 'not_authorized' | 'invalid_configuration' | 'not_found' }
 	| { state: 'already_complete' | 'busy' | 'not_retryable'; jobId: string }
 	| {
 			state: 'retry_later' | 'quota_exhausted';
@@ -111,12 +109,7 @@ export function parseOcrClaimResult(value: unknown): OcrClaimResult | null {
 	const state = parseOcrClaimState(record.state);
 	if (state === null) return null;
 
-	if (
-		state === 'not_authorized' ||
-		state === 'consent_required' ||
-		state === 'invalid_configuration' ||
-		state === 'not_found'
-	) {
+	if (state === 'not_authorized' || state === 'invalid_configuration' || state === 'not_found') {
 		return hasExactKeys(record, ['state']) ? Object.freeze({ state }) : null;
 	}
 
@@ -171,10 +164,6 @@ export type GeminiFailure = {
 	delaySeconds: number | null;
 	safeMessage: string;
 };
-
-export type GeminiFailureResponse =
-	| { status: 202; body: { state: 'quota_exhausted' | 'retry_later' } }
-	| { status: number; body: { code: GeminiFailure['code']; retryable: false } };
 
 export type GeminiProviderErrorMetadata = Readonly<{
 	status:
@@ -286,26 +275,9 @@ export function parseOcrPayload(value: string): OcrPayload {
 export function claimStateHttpStatus(state: unknown): number {
 	if (state === 'already_complete') return 200;
 	if (state === 'busy' || state === 'retry_later' || state === 'quota_exhausted') return 202;
-	if (state === 'consent_required' || state === 'not_authorized') return 403;
+	if (state === 'not_authorized') return 403;
 	if (state === 'not_found') return 404;
 	return 409;
-}
-
-export function geminiFailureResponse(
-	failure: GeminiFailure,
-	providerStatus: number
-): GeminiFailureResponse {
-	if (failure.quotaExhausted) {
-		return Object.freeze({ status: 202, body: Object.freeze({ state: 'quota_exhausted' }) });
-	}
-	if (failure.retryable) {
-		return Object.freeze({ status: 202, body: Object.freeze({ state: 'retry_later' }) });
-	}
-	const status = providerStatus >= 400 && providerStatus <= 599 ? providerStatus : 502;
-	return Object.freeze({
-		status,
-		body: Object.freeze({ code: failure.code, retryable: false })
-	});
 }
 
 export function classifyGeminiFailure(status: number, responseBody: string): GeminiFailure {

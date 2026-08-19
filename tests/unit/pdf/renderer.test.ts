@@ -104,7 +104,7 @@ describe('renderPdfDocumentPage', () => {
 		await vi.waitFor(() => expect(pdf.page.render).toHaveBeenCalledOnce());
 		pdf.render.resolve();
 		await vi.waitFor(() => expect(fixture.callbacks).toHaveLength(1));
-		const encoded = new Blob(['page'], { type: 'image/webp' });
+		const encoded = new Blob(['page'], { type: 'image/jpeg' });
 		fixture.callbacks[0]?.(encoded);
 
 		await expect(pending).resolves.toBe(encoded);
@@ -169,7 +169,7 @@ describe('renderPdfPage cancellation and cleanup', () => {
 		pdf.render.resolve();
 		await vi.waitFor(() => expect(fixture.callbacks).toHaveLength(1));
 		controller.abort();
-		fixture.callbacks[0]?.(new Blob(['page'], { type: 'image/webp' }));
+		fixture.callbacks[0]?.(new Blob(['page'], { type: 'image/jpeg' }));
 
 		await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
 		expect(pdf.renderTask.cancel).toHaveBeenCalled();
@@ -197,7 +197,7 @@ describe('renderPdfPage cancellation and cleanup', () => {
 		await vi.waitFor(() => expect(pdf.page.render).toHaveBeenCalledOnce());
 		pdf.render.resolve();
 		await vi.waitFor(() => expect(fixture.callbacks).toHaveLength(1));
-		const encoded = new Blob(['page'], { type: 'image/webp' });
+		const encoded = new Blob(['page'], { type: 'image/jpeg' });
 		fixture.callbacks[0]?.(encoded);
 
 		await expect(pending).resolves.toBe(encoded);

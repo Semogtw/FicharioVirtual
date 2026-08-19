@@ -1,11 +1,14 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import CorrectionEditor from '$lib/components/CorrectionEditor.svelte';
+	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import DocumentMediaViewer from '$lib/components/DocumentMediaViewer.svelte';
-	import type { PageDetail } from '$lib/domain/page';
 	import { deleteDocument } from '$lib/services/documents';
-	import { loadDocumentDetail, type DocumentDetail } from '$lib/services/document-detail';
+	import {
+		invalidateDocumentDetail,
+		loadDocumentDetail,
+		type DocumentDetail
+	} from '$lib/services/document-detail';
 	import { resumeDocumentOcr } from '$lib/services/ocr-resume';
 	import { RequestVersion } from '$lib/services/request-version';
 
@@ -15,20 +18,44 @@
 	let retrying = $state(false);
 	let deleting = $state(false);
 	let deleted = $state(false);
+	let confirmDelete = $state(false);
 	let error = $state<string | null>(null);
 	let highlightedQuery = $derived(page.url.searchParams.get('highlight')?.slice(0, 200) ?? '');
 	const refreshRequests = new RequestVersion();
 
-	let selectedPage = $derived(
-		detail?.pages.find((candidate) => candidate.pageNumber === selectedPageNumber) ??
-			detail?.pages[0] ??
-			null
-	);
+	function pageStatusLabel(status: DocumentDetail['pages'][number]['status']) {
+		switch (status) {
+			case 'pending':
+				return 'Na fila';
+			case 'processing':
+				return 'Processando';
+			case 'retryable':
+				return 'Aguardando';
+			case 'blocked_quota':
+				return 'Aguardando';
+			case 'failed':
+				return 'Falhou';
+			case 'ready':
+			case 'needs_review':
+				return 'Pronta';
+		}
+	}
 
-	async function refresh(documentId = page.params.id, requestedPageNumber = selectedPageNumber) {
+	async function refresh(
+		documentId: string | undefined = page.params.id,
+		requestedPageNumber = selectedPageNumber
+	) {
 		const version = refreshRequests.next();
 		loading = true;
 		error = null;
+		if (!documentId) {
+			if (refreshRequests.isCurrent(version)) {
+				detail = null;
+				error = 'Não foi possível abrir este documento.';
+				loading = false;
+			}
+			return;
+		}
 		try {
 			const loaded = await loadDocumentDetail(documentId);
 			if (!refreshRequests.isCurrent(version)) return;
@@ -47,13 +74,14 @@
 		}
 	}
 
-	function pageSaved(saved: PageDetail) {
-		if (!detail) return;
-		detail = Object.freeze({
-			...detail,
-			pages: Object.freeze(
-				detail.pages.map((candidate) => (candidate.id === saved.id ? saved : candidate))
-			)
+	function selectPage(pageNumber: number) {
+		if (!detail || pageNumber === selectedPageNumber) return;
+		selectedPageNumber = pageNumber;
+		error = null;
+		requestAnimationFrame(() => {
+			document
+				.getElementById(`document-page-${pageNumber}`)
+				?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 		});
 	}
 
@@ -65,6 +93,7 @@
 		try {
 			await resumeDocumentOcr(documentId);
 			if (page.params.id !== documentId) return;
+			invalidateDocumentDetail(documentId);
 			await refresh(documentId, selectedPageNumber);
 		} catch {
 			if (page.params.id === documentId) {
@@ -78,7 +107,6 @@
 	async function removeDocument() {
 		if (!detail || deleting || retrying) return;
 		const documentId = detail.id;
-		if (!window.confirm(`Excluir “${detail.title}” e todos os arquivos associados?`)) return;
 		deleting = true;
 		error = null;
 		try {
@@ -87,10 +115,13 @@
 			if (page.params.id === documentId) {
 				error = 'Não foi possível excluir o documento agora.';
 				deleting = false;
+				confirmDelete = false;
 			}
 			return;
 		}
 		if (page.params.id !== documentId) return;
+		invalidateDocumentDetail(documentId);
+		confirmDelete = false;
 		deleted = true;
 		detail = null;
 		try {
@@ -112,6 +143,7 @@
 		retrying = false;
 		deleting = false;
 		deleted = false;
+		confirmDelete = false;
 		void refresh(documentId, pageNumber);
 	});
 </script>
@@ -124,7 +156,7 @@
 	<a class="back" href="/library/">← Biblioteca</a>
 
 	{#if loading}
-		<p class="loading" role="status">Abrindo o documento privado…</p>
+		<p class="loading" role="status">Abrindo o documento…</p>
 	{:else if deleted}
 		<div class="deleted" role="status">
 			<p>O documento foi excluído.</p>
@@ -147,7 +179,7 @@
 				</p>
 			</div>
 			<div class="header-actions">
-				{#if ['processing', 'partially_ready', 'needs_review', 'failed'].includes(detail.status)}
+				{#if ['processing', 'partially_ready', 'failed'].includes(detail.status)}
 					<button
 						type="button"
 						class="secondary"
@@ -161,9 +193,9 @@
 					type="button"
 					class="danger"
 					disabled={deleting || retrying}
-					onclick={() => void removeDocument()}
+					onclick={() => (confirmDelete = true)}
 				>
-					{deleting ? 'Excluindo…' : 'Excluir'}
+					Excluir
 				</button>
 			</div>
 		</header>
@@ -171,7 +203,7 @@
 		{#if highlightedQuery}
 			<p class="search-context">
 				Aberto a partir da busca por <strong>“{highlightedQuery}”</strong>. A correspondência é
-				marcada sobre a mídia e na transcrição.
+				marcada diretamente no documento.
 			</p>
 		{/if}
 		{#if error}<p class="inline-error" role="alert">{error}</p>{/if}
@@ -181,18 +213,19 @@
 				{#each detail.pages as item}
 					<button
 						type="button"
-						class:active={item.pageNumber === selectedPage?.pageNumber}
-						onclick={() => (selectedPageNumber = item.pageNumber)}
+						class:active={item.pageNumber === selectedPageNumber}
+						aria-pressed={item.pageNumber === selectedPageNumber}
+						onclick={() => selectPage(item.pageNumber)}
 					>
 						<span>{item.pageNumber}</span>
-						<small>{item.status === 'needs_review' ? 'Revisar' : item.status}</small>
+						<small>{pageStatusLabel(item.status)}</small>
 					</button>
 				{/each}
 			</nav>
 		{/if}
 
-		{#if selectedPage}
-			<section class="reader" aria-label={`Página ${selectedPage.pageNumber}`}>
+		{#if detail.pages.length > 0}
+			<section class="reader" aria-label="Documento completo">
 				<div class="original-panel">
 					<div class="panel-heading">
 						<h2>Original</h2>
@@ -205,17 +238,31 @@
 						{/if}
 					</div>
 					<div class="original-body">
-						<DocumentMediaViewer {detail} page={selectedPage} query={highlightedQuery} />
+						<DocumentMediaViewer
+							{detail}
+							pages={detail.pages}
+							query={highlightedQuery}
+							focusPageNumber={selectedPageNumber}
+						/>
 					</div>
 				</div>
-
-				{#key selectedPage.id}
-					<CorrectionEditor page={selectedPage} onSaved={pageSaved} />
-				{/key}
 			</section>
 		{/if}
 	{/if}
 </div>
+
+<ConfirmDialog
+	open={confirmDelete && detail !== null}
+	title="Excluir documento?"
+	description={detail
+		? `“${detail.title}” e todos os arquivos associados serão removidos do Fichário.`
+		: ''}
+	confirmLabel="Excluir"
+	busy={deleting}
+	danger
+	onConfirm={() => void removeDocument()}
+	onCancel={() => (confirmDelete = false)}
+/>
 
 <style>
 	.page {
@@ -331,10 +378,7 @@
 	}
 
 	.reader {
-		display: grid;
-		grid-template-columns: minmax(20rem, 1fr) minmax(22rem, 1fr);
-		gap: 1rem;
-		align-items: stretch;
+		display: block;
 	}
 
 	.original-panel {
@@ -412,12 +456,6 @@
 	.fatal p {
 		margin: 0;
 		color: var(--danger);
-	}
-
-	@media (max-width: 980px) {
-		.reader {
-			grid-template-columns: 1fr;
-		}
 	}
 
 	@media (max-width: 620px) {

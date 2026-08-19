@@ -1,4 +1,5 @@
 import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist';
+import { safelyWipeBytes } from './safe-wipe';
 
 export type RenderPdfPageOptions = {
 	maxDimension?: number;
@@ -30,10 +31,10 @@ function toBlob(canvas: HTMLCanvasElement, type: string, quality: number) {
 }
 
 async function encode(canvas: HTMLCanvasElement, quality: number) {
-	const webp = await toBlob(canvas, 'image/webp', quality);
-	if (webp && webp.size > 0 && webp.type === 'image/webp') return webp;
 	const jpeg = await toBlob(canvas, 'image/jpeg', quality);
-	if (!jpeg || jpeg.size < 1) throw new PdfRenderError('render_failed');
+	if (!jpeg || jpeg.size < 1 || jpeg.type !== 'image/jpeg') {
+		throw new PdfRenderError('render_failed');
+	}
 	return jpeg;
 }
 
@@ -137,7 +138,7 @@ export async function renderPdfPage(
 
 	const bytes = new Uint8Array(await file.arrayBuffer());
 	if (options.signal?.aborted) {
-		bytes.fill(0);
+		safelyWipeBytes(bytes);
 		throw abortError();
 	}
 	const loadingTask = getDocument({ data: bytes, useSystemFonts: true });
@@ -164,6 +165,6 @@ export async function renderPdfPage(
 		options.signal?.removeEventListener('abort', cancel);
 		safely(() => pdfDocument?.cleanup());
 		await destroyLoadingTask();
-		bytes.fill(0);
+		safelyWipeBytes(bytes);
 	}
 }

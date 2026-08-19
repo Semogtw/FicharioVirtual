@@ -7,7 +7,7 @@
 
 	let {
 		initialValue = '',
-		placeholder = 'Pesquisar páginas, documentos e cadernos',
+		placeholder = 'Pesquisar páginas…',
 		onSearch
 	}: TopSearchProps = $props();
 
@@ -25,7 +25,16 @@
 	<svg class="search-icon" aria-hidden="true" viewBox="0 0 24 24">
 		<path d="m21 21-4.35-4.35m2.35-5.15a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z" />
 	</svg>
-	<input id="global-search" bind:value={query} {placeholder} autocomplete="off" />
+	<input
+		id="global-search"
+		name="q"
+		type="search"
+		inputmode="search"
+		spellcheck="false"
+		bind:value={query}
+		{placeholder}
+		autocomplete="off"
+	/>
 	<button type="submit" aria-label="Executar pesquisa">
 		<span class="submit-label">Buscar</span>
 		<svg class="submit-icon" aria-hidden="true" viewBox="0 0 24 24">
@@ -36,7 +45,9 @@
 
 <style>
 	form {
-		width: min(100%, 48rem);
+		width: 100%;
+		min-width: 0;
+		flex: 1 1 36rem;
 		display: grid;
 		grid-template-columns: auto minmax(0, 1fr) auto;
 		align-items: center;
@@ -47,6 +58,18 @@
 		border-radius: var(--radius-md);
 		background: var(--surface-strong);
 		box-shadow: 0 0.25rem 1rem rgb(var(--ink-rgb) / 5%);
+		transform: translateY(0) scale(1);
+		transition:
+			border-color var(--motion-fast) var(--ease-standard),
+			background-color var(--motion-base) var(--ease-soft),
+			box-shadow var(--motion-slow) var(--ease-soft),
+			transform var(--motion-base) var(--ease-emphasized);
+	}
+
+	form:focus-within {
+		border-color: var(--archive);
+		box-shadow: 0 0.55rem 1.65rem rgb(var(--ink-rgb) / 9%);
+		transform: translateY(-1px) scale(1.002);
 	}
 
 	svg {
@@ -60,6 +83,15 @@
 		width: 1.15rem;
 		height: 1.15rem;
 		stroke: var(--muted);
+		transform: scale(1) rotate(0deg);
+		transition:
+			stroke var(--motion-fast) var(--ease-standard),
+			transform var(--motion-base) var(--ease-emphasized);
+	}
+
+	form:focus-within .search-icon {
+		stroke: var(--archive);
+		transform: scale(1.08) rotate(-3deg);
 	}
 
 	input {
@@ -73,6 +105,11 @@
 
 	input::placeholder {
 		color: var(--muted);
+		transition: color var(--motion-fast) var(--ease-standard);
+	}
+
+	form:focus-within input::placeholder {
+		color: var(--muted-strong);
 	}
 
 	button {
@@ -86,6 +123,17 @@
 		color: white;
 		font-weight: 720;
 		cursor: pointer;
+		transform: translateY(0) scale(1);
+		transition:
+			background-color var(--motion-fast) var(--ease-standard),
+			box-shadow var(--motion-base) var(--ease-soft),
+			transform var(--motion-base) var(--ease-emphasized);
+	}
+
+	button:active {
+		box-shadow: none;
+		transform: translateY(1px) scale(0.96);
+		transition-duration: var(--motion-instant);
 	}
 
 	.submit-icon {
@@ -93,6 +141,25 @@
 		width: 1.1rem;
 		height: 1.1rem;
 		stroke: currentColor;
+		transform: translateX(0);
+		transition: transform var(--motion-base) var(--ease-emphasized);
+	}
+
+	@media (hover: hover) and (pointer: fine) {
+		button:hover {
+			background: var(--archive-strong);
+			box-shadow: 0 0.45rem 1.1rem rgb(var(--ink-rgb) / 11%);
+			transform: translateY(-1px) scale(1.01);
+		}
+
+		button:hover .submit-icon {
+			transform: translateX(2px);
+		}
+
+		button:active {
+			box-shadow: none;
+			transform: translateY(1px) scale(0.96);
+		}
 	}
 
 	@media (max-width: 520px) {

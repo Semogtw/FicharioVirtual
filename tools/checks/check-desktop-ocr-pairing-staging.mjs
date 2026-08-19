@@ -181,7 +181,7 @@ async function main() {
 		}
 	}
 
-	const signOut = await client.auth.signOut();
+	const signOut = await client.auth.signOut({ scope: 'local' });
 	if (signOut.error) cleanupErrors.push(new Error('Failed to sign out staging pairing probe'));
 
 	if (operationError && cleanupErrors.length > 0) {

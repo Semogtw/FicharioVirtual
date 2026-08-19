@@ -11,6 +11,7 @@ html {
 	background: var(--paper);
 	color: var(--ink);
 	text-rendering: optimizeLegibility;
+	scroll-behavior: smooth;
 }
 
 body {
@@ -18,6 +19,9 @@ body {
 	min-width: 20rem;
 	min-height: 100vh;
 	background: var(--paper);
+	transition:
+		background-color var(--motion-slow) var(--ease-soft),
+		color var(--motion-slow) var(--ease-soft);
 }
 
 button,
@@ -25,6 +29,15 @@ input,
 textarea,
 select {
 	font: inherit;
+}
+
+input,
+textarea {
+	transition:
+		background-color var(--motion-fast) var(--ease-standard),
+		border-color var(--motion-fast) var(--ease-standard),
+		box-shadow var(--motion-base) var(--ease-soft),
+		color var(--motion-fast) var(--ease-standard);
 }
 
 button,
@@ -73,6 +86,222 @@ p {
 	border: 0;
 }
 
+@keyframes ui-soft-enter {
+	from {
+		opacity: 0;
+		transform: translateY(0.35rem);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@keyframes ui-list-enter {
+	from {
+		opacity: 0;
+		transform: translateY(0.5rem) scale(0.995);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+	}
+}
+
+@keyframes ui-count-enter {
+	0% {
+		opacity: 0;
+		transform: scale(0.65);
+	}
+	70% {
+		opacity: 1;
+		transform: scale(1.08);
+	}
+	100% {
+		opacity: 1;
+		transform: scale(1);
+	}
+}
+
+@keyframes route-view-old {
+	to {
+		opacity: 0;
+		filter: blur(1px);
+		transform: translateY(-0.2rem) scale(0.998);
+	}
+}
+
+@keyframes route-view-new {
+	from {
+		opacity: 0;
+		filter: blur(1px);
+		transform: translateY(0.45rem) scale(0.998);
+	}
+	to {
+		opacity: 1;
+		filter: blur(0);
+		transform: translateY(0) scale(1);
+	}
+}
+
+@keyframes selected-document-old {
+	to {
+		opacity: 0.15;
+		filter: blur(1px);
+	}
+}
+
+@keyframes selected-document-new {
+	from {
+		opacity: 0.3;
+		filter: blur(1px);
+	}
+	to {
+		opacity: 1;
+		filter: blur(0);
+	}
+}
+
+::view-transition-group(route-surface),
+::view-transition-group(selected-document) {
+	animation-duration: var(--motion-page);
+	animation-timing-function: var(--ease-emphasized);
+}
+
+::view-transition-old(route-surface) {
+	animation: route-view-old var(--motion-base) var(--ease-standard) both;
+}
+
+::view-transition-new(route-surface) {
+	animation: route-view-new var(--motion-page) var(--ease-soft) both;
+}
+
+::view-transition-old(selected-document) {
+	animation: selected-document-old var(--motion-base) var(--ease-standard) both;
+}
+
+::view-transition-new(selected-document) {
+	animation: selected-document-new var(--motion-page) var(--ease-soft) both;
+}
+
+html:active-view-transition .route-content {
+	animation: none;
+}
+
+main :where([role='alert'], [role='status']):not(.visually-hidden) {
+	animation: ui-soft-enter var(--motion-base) var(--ease-soft) both;
+}
+
+main :where(.topic-card, .editable-topics > li, .photo-card) {
+	animation: ui-list-enter var(--motion-slow) var(--ease-soft) both;
+}
+
+main
+	:where(
+		.document-card,
+		.notebook-card,
+		.document-result,
+		.topic-card,
+		.editable-topics > li,
+		.photo-card
+	):nth-child(2),
+.queue-panel li:nth-child(2) {
+	animation-delay: 35ms;
+}
+
+main
+	:where(
+		.document-card,
+		.notebook-card,
+		.document-result,
+		.topic-card,
+		.editable-topics > li,
+		.photo-card
+	):nth-child(3),
+.queue-panel li:nth-child(3) {
+	animation-delay: 70ms;
+}
+
+main
+	:where(
+		.document-card,
+		.notebook-card,
+		.document-result,
+		.topic-card,
+		.editable-topics > li,
+		.photo-card
+	):nth-child(4),
+.queue-panel li:nth-child(4) {
+	animation-delay: 105ms;
+}
+
+main
+	:where(
+		.document-card,
+		.notebook-card,
+		.document-result,
+		.topic-card,
+		.editable-topics > li,
+		.photo-card
+	):nth-child(5),
+.queue-panel li:nth-child(5) {
+	animation-delay: 140ms;
+}
+
+main
+	:where(
+		.document-card,
+		.notebook-card,
+		.document-result,
+		.topic-card,
+		.editable-topics > li,
+		.photo-card
+	):nth-child(n + 6),
+.queue-panel li:nth-child(n + 6) {
+	animation-delay: 175ms;
+}
+
+.queue-trigger {
+	transform: translateY(0) scale(1);
+	transition:
+		background-color var(--motion-fast) var(--ease-standard),
+		border-color var(--motion-fast) var(--ease-standard),
+		box-shadow var(--motion-base) var(--ease-soft),
+		color var(--motion-fast) var(--ease-standard),
+		transform var(--motion-base) var(--ease-emphasized);
+}
+
+.queue-trigger > span:first-child {
+	display: inline-block;
+	transform: translateY(0) rotate(0deg);
+	transition: transform var(--motion-base) var(--ease-emphasized);
+}
+
+.queue-trigger strong {
+	animation: ui-count-enter var(--motion-base) var(--ease-emphasized) both;
+}
+
+.queue-trigger.active > span:first-child {
+	transform: translateY(1px) rotate(180deg);
+}
+
+.queue-panel li {
+	animation: ui-list-enter var(--motion-slow) var(--ease-soft) both;
+}
+
+@media (hover: hover) and (pointer: fine) {
+	.queue-trigger:hover {
+		box-shadow: 0 0.4rem 1rem rgb(var(--ink-rgb) / 8%);
+		transform: translateY(-1px) scale(1.01);
+	}
+}
+
+.queue-trigger:active {
+	box-shadow: none;
+	transform: translateY(1px) scale(0.96);
+	transition-duration: var(--motion-instant);
+}
+
 @media (prefers-reduced-motion: reduce) {
 	*,
 	*::before,
@@ -81,5 +310,11 @@ p {
 		animation-duration: 0.01ms !important;
 		animation-iteration-count: 1 !important;
 		transition-duration: 0.01ms !important;
+	}
+
+	::view-transition-group(*),
+	::view-transition-old(*),
+	::view-transition-new(*) {
+		animation-duration: 0.01ms !important;
 	}
 }

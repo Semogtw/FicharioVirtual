@@ -34,24 +34,24 @@ describe('Drive connection state', () => {
 		);
 	});
 
-	it('presents configuration-required separately from a disconnected account', () => {
+	it('keeps configuration errors user-friendly and separate from a disconnected account', () => {
 		expect(driveConnectionPresentation({ configured: false, connection: null })).toEqual({
 			kind: 'configuration_required',
-			title: 'Google Drive ainda não configurado',
-			detail: 'Cadastre o cliente OAuth e os secrets no ambiente antes de conectar.',
+			title: 'Indisponível',
+			detail: 'O Google Drive está temporariamente indisponível. Tente novamente mais tarde.',
 			canConnect: false,
 			canSynchronize: false
 		});
 		expect(driveConnectionPresentation({ configured: true, connection: null })).toEqual({
 			kind: 'disconnected',
-			title: 'Google Drive desconectado',
-			detail: 'Conecte sua conta para criar ou localizar a pasta Fichário Digital.',
+			title: 'Não conectado',
+			detail: 'Conecte sua conta para guardar e sincronizar seus arquivos.',
 			canConnect: true,
 			canSynchronize: false
 		});
 	});
 
-	it('presents connected and syncing states without exposing identifiers', () => {
+	it('presents connected and syncing states without implementation details', () => {
 		expect(
 			driveConnectionPresentation({
 				configured: true,
@@ -59,8 +59,8 @@ describe('Drive connection state', () => {
 			})
 		).toEqual({
 			kind: 'connected',
-			title: 'Google Drive conectado',
-			detail: 'arthur@example.test · última sincronização em 06/08/2026, 03:01',
+			title: 'Conectado',
+			detail: 'arthur@example.test está conectado ao Fichário.',
 			canConnect: false,
 			canSynchronize: true
 		});
@@ -72,6 +72,7 @@ describe('Drive connection state', () => {
 			})
 		).toMatchObject({
 			kind: 'syncing',
+			title: 'Sincronizando…',
 			canConnect: false,
 			canSynchronize: false
 		});

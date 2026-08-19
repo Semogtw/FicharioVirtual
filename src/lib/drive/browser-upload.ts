@@ -23,6 +23,7 @@ export type BrowserFetchLike = (
 ) => Promise<Response>;
 
 const DRIVE_ID = /^[A-Za-z0-9_-]{10,256}$/;
+const DRIVE_TOKEN_RETRY_DELAYS_MS = [250, 750, 1_500] as const;
 const tokenSchema = z
 	.object({
 		accessToken: z.string().min(8).max(8192),
@@ -105,15 +106,56 @@ function authorizationHeaders(accessToken: string) {
 	return { Authorization: `Bearer ${validAccessToken(accessToken)}` };
 }
 
+function retryableTokenFunctionError(error: unknown): boolean {
+	if (!error || typeof error !== 'object') return true;
+	const context = (error as { context?: unknown }).context;
+	if (!(context instanceof Response)) return true;
+	return (
+		context.status === 408 ||
+		context.status === 425 ||
+		context.status === 429 ||
+		context.status >= 500
+	);
+}
+
+function waitForTokenRetry(attempt: number) {
+	const delay = DRIVE_TOKEN_RETRY_DELAYS_MS[attempt];
+	if (delay === undefined) return Promise.resolve();
+	return new Promise<void>((resolve) => setTimeout(resolve, delay));
+}
+
 export async function requestDriveAccessToken(
 	client: DriveTokenClientLike
 ): Promise<Readonly<EphemeralDriveAccess>> {
 	try {
-		const { data, error } = await client.functions.invoke('drive-access-token', { body: {} });
-		if (error) throw error;
-		const parsed = tokenSchema.parse(data);
-		validAccessToken(parsed.accessToken);
-		return Object.freeze(parsed);
+		for (let attempt = 0; attempt <= DRIVE_TOKEN_RETRY_DELAYS_MS.length; attempt += 1) {
+			let result: { data: unknown; error: unknown };
+			try {
+				result = await client.functions.invoke('drive-access-token', { body: {} });
+			} catch (error) {
+				if (attempt < DRIVE_TOKEN_RETRY_DELAYS_MS.length) {
+					await waitForTokenRetry(attempt);
+					continue;
+				}
+				throw error;
+			}
+
+			if (result.error) {
+				if (
+					attempt < DRIVE_TOKEN_RETRY_DELAYS_MS.length &&
+					retryableTokenFunctionError(result.error)
+				) {
+					await waitForTokenRetry(attempt);
+					continue;
+				}
+				throw result.error;
+			}
+
+			const parsed = tokenSchema.parse(result.data);
+			validAccessToken(parsed.accessToken);
+			return Object.freeze(parsed);
+		}
+		throw new Error('Drive token attempts exhausted');
 	} catch {
 		throw new Error('Não foi possível obter acesso temporário ao Google Drive.');
 	}
@@ -195,7 +237,6 @@ export function createBrowserDriveUploadGateway({
 		}: Parameters<DriveResumableGateway['uploadChunk']>[0]) {
 			const response = await fetchImpl(validateDriveUploadSessionUrl(sessionUrl), {
 				method: 'PUT',
-				redirect: 'error',
 				headers: {
 					...headers,
 					'Content-Range': contentRange
@@ -210,7 +251,6 @@ export function createBrowserDriveUploadGateway({
 		}: Parameters<DriveResumableGateway['queryProgress']>[0]) {
 			const response = await fetchImpl(validateDriveUploadSessionUrl(sessionUrl), {
 				method: 'PUT',
-				redirect: 'error',
 				headers: {
 					...headers,
 					'Content-Range': `bytes */${validTotalBytes(totalBytes)}`

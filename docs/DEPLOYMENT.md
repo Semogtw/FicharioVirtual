@@ -457,11 +457,11 @@ Ao escolher a origem canônica:
 1. configurar domínio no Pages;
 2. configurar redirects e HTTPS;
 3. atualizar Site URL/redirects do Supabase Auth;
-4. atualizar `APP_ORIGIN` nas Edge Functions;
-5. revisar tela/origens Google OAuth;
+4. atualizar `APP_ORIGIN` (canônico) e `APP_ORIGIN_ALLOWLIST` (aliases oficiais) nas Edge Functions;
+5. revisar tela/origens Google OAuth e confirmar que o `state` retorna à origem permitida que iniciou o fluxo;
 6. reexecutar gate e smoke.
 
-Evite duas origens de produção aceitando sessão simultaneamente.
+Não use wildcard CORS global. Se o mesmo artefato precisar funcionar em aliases oficiais do Pages durante staging, limite a allowlist ao domínio raiz e a um único nível de subdomínio do mesmo projeto; produção futura deve voltar a uma origem canônica própria.
 
 ## 16. Quando produção puder ser criada
 

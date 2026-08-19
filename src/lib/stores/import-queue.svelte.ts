@@ -20,7 +20,6 @@ import {
 	listImportSessionsByResumeKeys,
 	updateImportSession
 } from '$lib/services/import-sessions';
-import { recordOcrConsent } from '$lib/services/ocr-consent';
 import { OcrProcessingError, processPageOcr } from '$lib/services/ocr';
 import { sessionState } from '$lib/stores/session.svelte';
 
@@ -63,7 +62,6 @@ const restoringUsers = new Set<string>();
 const completedElsewhere = new WeakSet<ImportQueueItem>();
 const completedBeforeRestore = new RecentImportCompletions();
 const importRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
-let consentPromise: Promise<void> | null = null;
 
 function id(prefix = 'import') {
 	return (
@@ -86,22 +84,6 @@ function appendImportItem(item: ImportQueueItem) {
 function releasePreview(item: ImportQueueItem) {
 	if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
 	item.previewUrl = null;
-}
-
-function ensureConsent() {
-	if (consentPromise === null) {
-		const pending = recordOcrConsent();
-		consentPromise = pending;
-		void pending.then(
-			() => {
-				if (consentPromise === pending) consentPromise = null;
-			},
-			() => {
-				if (consentPromise === pending) consentPromise = null;
-			}
-		);
-	}
-	return consentPromise;
 }
 
 function abortError() {
@@ -304,16 +286,13 @@ async function processOcr(item: ImportQueueItem, signal?: AbortSignal) {
 		if (signal?.aborted) throw abortError();
 		const result = await processPageOcr(item.result.pageId, undefined, { signal });
 		if (signal?.aborted) throw abortError();
-		if (result.state === 'complete' || result.state === 'already_complete') {
+		if (result.state === 'complete') {
 			item.status = result.needsReview ? 'needs_review' : 'complete';
 			void persistItem(item);
 			return;
 		}
 		item.status = 'waiting';
-		item.error =
-			result.state === 'quota_exhausted'
-				? 'A cota diária foi atingida; o arquivo permanece salvo para continuar depois.'
-				: 'A leitura ficou pendente e poderá ser retomada sem reenviar o arquivo.';
+		item.error = null;
 		void persistItem(item);
 	} catch (error) {
 		if (error instanceof DOMException && error.name === 'AbortError') throw error;
@@ -340,7 +319,6 @@ async function processItem(item: ImportQueueItem) {
 	void persistItem(item);
 
 	try {
-		await ensureConsent();
 		if (controller.signal.aborted) throw new DOMException('Import cancelled', 'AbortError');
 		const prepared = await prepareImage(item.file, item.mode, { signal: controller.signal });
 		releasePreview(item);

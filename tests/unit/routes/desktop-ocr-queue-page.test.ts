@@ -26,7 +26,7 @@ describe('desktop OCR queue page contract', () => {
 
 	it('surfaces expired lease recovery and links back to the owning document', () => {
 		expect(page).toContain('job.leaseExpired');
-		expect(page).toContain('aguardar outro dispositivo ativo recuperá-lo automaticamente');
+		expect(page).toContain('aguardar outro computador');
 		expect(page).toContain('href={`/documents/${job.documentId}/`}');
 	});
 
@@ -34,14 +34,13 @@ describe('desktop OCR queue page contract', () => {
 		expect(page).toContain('returnDesktopOcrJobToGemini');
 		expect(page).toContain("job.status === 'waiting_desktop'");
 		expect(page).toContain("job.status === 'processing' && job.leaseExpired");
-		expect(page).toContain("'Usar Gemini'");
+		expect(page).toContain("'Usar leitura automática'");
 		expect(page).toContain('movingPageId !== null');
-		expect(page).toContain('recoveredExpiredLease');
 	});
 
 	it('makes the queue a first-class settings destination without double-active tabs', () => {
 		expect(settingsLayout).toContain('href="/settings/computers/queue/"');
-		expect(settingsLayout).toContain('Fila OCR');
+		expect(settingsLayout).toContain('Fila de leitura');
 		expect(settingsLayout).toContain("page.url.pathname === '/settings/computers/'");
 		expect(settingsLayout).toContain("page.url.pathname.startsWith('/settings/computers/queue')");
 	});

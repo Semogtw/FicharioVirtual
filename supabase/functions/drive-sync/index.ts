@@ -40,7 +40,10 @@ async function remoteEventKey(pageToken: string, change: GoogleDriveChange): Pro
 }
 
 Deno.serve(async (request) => {
-	const appOrigin = parseAppOrigin(Deno.env.get('APP_ORIGIN'));
+	const appOrigin = parseAppOrigin(
+		Deno.env.get('APP_ORIGIN_ALLOWLIST') ?? Deno.env.get('APP_ORIGIN'),
+		request.headers.get('Origin')
+	);
 	const respond = (status: number, body: Record<string, unknown>) => json(status, body, appOrigin);
 	if (!appOrigin) return respond(503, { code: 'drive_not_configured' });
 	if (request.method === 'OPTIONS') return empty(204, appOrigin);

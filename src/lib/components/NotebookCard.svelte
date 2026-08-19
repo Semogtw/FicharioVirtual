@@ -3,9 +3,10 @@
 
 	interface NotebookCardProps {
 		notebook: NotebookSummary;
+		parentName?: string | null;
 	}
 
-	let { notebook }: NotebookCardProps = $props();
+	let { notebook, parentName = null }: NotebookCardProps = $props();
 </script>
 
 <article class={`notebook-card ${notebook.coverStyle}`}>
@@ -14,7 +15,7 @@
 			<span></span><span></span><span></span><span></span>
 		</div>
 		<div class="cover">
-			<p>Caderno</p>
+			<p>{parentName ? `Sub-caderno · ${parentName}` : 'Caderno'}</p>
 			<h2>{notebook.name}</h2>
 			{#if notebook.description}
 				<span>{notebook.description}</span>
@@ -37,20 +38,40 @@
 		background: var(--archive);
 		color: white;
 		box-shadow: var(--shadow-soft);
+		transform: translateY(0) rotate(0deg) scale(1);
+		animation: notebook-card-enter var(--motion-slow) var(--ease-soft) both;
 		transition:
-			box-shadow 120ms ease,
-			transform 120ms ease;
+			box-shadow var(--motion-slow) var(--ease-soft),
+			transform var(--motion-base) var(--ease-emphasized);
+	}
+
+	@keyframes notebook-card-enter {
+		from {
+			opacity: 0;
+			transform: translateY(0.6rem) scale(0.99);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0) scale(1);
+		}
 	}
 
 	.notebook-card:focus-within {
 		box-shadow: var(--shadow-raised);
-		transform: translateY(-0.15rem);
+		transform: translateY(-0.2rem) rotate(-0.12deg) scale(1.002);
 	}
 
 	a {
 		display: grid;
 		grid-template-columns: 1.4rem minmax(0, 1fr);
 		min-height: 14rem;
+		transform: scale(1);
+		transition: transform var(--motion-base) var(--ease-emphasized);
+	}
+
+	a:active {
+		transform: scale(0.985);
+		transition-duration: var(--motion-instant);
 	}
 
 	.binding {
@@ -66,6 +87,8 @@
 		height: 1.25rem;
 		border: 1px solid rgb(255 255 255 / 48%);
 		border-radius: 1rem;
+		transform: translateX(0);
+		transition: transform var(--motion-base) var(--ease-emphasized);
 	}
 
 	.cover {
@@ -77,12 +100,33 @@
 			linear-gradient(rgb(255 255 255 / 4%), rgb(0 0 0 / 6%));
 	}
 
+	.cover::after {
+		position: absolute;
+		inset: 0;
+		content: '';
+		pointer-events: none;
+		background: linear-gradient(
+			110deg,
+			transparent 20%,
+			rgb(255 255 255 / 5%) 46%,
+			transparent 72%
+		);
+		opacity: 0;
+		transform: translateX(-10%);
+		transition:
+			opacity var(--motion-base) var(--ease-soft),
+			transform var(--motion-slow) var(--ease-soft);
+	}
+
 	p {
+		overflow: hidden;
 		margin-bottom: 1.1rem;
 		font-size: 0.72rem;
 		font-weight: 760;
-		letter-spacing: 0.14em;
+		letter-spacing: 0.12em;
+		text-overflow: ellipsis;
 		text-transform: uppercase;
+		white-space: nowrap;
 		opacity: 0.75;
 	}
 
@@ -115,7 +159,20 @@
 	@media (hover: hover) and (pointer: fine) {
 		.notebook-card:hover {
 			box-shadow: var(--shadow-raised);
-			transform: translateY(-0.15rem);
+			transform: translateY(-0.24rem) rotate(-0.18deg) scale(1.003);
+		}
+
+		.notebook-card:hover .cover::after {
+			opacity: 1;
+			transform: translateX(8%);
+		}
+
+		.notebook-card:hover .binding span:nth-child(odd) {
+			transform: translateX(-1px);
+		}
+
+		.notebook-card:hover .binding span:nth-child(even) {
+			transform: translateX(1px);
 		}
 	}
 </style>

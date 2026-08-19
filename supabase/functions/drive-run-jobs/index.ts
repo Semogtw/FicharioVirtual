@@ -133,7 +133,10 @@ function toDriveItem(folder: Awaited<ReturnType<typeof ensureDriveFolder>>): Goo
 }
 
 Deno.serve(async (request) => {
-	const appOrigin = parseAppOrigin(Deno.env.get('APP_ORIGIN'));
+	const appOrigin = parseAppOrigin(
+		Deno.env.get('APP_ORIGIN_ALLOWLIST') ?? Deno.env.get('APP_ORIGIN'),
+		request.headers.get('Origin')
+	);
 	const respond = (status: number, body: Record<string, unknown>) => json(status, body, appOrigin);
 
 	if (!appOrigin) return respond(503, { code: 'drive_not_configured' });

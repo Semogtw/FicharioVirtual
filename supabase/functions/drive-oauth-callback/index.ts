@@ -4,6 +4,7 @@ import { bootstrapDriveRoot } from '../_shared/google-drive-client.ts';
 import {
 	hashOAuthState,
 	isOAuthPkceVerifier,
+	readOAuthStateOrigin,
 	requestInitialGoogleTokens,
 	verifyGoogleIdToken
 } from '../_shared/google-oauth-http.ts';
@@ -49,9 +50,10 @@ function consumedState(
 }
 
 Deno.serve(async (request) => {
-	const appOrigin = parseAppOrigin(Deno.env.get('APP_ORIGIN'));
-	if (!appOrigin) return new Response('Drive OAuth is not configured.', { status: 503 });
-	if (request.method !== 'GET') return redirect(appOrigin, 'error');
+	const canonicalAppOrigin = parseAppOrigin(Deno.env.get('APP_ORIGIN'));
+	if (!canonicalAppOrigin) return new Response('Drive OAuth is not configured.', { status: 503 });
+	const originAllowlist = Deno.env.get('APP_ORIGIN_ALLOWLIST') ?? Deno.env.get('APP_ORIGIN');
+	if (request.method !== 'GET') return redirect(canonicalAppOrigin, 'error');
 
 	const supabaseUrl = Deno.env.get('SUPABASE_URL');
 	const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -67,12 +69,14 @@ Deno.serve(async (request) => {
 		!redirectUri ||
 		!rootFolderName
 	) {
-		return redirect(appOrigin, 'error');
+		return redirect(canonicalAppOrigin, 'error');
 	}
 
 	const url = new URL(request.url);
 	const state = url.searchParams.get('state');
-	if (!state || !OPAQUE.test(state)) return redirect(appOrigin, 'error');
+	if (!state || !OPAQUE.test(state)) return redirect(canonicalAppOrigin, 'error');
+	const stateReturnOrigin = readOAuthStateOrigin(state);
+	let verifiedReturnOrigin = canonicalAppOrigin;
 
 	try {
 		const admin = createClient(supabaseUrl, serviceRoleKey, {
@@ -87,11 +91,16 @@ Deno.serve(async (request) => {
 			}
 		);
 		const verifiedState = consumeError ? null : consumedState(consumed);
-		if (!verifiedState) return redirect(appOrigin, 'error');
+		if (!verifiedState) return redirect(canonicalAppOrigin, 'error');
+		if (stateReturnOrigin) {
+			const allowedReturnOrigin = parseAppOrigin(originAllowlist, stateReturnOrigin);
+			if (!allowedReturnOrigin) return redirect(canonicalAppOrigin, 'error');
+			verifiedReturnOrigin = allowedReturnOrigin;
+		}
 
-		if (url.searchParams.has('error')) return redirect(appOrigin, 'cancelled');
+		if (url.searchParams.has('error')) return redirect(verifiedReturnOrigin, 'cancelled');
 		const code = url.searchParams.get('code');
-		if (!code) return redirect(appOrigin, 'error');
+		if (!code) return redirect(verifiedReturnOrigin, 'error');
 
 		const tokens = await requestInitialGoogleTokens({
 			clientId,
@@ -100,7 +109,7 @@ Deno.serve(async (request) => {
 			code,
 			codeVerifier: verifiedState.codeVerifier
 		});
-		if (!tokens.refreshToken || !tokens.idToken) return redirect(appOrigin, 'error');
+		if (!tokens.refreshToken || !tokens.idToken) return redirect(verifiedReturnOrigin, 'error');
 		const identity = await verifyGoogleIdToken({
 			idToken: tokens.idToken,
 			clientId,
@@ -115,7 +124,7 @@ Deno.serve(async (request) => {
 			target_google_email: identity.email,
 			target_scope: tokens.scopes.join(' ')
 		});
-		if (storeError || stored !== true) return redirect(appOrigin, 'error');
+		if (storeError || stored !== true) return redirect(verifiedReturnOrigin, 'error');
 
 		const bootstrap = await bootstrapDriveRoot({
 			accessToken: tokens.accessToken,
@@ -126,9 +135,9 @@ Deno.serve(async (request) => {
 			target_root_folder_id: bootstrap.rootFolder.id,
 			target_start_page_token: bootstrap.startPageToken
 		});
-		if (completeError || completed !== true) return redirect(appOrigin, 'error');
-		return redirect(appOrigin, 'authorized');
+		if (completeError || completed !== true) return redirect(verifiedReturnOrigin, 'error');
+		return redirect(verifiedReturnOrigin, 'authorized');
 	} catch {
-		return redirect(appOrigin, 'error');
+		return redirect(verifiedReturnOrigin, 'error');
 	}
 });

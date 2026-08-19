@@ -69,7 +69,7 @@ describe('Drive PDF descriptor lease integration', () => {
 		await expect(
 			importStagedDrivePdfReference({
 				staged,
-				consentGranted: true,
+
 				client: {} as never,
 				dependencies: deps
 			})
@@ -112,7 +112,7 @@ describe('Drive PDF descriptor lease integration', () => {
 		await expect(
 			importStagedDrivePdfReference({
 				staged,
-				consentGranted: true,
+
 				client: {} as never,
 				dependencies: deps
 			})
@@ -131,7 +131,7 @@ describe('Drive PDF descriptor lease integration', () => {
 		await expect(
 			importStagedDrivePdfReference({
 				staged,
-				consentGranted: true,
+
 				client: {} as never,
 				dependencies: deps
 			})
@@ -153,7 +153,7 @@ describe('Drive PDF descriptor lease integration', () => {
 		await expect(
 			importStagedDrivePdfReference({
 				staged,
-				consentGranted: true,
+
 				client: {} as never,
 				dependencies: deps
 			})

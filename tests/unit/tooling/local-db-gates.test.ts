@@ -18,14 +18,14 @@ describe('local database gate runner', () => {
 		);
 		expect(packageJson.scripts?.['test:db:local']).toBe('bash tools/checks/run-local-db-gates.sh');
 		expect(packageJson.scripts?.['test:functions:check']).toBe(
-			'bash tools/checks/check-edge-functions.sh'
+			"find supabase/functions -type f -name '*.ts' -print0 | sort -z | xargs -0 -n 1 deno check --no-config"
 		);
 		expect(packageJson.scripts?.['verify:full']).toBe(
 			'pnpm verify && pnpm test:e2e && pnpm test:source:offline && pnpm test:functions:check && pnpm test:db:local'
 		);
 	});
 
-	it('runs every local database contract after rebuilding the schema', () => {
+	it('runs every local database contract after rebuilding the launch schema', () => {
 		const runner = read('tools/checks/run-local-db-gates.sh');
 		const fixture = read('tools/checks/fixtures/ocr-concurrency-fixture.sql');
 		const claimContractGate = read('tools/checks/test-ocr-claim-contracts.sh');
@@ -39,9 +39,9 @@ describe('local database gate runner', () => {
 		expect(runner).toContain('tools/checks/test-ocr-claim-concurrency.sh');
 		expect(runner).toContain('tools/checks/test-ocr-idempotency.sh');
 		expect(fixture).toContain('insert into public.ocr_jobs');
-		expect(fixture).toContain('ocr_consent_version');
+		expect(fixture).not.toContain('ocr_consent_');
 		expect(claimContractGate).toContain('not-authorized claim contract drifted');
-		expect(claimContractGate).toContain('consent-required claim contract drifted');
+		expect(claimContractGate).not.toContain('consent-required claim contract drifted');
 		expect(claimContractGate).toContain('busy claim contract drifted');
 		expect(claimContractGate).toContain('not-retryable claim contract drifted');
 		expect(concurrencyGate).toContain('validate_claim_shape');
@@ -52,7 +52,10 @@ describe('local database gate runner', () => {
 		expect(concurrencyGate).not.toMatch(/\bpython(?:3)?\b/);
 		expect(idempotencyGate).toContain('first claim contract drifted');
 		expect(idempotencyGate).toContain('already-complete claim contract drifted');
-		expect(idempotencyGate).toContain('provider quota retried before UTC rollover');
+		expect(idempotencyGate).toContain('provider quota retried before Pacific rollover');
+		expect(idempotencyGate).toContain(
+			'provider quota retry was not scheduled for next Pacific day'
+		);
 		expect(idempotencyGate).toContain('next-day claim contract drifted');
 		expect(idempotencyGate).toContain("array['attemptCount', 'jobId', 'state', 'usageToday']");
 	});

@@ -47,6 +47,35 @@ describe('browser Drive access token', () => {
 			'Não foi possível obter acesso temporário ao Google Drive.'
 		);
 	});
+
+	it('survives a short burst of transient Edge gateway failures before accepting a token', async () => {
+		const invoke = vi
+			.fn()
+			.mockResolvedValueOnce({
+				data: null,
+				error: { context: new Response(null, { status: 503 }) }
+			})
+			.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+			.mockResolvedValueOnce({ data: { accessToken, expiresAt }, error: null });
+
+		await expect(requestDriveAccessToken({ functions: { invoke } })).resolves.toEqual({
+			accessToken,
+			expiresAt
+		});
+		expect(invoke).toHaveBeenCalledTimes(3);
+	});
+
+	it('does not retry authorization failures', async () => {
+		const invoke = vi.fn().mockResolvedValue({
+			data: null,
+			error: { context: new Response(null, { status: 401 }) }
+		});
+
+		await expect(requestDriveAccessToken({ functions: { invoke } })).rejects.toThrow(
+			'Não foi possível obter acesso temporário ao Google Drive.'
+		);
+		expect(invoke).toHaveBeenCalledTimes(1);
+	});
 });
 
 describe('browser Drive resumable session', () => {
@@ -122,7 +151,7 @@ describe('browser Drive resumable session', () => {
 });
 
 describe('browser Drive chunk gateway', () => {
-	it('sends chunks and progress probes without persisting the token', async () => {
+	it('sends chunks and progress probes without treating Drive 308 as a browser redirect error', async () => {
 		const fetchImpl = vi
 			.fn()
 			.mockResolvedValueOnce(
@@ -156,6 +185,7 @@ describe('browser Drive chunk gateway', () => {
 				'Content-Range': 'bytes 0-262143/524288'
 			}
 		});
+		expect(fetchImpl.mock.calls[0][1].redirect).toBeUndefined();
 		expect(fetchImpl.mock.calls[1][1]).toMatchObject({
 			method: 'PUT',
 			headers: {
@@ -163,12 +193,13 @@ describe('browser Drive chunk gateway', () => {
 				'Content-Range': 'bytes */524288'
 			}
 		});
+		expect(fetchImpl.mock.calls[1][1].redirect).toBeUndefined();
 		expect(fetchImpl.mock.calls[1][1].headers).not.toHaveProperty('Content-Length');
 	});
 });
 
 describe('browser Drive upload orchestration', () => {
-	it('requests one ephemeral token, creates a session, and uploads the blob', async () => {
+	it('requests one ephemeral token, creates a session, and uploads a one-chunk blob', async () => {
 		const invoke = vi.fn().mockResolvedValue({ data: { accessToken, expiresAt }, error: null });
 		const fetchImpl = vi
 			.fn()
@@ -191,5 +222,42 @@ describe('browser Drive upload orchestration', () => {
 		).resolves.toEqual(finalFile());
 		expect(invoke).toHaveBeenCalledTimes(1);
 		expect(fetchImpl).toHaveBeenCalledTimes(2);
+	});
+
+	it('continues a real multi-chunk sized blob after Drive returns 308', async () => {
+		const invoke = vi.fn().mockResolvedValue({ data: { accessToken, expiresAt }, error: null });
+		const totalBytes = 300 * 1024;
+		const fetchImpl = vi
+			.fn()
+			.mockResolvedValueOnce(new Response(null, { status: 200, headers: { Location: sessionUrl } }))
+			.mockResolvedValueOnce(
+				new Response(null, { status: 308, headers: { Range: 'bytes=0-262143' } })
+			)
+			.mockResolvedValueOnce(
+				new Response(JSON.stringify(finalFile()), {
+					status: 200,
+					headers: { 'Content-Type': 'application/json' }
+				})
+			);
+
+		await expect(
+			uploadBrowserBlobToDrive({
+				client: { functions: { invoke } },
+				blob: new Blob([new Uint8Array(totalBytes)], { type: 'application/pdf' }),
+				name: 'Resumo.pdf',
+				parentFolderId: folderId,
+				fetchImpl
+			})
+		).resolves.toEqual(finalFile());
+
+		expect(fetchImpl).toHaveBeenCalledTimes(3);
+		expect(fetchImpl.mock.calls[1][1]).toMatchObject({
+			method: 'PUT',
+			headers: { 'Content-Range': `bytes 0-262143/${totalBytes}` }
+		});
+		expect(fetchImpl.mock.calls[2][1]).toMatchObject({
+			method: 'PUT',
+			headers: { 'Content-Range': `bytes 262144-${totalBytes - 1}/${totalBytes}` }
+		});
 	});
 });

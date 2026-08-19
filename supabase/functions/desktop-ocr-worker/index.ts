@@ -9,6 +9,7 @@ import {
 	parseDesktopWorkerRequest,
 	type DesktopWorkerRequest
 } from '../_shared/desktop-worker-contract.ts';
+import { enqueueVisualEmbeddingAfterOcr } from '../_shared/visual-embedding-enqueue.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHA256_HEX = /^[0-9a-f]{64}$/;
@@ -189,6 +190,13 @@ function parseCompletion(value: unknown, expected: CompleteRequest) {
 	});
 }
 
+function visualContentClass(contentType: CompleteRequest['contentType']) {
+	if (contentType === 'handwritten') return 'handwriting' as const;
+	if (contentType === 'mixed') return 'mixed' as const;
+	if (contentType === 'printed') return 'book_clean' as const;
+	return 'unknown' as const;
+}
+
 async function sha256Hex(blob: Blob) {
 	const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer());
 	const value = [...new Uint8Array(digest)]
@@ -199,7 +207,10 @@ async function sha256Hex(blob: Blob) {
 }
 
 Deno.serve(async (request) => {
-	const appOrigin = parseAppOrigin(Deno.env.get('APP_ORIGIN'));
+	const appOrigin = parseAppOrigin(
+		Deno.env.get('APP_ORIGIN_ALLOWLIST') ?? Deno.env.get('APP_ORIGIN'),
+		request.headers.get('Origin')
+	);
 	const respond = (status: number, body: Record<string, unknown>) => json(status, body, appOrigin);
 
 	if (!appOrigin) return respond(503, { code: 'desktop_ocr_not_configured' });
@@ -292,8 +303,20 @@ Deno.serve(async (request) => {
 		const completion = parseCompletion(data, input);
 		if (!completion) return respond(503, { code: 'desktop_ocr_completion_failed' });
 
+		const visual = await enqueueVisualEmbeddingAfterOcr({
+			supabase: admin,
+			ownerUserId: device.userId,
+			pageId: completion.pageId,
+			mediaPath: completion.sourceStoragePath,
+			contentClass: visualContentClass(input.contentType),
+			warnings: input.warnings,
+			needsReview: input.needsReview,
+			effectiveText: input.correctedText ?? input.rawText,
+			wordGeometry: input.wordGeometry
+		});
+
 		let cleanupPending = completion.sourceStoragePath !== null;
-		if (completion.sourceStoragePath !== null) {
+		if (completion.sourceStoragePath !== null && !visual.preserveTemporaryMedia) {
 			const { error: removeError } = await admin.storage
 				.from('documents')
 				.remove([completion.sourceStoragePath]);

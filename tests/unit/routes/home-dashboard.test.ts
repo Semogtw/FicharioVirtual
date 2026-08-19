@@ -5,15 +5,17 @@ const source = readFileSync('src/routes/+page.svelte', 'utf8');
 
 describe('home dashboard', () => {
 	it('loads real usage totals and recent documents through validated services', () => {
+		expect(source).toContain("import AnimatedNumber from '$lib/components/AnimatedNumber.svelte';");
 		expect(source).toContain("import DocumentCard from '$lib/components/DocumentCard.svelte';");
 		expect(source).toContain("import { listDocuments } from '$lib/services/documents';");
 		expect(source).toContain("import { loadUsageOverview } from '$lib/services/usage';");
 		expect(source).toMatch(
 			/Promise\.allSettled\(\[[\s\S]*loadUsageOverview\(\)[\s\S]*listDocuments\(\{ limit: 6 \}\)[\s\S]*\]\)/
 		);
-		expect(source).toContain('usage.totals.documents');
-		expect(source).toContain('usage.totals.pages');
-		expect(source).toContain('usage.totals.reviewPages');
+		expect(source).toContain('<AnimatedNumber value={usage?.totals.documents ?? null} />');
+		expect(source).toContain('<AnimatedNumber value={usage?.totals.pages ?? null} />');
+		expect(source).toContain('<AnimatedNumber value={usage?.totals.notebooks ?? null} />');
+		expect(source).not.toContain('usage?.totals.reviewPages');
 		expect(source).toContain('{#each recentDocuments as document (document.id)}');
 		expect(source).toContain('<DocumentCard {document} />');
 		expect(source).not.toContain('<strong>0</strong>');

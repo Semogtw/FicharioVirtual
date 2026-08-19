@@ -3,7 +3,6 @@ import {
 	embeddingVectorText,
 	requestGeminiEmbeddings
 } from '../../../supabase/functions/_shared/gemini-embedding-client';
-import { requestGeminiCoverageVerification } from '../../../supabase/functions/_shared/gemini-coverage-verifier';
 
 function vector(dimensions: number, first = 3, second = 4) {
 	const values = Array.from({ length: dimensions }, () => 0);
@@ -68,51 +67,5 @@ describe('Gemini semantic clients', () => {
 
 	it('serializes normalized vectors for pgvector without JSON ambiguity', () => {
 		expect(embeddingVectorText([0.25, -0.5])).toBe('[0.250000000000,-0.500000000000]');
-	});
-
-	it('parses strict structured verifier verdicts', async () => {
-		const fetchImpl = vi.fn().mockResolvedValue(
-			new Response(
-				JSON.stringify({
-					candidates: [
-						{
-							content: {
-								parts: [
-									{
-										text: JSON.stringify({
-											verdicts: [
-												{
-													topicIndex: 0,
-													candidateIndex: 0,
-													coverage: 'strong',
-													confidence: 0.93
-												}
-											]
-										})
-									}
-								]
-							}
-						}
-					]
-				}),
-				{ status: 200 }
-			)
-		);
-		const result = await requestGeminiCoverageVerification({
-			apiKey: 'test-key',
-			model: 'gemini-2.5-flash',
-			candidates: [
-				{
-					topicIndex: 0,
-					candidateIndex: 0,
-					topic: 'Primeira lei da termodinâmica',
-					excerpt: 'A variação da energia interna depende do calor e do trabalho.'
-				}
-			],
-			fetchImpl
-		});
-		expect(result).toEqual([
-			{ topicIndex: 0, candidateIndex: 0, coverage: 'strong', confidence: 0.93 }
-		]);
 	});
 });

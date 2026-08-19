@@ -17,11 +17,19 @@ describe('process-ocr provider delegation', () => {
 		expect(source).toMatch(rpc('finish_ocr_batch'));
 	});
 
-	it('keeps both the legacy one-page body and the new exact batch body', () => {
-		expect(source).toContain("hasExactKeys(record, ['pageId'])");
+	it('accepts only the launch batch request bodies', () => {
+		expect(source).not.toContain("hasExactKeys(record, ['pageId'])");
 		expect(source).toContain("hasExactKeys(record, ['pageIds'])");
 		expect(source).toContain("hasExactKeys(record, ['batchId', 'pageIds'])");
 		expect(source).toContain('new Set(record.pageIds).size !== record.pageIds.length');
+		expect(source).not.toContain('parsedRequest.legacy');
+	});
+
+	it('returns only the aggregate launch response contract', () => {
+		expect(source).toContain('aggregateBody({');
+		expect(source).not.toContain('const warningCounts = new Map<string, number>();');
+		expect(source).not.toContain('warningCounts.set(');
+		expect(source).not.toContain('warningCount:');
 	});
 
 	it('does not duplicate provider transport, prompt schema or payload parsing', () => {
@@ -38,6 +46,18 @@ describe('process-ocr provider delegation', () => {
 		expect(source).not.toContain('dailyLimit');
 		expect(source).toContain('OCR_BATCH_MAX_PAGES');
 		expect(source).toContain('OCR_BATCH_MAX_BYTES');
+	});
+
+	it('paces provider calls globally and uses the secondary model only after provider 429', () => {
+		expect(source).toContain("admin.rpc('reserve_ocr_provider_rate_slot'");
+		expect(source).toContain("envInteger('OCR_MODEL_PRIMARY_RPM', DEFAULT_GEMINI_OCR_RPM");
+		expect(source).toContain("envInteger('OCR_MODEL_FALLBACK_RPM', DEFAULT_GEMINI_OCR_RPM");
+		expect(source).toContain('shouldFallbackGeminiOcr(attempt.error)');
+		expect(source).toContain('attemptProvider(fallbackModel, fallbackRpm)');
+		expect(source).toContain("activeRouteReason = 'fallback_gemini_rate_limit'");
+		expect(source).toContain('localOcrProviderFailureCode(attempt.error)');
+		expect(source).toContain('safeErrorCode: code');
+		expect(source).toContain('const code = localOcrProviderFailureCode(error)');
 	});
 
 	it('keeps aggregate inline bytes inside the Gemini request-size safety envelope', () => {

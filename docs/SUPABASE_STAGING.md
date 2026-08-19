@@ -74,6 +74,7 @@ Além das variáveis fornecidas automaticamente pelo Supabase hospedado, os flux
 
 ```text
 APP_ORIGIN
+APP_ORIGIN_ALLOWLIST
 GOOGLE_CLIENT_ID
 GOOGLE_CLIENT_SECRET
 GOOGLE_DRIVE_REDIRECT_URI
@@ -83,7 +84,7 @@ OCR_MODEL_PRIMARY
 OCR_PROMPT_VERSION
 ```
 
-Também existem ajustes opcionais do OCR, como limites de páginas/bytes e timeout de request. Não versionar os valores desses secrets.
+No staging, `APP_ORIGIN` continua sendo a origem canônica e `APP_ORIGIN_ALLOWLIST` contém somente aliases oficiais do projeto Pages; a resposta CORS ecoa apenas a origem da requisição quando ela corresponde exatamente à allowlist. Também existem ajustes opcionais do OCR, como limites de páginas/bytes e timeout de request. Não versionar os valores desses secrets.
 
 A auditoria não expõe valores de Edge Function secrets. O runtime comprovou que `GEMINI_API_KEY`, modelo e prompt estão configurados em nível suficiente para `process-ocr` completar a chamada sintética real; isso não autoriza registrar seus valores.
 

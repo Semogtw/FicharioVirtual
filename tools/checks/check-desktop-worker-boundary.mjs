@@ -145,33 +145,43 @@ for (const [name, source] of [
 
 requireSource(
 	pair,
-	/if \(input\.action === 'redeem'\)/,
-	'pairing endpoint must isolate the unauthenticated one-time redeem action'
+	/record\.action !== 'redeem'/,
+	'pairing endpoint must accept only the one-time redeem action'
+);
+requireSource(
+	pair,
+	/credentialDigest:\s*string/,
+	'pairing endpoint must receive only the desktop-generated credential digest'
+);
+requireSource(
+	pair,
+	/SHA256_HEX\.test\(record\.credentialDigest\)/,
+	'pairing endpoint must validate the desktop credential digest shape'
 );
 requireSource(
 	pair,
 	/admin\.rpc\('redeem_ocr_worker_pairing_code'/,
 	'pairing-code redemption must cross the service-only database boundary'
 );
-requireSource(
+forbidSource(
 	pair,
 	/request\.headers\.get\('Authorization'\)/,
-	'legacy pairing and revoke paths must explicitly authenticate their browser bearer token'
+	'redeem-only pairing endpoint must not expose browser bearer-token compatibility paths'
 );
-requireSource(
+forbidSource(
 	pair,
-	/generateDesktopWorkerCredential\(\)/,
-	'legacy pairing compatibility must still generate its credential server-side'
+	/generateDesktopWorkerCredential\(/,
+	'redeem-only pairing endpoint must not mint the desktop credential server-side'
 );
-requireSource(
+forbidSource(
 	pair,
 	/register_ocr_worker_device/,
-	'legacy pairing must persist only through the service registration RPC'
+	'redeem-only pairing endpoint must not retain the pre-code registration path'
 );
-requireSource(
+forbidSource(
 	pair,
 	/credential:\s*generated\.credential/,
-	'legacy pairing must return its raw credential exactly once'
+	'pairing response must never return a server-generated raw credential'
 );
 forbidSource(
 	pair,
@@ -251,7 +261,7 @@ forbidSource(
 requireSource(
 	config,
 	/\[functions\.desktop-ocr-pair\][\s\S]*?verify_jwt\s*=\s*false/,
-	'pairing endpoint gateway must permit the one-time code request so the function can enforce its split auth boundary'
+	'pairing endpoint gateway must permit the one-time code request for its redeem-only boundary'
 );
 requireSource(
 	config,

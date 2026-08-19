@@ -26,9 +26,8 @@ const session = {
 };
 
 type RequestCounters = {
-	consents: number;
 	metadataCreates: number;
-	ocrRuns: number;
+	ocrKicks: number;
 	storageUploads: number;
 	unknown: string[];
 };
@@ -59,9 +58,26 @@ async function mockSupabase(context: BrowserContext, counters: RequestCounters) 
 		const path = url.pathname;
 
 		if (path === '/rest/v1/app_users') return json(route, { is_active: true });
+		if (path === '/rest/v1/drive_connections') {
+			return json(route, {
+				status: 'connected',
+				google_email: 'owner@example.test',
+				root_folder_id: 'RootFolder_1234567890',
+				last_sync_started_at: null,
+				last_sync_completed_at: null,
+				last_error_code: null,
+				last_error_message: null
+			});
+		}
 		if (path === '/rest/v1/notebooks') return json(route, []);
-		if (path === '/rest/v1/rpc/list_notebooks') return json(route, []);
+		if (path === '/rest/v1/rpc/list_notebooks_v2') return json(route, []);
 		if (path === '/rest/v1/documents') return json(route, null);
+		if (path === '/rest/v1/pages' && request.method() === 'GET') {
+			return json(route, { status: 'processing' });
+		}
+		if (path === '/rest/v1/rpc/get_document_ocr_summary') {
+			return json(route, [{ total: 1, completed: 0, needs_review: 0, pending: 1, failed: 0 }]);
+		}
 
 		if (path === '/rest/v1/import_sessions' && request.method() === 'GET') {
 			return json(route, []);
@@ -100,10 +116,6 @@ async function mockSupabase(context: BrowserContext, counters: RequestCounters) 
 
 		if (path === '/rest/v1/rpc/recover_stale_ocr_jobs') return json(route, null);
 		if (path === '/rest/v1/rpc/list_runnable_ocr_jobs') return json(route, []);
-		if (path === '/rest/v1/rpc/record_ocr_consent') {
-			counters.consents += 1;
-			return json(route, true);
-		}
 		if (path === '/rest/v1/rpc/create_drive_image_import_v2') {
 			counters.metadataCreates += 1;
 			const body = request.postDataJSON() as Record<string, string>;
@@ -125,14 +137,14 @@ async function mockSupabase(context: BrowserContext, counters: RequestCounters) 
 				expiresAt: '2099-01-01T00:00:00.000Z'
 			});
 		}
+		if (path === '/functions/v1/ocr-queue-kick') {
+			counters.ocrKicks += 1;
+			return json(route, { accepted: true });
+		}
 
 		if (path.startsWith('/storage/v1/object/documents/')) {
 			counters.storageUploads += 1;
 			return json(route, { Key: path.slice('/storage/v1/object/'.length) });
-		}
-		if (path === '/functions/v1/process-ocr') {
-			counters.ocrRuns += 1;
-			return json(route, { state: 'complete', needsReview: false, warningCount: 0 });
 		}
 
 		counters.unknown.push(`${request.method()} ${path}`);
@@ -244,13 +256,12 @@ async function seedStoredImport(context: BrowserContext) {
 
 test.use({ serviceWorkers: 'block' });
 
-test('two tabs resume one persisted image import without duplicate upload or OCR', async ({
+test('two tabs resume one persisted image import without duplicate upload while OCR stays in background', async ({
 	context
 }) => {
 	const counters: RequestCounters = {
-		consents: 0,
 		metadataCreates: 0,
-		ocrRuns: 0,
+		ocrKicks: 0,
 		storageUploads: 0,
 		unknown: []
 	};
@@ -265,43 +276,35 @@ test('two tabs resume one persisted image import without duplicate upload or OCR
 	const second = await context.newPage();
 	await Promise.all([first.goto('/import/'), second.goto('/import/')]);
 
-	await expect.poll(() => counters.ocrRuns, { timeout: 20_000 }).toBe(1);
+	await expect.poll(() => counters.ocrKicks, { timeout: 20_000 }).toBeGreaterThanOrEqual(1);
 	await expect
 		.poll(
-			async () => {
-				return (
-					(await first.getByText('Pronto', { exact: true }).count()) +
-					(await second.getByText('Pronto', { exact: true }).count())
-				);
-			},
+			async () =>
+				first.evaluate(async (id) => {
+					const database = await new Promise<IDBDatabase>((resolve, reject) => {
+						const request = indexedDB.open('fichario-resume', 2);
+						request.onsuccess = () => resolve(request.result);
+						request.onerror = () => reject(request.error ?? new Error('IndexedDB open failed'));
+					});
+					const record = await new Promise<{
+						status?: string;
+						result?: { documentId?: string } | null;
+					} | null>((resolve, reject) => {
+						const request = database
+							.transaction('image-imports', 'readonly')
+							.objectStore('image-imports')
+							.get(id);
+						request.onsuccess = () => resolve(request.result ?? null);
+						request.onerror = () => reject(request.error ?? new Error('IndexedDB read failed'));
+					});
+					database.close();
+					return record?.status === 'waiting' && Boolean(record.result?.documentId);
+				}, importId),
 			{ timeout: 15_000 }
 		)
-		.toBe(1);
+		.toBe(true);
 
-	expect(counters.consents).toBe(1);
 	expect(counters.metadataCreates).toBe(1);
 	expect(counters.storageUploads).toBe(3);
 	expect(counters.unknown).toEqual([]);
-
-	await expect
-		.poll(async () => {
-			return first.evaluate(async (id) => {
-				const database = await new Promise<IDBDatabase>((resolve, reject) => {
-					const request = indexedDB.open('fichario-resume', 2);
-					request.onsuccess = () => resolve(request.result);
-					request.onerror = () => reject(request.error ?? new Error('IndexedDB open failed'));
-				});
-				const record = await new Promise<unknown>((resolve, reject) => {
-					const request = database
-						.transaction('image-imports', 'readonly')
-						.objectStore('image-imports')
-						.get(id);
-					request.onsuccess = () => resolve(request.result);
-					request.onerror = () => reject(request.error ?? new Error('IndexedDB read failed'));
-				});
-				database.close();
-				return record === undefined;
-			}, importId);
-		})
-		.toBe(true);
 });

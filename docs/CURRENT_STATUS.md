@@ -1,8 +1,9 @@
 # Estado atual do Fichário Virtual
 
-_Atualizado: 2026-08-10_<br>
+_Atualizado: 2026-08-18_<br>
 _Branch ativa: `main`_<br>
-_Estado: Drive-first e OCR seletivo por lotes seguem integrados. O defeito de request Gemini HTTP 400 foi reproduzido e corrigido em staging: o checkpoint `f87e1edc` passou o CI completo (`31333367357`), o deploy (`31333367356`) e a sonda protegida (`31333418948`), cujo caminho `process-ocr` retornou `provider_ok` HTTP 200. A instrumentação temporária foi removida, o cleanup remoto `31333977753` terminou com sucesso, `process-ocr` ficou `ACTIVE v19` e `ocr-boundary-probe` não existe mais. O Desktop OCR Worker já possui runtime local, spool, lease renovável, keyring, backend Ollama loopback, serviço systemd e gestão web de dispositivos em código, mas ainda depende de validação real de hardware/modelo e pareamento web sem token manual. Release continua dependente dos gates externos de Drive, host e dispositivos._
+_Estado: Drive-first e OCR seletivo por lotes seguem integrados. A auditoria autenticada corrigiu o recall e a precisão semântica, a marcação visual, o aceite assíncrono falso e os verificadores de estado terminal. A calibração real elevou o circuit breaker do Gemini para 190 RPD por modelo e reabriu jobs que ainda carregavam o agendamento obsoleto do limite anterior de 15 RPD. Um PDF manuscrito real de cinco páginas comprovou OCR persistido em todas as páginas, com revisão necessária e sem jobs pendentes. O fluxo de retomada no navegador também foi corrigido para não transformar páginas sem metadados de tamanho em um lote artificial que pode expirar; batching permanece disponível somente quando o caller fornece metadados e controle explícitos. O frontend foi publicado no domínio Pages e os gates locais e remotos de validação, deploy Supabase, busca semântica, fluxos reais, importação escaneada e ranking visual adaptativo passaram no SHA `e89a870`; os workflows reais também evitam a instalação de pacotes do sistema que havia travado a etapa de Chromium. Os gates externos de Drive OAuth, worker desktop e dispositivos físicos continuam pendentes. O relatório completo está em
+[docs/reports/2026-08-17-authenticated-site-audit.md](reports/2026-08-17-authenticated-site-audit.md)._
 
 ## Resumo executivo
 
@@ -94,6 +95,8 @@ A implementação inclui:
 - distinção entre rate limit temporário e quota diária real;
 - retomada após reload;
 - limpeza do derivado temporário após OCR terminal bem-sucedido, preservando-o quando uma nova tentativa ainda é necessária.
+- retomada foreground sem metadados de tamanho usa páginas individuais, com no máximo duas requisições concorrentes; batching explícito continua disponível para ingestões que possuem planejamento de bytes confiável;
+- jobs diferidos pelo antigo guard de 15 RPD são despertados pela migration `20260818022127_reopen_ocr_jobs_after_rpd_raise` após a elevação para 190 RPD.
 
 ### Google Drive-first
 
@@ -142,6 +145,14 @@ O estado local `readyToRun` não é selo de benchmark. Ainda não existe modelo 
 
 ## Estado de validação
 
+### Correção da auditoria autenticada de 2026-08-17
+
+O fluxo real de busca foi exercitado com login, importação de PDF sintético, indexação Gemini, consultas exata, semântica e negativas, seguido de limpeza dos documentos criados. A regressão encontrada era de política: uma frase exata em qualquer documento ativava uma restrição lexical global e escondia o documento semanticamente relevante; consultas negativas também mostravam candidatos abaixo do limite de confiança.
+
+A correção agora mantém recall para consultas em linguagem natural, restringe somente tokens opacos de identificador quando há evidência lexical forte e eleva o piso de candidatos semânticos isolados para `0.72`, acima do máximo negativo observado no corpus de staging (`0.7108`). O verificador aceita a posição semântica no top 3 quando o corpus compartilhado já contém uma fonte relevante, mas mantém Recall@1 para marcadores opacos exatos e exige taxa de falso positivo negativa zero. O cleanup visual também descobre documentos criados antes da persistência do estado do teste e confirma que nenhum documento ainda referencia o caderno antes de removê-lo. Os testes de URL visual passaram a validar o helper de apresentação, e os verificadores autenticados usam os textos atuais da fila e da rota de leitura. `pdf-lib` e `playwright` também passaram a ser dependências de desenvolvimento declaradas, removendo a necessidade de instalação ad hoc para executar os scripts locais.
+
+Validação local do checkpoint `e89a870`: `pnpm test` passou com 327 arquivos e 1.409 testes; `pnpm lint`, `pnpm check`, `pnpm build`, `pnpm test:e2e`, gates source/offline, Edge Functions e banco local + pgTAP passaram. A sonda pessoal autenticada contra o domínio publicado importou um PDF manuscrito real de cinco páginas, aguardou OCR persistido em todas as páginas e confirmou a limpeza do documento de teste. A busca semântica oficial passou com positivo relevante e negativo sem falsos positivos. Os workflows remotos [`32095431312`](https://github.com/Semogtw/FicharioVirtual/actions/runs/32095431312), [`32095971846`](https://github.com/Semogtw/FicharioVirtual/actions/runs/32095971846), [`32095971867`](https://github.com/Semogtw/FicharioVirtual/actions/runs/32095971867) e [`32096263350`](https://github.com/Semogtw/FicharioVirtual/actions/runs/32096263350) terminaram com **success**, incluindo fluxos reais, PDF escaneado, busca e ranking visual adaptativo.
+
 ### Checkpoint OCR corrigido
 
 O workflow [`Validate current head`](https://github.com/Semogtw/FicharioVirtual/actions/runs/31333367357) no SHA `f87e1edc47268b4e0d2ea0742dac690c96d93646` terminou com **success** em 2026-08-09. No mesmo SHA passaram frontend/`pnpm verify`, gates source/offline, Chromium E2E, Deno/Edge Functions e Supabase local + pgTAP.
@@ -161,6 +172,36 @@ O deploy [`31333367356`](https://github.com/Semogtw/FicharioVirtual/actions/runs
 ```
 
 A sequência anterior de sondas mostrou que `responseFormat` e os campos de schema enviados em `generationConfig` eram rejeitados pelo endpoint/modelo real com HTTP 400. O cliente de produção agora envia `responseMimeType: application/json` sem schema de provedor, mantém o contrato JSON explícito no prompt e preserva os parsers locais fail-closed. O `process-ocr` da sonda recebeu e validou uma resposta Gemini real com HTTP 200; a tentativa direta separada atingiu quota do provedor e não foi convertida em sucesso.
+
+### Diagnóstico do fallback OCR em 2026-08-17
+
+A sonda protegida [`32078967959`](https://github.com/Semogtw/FicharioVirtual/actions/runs/32078967959) criou o documento sintético, autenticou e chamou o `process-ocr`, mas terminou com o job pendente por `ocr_provider_rate_queue_full`. O relatório sanitizado registrou o modelo primário `gemini-3.1-flash-lite` e esse erro no limitador local; a ausência de uma segunda linha de telemetria não significava que o fallback não havia sido tentado: o evento primário só é escrito quando o roteador entra no fallback, e a falha final do segundo `reserveProviderSlot` não era registrada.
+
+O checkpoint [`ce34d69`](https://github.com/Semogtw/FicharioVirtual/commit/ce34d69fd2134a4e17c09c9339a09d4bb1ae8db6) corrigiu essa observabilidade nos caminhos síncrono e worker: cada modelo agora registra sua própria falha, rota e código sanitizado. O deploy de staging [`32079625356`](https://github.com/Semogtw/FicharioVirtual/actions/runs/32079625356) aplicou migrations e publicou as Edge Functions com sucesso. A confirmação posterior [`32080815025`](https://github.com/Semogtw/FicharioVirtual/actions/runs/32080815025) comprovou o roteamento: `gemini-3.1-flash-lite` falhou em `primary_gemini` e `gemini-3.5-flash-lite` falhou em `fallback_gemini_rate_limit`, ambos com `ocr_provider_rate_queue_full` e sem HTTP status. Isso resolve a classificação do fallback, não cria quota: os dois limitadores locais estão sem capacidade, portanto nenhuma chamada Gemini foi feita e o retry permanece agendado para o reset seguro.
+
+### Calibração real de quota e PDF manuscrito em 2026-08-18
+
+O teste autenticado com um PDF manuscrito real de cinco páginas separou dois
+problemas que pareciam ser a mesma falha. Primeiro, os jobs criados sob o
+limite antigo de 15 RPD continuavam com `next_retry_at` apontando para o reset
+do Pacífico, mesmo depois de o guard ter sido elevado para 190 RPD. A migration
+`20260818022127_reopen_ocr_jobs_after_rpd_raise` tornou esses jobs elegíveis
+imediatamente; a retomada real os moveu de `retryable` para `processing`.
+
+Depois, a telemetria mostrou uma única requisição primária com timeout de 90 s
+para as cinco páginas. A causa estava no fluxo foreground: ao retomar, ele
+inventava `derivedBytes = 1` e `density = normal`, fazendo o planner agrupar
+todo o manuscrito em um lote sem possuir metadados confiáveis. O código agora
+usa `processPageOcr` por página quando nenhum batching explícito é injetado,
+limitando a concorrência a duas páginas e preservando o batching calibrado dos
+demais caminhos. Na repetição posterior pelo worker, as cinco páginas foram
+persistidas em estado `ready`, com revisão necessária e texto OCR não vazio.
+Depois do deploy, a retomada manual com três páginas elegíveis produziu uma
+chamada primária de 7,108 ms para essas três páginas, sem o timeout de 90 s.
+Um segundo cenário controlado deixou geometria histórica artificial na página 2,
+provocou a proteção correta `ocr_persistence_failed` e foi removido
+integralmente; o documento de teste não ficou na conta e a consulta final
+encontrou zero jobs ou páginas OCR ativos.
 
 ### Cleanup e runtime remoto
 
@@ -200,12 +241,12 @@ Ainda são obrigatórios antes de release:
 - regenerar `src/lib/types/database.ts` a partir do schema efetivamente implantado;
 - executar OAuth e Google Drive com conta real;
 - validar `appProperties` e a reconciliação de cópia após interrupção real do navegador;
-- executar smoke Gemini real e lote multipágina;
+- manter smoke Gemini real e lote multipágina no workflow pós-deploy;
 - testar PDFs grandes reais, incluindo arquivos acima de 50 MiB, documentos extensos e páginas com muito texto nativo;
 - validar expiração/takeover do lease em duas sessões reais e confirmar que uma tentativa stale nunca remove nem sobrescreve derivados da nova proprietária;
 - validar hash/identidade do original antes/depois;
 - testar cancelamento/retomada em computador, tablet e celular;
-- validar Cloudflare Pages e headers no domínio final;
+- repetir a verificação de Cloudflare Pages e headers a cada publicação relevante;
 - confirmar administrativamente ausência de billing/fallback pago.
 
 ### Contratos gerados do banco
@@ -227,11 +268,11 @@ A fronteira backend e o runtime local estão implementados em código, incluindo
 
 ## Pendências imediatas
 
-1. executar o fluxo OCR normal em staging com página/job e persistência, além da sonda sintética já aprovada;
+1. manter o fluxo OCR normal em staging com página/job e persistência coberto pelo workflow real;
 2. executar OAuth e Google Drive com conta real, incluindo crash/recovery, ranges e duas sessões concorrentes;
 3. regenerar `src/lib/types/database.ts` pelo schema efetivamente implantado;
 4. validar PDFs grandes reais e dispositivos móveis/tablet;
-5. implantar e verificar Cloudflare Pages e headers no domínio final;
+5. repetir a verificação de Cloudflare Pages e headers em novas publicações;
 6. concluir o pareamento web do Desktop OCR Worker e depois validar runtime/modelo/hardware em staging + CachyOS real.
 
 ## Regras de continuidade

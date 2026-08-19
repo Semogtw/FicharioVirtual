@@ -40,11 +40,32 @@ enable_confirmations = true
 [functions.process-ocr]
 verify_jwt = true
 
+[functions.ocr-queue-kick]
+verify_jwt = true
+
+# Server-to-server only. The function performs its own constant-time check of a
+# dedicated high-entropy worker secret and never accepts browser credentials.
+[functions.ocr-queue-worker]
+verify_jwt = false
+
 [functions.semantic-coverage]
 verify_jwt = true
 
 [functions.semantic-search]
 verify_jwt = true
+
+[functions.semantic-index]
+verify_jwt = true
+
+# Server-to-server semantic indexing. It reuses the internal worker credential
+# and applies page writes through a narrow service-role dispatcher.
+[functions.semantic-index-worker]
+verify_jwt = false
+
+# Optional low-priority visual semantic enrichment. Authentication is an internal
+# high-entropy worker key; user-visible search remains functional if it is disabled.
+[functions.semantic-visual-worker]
+verify_jwt = false
 
 [functions.delete-document]
 verify_jwt = true
@@ -56,6 +77,9 @@ verify_jwt = true
 verify_jwt = false
 
 [functions.drive-access-token]
+verify_jwt = true
+
+[functions.drive-media]
 verify_jwt = true
 
 [functions.drive-resolve-folder]

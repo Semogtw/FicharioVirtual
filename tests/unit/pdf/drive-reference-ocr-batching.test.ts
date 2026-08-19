@@ -22,14 +22,27 @@ function dependencies() {
 		splitRequiredPageIds: [],
 		unexpectedResultPageIds: []
 	}));
+	const lease = {
+		attemptId: '11111111-2222-4333-8444-555555555555',
+		renew: vi.fn().mockResolvedValue(undefined),
+		renewIfNeeded: vi.fn().mockResolvedValue(undefined),
+		abandon: vi.fn().mockResolvedValue(true),
+		stageAndFinalize: vi.fn().mockImplementation(async ({ pages }) => ({
+			documentId,
+			pageCount: pages.length,
+			ocrPageCount: pages.length,
+			reviewPageCount: 0,
+			status: 'processing'
+		}))
+	};
 	return {
 		destroy,
 		processBatch,
+		lease,
 		currentUserId: vi.fn().mockResolvedValue(userId),
-		verifyIdentity: vi.fn().mockResolvedValue({
-			driveVersion: '4',
-			sourceSizeBytes: staged.sourceSizeBytes
-		}),
+		verifyIdentity: vi
+			.fn()
+			.mockResolvedValue({ driveVersion: '4', sourceSizeBytes: staged.sourceSizeBytes }),
 		openDocument: vi.fn().mockResolvedValue({ document, destroy }),
 		inspectDocument: vi.fn().mockResolvedValue({
 			pageCount: 4,
@@ -40,22 +53,13 @@ function dependencies() {
 				reasons: ['no_extractable_text']
 			}))
 		}),
-		recordOcrConsent: vi.fn().mockResolvedValue(undefined),
+		acquireDescriptorLease: vi.fn().mockResolvedValue(lease),
 		renderPage: vi
 			.fn()
 			.mockResolvedValue(new Blob([new Uint8Array(256 * 1024)], { type: 'image/webp' })),
 		upload: vi.fn().mockResolvedValue(undefined),
 		remove: vi.fn().mockResolvedValue(undefined),
-		finalize: vi.fn().mockImplementation(async ({ pages }) => ({
-			documentId,
-			pageCount: pages.length,
-			ocrPageCount: pages.length,
-			reviewPageCount: 0,
-			status: 'processing'
-		})),
-		recoverPublication: vi.fn().mockResolvedValue(null),
-		referencePending: vi.fn().mockResolvedValue(true),
-		processPage: vi.fn().mockRejectedValue(new Error('legacy page OCR should not run'))
+		recoverPublication: vi.fn().mockResolvedValue(null)
 	};
 }
 
@@ -68,20 +72,16 @@ describe('oversized Drive PDF OCR batching', () => {
 			current?: number;
 			total?: number;
 		}> = [];
-
 		const result = await importStagedDrivePdfReference({
 			staged,
-			consentGranted: true,
 			client: {} as never,
-			dependencies: deps,
+			dependencies: deps as never,
 			onProgress: (event) => progress.push(event)
 		});
-
 		expect(deps.processBatch).toHaveBeenCalledTimes(1);
 		const requestedIds = deps.processBatch.mock.calls[0]?.[0] as readonly string[];
 		expect(requestedIds).toHaveLength(4);
 		expect(new Set(requestedIds).size).toBe(4);
-		expect(deps.processPage).not.toHaveBeenCalled();
 		expect(result).toMatchObject({
 			documentId,
 			pageCount: 4,
@@ -96,6 +96,7 @@ describe('oversized Drive PDF OCR batching', () => {
 			expect.objectContaining({ pageNumber: 3, current: 3, total: 4 }),
 			expect.objectContaining({ pageNumber: 4, current: 4, total: 4 })
 		]);
+		expect(deps.lease.stageAndFinalize).toHaveBeenCalledOnce();
 		expect(deps.destroy).toHaveBeenCalledOnce();
 	});
 });

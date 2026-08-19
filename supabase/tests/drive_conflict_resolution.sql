@@ -51,24 +51,40 @@ insert into public.notebooks (
 );
 
 select *
-from public.create_drive_image_import(
-  'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-  'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-  'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
-  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-  'Fotossíntese',
-  'fotossintese.webp',
-  '1ConflictDriveFileId_123456789',
-  '0ABiologyFolderId_123456789',
-  'image/webp',
-  '2026-08-06T15:00:00Z',
-  '1',
-  'd41d8cd98f00b204e9800998ecf8427e',
-  '11111111-1111-4111-8111-111111111111/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/thumbnail.jpg',
-  repeat('a', 64),
-  null,
-  1
-);
+from public.create_drive_image_import_v2(
+      'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      'Fotossíntese',
+      'fotossintese.webp',
+      '1ConflictDriveFileId_123456789',
+      '0ABiologyFolderId_123456789',
+      'image/webp',
+      '2026-08-06T15:00:00Z',
+      '1',
+      'd41d8cd98f00b204e9800998ecf8427e',
+      auth.uid()::text || '/' || 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' || '/ocr.webp',
+      '11111111-1111-4111-8111-111111111111/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/thumbnail.jpg',
+      repeat('a', 64),
+      repeat('a', 64),
+      'ocr_clean_v1',
+      1,
+      false,
+      1000,
+      0,
+      true,
+      true,
+      false,
+      1600,
+      1200,
+      1600,
+      1200,
+      500000,
+      250000,
+      null,
+      1
+    );
 update public.documents
 set drive_sync_status = 'conflict'
 where id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';

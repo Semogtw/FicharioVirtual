@@ -1,14 +1,8 @@
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { DriveMediaClientLike } from '$lib/drive/browser-download';
 import type { DriveTokenClientLike } from '$lib/drive/browser-upload';
-import { recordOcrConsent } from '$lib/services/ocr-consent';
-import {
-	OcrProcessingError,
-	processOcrBatch as runOcrBatch,
-	processPageOcr,
-	type OcrBatchRunResult,
-	type OcrRunResult
-} from '$lib/services/ocr';
+import { processOcrBatch as runOcrBatch, type OcrBatchRunResult } from '$lib/services/ocr';
 import { getSupabaseClient } from '$lib/services/supabase';
 import type { Database } from '$lib/types/database';
 import type { StagedDrivePdfReference } from './drive-reference';
@@ -17,7 +11,6 @@ import {
 	type DrivePdfReferenceDescriptorLease
 } from './drive-reference-descriptor-attempt';
 import {
-	isDrivePdfReferenceStillFinalizable,
 	recoverDrivePdfReferencePublication,
 	type DrivePdfReferenceRecoveryClient
 } from './drive-reference-publication-recovery';
@@ -34,18 +27,13 @@ import { openDrivePdfRangeDocument, type DrivePdfRangeDocument } from './drive-r
 import { buildPdfImportPlan, type PdfImportPagePlan } from './import-plan';
 import { runPdfOcrBatches } from './ocr-batching';
 import { renderPdfDocumentPage } from './renderer';
-import {
-	PdfConsentRequiredError,
-	parsePdfImportPublication,
-	type PdfImportPublication
-} from './upload';
+import { parsePdfImportPublication, type PdfImportPublication } from './upload';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DRIVE_ID = /^[A-Za-z0-9_-]{10,256}$/;
 const MAX_DERIVED_PAGE_BYTES = 12 * 1024 * 1024;
 
-type ReferenceImportClient = SupabaseClient<Database> & DriveTokenClientLike;
-type PageProcessResult = Pick<OcrRunResult, 'state'> & { needsReview?: boolean };
+type ReferenceImportClient = SupabaseClient<Database> & DriveTokenClientLike & DriveMediaClientLike;
 
 export type DrivePdfReferenceImportProgress = Readonly<{
 	phase:
@@ -72,7 +60,7 @@ export interface DrivePdfReferenceImportDependencies {
 		sourceSizeBytes: number;
 	}): Promise<Readonly<{ driveVersion: string; sourceSizeBytes: number }>>;
 	openDocument(input: {
-		client: DriveTokenClientLike;
+		client: DriveMediaClientLike;
 		fileId: string;
 		totalBytes: number;
 	}): Promise<DrivePdfRangeDocument>;
@@ -80,8 +68,7 @@ export interface DrivePdfReferenceImportDependencies {
 		document: PDFDocumentProxy,
 		options?: DrivePdfRangeInspectionOptions
 	): Promise<DrivePdfRangeInspection>;
-	recordOcrConsent(version?: number): Promise<void>;
-	acquireDescriptorLease?(input: {
+	acquireDescriptorLease(input: {
 		documentId: string;
 		expectedPageCount: number;
 		client: ReferenceImportClient;
@@ -93,18 +80,11 @@ export interface DrivePdfReferenceImportDependencies {
 	): Promise<Blob>;
 	upload(path: string, blob: Blob): Promise<void>;
 	remove(paths: readonly string[]): Promise<void>;
-	finalize(input: {
-		documentId: string;
-		pages: readonly PdfImportPagePlan[];
-		promptVersion: number;
-	}): Promise<unknown>;
 	recoverPublication(input: {
 		documentId: string;
 		pages: readonly PdfImportPagePlan[];
 	}): Promise<PdfImportPublication | null>;
-	referencePending(documentId: string): Promise<boolean>;
-	processPage(pageId: string, options?: { signal?: AbortSignal }): Promise<PageProcessResult>;
-	processBatch?(
+	processBatch(
 		pageIds: readonly string[],
 		options?: { signal?: AbortSignal }
 	): Promise<OcrBatchRunResult>;
@@ -176,7 +156,6 @@ function createDefaultDependencies(
 			}),
 		openDocument: openDrivePdfRangeDocument,
 		inspectDocument: inspectDrivePdfDocument,
-		recordOcrConsent,
 		acquireDescriptorLease: ({ documentId, expectedPageCount }) =>
 			acquireDrivePdfReferenceDescriptorLease({
 				documentId,
@@ -198,36 +177,12 @@ function createDefaultDependencies(
 			if (paths.length === 0) return;
 			await client.storage.from('documents').remove([...paths]);
 		},
-		async finalize(input) {
-			type RpcClient = {
-				rpc(
-					name: 'finalize_drive_pdf_reference_import',
-					args: Record<string, unknown>
-				): Promise<{ data: unknown; error: unknown }>;
-			};
-			const { data, error } = await (client as unknown as RpcClient).rpc(
-				'finalize_drive_pdf_reference_import',
-				{
-					target_document_id: input.documentId,
-					page_descriptors: input.pages,
-					prompt_version: input.promptVersion
-				}
-			);
-			if (error) throw error;
-			return data;
-		},
 		recoverPublication: ({ documentId, pages }) =>
 			recoverDrivePdfReferencePublication({
 				client: client as unknown as DrivePdfReferenceRecoveryClient,
 				documentId,
 				pages
 			}),
-		referencePending: (documentId) =>
-			isDrivePdfReferenceStillFinalizable({
-				client: client as unknown as DrivePdfReferenceRecoveryClient,
-				documentId
-			}),
-		processPage: (pageId, options) => processPageOcr(pageId, undefined, options),
 		processBatch: (pageIds, options) => runOcrBatch(pageIds, undefined, options)
 	};
 }
@@ -240,63 +195,29 @@ async function processPublishedOcrPages(
 	signal?: AbortSignal
 ) {
 	const queue = pages.filter((page) => page.needsOcr);
-	const processBatch = dependencies.processBatch;
-	if (processBatch && queue.length > 0) {
-		return runPdfOcrBatches({
-			pages: queue.map((page) => {
-				const derivedBytes = renderedSizes.get(page.id);
-				if (!Number.isSafeInteger(derivedBytes) || !derivedBytes || derivedBytes < 1) {
-					throw new Error('missing_derived_page_size');
-				}
-				return {
-					id: page.id,
-					pageNumber: page.pageNumber,
-					derivedBytes,
-					density: 'normal' as const
-				};
-			}),
-			processBatch: (pageIds) => processBatch(pageIds, { signal }),
-			signal,
-			onPageFinished: (pageNumber, current, total) =>
-				safelyReportProgress(onProgress, { phase: 'ocr', pageNumber, current, total })
-		});
-	}
-
-	let complete = 0;
-	let needsReview = 0;
-	let pending = 0;
-	let failed = 0;
-
-	for (let index = 0; index < queue.length; index += 1) {
-		const page = queue[index];
-		if (!page) continue;
-		if (signal?.aborted) throw abortError();
-		safelyReportProgress(onProgress, {
-			phase: 'ocr',
-			pageNumber: page.pageNumber,
-			current: index + 1,
-			total: queue.length
-		});
-		try {
-			const result = await dependencies.processPage(page.id, { signal });
-			if (result.state === 'complete' || result.state === 'already_complete') {
-				if (result.needsReview) needsReview += 1;
-				else complete += 1;
-			} else {
-				pending += 1;
+	if (queue.length === 0) return { complete: 0, needsReview: 0, pending: 0, failed: 0 };
+	return runPdfOcrBatches({
+		pages: queue.map((page) => {
+			const derivedBytes = renderedSizes.get(page.id);
+			if (!Number.isSafeInteger(derivedBytes) || !derivedBytes || derivedBytes < 1) {
+				throw new Error('missing_derived_page_size');
 			}
-		} catch (error) {
-			if (error instanceof DOMException && error.name === 'AbortError') throw error;
-			if (error instanceof OcrProcessingError && !error.retryable) failed += 1;
-			else pending += 1;
-		}
-	}
-	return { complete, needsReview, pending, failed };
+			return {
+				id: page.id,
+				pageNumber: page.pageNumber,
+				derivedBytes,
+				density: 'normal' as const
+			};
+		}),
+		processBatch: (pageIds) => dependencies.processBatch(pageIds, { signal }),
+		signal,
+		onPageFinished: (pageNumber, current, total) =>
+			safelyReportProgress(onProgress, { phase: 'ocr', pageNumber, current, total })
+	});
 }
 
 export async function importStagedDrivePdfReference({
 	staged,
-	consentGranted,
 	promptVersion: requestedPromptVersion,
 	signal,
 	onProgress,
@@ -304,17 +225,16 @@ export async function importStagedDrivePdfReference({
 	dependencies
 }: {
 	staged: StagedDrivePdfReference;
-	consentGranted: boolean;
 	promptVersion?: number;
 	signal?: AbortSignal;
 	onProgress?: (progress: DrivePdfReferenceImportProgress) => void;
 	client?: ReferenceImportClient;
-	dependencies?: DrivePdfReferenceImportDependencies;
+	dependencies?: Partial<DrivePdfReferenceImportDependencies>;
 }): Promise<DrivePdfReferenceImportResult> {
 	validateStagedReference(staged);
 	const promptVersion = validatePromptVersion(requestedPromptVersion);
 	if (signal?.aborted) throw abortError();
-	const runtime = dependencies ?? createDefaultDependencies(client);
+	const runtime = Object.assign(createDefaultDependencies(client), dependencies ?? {});
 	const uploadedPaths: string[] = [];
 	let metadataPublished = false;
 	let descriptorLease: DrivePdfReferenceDescriptorLease | null = null;
@@ -347,10 +267,6 @@ export async function importStagedDrivePdfReference({
 			onPage: (pageNumber, pageCount) =>
 				safelyReportProgress(onProgress, { phase: 'inspecting', pageNumber, pageCount })
 		});
-		if (inspection.pagesNeedingOcr.length > 0) {
-			if (!consentGranted) throw new PdfConsentRequiredError();
-			await runtime.recordOcrConsent();
-		}
 		if (signal?.aborted) throw abortError();
 
 		const storageRoot = `${userId}/${staged.documentId}`;
@@ -358,13 +274,11 @@ export async function importStagedDrivePdfReference({
 		const renderedSizes = new Map<string, number>();
 		const ocrPages = pages.filter((page) => page.needsOcr);
 
-		if (runtime.acquireDescriptorLease) {
-			descriptorLease = await runtime.acquireDescriptorLease({
-				documentId: staged.documentId,
-				expectedPageCount: pages.length,
-				client
-			});
-		}
+		descriptorLease = await runtime.acquireDescriptorLease({
+			documentId: staged.documentId,
+			expectedPageCount: pages.length,
+			client
+		});
 
 		for (let index = 0; index < ocrPages.length; index += 1) {
 			const page = ocrPages[index];
@@ -412,17 +326,11 @@ export async function importStagedDrivePdfReference({
 		const immutablePages = Object.freeze(pages.map((page) => Object.freeze(page)));
 		let publication: PdfImportPublication;
 		try {
-			const finalized = descriptorLease
-				? await descriptorLease.stageAndFinalize({
-						pages: immutablePages,
-						promptVersion,
-						signal
-					})
-				: await runtime.finalize({
-						documentId: staged.documentId,
-						pages: immutablePages,
-						promptVersion
-					});
+			const finalized = await descriptorLease.stageAndFinalize({
+				pages: immutablePages,
+				promptVersion,
+				signal
+			});
 			publication = parsePdfImportPublication(finalized, staged.documentId);
 		} catch (finalizeError) {
 			const recovered = await runtime
@@ -449,11 +357,7 @@ export async function importStagedDrivePdfReference({
 			if (abandoned && uploadedPaths.length > 0) {
 				await runtime.remove(uploadedPaths).catch(() => undefined);
 			}
-		} else if (!metadataPublished && uploadedPaths.length > 0) {
-			const referencePending = await runtime.referencePending(staged.documentId).catch(() => false);
-			if (referencePending) await runtime.remove(uploadedPaths).catch(() => undefined);
 		}
-		if (error instanceof PdfConsentRequiredError) throw error;
 		if (error instanceof DrivePdfReferenceChangedError) throw error;
 		if (error instanceof DOMException && error.name === 'AbortError') throw error;
 		throw new DrivePdfReferenceImportError();

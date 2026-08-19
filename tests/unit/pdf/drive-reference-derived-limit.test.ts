@@ -9,10 +9,17 @@ const staged = {
 };
 
 function dependencies() {
-	const document = { numPages: 3 };
+	const document = { numPages: 1 };
 	const destroy = vi.fn().mockResolvedValue(undefined);
+	const lease = {
+		attemptId: '11111111-2222-4333-8444-555555555555',
+		renew: vi.fn().mockResolvedValue(undefined),
+		renewIfNeeded: vi.fn().mockResolvedValue(undefined),
+		abandon: vi.fn().mockResolvedValue(true),
+		stageAndFinalize: vi.fn()
+	};
 	return {
-		document,
+		lease,
 		destroy,
 		currentUserId: vi.fn().mockResolvedValue('11111111-1111-4111-8111-111111111111'),
 		verifyIdentity: vi
@@ -25,14 +32,12 @@ function dependencies() {
 			pagesNeedingOcr: [1],
 			ocrReasonsByPage: [{ pageNumber: 1, reasons: ['no_extractable_text'] }]
 		}),
-		recordOcrConsent: vi.fn().mockResolvedValue(undefined),
+		acquireDescriptorLease: vi.fn().mockResolvedValue(lease),
 		renderPage: vi.fn(),
 		upload: vi.fn(),
 		remove: vi.fn(),
-		finalize: vi.fn(),
-		recoverPublication: vi.fn(),
-		referencePending: vi.fn(),
-		processPage: vi.fn()
+		recoverPublication: vi.fn().mockResolvedValue(null),
+		processBatch: vi.fn()
 	};
 }
 
@@ -46,19 +51,16 @@ describe('Drive PDF derived page ceiling', () => {
 			);
 
 		await expect(
-			importStagedDrivePdfReference({
-				staged,
-				consentGranted: true,
-				client: {} as never,
-				dependencies: deps
-			})
+			importStagedDrivePdfReference({ staged, client: {} as never, dependencies: deps as never })
 		).rejects.toThrow('Não foi possível concluir a importação do PDF grande.');
 
 		expect(deps.renderPage).toHaveBeenCalledTimes(2);
 		expect(deps.renderPage.mock.calls[0]?.[2]).toMatchObject({ maxDimension: 2400, quality: 0.88 });
 		expect(deps.renderPage.mock.calls[1]?.[2]).toMatchObject({ maxDimension: 1800, quality: 0.78 });
 		expect(deps.upload).not.toHaveBeenCalled();
-		expect(deps.finalize).not.toHaveBeenCalled();
+		expect(deps.lease.stageAndFinalize).not.toHaveBeenCalled();
+		expect(deps.lease.abandon).toHaveBeenCalledOnce();
 		expect(deps.remove).not.toHaveBeenCalled();
+		expect(deps.processBatch).not.toHaveBeenCalled();
 	});
 });

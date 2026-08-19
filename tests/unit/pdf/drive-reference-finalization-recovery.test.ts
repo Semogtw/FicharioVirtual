@@ -10,16 +10,35 @@ const staged = {
 	status: 'pending_inspection' as const
 };
 
+function complete(pageIds: readonly string[]) {
+	return {
+		state: 'complete' as const,
+		completedPageIds: [...pageIds],
+		reviewPageIds: [],
+		pendingPageIds: [],
+		failedPageIds: [],
+		splitRequiredPageIds: [],
+		unexpectedResultPageIds: []
+	};
+}
+
 function dependencies() {
 	const document = { numPages: 1 };
 	const destroy = vi.fn().mockResolvedValue(undefined);
+	const lease = {
+		attemptId: '11111111-2222-4333-8444-555555555555',
+		renew: vi.fn().mockResolvedValue(undefined),
+		renewIfNeeded: vi.fn().mockResolvedValue(undefined),
+		abandon: vi.fn().mockResolvedValue(true),
+		stageAndFinalize: vi.fn().mockRejectedValue(new Error('response lost after commit'))
+	};
 	return {
+		lease,
 		destroy,
 		currentUserId: vi.fn().mockResolvedValue(userId),
-		verifyIdentity: vi.fn().mockResolvedValue({
-			driveVersion: '4',
-			sourceSizeBytes: staged.sourceSizeBytes
-		}),
+		verifyIdentity: vi
+			.fn()
+			.mockResolvedValue({ driveVersion: '4', sourceSizeBytes: staged.sourceSizeBytes }),
 		openDocument: vi.fn().mockResolvedValue({ document, destroy }),
 		inspectDocument: vi.fn().mockResolvedValue({
 			pageCount: 1,
@@ -27,19 +46,17 @@ function dependencies() {
 			pagesNeedingOcr: [1],
 			ocrReasonsByPage: [{ pageNumber: 1, reasons: ['no_extractable_text'] }]
 		}),
-		recordOcrConsent: vi.fn().mockResolvedValue(undefined),
+		acquireDescriptorLease: vi.fn().mockResolvedValue(lease),
 		renderPage: vi.fn().mockResolvedValue(new Blob([new Uint8Array(64)], { type: 'image/webp' })),
 		upload: vi.fn().mockResolvedValue(undefined),
 		remove: vi.fn().mockResolvedValue(undefined),
-		finalize: vi.fn().mockRejectedValue(new Error('response lost after commit')),
 		recoverPublication: vi.fn().mockResolvedValue(null),
-		referencePending: vi.fn().mockResolvedValue(false),
-		processPage: vi.fn().mockResolvedValue({ state: 'complete', needsReview: false })
+		processBatch: vi.fn(async (pageIds: readonly string[]) => complete(pageIds))
 	};
 }
 
 describe('Drive PDF finalization recovery', () => {
-	it('continues OCR without deleting derivatives when the finalizer committed but its response was lost', async () => {
+	it('continues OCR without deleting derivatives when a committed publication is recovered', async () => {
 		const deps = dependencies();
 		deps.recoverPublication.mockResolvedValue({
 			documentId,
@@ -50,55 +67,38 @@ describe('Drive PDF finalization recovery', () => {
 		});
 
 		await expect(
-			importStagedDrivePdfReference({
-				staged,
-				consentGranted: true,
-				client: {} as never,
-				dependencies: deps
-			})
+			importStagedDrivePdfReference({ staged, client: {} as never, dependencies: deps as never })
 		).resolves.toMatchObject({ documentId, pageCount: 1, ocrCompleted: 1 });
 
 		expect(deps.recoverPublication).toHaveBeenCalledOnce();
-		expect(deps.referencePending).not.toHaveBeenCalled();
+		expect(deps.lease.abandon).not.toHaveBeenCalled();
 		expect(deps.remove).not.toHaveBeenCalled();
-		expect(deps.processPage).toHaveBeenCalledOnce();
+		expect(deps.processBatch).toHaveBeenCalledOnce();
 		expect(deps.destroy).toHaveBeenCalledOnce();
 	});
 
-	it('cleans derivatives only when a failed publication is confirmed to remain staged', async () => {
+	it('abandons the descriptor and cleans derivatives when publication cannot be recovered', async () => {
 		const deps = dependencies();
-		deps.referencePending.mockResolvedValue(true);
 
 		await expect(
-			importStagedDrivePdfReference({
-				staged,
-				consentGranted: true,
-				client: {} as never,
-				dependencies: deps
-			})
+			importStagedDrivePdfReference({ staged, client: {} as never, dependencies: deps as never })
 		).rejects.toThrow('Não foi possível concluir a importação do PDF grande.');
 
 		expect(deps.recoverPublication).toHaveBeenCalledOnce();
-		expect(deps.referencePending).toHaveBeenCalledWith(documentId);
+		expect(deps.lease.abandon).toHaveBeenCalledOnce();
 		expect(deps.remove).toHaveBeenCalledWith([`${userId}/${documentId}/pages/1.webp`]);
-		expect(deps.processPage).not.toHaveBeenCalled();
+		expect(deps.processBatch).not.toHaveBeenCalled();
 	});
 
-	it('preserves derivatives when database state is unknown after finalization failure', async () => {
+	it('uses the same safe cleanup path when recovery itself is unavailable', async () => {
 		const deps = dependencies();
 		deps.recoverPublication.mockRejectedValue(new Error('recovery unavailable'));
-		deps.referencePending.mockRejectedValue(new Error('staging state unavailable'));
 
 		await expect(
-			importStagedDrivePdfReference({
-				staged,
-				consentGranted: true,
-				client: {} as never,
-				dependencies: deps
-			})
+			importStagedDrivePdfReference({ staged, client: {} as never, dependencies: deps as never })
 		).rejects.toThrow('Não foi possível concluir a importação do PDF grande.');
 
-		expect(deps.referencePending).toHaveBeenCalledWith(documentId);
-		expect(deps.remove).not.toHaveBeenCalled();
+		expect(deps.lease.abandon).toHaveBeenCalledOnce();
+		expect(deps.remove).toHaveBeenCalledWith([`${userId}/${documentId}/pages/1.webp`]);
 	});
 });

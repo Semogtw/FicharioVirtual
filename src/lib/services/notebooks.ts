@@ -8,6 +8,7 @@ import {
 	type UpdateNotebookInput
 } from '$lib/domain/notebook';
 import type { Database } from '$lib/types/database';
+import type { DatabaseWithNotebookBanners } from '$lib/types/database-notebook-banner-extensions';
 import { isIsoTimestamp } from '$lib/validation/iso-timestamp';
 import { getSupabaseClient } from './supabase';
 
@@ -35,23 +36,29 @@ const optionalDescription = z
 		return normalized.length === 0 ? null : normalized;
 	})
 	.refine((value) => value === null || (value.length <= 2_000 && !hasControlCharacters(value)));
+const optionalParentNotebookId = z.union([z.string().regex(UUID), z.null()]);
 const newNotebookInputSchema = z
 	.object({
 		name: normalizedText(120),
 		description: optionalDescription.optional(),
-		coverStyle: normalizedText(64).optional()
+		coverStyle: normalizedText(64).optional(),
+		parentNotebookId: optionalParentNotebookId.optional()
 	})
 	.strict();
 const notebookUpdateSchema = z
 	.object({
 		name: normalizedText(120).optional(),
 		description: optionalDescription.optional(),
-		coverStyle: normalizedText(64).optional()
+		coverStyle: normalizedText(64).optional(),
+		parentNotebookId: optionalParentNotebookId.optional()
 	})
 	.strict()
 	.refine(
 		(value) =>
-			value.name !== undefined || value.description !== undefined || value.coverStyle !== undefined
+			value.name !== undefined ||
+			value.description !== undefined ||
+			value.coverStyle !== undefined ||
+			value.parentNotebookId !== undefined
 	);
 
 export function parseNewNotebookInput(data: unknown): NewNotebookInput {
@@ -73,6 +80,10 @@ const notebookRecordSchema = z
 		name: z.string().trim().min(1).max(120),
 		description: z.string().max(2_000).nullable(),
 		cover_style: z.string().trim().min(1).max(64),
+		parent_notebook_id: z.string().regex(UUID).nullable(),
+		banner_path: z.string().min(3).max(1_024).nullable(),
+		banner_position_x: z.number().int().min(0).max(100),
+		banner_position_y: z.number().int().min(0).max(100),
 		created_at: timestamp,
 		updated_at: timestamp
 	})
@@ -105,7 +116,7 @@ export function parseNotebookRecord(data: unknown, expectedId?: string): Noteboo
 
 type RpcError = { message: string };
 type NotebookRpcClient = {
-	rpc(name: 'list_notebooks'): Promise<{ data: unknown; error: RpcError | null }>;
+	rpc(name: 'list_notebooks_v2'): Promise<{ data: unknown; error: RpcError | null }>;
 	rpc(
 		name: 'delete_notebook',
 		args: { target_notebook_id: string }
@@ -145,7 +156,7 @@ export async function listNotebooks(
 ): Promise<readonly NotebookSummary[]> {
 	try {
 		const rpc = clientOrDefault(client) as unknown as NotebookRpcClient;
-		const { data, error } = await rpc.rpc('list_notebooks');
+		const { data, error } = await rpc.rpc('list_notebooks_v2');
 		if (error) throw new NotebookServiceError();
 		return Object.freeze(parseNotebookRecords(data).map(mapNotebookRecord));
 	} catch {
@@ -161,15 +172,19 @@ export async function createNotebook(
 	const resolvedClient = clientOrDefault(client);
 	const userId = await currentUserId(resolvedClient);
 	try {
-		const { data, error } = await resolvedClient
+		const notebookClient = resolvedClient as unknown as SupabaseClient<DatabaseWithNotebookBanners>;
+		const { data, error } = await notebookClient
 			.from('notebooks')
 			.insert({
 				user_id: userId,
 				name: validatedInput.name,
 				description: validatedInput.description ?? null,
-				cover_style: validatedInput.coverStyle ?? 'linen'
+				cover_style: validatedInput.coverStyle ?? 'linen',
+				parent_notebook_id: validatedInput.parentNotebookId ?? null
 			})
-			.select('id,name,description,cover_style,created_at,updated_at')
+			.select(
+				'id,name,description,cover_style,parent_notebook_id,banner_path,banner_position_x,banner_position_y,created_at,updated_at'
+			)
 			.single();
 
 		if (error || data === null) throw new NotebookServiceError();
@@ -186,13 +201,20 @@ export async function updateNotebook(
 ): Promise<NotebookSummary> {
 	const validatedNotebookId = validId(notebookId);
 	const validatedInput = parseNotebookUpdate(input);
+	if (validatedInput.parentNotebookId === validatedNotebookId) {
+		throw new TypeError('Invalid notebook parent');
+	}
 	const resolvedClient = clientOrDefault(client);
-	const changes: Database['public']['Tables']['notebooks']['Update'] = {};
+	const notebookClient = resolvedClient as unknown as SupabaseClient<DatabaseWithNotebookBanners>;
+	const changes: DatabaseWithNotebookBanners['public']['Tables']['notebooks']['Update'] = {};
 	if (validatedInput.name !== undefined) changes.name = validatedInput.name;
 	if (validatedInput.description !== undefined) changes.description = validatedInput.description;
 	if (validatedInput.coverStyle !== undefined) changes.cover_style = validatedInput.coverStyle;
+	if (validatedInput.parentNotebookId !== undefined) {
+		changes.parent_notebook_id = validatedInput.parentNotebookId;
+	}
 	try {
-		const { error } = await resolvedClient
+		const { error } = await notebookClient
 			.from('notebooks')
 			.update(changes)
 			.eq('id', validatedNotebookId);

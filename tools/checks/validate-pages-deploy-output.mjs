@@ -2,10 +2,13 @@ import { appendFileSync, readFileSync } from 'node:fs';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
+const STAGING_ALIAS = 'https://staging.fichario-virtual.pages.dev';
+const PRODUCTION_ALIAS = 'https://fichario-virtual.pages.dev';
+
 /**
  * @typedef {Readonly<{
  *   project: 'fichario-virtual';
- *   environment: 'preview';
+ *   environment: 'preview' | 'production';
  *   productionBranch: 'main';
  *   commitHash: string;
  * }>} ExpectedDeploymentIdentity
@@ -52,7 +55,9 @@ export function validatePagesDeployOutput(source, expected) {
 	if (typeof source !== 'string' || source.trim() === '') fail('Wrangler output is empty');
 	if (!expected || typeof expected !== 'object') fail('expected deployment identity is missing');
 	if (expected.project !== 'fichario-virtual') fail('expected project must be fichario-virtual');
-	if (expected.environment !== 'preview') fail('expected environment must be preview');
+	if (expected.environment !== 'preview' && expected.environment !== 'production') {
+		fail('expected environment must be preview or production');
+	}
 	if (expected.productionBranch !== 'main') fail('expected production branch must be main');
 	if (!/^[0-9a-f]{40}$/.test(expected.commitHash)) fail('expected source SHA is invalid');
 
@@ -87,20 +92,27 @@ export function validatePagesDeployOutput(source, expected) {
 
 	const url = cleanHttpsOrigin(deployment.url, 'deployment URL');
 	const hostname = new URL(url).hostname;
-	if (!hostname.endsWith('.fichario-virtual.pages.dev')) {
+	if (
+		hostname !== 'fichario-virtual.pages.dev' &&
+		!hostname.endsWith('.fichario-virtual.pages.dev')
+	) {
 		fail('deployment URL is outside the expected Pages project');
 	}
 
-	let alias = '';
-	if (deployment.alias !== undefined && deployment.alias !== null && deployment.alias !== '') {
+	let alias;
+	if (expected.environment === 'preview') {
 		alias = cleanHttpsOrigin(deployment.alias, 'deployment alias');
-		const aliasHostname = new URL(alias).hostname;
-		if (
-			aliasHostname !== 'fichario-virtual.pages.dev' &&
-			!aliasHostname.endsWith('.fichario-virtual.pages.dev')
-		) {
-			fail('deployment alias is outside the expected Pages project');
+		if (alias !== STAGING_ALIAS) {
+			fail(`deployment alias must be ${STAGING_ALIAS}`);
 		}
+	} else {
+		if (deployment.alias !== null && deployment.alias !== undefined && deployment.alias !== '') {
+			const reportedAlias = cleanHttpsOrigin(deployment.alias, 'deployment alias');
+			if (reportedAlias !== PRODUCTION_ALIAS) {
+				fail(`production deployment alias must be ${PRODUCTION_ALIAS} when reported`);
+			}
+		}
+		alias = PRODUCTION_ALIAS;
 	}
 
 	return Object.freeze({
@@ -116,12 +128,14 @@ function runCli() {
 	const commitHash = process.env.EXPECTED_SOURCE_COMMIT;
 	const githubOutput = process.env.GITHUB_OUTPUT;
 	if (!outputPath) fail('WRANGLER_OUTPUT_FILE_PATH is missing');
-	if (targetEnvironment !== 'staging') fail('TARGET_ENVIRONMENT must be staging');
+	if (targetEnvironment !== 'staging' && targetEnvironment !== 'production') {
+		fail('TARGET_ENVIRONMENT must be staging or production');
+	}
 	if (!commitHash) fail('EXPECTED_SOURCE_COMMIT is missing');
 	if (!githubOutput) fail('GITHUB_OUTPUT is missing');
 	const result = validatePagesDeployOutput(readFileSync(outputPath, 'utf8'), {
 		project: 'fichario-virtual',
-		environment: 'preview',
+		environment: targetEnvironment === 'production' ? 'production' : 'preview',
 		productionBranch: 'main',
 		commitHash
 	});
@@ -130,7 +144,7 @@ function runCli() {
 		`url=${result.url}\ndeployment_id=${result.deploymentId}\nalias=${result.alias}\n`
 	);
 	console.log(
-		`Cloudflare Pages deployment identity: PASS (${result.deploymentId}, ${result.url}, ${commitHash})`
+		`Cloudflare Pages ${targetEnvironment} deployment identity: PASS (${result.deploymentId}, ${result.url}, ${result.alias}, ${commitHash})`
 	);
 }
 

@@ -42,8 +42,8 @@ const documentRecordSchema = z
 	.strict();
 const documentFiltersSchema = z
 	.object({
-		notebookId: z.string().regex(UUID).optional(),
-		kind: z.enum(['image', 'pdf']).optional(),
+		notebookId: z.string().regex(UUID).nullable().optional(),
+		kind: z.enum(['image', 'pdf']).nullable().optional(),
 		status: z
 			.enum([
 				'uploading',
@@ -54,15 +54,16 @@ const documentFiltersSchema = z
 				'needs_review',
 				'failed'
 			])
+			.nullable()
 			.optional(),
-		createdFrom: timestamp.optional(),
-		createdTo: timestamp.optional()
+		createdFrom: timestamp.nullable().optional(),
+		createdTo: timestamp.nullable().optional()
 	})
 	.strict()
 	.superRefine((filters, context) => {
 		if (
-			filters.createdFrom !== undefined &&
-			filters.createdTo !== undefined &&
+			filters.createdFrom != null &&
+			filters.createdTo != null &&
 			Date.parse(filters.createdFrom) > Date.parse(filters.createdTo)
 		) {
 			context.addIssue({ code: 'custom', message: 'Invalid document date range' });
@@ -190,7 +191,11 @@ export async function listDocuments({
 
 	if (resolvedFilters.notebookId) query = query.eq('notebook_id', resolvedFilters.notebookId);
 	if (resolvedFilters.kind) query = query.eq('kind', resolvedFilters.kind);
-	if (resolvedFilters.status) query = query.eq('status', resolvedFilters.status);
+	if (resolvedFilters.status === 'ready') {
+		query = query.in('status', ['ready', 'needs_review']);
+	} else if (resolvedFilters.status) {
+		query = query.eq('status', resolvedFilters.status);
+	}
 	if (resolvedFilters.createdFrom) query = query.gte('created_at', resolvedFilters.createdFrom);
 	if (resolvedFilters.createdTo) query = query.lte('created_at', resolvedFilters.createdTo);
 	if (cursor) {

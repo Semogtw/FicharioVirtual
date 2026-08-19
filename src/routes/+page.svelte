@@ -1,8 +1,11 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { onDestroy, onMount } from 'svelte';
+	import { fly } from 'svelte/transition';
+	import AnimatedNumber from '$lib/components/AnimatedNumber.svelte';
 	import DocumentCard from '$lib/components/DocumentCard.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
+	import LoadingCollection from '$lib/components/LoadingCollection.svelte';
 	import type { DocumentSummary } from '$lib/domain/document';
 	import { listDocuments } from '$lib/services/documents';
 	import { RequestVersion } from '$lib/services/request-version';
@@ -94,25 +97,27 @@
 	</header>
 
 	<section class="overview" aria-label="Resumo da biblioteca" aria-busy={loading || refreshing}>
-		<article>
+		<a class="overview-card actionable" href="/library/" aria-label="Abrir biblioteca">
 			<span>Documentos</span>
-			<strong>{usage ? usage.totals.documents.toLocaleString('pt-BR') : '—'}</strong>
+			<strong><AnimatedNumber value={usage?.totals.documents ?? null} /></strong>
 			<small>Arquivos privados preservados no fichário</small>
-		</article>
-		<article>
+			<b aria-hidden="true">Abrir biblioteca →</b>
+		</a>
+		<article class="overview-card">
 			<span>Páginas no fichário</span>
-			<strong>{usage ? usage.totals.pages.toLocaleString('pt-BR') : '—'}</strong>
-			<small>Texto nativo, leituras e correções manuais</small>
+			<strong><AnimatedNumber value={usage?.totals.pages ?? null} /></strong>
+			<small>Originais preservados e conteúdo preparado para pesquisa</small>
 		</article>
-		<article>
-			<span>Para revisar</span>
-			<strong>{usage ? usage.totals.reviewPages.toLocaleString('pt-BR') : '—'}</strong>
-			<small>Páginas que ainda pedem atenção humana</small>
-		</article>
+		<a class="overview-card actionable" href="/notebooks/" aria-label="Abrir cadernos">
+			<span>Cadernos</span>
+			<strong><AnimatedNumber value={usage?.totals.notebooks ?? null} /></strong>
+			<small>Conjuntos de documentos organizados do seu jeito</small>
+			<b aria-hidden="true">Abrir cadernos →</b>
+		</a>
 	</section>
 
 	{#if warning}
-		<div class="warning" role="status">
+		<div class="warning" role="status" transition:fly={{ y: -6, duration: 220 }}>
 			<p>{warning}</p>
 			<button type="button" disabled={loading || refreshing} onclick={() => void loadDashboard()}>
 				{refreshing ? 'Atualizando…' : 'Tentar atualizar novamente'}
@@ -130,14 +135,14 @@
 		</div>
 
 		{#if loading}
-			<p class="loading" role="status">Atualizando o resumo do fichário…</p>
+			<LoadingCollection count={6} label="Atualizando o resumo do fichário…" />
 		{:else if error}
-			<div class="error" role="alert">
+			<div class="error" role="alert" transition:fly={{ y: -6, duration: 220 }}>
 				<p>{error}</p>
 				<button type="button" onclick={() => void loadDashboard()}>Tentar novamente</button>
 			</div>
 		{:else if !documentsAvailable}
-			<div class="error" role="alert">
+			<div class="error" role="alert" transition:fly={{ y: -6, duration: 220 }}>
 				<p>Os documentos recentes não puderam ser carregados.</p>
 				<button type="button" onclick={() => void loadDashboard()}>Tentar novamente</button>
 			</div>
@@ -222,7 +227,7 @@
 		gap: 1rem;
 	}
 
-	.overview article {
+	.overview-card {
 		display: grid;
 		gap: 0.35rem;
 		min-height: 10.5rem;
@@ -231,6 +236,16 @@
 		border: 1px solid var(--line);
 		border-radius: var(--radius-md);
 		background: var(--surface);
+		color: var(--ink);
+	}
+
+	.overview-card.actionable {
+		position: relative;
+		transform: translateY(0);
+		transition:
+			border-color var(--motion-fast) var(--ease-standard),
+			box-shadow var(--motion-base) var(--ease-standard),
+			transform var(--motion-base) var(--ease-emphasized);
 	}
 
 	.overview span,
@@ -253,6 +268,16 @@
 
 	.overview small {
 		line-height: 1.45;
+	}
+
+	.overview-card b {
+		color: var(--archive);
+		font-size: 0.76rem;
+		font-weight: 760;
+	}
+
+	.overview-card.actionable:active {
+		transform: translateY(1px) scale(0.99);
 	}
 
 	.recent {
@@ -286,12 +311,6 @@
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
 		gap: 1rem;
-	}
-
-	.loading {
-		padding: 3rem;
-		color: var(--muted);
-		text-align: center;
 	}
 
 	.warning {
@@ -342,6 +361,14 @@
 		cursor: pointer;
 	}
 
+	@media (hover: hover) and (pointer: fine) {
+		.overview-card.actionable:hover {
+			border-color: var(--archive);
+			box-shadow: var(--shadow-raised);
+			transform: translateY(-2px);
+		}
+	}
+
 	@media (max-width: 760px) {
 		.page-header {
 			align-items: flex-start;
@@ -352,7 +379,7 @@
 			grid-template-columns: 1fr;
 		}
 
-		.overview article {
+		.overview-card {
 			min-height: 8rem;
 		}
 	}

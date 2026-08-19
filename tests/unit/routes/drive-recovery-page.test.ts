@@ -12,11 +12,9 @@ describe('Drive recovery page', () => {
 		expect(source).toContain('resolveDriveFolder');
 		expect(source).toContain('copyBrowserDriveFile');
 		expect(source).toContain('reconnectMissingDriveDocument');
-		expect(source).toContain(
-			"label={busyId === document.id ? 'Reconectando…' : 'Reconectar original'}"
-		);
+		expect(source).toContain("label={busyId === document.id ? 'Reconectando…' : 'Reconectar'}");
 		expect(source).toContain('Arquivos ausentes');
-		expect(source).toContain('Conflitos isolados');
+		expect(source).toContain('Itens com conflito');
 	});
 
 	it('rolls back a copied replacement if metadata reconnection fails', () => {

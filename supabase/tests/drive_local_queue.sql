@@ -144,24 +144,40 @@ select results_eq(
 );
 
 select *
-from public.create_drive_image_import(
-  'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-  'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
-  'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
-  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-  'Fotossíntese',
-  'fotossintese.webp',
-  '1DriveDocumentFileId_123456789',
-  '0ABiologyFolderId_123456789',
-  'image/webp',
-  '2026-08-06T12:40:00Z',
-  '1',
-  'd41d8cd98f00b204e9800998ecf8427e',
-  '11111111-1111-4111-8111-111111111111/cccccccc-cccc-4ccc-8ccc-cccccccccccc/thumbnail.jpg',
-  repeat('a', 64),
-  null,
-  1
-);
+from public.create_drive_image_import_v2(
+      'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      'Fotossíntese',
+      'fotossintese.webp',
+      '1DriveDocumentFileId_123456789',
+      '0ABiologyFolderId_123456789',
+      'image/webp',
+      '2026-08-06T12:40:00Z',
+      '1',
+      'd41d8cd98f00b204e9800998ecf8427e',
+      auth.uid()::text || '/' || 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' || '/ocr.webp',
+      '11111111-1111-4111-8111-111111111111/cccccccc-cccc-4ccc-8ccc-cccccccccccc/thumbnail.jpg',
+      repeat('a', 64),
+      repeat('a', 64),
+      'ocr_clean_v1',
+      1,
+      false,
+      1000,
+      0,
+      true,
+      true,
+      false,
+      1600,
+      1200,
+      1600,
+      1200,
+      500000,
+      250000,
+      null,
+      1
+    );
 
 select is(
   (select count(*) from public.drive_sync_jobs where document_id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'),

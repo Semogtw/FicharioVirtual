@@ -1,5 +1,11 @@
 import type { Session, User } from '@supabase/supabase-js';
-import { AuthServiceError, loadAuthorizedSession, signIn, signOut } from '$lib/services/auth';
+import {
+	AuthServiceError,
+	loadAuthorizedSession,
+	loadPersistedSession,
+	signIn,
+	signOut
+} from '$lib/services/auth';
 import { getSupabaseClient } from '$lib/services/supabase';
 
 type SessionState = {
@@ -84,6 +90,19 @@ export async function initializeSession(): Promise<Session | null> {
 		if (isCurrentOperation(version)) applySession(session);
 		return session;
 	} catch (error) {
+		if (!isCurrentOperation(version)) return null;
+
+		try {
+			const persistedSession = await loadPersistedSession();
+			if (!isCurrentOperation(version)) return persistedSession;
+			if (persistedSession !== null) {
+				applySession(persistedSession);
+				return persistedSession;
+			}
+		} catch {
+			// Keep the original authorization failure as the user-facing startup error.
+		}
+
 		if (isCurrentOperation(version)) {
 			applySession(null);
 			sessionState.error = message(error);
@@ -153,6 +172,17 @@ export function startSessionTracking(onExternalSessionChange?: () => void): () =
 
 			const previousUserId = sessionState.user?.id ?? null;
 			const wasAuthorized = sessionState.authorized;
+			const sameAuthorizedUser = wasAuthorized && previousUserId === session.user.id;
+			if (
+				sameAuthorizedUser &&
+				(event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN' || event === 'USER_UPDATED')
+			) {
+				invalidateOperations();
+				applySession(session);
+				sessionState.loading = false;
+				return;
+			}
+
 			void initializeSession().then((authorizedSession) => {
 				if (
 					!active ||

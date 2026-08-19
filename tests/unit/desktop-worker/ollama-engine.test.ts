@@ -51,6 +51,7 @@ function chatContent(overrides: Record<string, unknown> = {}) {
 		contentType: 'printed',
 		warnings: [],
 		needsReview: false,
+		wordGeometry: [],
 		...overrides
 	};
 }

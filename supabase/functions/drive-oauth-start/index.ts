@@ -4,6 +4,7 @@ import { buildGoogleAuthorizationUrl } from '../_shared/google-oauth.ts';
 import {
 	createOAuthPkceChallenge,
 	generateOAuthOpaqueValue,
+	generateOAuthStateForOrigin,
 	hashOAuthState
 } from '../_shared/google-oauth-http.ts';
 
@@ -26,7 +27,10 @@ function empty(status: number, appOrigin: string | null) {
 }
 
 Deno.serve(async (request) => {
-	const appOrigin = parseAppOrigin(Deno.env.get('APP_ORIGIN'));
+	const appOrigin = parseAppOrigin(
+		Deno.env.get('APP_ORIGIN_ALLOWLIST') ?? Deno.env.get('APP_ORIGIN'),
+		request.headers.get('Origin')
+	);
 	const respond = (status: number, body: Record<string, unknown>) => json(status, body, appOrigin);
 
 	if (!appOrigin) return respond(503, { code: 'drive_oauth_not_configured' });
@@ -65,7 +69,7 @@ Deno.serve(async (request) => {
 		.maybeSingle();
 	if (allowedError || !allowed) return respond(403, { code: 'drive_oauth_forbidden' });
 
-	const state = generateOAuthOpaqueValue();
+	const state = generateOAuthStateForOrigin(appOrigin);
 	const nonce = generateOAuthOpaqueValue();
 	const codeVerifier = generateOAuthOpaqueValue();
 	const [stateHash, codeChallenge] = await Promise.all([

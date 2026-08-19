@@ -16,9 +16,12 @@ describe('theme CSS tokens', () => {
 			'--archive-rgb',
 			'--success',
 			'--success-rgb',
+			'--success-soft',
 			'--warning',
 			'--warning-rgb',
 			'--danger-rgb',
+			'--danger-soft',
+			'--focus-ring',
 			'--archive-strong',
 			'--muted-strong',
 			'--selection'

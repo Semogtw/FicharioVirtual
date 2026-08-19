@@ -127,6 +127,10 @@ describe('notebook mapping', () => {
 				name: 'Biologia',
 				description: null,
 				cover_style: 'linen',
+				parent_notebook_id: null,
+				banner_path: null,
+				banner_position_x: 50,
+				banner_position_y: 50,
 				created_at: '2026-08-02T01:00:00.000Z',
 				updated_at: '2026-08-02T02:00:00.000Z',
 				document_count: 4
@@ -136,6 +140,10 @@ describe('notebook mapping', () => {
 			name: 'Biologia',
 			description: null,
 			coverStyle: 'linen',
+			parentNotebookId: null,
+			bannerPath: null,
+			bannerPositionX: 50,
+			bannerPositionY: 50,
 			documentCount: 4,
 			createdAt: '2026-08-02T01:00:00.000Z',
 			updatedAt: '2026-08-02T02:00:00.000Z'
@@ -222,6 +230,24 @@ describe('document filter contract', () => {
 			createdTo: '2026-08-03T00:00:00.000Z'
 		});
 		expect(Object.isFrozen(filters)).toBe(true);
+	});
+
+	it('accepts nullable empty filters used by the library UI', () => {
+		const filters = parseDocumentFilters({
+			notebookId: null,
+			kind: null,
+			status: null,
+			createdFrom: null,
+			createdTo: null
+		});
+
+		expect(filters).toEqual({
+			notebookId: null,
+			kind: null,
+			status: null,
+			createdFrom: null,
+			createdTo: null
+		});
 	});
 
 	it('rejects invalid, extra or inverted filters', () => {

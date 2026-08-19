@@ -1,7 +1,7 @@
-import { readFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { readdir, readFile } from 'node:fs/promises';
+import { join, relative, resolve } from 'node:path';
 import process from 'node:process';
-import { assertSecurityHeaders } from './deployment-contract.mjs';
+import { assertInlineScriptsAllowedByCsp, assertSecurityHeaders } from './deployment-contract.mjs';
 
 const root = resolve(new URL('../..', import.meta.url).pathname);
 const build = join(root, 'build');
@@ -18,6 +18,19 @@ async function requiredFile(name) {
 		fail(`${name} is missing from the static build`);
 		return '';
 	}
+}
+
+async function listHtmlFiles(directory) {
+	const files = [];
+	for (const entry of await readdir(directory, { withFileTypes: true })) {
+		const path = join(directory, entry.name);
+		if (entry.isDirectory()) {
+			files.push(...(await listHtmlFiles(path)));
+		} else if (entry.isFile() && entry.name.endsWith('.html')) {
+			files.push(path);
+		}
+	}
+	return files;
 }
 
 function parseRootStaticHeaders(source) {
@@ -43,13 +56,15 @@ function parseRootStaticHeaders(source) {
 	return headers;
 }
 
-const [manifestSource, serviceWorker, registerScript, fallback, staticHeaders] = await Promise.all([
-	requiredFile('manifest.webmanifest'),
-	requiredFile('sw.js'),
-	requiredFile('registerSW.js'),
-	requiredFile('200.html'),
-	requiredFile('_headers')
-]);
+const [manifestSource, serviceWorker, registerScript, fallback, staticHeaders, publicEnvironment] =
+	await Promise.all([
+		requiredFile('manifest.webmanifest'),
+		requiredFile('sw.js'),
+		requiredFile('registerSW.js'),
+		requiredFile('200.html'),
+		requiredFile('_headers'),
+		requiredFile('_app/env.js')
+	]);
 
 if (manifestSource) {
 	try {
@@ -83,6 +98,10 @@ if (registerScript && !/serviceWorker/.test(registerScript)) {
 	fail('registerSW.js does not register a service worker');
 }
 
+if (publicEnvironment && !/export\s+const\s+env\s*=/.test(publicEnvironment)) {
+	fail('_app/env.js does not expose the expected public runtime configuration');
+}
+
 if (serviceWorker) {
 	for (const forbidden of ['supabase.co', '/rest/v1', '/storage/v1', '/functions/v1', '/auth/v1']) {
 		if (serviceWorker.includes(forbidden)) fail(`sw.js must not contain ${forbidden}`);
@@ -95,15 +114,32 @@ if (serviceWorker) {
 	if (!serviceWorker.includes('200.html')) {
 		fail('sw.js must precache the static adapter fallback shell');
 	}
+	if (!serviceWorker.includes('_app/env.js')) {
+		fail('sw.js must precache _app/env.js so the application shell can boot offline');
+	}
 }
 
+let parsedStaticHeaders;
 if (staticHeaders) {
 	try {
-		assertSecurityHeaders(parseRootStaticHeaders(staticHeaders));
+		parsedStaticHeaders = parseRootStaticHeaders(staticHeaders);
+		assertSecurityHeaders(parsedStaticHeaders);
 	} catch (error) {
 		fail(
 			`_headers root security contract is invalid: ${error instanceof Error ? error.message : String(error)}`
 		);
+	}
+}
+
+if (parsedStaticHeaders) {
+	for (const htmlFile of await listHtmlFiles(build)) {
+		try {
+			assertInlineScriptsAllowedByCsp(parsedStaticHeaders, await readFile(htmlFile, 'utf8'));
+		} catch (error) {
+			fail(
+				`${relative(build, htmlFile)} bootstrap is blocked by CSP: ${error instanceof Error ? error.message : String(error)}`
+			);
+		}
 	}
 }
 

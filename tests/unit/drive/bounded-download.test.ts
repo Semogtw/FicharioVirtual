@@ -33,7 +33,11 @@ function chunkedResponse(chunks: readonly string[], contentType = 'image/jpeg') 
 
 describe('downloadBoundedBrowserDriveFile', () => {
 	it('streams a response without Content-Length inside the configured ceiling', async () => {
-		const fetchImpl = vi.fn(async () => chunkedResponse(['abc', 'def']));
+		const fetchImpl = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+			void input;
+			void init;
+			return chunkedResponse(['abc', 'def']);
+		});
 		const result = await downloadBoundedBrowserDriveFile({
 			client: client(),
 			fileId: 'abcdefghij',
@@ -46,11 +50,11 @@ describe('downloadBoundedBrowserDriveFile', () => {
 		expect(fetchImpl).toHaveBeenCalledWith(
 			'https://www.googleapis.com/drive/v3/files/abcdefghij?alt=media',
 			expect.objectContaining({
-				redirect: 'error',
 				cache: 'no-store',
 				headers: { Authorization: 'Bearer drive-token-12345' }
 			})
 		);
+		expect(fetchImpl.mock.calls[0]?.[1]?.redirect).toBeUndefined();
 	});
 
 	it('cancels a chunked response once cumulative bytes exceed the ceiling', async () => {

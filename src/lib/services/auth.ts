@@ -5,12 +5,15 @@ export type AuthServiceErrorCode =
 	'invalid_input' | 'invalid_credentials' | 'not_authorized' | 'auth_unavailable';
 
 type ServiceError = { message: string; status?: number };
+type SignOutScope = 'global' | 'local' | 'others';
 
 type AllowlistQuery = {
 	select(columns: string): AllowlistQuery;
 	eq(column: string, value: string | boolean): AllowlistQuery;
 	maybeSingle(): Promise<{ data: unknown; error: ServiceError | null }>;
 };
+
+type PendingAllowlistChecks = Map<string, Promise<boolean | null>>;
 
 export type AuthClientLike = {
 	auth: {
@@ -19,7 +22,7 @@ export type AuthClientLike = {
 			email: string;
 			password: string;
 		}): Promise<{ data: { session: Session | null }; error: ServiceError | null }>;
-		signOut(): Promise<{ error: ServiceError | null }>;
+		signOut(options?: { scope?: SignOutScope }): Promise<{ error: ServiceError | null }>;
 	};
 	from(table: 'app_users'): AllowlistQuery;
 };
@@ -30,6 +33,11 @@ const messages: Record<AuthServiceErrorCode, string> = {
 	not_authorized: 'Esta conta não está autorizada a acessar o fichário.',
 	auth_unavailable: 'Não foi possível confirmar o acesso agora. Tente novamente.'
 };
+
+// Layout loading and client session initialization can overlap during the first
+// browser render. Share only the in-flight check: a later authorization change
+// still performs a fresh query, so revocations are not hidden by a long cache.
+const pendingAllowlistChecks = new WeakMap<AuthClientLike, PendingAllowlistChecks>();
 
 export class AuthServiceError extends Error {
 	readonly code: AuthServiceErrorCode;
@@ -80,19 +88,14 @@ function parseAllowlistRow(data: unknown): boolean | null {
 
 async function closeUnauthorizedSession(client: AuthClientLike) {
 	try {
-		const { error } = await client.auth.signOut();
+		const { error } = await client.auth.signOut({ scope: 'global' });
 		if (error) throw new AuthServiceError('auth_unavailable');
 	} catch (error) {
 		unavailable(error);
 	}
 }
 
-async function closeFailedAuthorization(client: AuthClientLike, error: unknown): Promise<never> {
-	await closeUnauthorizedSession(client);
-	unavailable(error);
-}
-
-async function authorizeSession(session: Session, client: AuthClientLike): Promise<Session | null> {
+async function checkAllowlist(session: Session, client: AuthClientLike): Promise<boolean | null> {
 	let data: unknown;
 	try {
 		const response = await client
@@ -101,37 +104,64 @@ async function authorizeSession(session: Session, client: AuthClientLike): Promi
 			.eq('user_id', session.user.id)
 			.eq('is_active', true)
 			.maybeSingle();
-		if (response.error) {
-			return closeFailedAuthorization(client, new AuthServiceError('auth_unavailable'));
-		}
+		if (response.error) throw new AuthServiceError('auth_unavailable');
 		data = response.data;
 	} catch (error) {
-		return closeFailedAuthorization(client, error);
+		unavailable(error);
 	}
 
-	let active: boolean | null;
 	try {
-		active = parseAllowlistRow(data);
+		return parseAllowlistRow(data);
 	} catch (error) {
-		return closeFailedAuthorization(client, error);
+		unavailable(error);
 	}
+}
+
+function getAllowlistCheck(session: Session, client: AuthClientLike): Promise<boolean | null> {
+	let checks = pendingAllowlistChecks.get(client);
+	if (checks === undefined) {
+		checks = new Map();
+		pendingAllowlistChecks.set(client, checks);
+	}
+
+	const existing = checks.get(session.user.id);
+	if (existing !== undefined) return existing;
+
+	const pending = checkAllowlist(session, client);
+	checks.set(session.user.id, pending);
+	const clear = () => {
+		if (checks?.get(session.user.id) === pending) checks.delete(session.user.id);
+	};
+	void pending.then(clear, clear);
+	return pending;
+}
+
+async function authorizeSession(session: Session, client: AuthClientLike): Promise<Session | null> {
+	const active = await getAllowlistCheck(session, client);
 	if (active === true) return session;
 
 	await closeUnauthorizedSession(client);
 	return null;
 }
 
-export async function loadAuthorizedSession(
+export async function loadPersistedSession(
 	client: AuthClientLike = defaultClient()
 ): Promise<Session | null> {
 	try {
 		const { data, error } = await client.auth.getSession();
 		if (error) throw new AuthServiceError('auth_unavailable');
-		if (data.session === null) return null;
-		return await authorizeSession(data.session, client);
+		return data.session;
 	} catch (error) {
 		unavailable(error);
 	}
+}
+
+export async function loadAuthorizedSession(
+	client: AuthClientLike = defaultClient()
+): Promise<Session | null> {
+	const session = await loadPersistedSession(client);
+	if (session === null) return null;
+	return authorizeSession(session, client);
 }
 
 export async function signIn(
@@ -163,7 +193,7 @@ export async function signIn(
 
 export async function signOut(client: AuthClientLike = defaultClient()): Promise<void> {
 	try {
-		const { error } = await client.auth.signOut();
+		const { error } = await client.auth.signOut({ scope: 'local' });
 		if (error) throw new AuthServiceError('auth_unavailable');
 	} catch (error) {
 		unavailable(error);

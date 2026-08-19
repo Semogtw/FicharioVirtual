@@ -40,6 +40,7 @@ function createFixture() {
 		['source/package.json', packageSource],
 		['source/pnpm-lock.yaml', lockSource],
 		['checks/check-deployed-site.mjs', 'import "./deployment-contract.mjs";\n'],
+		['checks/check-deployed-ui.mjs', 'export const checkDeployedUi = () => true;\n'],
 		[
 			'checks/check-deployment-artifact.mjs',
 			'export const verifyDeploymentArtifact = async () => ({ targetEnvironment: "staging" });\n'
@@ -104,13 +105,14 @@ describe('deployable artifact verification', () => {
 			schemaVersion: 2,
 			sourceCommit: '0123456789abcdef0123456789abcdef01234567',
 			targetEnvironment: 'staging',
-			verifiedFiles: 12
+			verifiedFiles: 13
 		});
 	});
 
 	it('requires every deployment verifier to travel with the immutable artifact', async () => {
 		for (const checker of [
 			'check-deployed-site.mjs',
+			'check-deployed-ui.mjs',
 			'check-deployment-artifact.mjs',
 			'deployment-contract.mjs',
 			'validate-pages-deploy-output.mjs'

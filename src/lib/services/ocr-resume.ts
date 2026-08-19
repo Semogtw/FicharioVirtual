@@ -35,6 +35,20 @@ export type OcrResumeOptions = {
 	sleep?: (milliseconds: number) => Promise<void>;
 };
 
+export function createResumeExecutionOptions(
+	options: Pick<OcrResumeOptions, 'signal' | 'batchProcessor' | 'sleep'>
+): Pick<OcrResumeOptions, 'signal' | 'batchProcessor' | 'sleep'> {
+	return {
+		signal: options.signal,
+		sleep: options.sleep,
+		...(options.batchProcessor ? { batchProcessor: options.batchProcessor } : {})
+	};
+}
+
+export function createProviderBatchProcessor(): OcrBatchProcessor {
+	return (pageIds, options) => processOcrBatch(pageIds, undefined, options);
+}
+
 function validId(value: string) {
 	if (!UUID.test(value)) throw new TypeError('Invalid document identifier');
 	return value;
@@ -124,7 +138,7 @@ async function resumePageByPage(
 			if (!page) return;
 			try {
 				const result = await processor(page.id);
-				if (result.state === 'complete' || result.state === 'already_complete') {
+				if (result.state === 'complete') {
 					if (result.needsReview) needsReview += 1;
 					else completed += 1;
 				} else pending += 1;
@@ -183,12 +197,6 @@ export function resumeDocumentOcr(documentId: string, options: OcrResumeOptions 
 		documentId,
 		new SupabaseGateway(options.client ?? getSupabaseClient()),
 		processPageOcr,
-		{
-			signal: options.signal,
-			sleep: options.sleep,
-			batchProcessor:
-				options.batchProcessor ??
-				((pageIds, batchOptions) => processOcrBatch(pageIds, undefined, batchOptions))
-		}
+		createResumeExecutionOptions(options)
 	);
 }

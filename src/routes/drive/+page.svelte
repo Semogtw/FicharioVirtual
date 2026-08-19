@@ -23,10 +23,10 @@
 	let message = $state<string | null>(null);
 
 	const conflictLabels: Record<OpenDriveConflict['kind'], string> = {
-		ambiguous_order: 'Ordem de alterações ambígua',
-		identity_mismatch: 'Identidade física divergente',
-		remote_deleted_local_changed: 'Removido no Drive com mudanças locais',
-		local_deleted_remote_changed: 'Removido localmente com mudanças no Drive'
+		ambiguous_order: 'Alterações feitas ao mesmo tempo',
+		identity_mismatch: 'Arquivo diferente do esperado',
+		remote_deleted_local_changed: 'Arquivo removido no Drive',
+		local_deleted_remote_changed: 'Arquivo removido no Fichário'
 	};
 
 	function formatDate(value: string) {
@@ -48,11 +48,8 @@
 		error = null;
 		try {
 			recovery = await listDriveRecovery(client as never);
-		} catch (caught) {
-			error =
-				caught instanceof Error
-					? caught.message
-					: 'Não foi possível carregar a recuperação do Google Drive.';
+		} catch {
+			error = 'Não foi possível verificar o Google Drive agora.';
 		} finally {
 			loading = false;
 		}
@@ -90,14 +87,11 @@
 				}).catch(() => undefined);
 				throw caught;
 			}
-			message = `O original de “${document.title}” foi reconectado sem perder OCR ou metadados.`;
+			message = `“${document.title}” foi reconectado.`;
 			busyId = null;
 			await load();
-		} catch (caught) {
-			error =
-				caught instanceof Error
-					? caught.message
-					: 'Não foi possível reconectar o original no Google Drive.';
+		} catch {
+			error = 'Não foi possível reconectar este arquivo.';
 		} finally {
 			busyId = null;
 		}
@@ -115,12 +109,9 @@
 <div class="page" aria-labelledby="page-title">
 	<header>
 		<div>
-			<p class="eyebrow">Recuperação física</p>
-			<h1 id="page-title">Google Drive</h1>
-			<p>
-				Revise arquivos ausentes e conflitos sem apagar OCR, correções, tags ou histórico
-				pesquisável.
-			</p>
+			<p class="eyebrow">Google Drive</p>
+			<h1 id="page-title">Arquivos no Drive</h1>
+			<p>Veja arquivos que precisam ser reconectados e resolva problemas de sincronização.</p>
 		</div>
 		<Button
 			label={loading ? 'Atualizando…' : 'Atualizar'}
@@ -135,27 +126,24 @@
 
 	{#if !pickerConfigured}
 		<section class="notice" aria-labelledby="picker-required-title">
-			<h2 id="picker-required-title">Reconexão ainda não configurada</h2>
-			<p>
-				Cadastre os identificadores públicos do Google Picker para selecionar conscientemente um
-				novo original. Nenhuma leitura ampla do Drive será solicitada.
-			</p>
+			<h2 id="picker-required-title">Seleção de arquivos indisponível</h2>
+			<p>A seleção manual de arquivos do Google Drive ainda não está disponível.</p>
 		</section>
 	{/if}
 
 	<section aria-labelledby="missing-title" class="panel">
 		<div class="panel-heading">
 			<div>
-				<p class="eyebrow">Originais físicos</p>
+				<p class="eyebrow">Arquivos</p>
 				<h2 id="missing-title">Arquivos ausentes</h2>
 			</div>
 			<span>{recovery.missingDocuments.length}</span>
 		</div>
 
 		{#if loading}
-			<p class="empty" role="status">Verificando os arquivos do Google Drive…</p>
+			<p class="empty" role="status">Verificando seus arquivos…</p>
 		{:else if recovery.missingDocuments.length === 0}
-			<p class="empty">Nenhum original ausente foi encontrado.</p>
+			<p class="empty">Está tudo certo por aqui.</p>
 		{:else}
 			<ul class="recovery-list">
 				{#each recovery.missingDocuments as document (document.id)}
@@ -163,14 +151,13 @@
 						<div>
 							<strong>{document.title}</strong>
 							<small>
-								{document.kind === 'pdf' ? 'PDF' : 'Imagem'} · {document.originalFilename} · detectado
-								em
-								{formatDate(document.updatedAt)}
+								{document.kind === 'pdf' ? 'PDF' : 'Imagem'} · {document.originalFilename} · encontrado
+								em {formatDate(document.updatedAt)}
 							</small>
-							<a href={`/documents/${document.id}/`}>Abrir metadados preservados</a>
+							<a href={`/documents/${document.id}/`}>Abrir documento</a>
 						</div>
 						<Button
-							label={busyId === document.id ? 'Reconectando…' : 'Reconectar original'}
+							label={busyId === document.id ? 'Reconectando…' : 'Reconectar'}
 							disabled={!pickerConfigured || busyId !== null}
 							onclick={() => void reconnect(document)}
 						/>
@@ -183,28 +170,26 @@
 	<section aria-labelledby="conflicts-title" class="panel">
 		<div class="panel-heading">
 			<div>
-				<p class="eyebrow">Fila não bloqueante</p>
-				<h2 id="conflicts-title">Conflitos isolados</h2>
+				<p class="eyebrow">Sincronização</p>
+				<h2 id="conflicts-title">Itens com conflito</h2>
 			</div>
 			<span>{recovery.openConflicts.length}</span>
 		</div>
 
 		{#if loading}
-			<p class="empty" role="status">Verificando conflitos…</p>
+			<p class="empty" role="status">Verificando a sincronização…</p>
 		{:else if recovery.openConflicts.length === 0}
-			<p class="empty">Nenhum conflito aberto.</p>
+			<p class="empty">Nenhum conflito encontrado.</p>
 		{:else}
 			<ul class="conflict-list">
 				{#each recovery.openConflicts as conflict (conflict.id)}
 					<li>
 						<strong>{conflictLabels[conflict.kind]}</strong>
-						<small
-							>Isolado em {formatDate(conflict.createdAt)}. Os demais itens continuam sincronizando.</small
-						>
+						<small>Identificado em {formatDate(conflict.createdAt)}.</small>
 						{#if conflict.documentId}
-							<a href={`/documents/${conflict.documentId}/`}>Abrir documento relacionado</a>
+							<a href={`/documents/${conflict.documentId}/`}>Abrir documento</a>
 						{:else if conflict.notebookId}
-							<a href={`/notebooks/${conflict.notebookId}/`}>Abrir caderno relacionado</a>
+							<a href={`/notebooks/${conflict.notebookId}/`}>Abrir caderno</a>
 						{/if}
 					</li>
 				{/each}

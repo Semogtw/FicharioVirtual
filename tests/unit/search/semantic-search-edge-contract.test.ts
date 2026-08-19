@@ -2,41 +2,45 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const edge = readFileSync('supabase/functions/semantic-search/index.ts', 'utf8');
-const migration = readFileSync(
-	'supabase/migrations/202608101501_global_semantic_search_consent.sql',
+const backgroundIndexer = readFileSync(
+	'supabase/functions/_shared/background-semantic-indexer.ts',
 	'utf8'
 );
+const queryCache = readFileSync('supabase/functions/_shared/semantic-query-cache.ts', 'utf8');
 
 describe('global semantic search edge contract', () => {
-	it('retrieves with embeddings instead of only classifying lexical candidates', () => {
-		expect(edge).toContain("taskType: 'RETRIEVAL_QUERY'");
-		expect(edge).toContain("supabase.rpc('search_pages_semantic'");
-		expect(edge).toContain("supabase.rpc('search_pages'");
-		expect(edge).toContain('mergeCandidates(lexical, semantic)');
+	it('retrieves document-first with embeddings instead of classifying repeated page candidates', () => {
+		expect(edge).toContain('getSemanticQueryEmbedding');
+		expect(queryCache).toContain("taskType: 'RETRIEVAL_QUERY'");
+		expect(queryCache).toContain("operation: 'query_embedding'");
+		expect(edge).toContain("supabase.rpc('search_documents_semantic'");
+		expect(edge).toContain("supabase.rpc('search_documents'");
+		expect(edge).toContain("supabase.rpc('search_documents_visual_semantic'");
+		expect(edge).toContain("visualMode === 'active' ? visibleVisual : []");
 		expect(edge).toContain("matchMode: 'semantic'");
-		expect(edge).not.toContain('requestGeminiCoverageVerification');
+		expect(edge).toContain('merged.set(row.document_id, candidate)');
+		expect(edge).toContain('hybridPrecisionPolicy(lexical, parsed.query)');
+		expect(edge).toContain('applyHybridPrecision(semantic, precisionPolicy)');
 	});
 
-	it('reuses the coverage semantic index and keeps opportunistic indexing page-atomic', () => {
-		expect(edge).toContain("supabase.rpc('list_pages_needing_semantic_index'");
-		expect(edge).toContain("'replace_page_semantic_chunks'");
-		expect(edge).toContain('flattened.length + chunks.length > MAX_INDEX_CHUNKS_PER_RUN');
-		expect(edge).toContain("surface: 'search'");
+	it('keeps document embedding out of interactive search requests', () => {
+		expect(edge).not.toContain('indexNextSemanticBatch');
+		expect(edge).not.toContain("taskType: 'RETRIEVAL_DOCUMENT'");
+		expect(backgroundIndexer).toContain("taskType: 'RETRIEVAL_DOCUMENT'");
 	});
 
-	it('requires dedicated consent before sending query or page text to Gemini', () => {
-		const consentCheck = edge.indexOf("supabase.rpc('has_search_semantic_consent'");
-		const documentEmbedding = edge.indexOf('indexedThisRun = await indexPages');
-		const queryEmbedding = edge.indexOf("taskType: 'RETRIEVAL_QUERY'");
-		expect(consentCheck).toBeGreaterThan(0);
-		expect(documentEmbedding).toBeGreaterThan(consentCheck);
-		expect(queryEmbedding).toBeGreaterThan(consentCheck);
-		expect(migration).toContain('security definer');
-		expect(migration).toContain('record_search_semantic_consent');
-		expect(migration).toContain('has_search_semantic_consent');
-		expect(migration).toContain(
-			'revoke execute on function public.record_search_semantic_consent(integer) from public, anon;'
-		);
+	it('does not query semantic coverage statistics on the interactive hot path', () => {
+		expect(edge).not.toContain('semanticIndexStats');
+		expect(edge).toContain('index: null');
+		expect(edge).toContain('totalPages: null');
+		expect(edge).toContain('indexedPages: null');
+	});
+
+	it('does not retain a pre-launch semantic consent gate', () => {
+		expect(edge).not.toContain('has_search_semantic_consent');
+		expect(edge).not.toContain('consent_required');
+		expect(edge).not.toContain('record_search_semantic_consent');
+		expect(edge).toContain('getSemanticQueryEmbedding({');
 	});
 
 	it('keeps textual fallback for short queries, quota and provider failures', () => {

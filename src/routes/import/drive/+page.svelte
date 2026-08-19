@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
 	import Button from '$lib/components/Button.svelte';
+	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import NativeSelect from '$lib/components/ui/native-select/NativeSelect.svelte';
 	import type { NotebookSummary } from '$lib/domain/notebook';
 	import { GOOGLE_PICKER_MIME_TYPES } from '$lib/drive/picker';
@@ -34,8 +35,8 @@
 	let referenceProgress = $state<DrivePdfReferenceImportProgress | null>(null);
 	let referenceAbortController: AbortController | null = null;
 	let deletingDocumentId = $state<string | null>(null);
+	let pendingDeleteReference = $state<ResumableDrivePdfReference | null>(null);
 	let selecting = $state(false);
-	let consent = $state(false);
 	let error = $state<string | null>(null);
 	let referenceError = $state<string | null>(null);
 	let message = $state<string | null>(null);
@@ -91,27 +92,27 @@
 
 	function referenceMessage(name: string, pending: number) {
 		return pending > 0
-			? `“${name}” foi importado por referência; ${pending} página(s) de OCR permanecem retomáveis.`
-			: `“${name}” foi importado por referência sem baixar o PDF inteiro.`;
+			? `“${name}” foi adicionado. ${pending} página(s) ainda serão concluídas.`
+			: `“${name}” foi adicionado.`;
 	}
 
 	function referenceProgressMessage(progress: DrivePdfReferenceImportProgress) {
 		if (progress.phase === 'inspecting') {
-			return `Inspecionando página ${progress.pageNumber ?? 0} de ${progress.pageCount ?? 0}…`;
+			return `Preparando página ${progress.pageNumber ?? 0} de ${progress.pageCount ?? 0}…`;
 		}
 		if (progress.phase === 'rendering_ocr') {
-			return `Preparando página ${progress.current ?? 0} de ${progress.total ?? 0} para OCR…`;
+			return `Preparando página ${progress.current ?? 0} de ${progress.total ?? 0}…`;
 		}
 		if (progress.phase === 'ocr') {
-			return `Lendo página ${progress.current ?? 0} de ${progress.total ?? 0} com OCR…`;
+			return `Lendo página ${progress.current ?? 0} de ${progress.total ?? 0}…`;
 		}
 		const labels: Record<DrivePdfReferenceImportProgress['phase'], string> = {
-			verifying: 'Verificando a cópia preservada no Drive…',
-			opening: 'Abrindo o PDF por faixas…',
+			verifying: 'Verificando arquivo…',
+			opening: 'Abrindo PDF…',
 			inspecting: 'Inspecionando páginas…',
-			rendering_ocr: 'Preparando páginas para OCR…',
-			publishing: 'Publicando a estrutura do documento…',
-			ocr: 'Executando OCR…',
+			rendering_ocr: 'Preparando páginas…',
+			publishing: 'Salvando documento…',
+			ocr: 'Lendo páginas…',
 			complete: 'Importação concluída.'
 		};
 		return labels[progress.phase];
@@ -129,7 +130,7 @@
 		try {
 			return await importStagedDrivePdfReference({
 				staged,
-				consentGranted: true,
+
 				signal: controller.signal,
 				onProgress: (progress) => {
 					referenceProgress = progress;
@@ -138,7 +139,7 @@
 		} catch (caught) {
 			if (isAbortError(caught)) {
 				error = null;
-				message = `O processamento de “${name}” foi interrompido sem apagar o estado durável. Se ainda houver etapas pendentes, elas poderão ser retomadas.`;
+				message = `“${name}” foi interrompido. Você poderá retomar depois.`;
 				return null;
 			}
 			throw caught;
@@ -155,17 +156,13 @@
 		const controller = referenceAbortController;
 		if (!controller || controller.signal.aborted) return;
 		controller.abort();
-		message = `Interrompendo “${reference.title}” sem apagar o estado durável…`;
+		message = `Interrompendo “${reference.title}”…`;
 	}
 
 	async function resumeReference(reference: ResumableDrivePdfReference) {
 		if (resumingDocumentId !== null || deletingDocumentId !== null || selecting) return;
 		error = null;
 		message = null;
-		if (!consent) {
-			error = 'Confirme a autorização de OCR antes de retomar o PDF.';
-			return;
-		}
 		try {
 			const imported = await runReferenceImport(
 				{
@@ -187,17 +184,13 @@
 
 	async function cancelReference(reference: ResumableDrivePdfReference) {
 		if (deletingDocumentId !== null || resumingDocumentId !== null || selecting) return;
-		if (
-			!globalThis.confirm(`Excluir a cópia preservada de “${reference.title}” do Google Drive?`)
-		) {
-			return;
-		}
 		error = null;
 		message = null;
 		deletingDocumentId = reference.documentId;
 		try {
 			await deleteDocument(reference.documentId);
 			message = `A cópia preservada de “${reference.title}” foi excluída.`;
+			pendingDeleteReference = null;
 		} catch (caught) {
 			error =
 				caught instanceof Error ? caught.message : 'Não foi possível excluir o PDF preservado.';
@@ -217,10 +210,6 @@
 			return;
 		error = null;
 		message = null;
-		if (!consent) {
-			error = 'Confirme a autorização de OCR antes de selecionar o arquivo.';
-			return;
-		}
 		selecting = true;
 		try {
 			const selected = await selectGoogleDriveImportSource({
@@ -250,7 +239,7 @@
 			}
 
 			if (selected.file.type === 'application/pdf') {
-				addPdfs([selected.file], { notebookId: notebookId || null, consentGranted: true });
+				addPdfs([selected.file], { notebookId: notebookId || null });
 				message = `“${selected.file.name}” foi encaminhado à fila de PDFs.`;
 			} else if (['image/jpeg', 'image/png', 'image/webp'].includes(selected.file.type)) {
 				addImages([selected.file], { mode: 'standard', notebookId: notebookId || null });
@@ -285,19 +274,16 @@
 <div class="page" aria-labelledby="page-title">
 	<header>
 		<div>
-			<p class="eyebrow">Seleção consciente</p>
+			<p class="eyebrow">Google Drive</p>
 			<h1 id="page-title">Importar do Google Drive</h1>
-			<p>
-				Escolha exatamente um arquivo. Ele é lido temporariamente e publicado pela mesma fila
-				Drive-first dos uploads locais. Nenhuma leitura ampla da conta é realizada.
-			</p>
+			<p>Escolha um arquivo do seu Google Drive para adicionar ao fichário.</p>
 		</div>
 	</header>
 
 	{#if !pickerConfigured}
 		<section class="notice" aria-labelledby="configuration-title">
-			<h2 id="configuration-title">Google Picker ainda não configurado</h2>
-			<p>Cadastre a chave pública restrita e o número do projeto para habilitar esta tela.</p>
+			<h2 id="configuration-title">Google Drive indisponível</h2>
+			<p>A importação pelo Google Drive ainda não está disponível.</p>
 		</section>
 	{/if}
 
@@ -311,31 +297,13 @@
 				{/each}
 			</NativeSelect>
 		</label>
-
-		<label class="consent">
-			<input
-				type="checkbox"
-				bind:checked={consent}
-				disabled={selecting || resumingDocumentId !== null || deletingDocumentId !== null}
-			/>
-			<span>
-				<strong>Permitir OCR somente quando necessário</strong>
-				<small>
-					Imagens precisam dessa autorização. PDFs preservam texto nativo e enviam apenas páginas
-					sem texto ao provedor de leitura.
-				</small>
-			</span>
-		</label>
 	</section>
 
 	<section class="picker-card" aria-labelledby="picker-title">
 		<div>
 			<p class="eyebrow">JPG · PNG · WebP · PDF</p>
 			<h2 id="picker-title">Escolher um arquivo</h2>
-			<p>
-				O download direto no navegador aceita até 50 MiB. PDFs maiores são preservados no Drive e
-				preparados por referência; esse teto não é do documento lógico nem dos lotes de OCR.
-			</p>
+			<p>Imagens e PDFs são aceitos, inclusive PDFs grandes.</p>
 		</div>
 		<Button
 			label={selecting ? 'Abrindo Drive…' : 'Escolher no Google Drive'}
@@ -351,15 +319,12 @@
 	{#if loadingReferences || pendingReferences.length > 0 || referenceError}
 		<section class="resume-card" aria-labelledby="resume-title">
 			<div>
-				<p class="eyebrow">Retomada durável</p>
-				<h2 id="resume-title">PDFs grandes preservados</h2>
-				<p>
-					Esses arquivos já estão na pasta controlada do Drive. Retomar lê somente faixas e páginas
-					necessárias; você não precisa selecionar nem enviar o PDF novamente.
-				</p>
+				<p class="eyebrow">Continuar depois</p>
+				<h2 id="resume-title">PDFs pendentes</h2>
+				<p>Você pode continuar esses arquivos sem selecioná-los novamente.</p>
 			</div>
 			{#if loadingReferences}
-				<p class="muted" role="status">Verificando referências pendentes…</p>
+				<p class="muted" role="status">Verificando arquivos pendentes…</p>
 			{:else if referenceError}
 				<div class="reference-error">
 					<p role="alert">{referenceError}</p>
@@ -371,7 +336,7 @@
 						<article>
 							<div>
 								<strong>{reference.title}</strong>
-								<small>{formatSize(reference.sourceSizeBytes)} · preservado no Google Drive</small>
+								<small>{formatSize(reference.sourceSizeBytes)}</small>
 							</div>
 							<div class="reference-actions">
 								{#if resumingDocumentId === reference.documentId}
@@ -394,7 +359,7 @@
 										? 'Excluindo…'
 										: 'Excluir cópia'}
 									disabled={selecting || resumingDocumentId !== null || deletingDocumentId !== null}
-									onclick={() => void cancelReference(reference)}
+									onclick={() => (pendingDeleteReference = reference)}
 								/>
 							</div>
 							{#if resumingDocumentId === reference.documentId && referenceProgress}
@@ -423,6 +388,19 @@
 		</a>
 	</section>
 </div>
+
+<ConfirmDialog
+	open={pendingDeleteReference !== null}
+	title="Excluir cópia preservada?"
+	description={pendingDeleteReference
+		? `A cópia de “${pendingDeleteReference.title}” preservada no Google Drive será excluída.`
+		: ''}
+	confirmLabel="Excluir cópia"
+	busy={deletingDocumentId !== null}
+	danger
+	onConfirm={() => pendingDeleteReference && void cancelReference(pendingDeleteReference)}
+	onCancel={() => (pendingDeleteReference = null)}
+/>
 
 <style>
 	.page {
@@ -468,7 +446,7 @@
 	}
 	.options {
 		display: grid;
-		grid-template-columns: minmax(12rem, 0.4fr) minmax(20rem, 1fr);
+		grid-template-columns: minmax(12rem, 24rem);
 		gap: 1rem;
 	}
 	.options > label:first-child {
@@ -480,24 +458,6 @@
 		font-size: 0.75rem;
 		font-weight: 740;
 	}
-	.consent {
-		display: flex;
-		align-items: flex-start;
-		gap: 0.65rem;
-		padding: 0.75rem;
-		border-left: 0.3rem solid var(--accent);
-		background: rgb(166 94 67 / 7%);
-	}
-	.consent input {
-		width: 1.1rem;
-		height: 1.1rem;
-		margin-top: 0.18rem;
-	}
-	.consent span {
-		display: grid;
-		gap: 0.2rem;
-	}
-	.consent small,
 	.queues span,
 	.reference-list small,
 	.muted {

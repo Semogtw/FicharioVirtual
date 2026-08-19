@@ -41,20 +41,11 @@ async function encode(
 	source: OffscreenCanvas,
 	quality: number
 ): Promise<{ blob: Blob; format: PreparedImageFormat }> {
-	try {
-		const webp = await source.convertToBlob({ type: 'image/webp', quality });
-		if (webp.size > 0 && webp.type === 'image/webp') {
-			return { blob: webp, format: 'image/webp' };
-		}
-	} catch {
-		// JPEG is the documented fallback when WebP encoding is unavailable.
-	}
-
 	const { output, context } = canvas(source.width, source.height);
 	white(context, source.width, source.height);
 	context.drawImage(source, 0, 0);
 	const jpeg = await output.convertToBlob({ type: 'image/jpeg', quality });
-	if (jpeg.size < 1) throw new Error('Empty encoded image');
+	if (jpeg.size < 1 || jpeg.type !== 'image/jpeg') throw new Error('Empty encoded image');
 	return { blob: jpeg, format: 'image/jpeg' };
 }
 

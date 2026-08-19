@@ -33,6 +33,17 @@ function record(overrides: Partial<StoredImageImportRecord> = {}): StoredImageIm
 	};
 }
 
+function driveResult() {
+	return {
+		documentId: '50000000-0000-4000-8000-000000000011',
+		pageId: '50000000-0000-4000-8000-000000000012',
+		ocrJobId: '50000000-0000-4000-8000-000000000013',
+		sha256: 'b'.repeat(64),
+		storagePath: 'drive:1AbCdEfGhIjKlMnOpQrStUvWxYz_123456',
+		thumbnailPath: `${userId}/document/thumbnail.webp`
+	};
+}
+
 class MemoryStore implements ImportResumeStore {
 	readonly records = new Map<string, unknown>();
 
@@ -58,36 +69,21 @@ describe('parseStoredImageImport', () => {
 		expect(Object.isFrozen(result)).toBe(true);
 	});
 
-	it('accepts legacy and Drive published pages so OCR resumes without another upload', () => {
-		const legacy = parseStoredImageImport(
-			record({
-				status: 'waiting',
-				result: {
-					documentId: '50000000-0000-4000-8000-000000000001',
-					pageId: '50000000-0000-4000-8000-000000000002',
-					ocrJobId: '50000000-0000-4000-8000-000000000003',
-					sha256: 'a'.repeat(64),
-					storagePath: `${userId}/document/original.webp`,
-					thumbnailPath: `${userId}/document/thumbnail.webp`
-				}
-			})
-		);
-		const drive = parseStoredImageImport(
-			record({
-				status: 'waiting',
-				result: {
-					documentId: '50000000-0000-4000-8000-000000000011',
-					pageId: '50000000-0000-4000-8000-000000000012',
-					ocrJobId: '50000000-0000-4000-8000-000000000013',
-					sha256: 'b'.repeat(64),
-					storagePath: 'drive:1AbCdEfGhIjKlMnOpQrStUvWxYz_123456',
-					thumbnailPath: `${userId}/document/thumbnail.webp`
-				}
-			})
-		);
-
-		expect(legacy.result?.pageId).toBe('50000000-0000-4000-8000-000000000002');
+	it('accepts only Drive-published pages for resumable OCR', () => {
+		const drive = parseStoredImageImport(record({ status: 'waiting', result: driveResult() }));
 		expect(drive.result?.storagePath).toBe('drive:1AbCdEfGhIjKlMnOpQrStUvWxYz_123456');
+
+		expect(() =>
+			parseStoredImageImport(
+				record({
+					status: 'waiting',
+					result: {
+						...driveResult(),
+						storagePath: `${userId}/document/original.webp`
+					}
+				})
+			)
+		).toThrow('Invalid stored image import');
 	});
 
 	it('rejects unsupported versions, unsafe files, extra keys and malformed results', () => {
@@ -110,12 +106,8 @@ describe('parseStoredImageImport', () => {
 			parseStoredImageImport(
 				record({
 					result: {
-						documentId: '50000000-0000-4000-8000-000000000011',
-						pageId: '50000000-0000-4000-8000-000000000012',
-						ocrJobId: '50000000-0000-4000-8000-000000000013',
-						sha256: 'b'.repeat(64),
-						storagePath: 'drive:bad id',
-						thumbnailPath: `${userId}/document/thumbnail.webp`
+						...driveResult(),
+						storagePath: 'drive:bad id'
 					}
 				})
 			)

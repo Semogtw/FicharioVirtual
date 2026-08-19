@@ -100,23 +100,15 @@ select results_eq(
   'legacy processing_status never gains desktop-only job states'
 );
 
-select results_eq(
-  $$
-    select
-      castsource = 'public.processing_status'::regtype,
-      casttarget in ('public.page_status'::regtype, 'public.ocr_status'::regtype),
-      castcontext::text collate "C"
+select is(
+  (
+    select count(*)::integer
       from pg_catalog.pg_cast
      where castsource = 'public.processing_status'::regtype
        and casttarget in ('public.page_status'::regtype, 'public.ocr_status'::regtype)
-     order by casttarget::regtype::text
-  $$,
-  $$
-    values
-      (true, true, 'a'::text collate "C"),
-      (true, true, 'a'::text collate "C")
-  $$,
-  'legacy status values have assignment-only compatibility into both split domains'
+  ),
+  0,
+  'pre-launch assignment casts into split status domains are absent'
 );
 
 select is(

@@ -175,7 +175,6 @@ function requireVisionCapabilities(body) {
 }
 
 function parseWordGeometry(value) {
-	if (value === undefined) return Object.freeze([]);
 	if (!Array.isArray(value) || value.length > MAX_WORD_GEOMETRY) {
 		throw new OllamaEngineError('ollama_ocr_invalid');
 	}
@@ -212,12 +211,10 @@ function parseOcrContent(value) {
 		throw new OllamaEngineError('ollama_ocr_invalid');
 	}
 	const keys = Object.keys(value).sort();
-	const legacy = ['contentType', 'needsReview', 'rawText', 'warnings'];
-	const withGeometry = ['contentType', 'needsReview', 'rawText', 'warnings', 'wordGeometry'].sort();
+	const expectedKeys = ['contentType', 'needsReview', 'rawText', 'warnings', 'wordGeometry'].sort();
 	if (
-		(keys.length !== legacy.length || !keys.every((key, index) => key === legacy[index])) &&
-		(keys.length !== withGeometry.length ||
-			!keys.every((key, index) => key === withGeometry[index]))
+		keys.length !== expectedKeys.length ||
+		!keys.every((key, index) => key === expectedKeys[index])
 	) {
 		throw new OllamaEngineError('ollama_ocr_invalid');
 	}
@@ -230,7 +227,8 @@ function parseOcrContent(value) {
 	if (
 		typeof value.needsReview !== 'boolean' ||
 		!Array.isArray(value.warnings) ||
-		value.warnings.length > 4
+		value.warnings.length > 4 ||
+		!Array.isArray(value.wordGeometry)
 	) {
 		throw new OllamaEngineError('ollama_ocr_invalid');
 	}

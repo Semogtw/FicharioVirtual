@@ -24,7 +24,6 @@ export type StoredPdfImportRecord = Readonly<{
 	resumeKey: string;
 	file: File;
 	notebookId: string | null;
-	consentGranted: boolean;
 	status: StoredPdfImportStatus;
 	inspected: boolean;
 	uploaded: boolean;
@@ -69,7 +68,6 @@ export function parseStoredPdfImport(data: unknown): StoredPdfImportRecord {
 			'resumeKey',
 			'file',
 			'notebookId',
-			'consentGranted',
 			'status',
 			'inspected',
 			'uploaded',
@@ -88,7 +86,6 @@ export function parseStoredPdfImport(data: unknown): StoredPdfImportRecord {
 		resumeKey,
 		file,
 		notebookId,
-		consentGranted,
 		status,
 		inspected,
 		uploaded,
@@ -110,7 +107,6 @@ export function parseStoredPdfImport(data: unknown): StoredPdfImportRecord {
 		file.size < 1 ||
 		file.size > MAX_LOCAL_PDF_BYTES ||
 		(notebookId !== null && (typeof notebookId !== 'string' || !UUID.test(notebookId))) ||
-		typeof consentGranted !== 'boolean' ||
 		typeof status !== 'string' ||
 		![
 			'queued',
@@ -142,7 +138,6 @@ export function parseStoredPdfImport(data: unknown): StoredPdfImportRecord {
 		resumeKey,
 		file,
 		notebookId,
-		consentGranted,
 		status: status as StoredPdfImportStatus,
 		inspected,
 		uploaded,

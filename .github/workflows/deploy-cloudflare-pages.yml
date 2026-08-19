@@ -1,4 +1,4 @@
-name: Deploy validated staging artifact to Cloudflare Pages
+name: Deploy validated Fichário artifact to Cloudflare Pages
 
 on:
   workflow_dispatch:
@@ -11,43 +11,54 @@ on:
         description: Full 40-character source SHA expected in the artifact manifest
         required: true
         type: string
+  workflow_run:
+    workflows:
+      - Build deployable Fichário staging artifact
+    types:
+      - completed
 
 permissions:
   actions: read
   contents: read
 
 concurrency:
-  group: deploy-fichario-cloudflare-staging
+  group: deploy-fichario-cloudflare
   cancel-in-progress: false
 
 jobs:
   deploy:
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event_name == 'workflow_run' &&
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.head_branch == 'main'
+        )
+      }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     environment: staging-deploy
     env:
-      TARGET_ENVIRONMENT: staging
-      EXPECTED_SOURCE_COMMIT: ${{ inputs.expected_source_commit }}
+      EXPECTED_SOURCE_COMMIT: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.expected_source_commit }}
+      ARTIFACT_RUN_ID: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.artifact_run_id }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       WRANGLER_SEND_METRICS: 'false'
       WRANGLER_VERSION: '4.120.0'
-      WRANGLER_OUTPUT_FILE_PATH: /tmp/wrangler-pages-output.jsonl
+      PLAYWRIGHT_VERSION: '1.62.1'
+      PLAYWRIGHT_BROWSERS_PATH: /tmp/fichario-playwright-browsers
 
     steps:
       - name: Validate immutable deployment inputs
         shell: bash
         run: |
           set -euo pipefail
-          [[ "$TARGET_ENVIRONMENT" == 'staging' ]] || {
-            echo 'this workflow is intentionally staging-only until production infrastructure exists' >&2
-            exit 1
-          }
           if [[ ! "$EXPECTED_SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
             echo 'expected_source_commit must be a full lowercase Git SHA' >&2
             exit 1
           fi
-          if [[ ! "${{ inputs.artifact_run_id }}" =~ ^[1-9][0-9]*$ ]]; then
+          if [[ ! "$ARTIFACT_RUN_ID" =~ ^[1-9][0-9]*$ ]]; then
             echo 'artifact_run_id must be a positive numeric workflow run ID' >&2
             exit 1
           fi
@@ -59,11 +70,11 @@ jobs:
       - name: Download the validated deployment artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: fichario-static-${{ inputs.expected_source_commit }}-staging
+          name: fichario-static-${{ env.EXPECTED_SOURCE_COMMIT }}-staging
           path: deployment-artifact
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
-          run-id: ${{ inputs.artifact_run_id }}
+          run-id: ${{ env.ARTIFACT_RUN_ID }}
           digest-mismatch: error
 
       - name: Verify artifact identity and checksums
@@ -76,7 +87,7 @@ jobs:
             artifact_root="$artifact_root/fichario-deploy"
           fi
 
-          for required in DEPLOYMENT-MANIFEST.txt SHA256SUMS source/package.json source/pnpm-lock.yaml checks/check-deployed-site.mjs checks/check-deployment-artifact.mjs checks/deployment-contract.mjs checks/validate-pages-deploy-output.mjs site/_headers site/200.html site/manifest.webmanifest site/sw.js site/registerSW.js; do
+          for required in DEPLOYMENT-MANIFEST.txt SHA256SUMS source/package.json source/pnpm-lock.yaml checks/check-deployed-site.mjs checks/check-deployed-ui.mjs checks/check-deployment-artifact.mjs checks/deployment-contract.mjs checks/validate-pages-deploy-output.mjs site/_headers site/200.html site/manifest.webmanifest site/sw.js site/registerSW.js; do
             if [[ ! -f "$artifact_root/$required" ]]; then
               echo "deployment artifact is missing $required" >&2
               exit 1
@@ -127,11 +138,13 @@ jobs:
 
           echo "root=$artifact_root" >> "$GITHUB_OUTPUT"
 
-      - name: Deploy the exact artifact with pinned Wrangler
-        id: deploy
+      - name: Deploy validated staging preview
+        id: deploy_staging
         shell: bash
         env:
           ARTIFACT_ROOT: ${{ steps.artifact.outputs.root }}
+          TARGET_ENVIRONMENT: staging
+          WRANGLER_OUTPUT_FILE_PATH: /tmp/wrangler-pages-staging-output.jsonl
         run: |
           set -euo pipefail
           rm -f "$WRANGLER_OUTPUT_FILE_PATH"
@@ -146,33 +159,100 @@ jobs:
 
           node "$ARTIFACT_ROOT/checks/validate-pages-deploy-output.mjs"
 
-      - name: Verify the exact deployed URL with the artifact-pinned contract
+      - name: Verify staging exact URL and stable alias
         shell: bash
         env:
           ARTIFACT_ROOT: ${{ steps.artifact.outputs.root }}
-          DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
+          DEPLOYMENT_URL: ${{ steps.deploy_staging.outputs.url }}
+          DEPLOYMENT_ALIAS: ${{ steps.deploy_staging.outputs.alias }}
         run: |
           set -euo pipefail
           node "$ARTIFACT_ROOT/checks/check-deployed-site.mjs" "$DEPLOYMENT_URL"
+          node "$ARTIFACT_ROOT/checks/check-deployed-site.mjs" "$DEPLOYMENT_ALIAS"
 
-      - name: Record verified deployment target
+      - name: Promote validated artifact to production
+        id: deploy_production
         shell: bash
         env:
-          DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
-          DEPLOYMENT_ALIAS: ${{ steps.deploy.outputs.alias }}
-          DEPLOYMENT_ID: ${{ steps.deploy.outputs.deployment_id }}
+          ARTIFACT_ROOT: ${{ steps.artifact.outputs.root }}
+          TARGET_ENVIRONMENT: production
+          WRANGLER_OUTPUT_FILE_PATH: /tmp/wrangler-pages-production-output.jsonl
+        run: |
+          set -euo pipefail
+          rm -f "$WRANGLER_OUTPUT_FILE_PATH"
+
+          npm exec --yes --package="wrangler@${WRANGLER_VERSION}" -- \
+            wrangler pages deploy "$ARTIFACT_ROOT/site" \
+              --project-name=fichario-virtual \
+              --commit-hash="$EXPECTED_SOURCE_COMMIT" \
+              --commit-message="Deploy validated Fichário production artifact ${EXPECTED_SOURCE_COMMIT}" \
+              --commit-dirty=false
+
+          node "$ARTIFACT_ROOT/checks/validate-pages-deploy-output.mjs"
+
+      - name: Verify production exact URL and stable root domain
+        shell: bash
+        env:
+          ARTIFACT_ROOT: ${{ steps.artifact.outputs.root }}
+          DEPLOYMENT_URL: ${{ steps.deploy_production.outputs.url }}
+          PRODUCTION_ALIAS: ${{ steps.deploy_production.outputs.alias }}
+        run: |
+          set -euo pipefail
+          [[ "$PRODUCTION_ALIAS" == 'https://fichario-virtual.pages.dev' ]]
+          node "$ARTIFACT_ROOT/checks/check-deployed-site.mjs" "$DEPLOYMENT_URL"
+          node "$ARTIFACT_ROOT/checks/check-deployed-site.mjs" "$PRODUCTION_ALIAS"
+
+      - name: Verify rendered UI in Chromium
+        shell: bash
+        env:
+          ARTIFACT_ROOT: ${{ steps.artifact.outputs.root }}
+          STAGING_URL: ${{ steps.deploy_staging.outputs.url }}
+          STAGING_ALIAS: ${{ steps.deploy_staging.outputs.alias }}
+          PRODUCTION_URL: ${{ steps.deploy_production.outputs.url }}
+          PRODUCTION_ALIAS: ${{ steps.deploy_production.outputs.alias }}
+        run: |
+          set -euo pipefail
+          cd "$ARTIFACT_ROOT"
+          printf '%s\n' '{"private":true,"type":"module"}' > package.json
+          npm install --no-save --package-lock=false --ignore-scripts "playwright@${PLAYWRIGHT_VERSION}"
+          npx playwright install chromium
+          DEPLOYMENT_UI_EVIDENCE_DIR="$GITHUB_WORKSPACE/deployment-ui-evidence/staging-exact" node checks/check-deployed-ui.mjs "$STAGING_URL"
+          DEPLOYMENT_UI_EVIDENCE_DIR="$GITHUB_WORKSPACE/deployment-ui-evidence/staging-alias" node checks/check-deployed-ui.mjs "$STAGING_ALIAS"
+          DEPLOYMENT_UI_EVIDENCE_DIR="$GITHUB_WORKSPACE/deployment-ui-evidence/production-exact" node checks/check-deployed-ui.mjs "$PRODUCTION_URL"
+          DEPLOYMENT_UI_EVIDENCE_DIR="$GITHUB_WORKSPACE/deployment-ui-evidence/production-alias" node checks/check-deployed-ui.mjs "$PRODUCTION_ALIAS"
+
+      - name: Upload rendered UI evidence
+        if: ${{ always() && steps.deploy_staging.outcome == 'success' && steps.deploy_production.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: deployed-ui-${{ env.EXPECTED_SOURCE_COMMIT }}
+          path: deployment-ui-evidence/
+          if-no-files-found: warn
+          compression-level: 6
+          retention-days: 7
+
+      - name: Record verified deployment targets
+        shell: bash
+        env:
+          STAGING_URL: ${{ steps.deploy_staging.outputs.url }}
+          STAGING_ALIAS: ${{ steps.deploy_staging.outputs.alias }}
+          STAGING_ID: ${{ steps.deploy_staging.outputs.deployment_id }}
+          PRODUCTION_URL: ${{ steps.deploy_production.outputs.url }}
+          PRODUCTION_ALIAS: ${{ steps.deploy_production.outputs.alias }}
+          PRODUCTION_ID: ${{ steps.deploy_production.outputs.deployment_id }}
         run: |
           set -euo pipefail
           {
-            echo '### Cloudflare Pages staging deployment'
+            echo '### Cloudflare Pages deployment'
             echo
-            echo '- Environment: `staging`'
             echo "- Source SHA: \`$EXPECTED_SOURCE_COMMIT\`"
-            echo "- Deployment ID: \`$DEPLOYMENT_ID\`"
-            echo "- Exact verified URL: \`$DEPLOYMENT_URL\`"
-            if [[ -n "$DEPLOYMENT_ALIAS" ]]; then
-              echo "- Alias reported by Wrangler: \`$DEPLOYMENT_ALIAS\`"
-            fi
+            echo "- Staging deployment ID: \`$STAGING_ID\`"
+            echo "- Staging exact URL: \`$STAGING_URL\`"
+            echo "- Staging alias: \`$STAGING_ALIAS\`"
+            echo "- Production deployment ID: \`$PRODUCTION_ID\`"
+            echo "- Production exact URL: \`$PRODUCTION_URL\`"
+            echo "- Production root: \`$PRODUCTION_ALIAS\`"
+            echo '- Chromium UI smoke: `PASS` for staging and production exact URLs and stable aliases'
             echo
-            echo 'Artifact checksum verification and the HTTP deployment contract both passed for the exact staging deployment URL.'
+            echo 'The same validated artifact was verified and promoted from staging preview to the production Pages root.'
           } >> "$GITHUB_STEP_SUMMARY"

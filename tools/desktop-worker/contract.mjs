@@ -71,7 +71,7 @@ function parseWordGeometry(value) {
 
 export function parseCompletionRequest(value) {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-	const baseKeys = [
+	const expectedKeys = [
 		'action',
 		'jobId',
 		'leaseId',
@@ -84,12 +84,11 @@ export function parseCompletionRequest(value) {
 		'contentType',
 		'warnings',
 		'needsReview',
-		'timingMs'
+		'timingMs',
+		'wordGeometry'
 	];
-	const legacyShape = exactKeys(value, baseKeys);
-	const geometryShape = exactKeys(value, [...baseKeys, 'wordGeometry']);
 	if (
-		(!legacyShape && !geometryShape) ||
+		!exactKeys(value, expectedKeys) ||
 		value.action !== 'complete' ||
 		typeof value.jobId !== 'string' ||
 		!UUID.test(value.jobId) ||
@@ -115,7 +114,7 @@ export function parseCompletionRequest(value) {
 		return null;
 	}
 	const warnings = parseWarnings(value.warnings);
-	const wordGeometry = geometryShape ? parseWordGeometry(value.wordGeometry) : Object.freeze([]);
+	const wordGeometry = parseWordGeometry(value.wordGeometry);
 	if (warnings === null || wordGeometry === null) return null;
 	return Object.freeze({ ...value, warnings, wordGeometry });
 }

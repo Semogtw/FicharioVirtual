@@ -4,6 +4,7 @@ import process from 'node:process';
 
 const root = resolve(new URL('../..', import.meta.url).pathname);
 const packageJson = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'));
+const workspaceYaml = await readFile(resolve(root, 'pnpm-workspace.yaml'), 'utf8').catch(() => '');
 const failures = [];
 
 function parsePinnedSemver(value, dependency) {
@@ -24,6 +25,11 @@ function compareVersion(left, right) {
 	return 0;
 }
 
+function workspaceOverride(name) {
+	const section = workspaceYaml.match(/^overrides:\s*\n((?:^[ \t]+[^\n]*(?:\n|$))*)/m)?.[1] ?? '';
+	return section.match(new RegExp(`^[ \\t]+${name}:\\s*([^\\s#]+)\\s*$`, 'm'))?.[1];
+}
+
 const pdfjsVersion = parsePinnedSemver(packageJson.dependencies?.['pdfjs-dist'], 'pdfjs-dist');
 if (pdfjsVersion && compareVersion(pdfjsVersion, [6, 2, 108]) < 0) {
 	failures.push(
@@ -32,7 +38,7 @@ if (pdfjsVersion && compareVersion(pdfjsVersion, [6, 2, 108]) < 0) {
 }
 
 const nanoidOverride = parsePinnedSemver(
-	packageJson.pnpm?.overrides?.nanoid,
+	packageJson.pnpm?.overrides?.nanoid ?? workspaceOverride('nanoid'),
 	'pnpm.overrides.nanoid'
 );
 if (nanoidOverride && compareVersion(nanoidOverride, [3, 3, 17]) < 0) {

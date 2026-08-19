@@ -2,8 +2,12 @@ name: Build deployable Fichário staging artifact
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
@@ -23,6 +27,51 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+
+      - name: Require green current-head validation for this SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          validation_run_id=''
+          for attempt in $(seq 1 120); do
+            main_sha="$(gh api "/repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
+            if [[ "$main_sha" != "$GITHUB_SHA" ]]; then
+              echo "Refusing to build a stale/non-main artifact: workflow SHA=$GITHUB_SHA main SHA=$main_sha" >&2
+              exit 1
+            fi
+
+            validation_run_id="$(
+              gh api --paginate \
+                "/repos/${GITHUB_REPOSITORY}/actions/workflows/validate-current-head.yml/runs?head_sha=${GITHUB_SHA}&per_page=100" \
+                --jq ".workflow_runs[] | select(.head_sha == \"${GITHUB_SHA}\" and .head_branch == \"main\" and .event == \"push\" and .status == \"completed\" and .conclusion == \"success\") | .id" \
+                | head -n 1
+            )"
+            if [[ -n "$validation_run_id" ]]; then
+              break
+            fi
+
+            failed_run="$(
+              gh api --paginate \
+                "/repos/${GITHUB_REPOSITORY}/actions/workflows/validate-current-head.yml/runs?head_sha=${GITHUB_SHA}&per_page=100" \
+                --jq ".workflow_runs[] | select(.head_sha == \"${GITHUB_SHA}\" and .head_branch == \"main\" and .event == \"push\" and .status == \"completed\" and .conclusion != \"success\") | [.id, .conclusion] | @tsv" \
+                | head -n 1
+            )"
+            if [[ -n "$failed_run" ]]; then
+              echo "Validate current head completed without success for $GITHUB_SHA: $failed_run" >&2
+              exit 1
+            fi
+
+            sleep 5
+          done
+
+          if [[ -z "$validation_run_id" ]]; then
+            echo "No successful Validate current head push run became available for main SHA $GITHUB_SHA." >&2
+            exit 1
+          fi
+
+          echo "Using Validate current head run $validation_run_id for $GITHUB_SHA."
 
       - name: Set up pnpm
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
@@ -46,51 +95,7 @@ jobs:
           PUBLIC_GOOGLE_CLIENT_ID: ${{ secrets.PUBLIC_GOOGLE_CLIENT_ID }}
           PUBLIC_GOOGLE_PICKER_API_KEY: ${{ secrets.PUBLIC_GOOGLE_PICKER_API_KEY }}
           PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER: ${{ secrets.PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER }}
-        run: |
-          set -euo pipefail
-          [[ "$TARGET_ENVIRONMENT" == 'staging' ]] || {
-            echo 'this workflow is intentionally staging-only until production infrastructure exists' >&2
-            exit 1
-          }
-
-          node <<'NODE'
-          const urlValue = process.env.PUBLIC_SUPABASE_URL ?? '';
-          const key = process.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? '';
-          const url = new URL(urlValue);
-          if (
-            url.protocol !== 'https:' ||
-            url.username ||
-            url.password ||
-            url.pathname !== '/' ||
-            url.search ||
-            url.hash
-          ) {
-            throw new Error('PUBLIC_SUPABASE_URL must be a credential-free HTTPS origin');
-          }
-          if (!key.startsWith('sb_publishable_') || key.length < 20 || key.length > 512) {
-            throw new Error('PUBLIC_SUPABASE_PUBLISHABLE_KEY is invalid');
-          }
-
-          const clientId = (process.env.PUBLIC_GOOGLE_CLIENT_ID ?? '').trim();
-          const pickerKey = (process.env.PUBLIC_GOOGLE_PICKER_API_KEY ?? '').trim();
-          const projectNumber = (process.env.PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER ?? '').trim();
-          const pickerValues = [clientId, pickerKey, projectNumber];
-          const configuredPickerValues = pickerValues.filter(Boolean).length;
-          if (configuredPickerValues !== 0 && configuredPickerValues !== pickerValues.length) {
-            throw new Error('Google Picker public settings must be configured together');
-          }
-          if (configuredPickerValues === pickerValues.length) {
-            if (!/^\d+-[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$/.test(clientId)) {
-              throw new Error('PUBLIC_GOOGLE_CLIENT_ID is invalid');
-            }
-            if (!/^AIza[A-Za-z0-9_-]+$/.test(pickerKey) || pickerKey.length > 256) {
-              throw new Error('PUBLIC_GOOGLE_PICKER_API_KEY is invalid');
-            }
-            if (!/^\d{6,20}$/.test(projectNumber)) {
-              throw new Error('PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER is invalid');
-            }
-          }
-          NODE
+        run: node tools/checks/check-staging-public-config.mjs
 
       - name: Verify and build static site
         env:
@@ -112,11 +117,9 @@ jobs:
           set -euo pipefail
           grep -R -F -- "$PUBLIC_SUPABASE_URL" build >/dev/null
           grep -R -F -- "$PUBLIC_SUPABASE_PUBLISHABLE_KEY" build >/dev/null
-          if [[ -n "$PUBLIC_GOOGLE_CLIENT_ID" ]]; then
-            grep -R -F -- "$PUBLIC_GOOGLE_CLIENT_ID" build >/dev/null
-            grep -R -F -- "$PUBLIC_GOOGLE_PICKER_API_KEY" build >/dev/null
-            grep -R -F -- "$PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER" build >/dev/null
-          fi
+          grep -R -F -- "$PUBLIC_GOOGLE_CLIENT_ID" build >/dev/null
+          grep -R -F -- "$PUBLIC_GOOGLE_PICKER_API_KEY" build >/dev/null
+          grep -R -F -- "$PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER" build >/dev/null
           ! grep -R -F '127.0.0.1:54321' build
           ! grep -R -F 'sb_publishable_test_key_1234567890' build
 

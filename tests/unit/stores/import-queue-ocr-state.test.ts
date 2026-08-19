@@ -7,9 +7,20 @@ const source = readFileSync(
 );
 
 describe('import queue OCR state', () => {
-	it('preserves and persists review state when another worker completed the page', () => {
+	it('persists review state from the launch completion result', () => {
 		expect(source).toMatch(
-			/if \(result\.state === 'complete' \|\| result\.state === 'already_complete'\) \{\s*item\.status = result\.needsReview \? 'needs_review' : 'complete';\s*void persistItem\(item\);\s*return;\s*\}/
+			/if \(result\.state === 'complete'\) \{\s*item\.status = result\.needsReview \? 'needs_review' : 'complete';\s*void persistItem\(item\);\s*return;\s*\}/
 		);
+	});
+
+	it('keeps a normal deferred read informational instead of presenting it as an error', () => {
+		expect(source).toMatch(
+			/item\.status = 'waiting';\s*item\.error = null;\s*void persistItem\(item\);\s*\} catch \(error\)/
+		);
+	});
+
+	it('does not branch on removed single-page response states', () => {
+		expect(source).not.toContain("result.state === 'already_complete'");
+		expect(source).not.toContain("result.state === 'quota_exhausted'");
 	});
 });

@@ -133,12 +133,8 @@ select ok(
 );
 
 select ok(
-  not has_function_privilege(
-    'authenticated',
-    'public.finalize_drive_pdf_reference_import(uuid,jsonb,integer)',
-    'EXECUTE'
-  ),
-  'authenticated users cannot bypass the lease through the legacy Drive PDF finalizer'
+  to_regprocedure('public.finalize_drive_pdf_reference_import(uuid,jsonb,integer)') is null,
+  'pre-launch direct Drive PDF finalizer is absent'
 );
 
 select ok(

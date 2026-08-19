@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-	recordSemanticSearchConsent,
 	searchPagesHybrid,
 	SemanticSearchServiceError
 } from '../../../src/lib/services/semantic-search';
@@ -9,14 +8,20 @@ const pageId = '11111111-1111-4111-8111-111111111111';
 const documentId = '22222222-2222-4222-8222-222222222222';
 
 type FunctionClient = NonNullable<Parameters<typeof searchPagesHybrid>[2]>;
-type ConsentClient = NonNullable<Parameters<typeof recordSemanticSearchConsent>[0]>;
 
 function hybridResponse() {
 	return {
 		mode: 'hybrid',
 		reason: null,
 		embeddingModel: 'gemini-embedding-2',
-		index: { totalPages: 12, indexedPages: 8, indexedThisRun: 2, complete: false },
+		index: {
+			totalPages: 12,
+			indexedPages: 8,
+			remainingPages: 4,
+			coverage: 8 / 12,
+			indexedThisRun: 2
+		},
+		queryEmbeddingCacheHit: true,
 		hasMore: false,
 		results: [
 			{
@@ -54,7 +59,7 @@ function functionClient(data: unknown): FunctionClient {
 }
 
 describe('searchPagesHybrid', () => {
-	it('accepts semantic and hybrid matches without requiring literal overlap', async () => {
+	it('accepts the deployed hybrid response, including cache metadata and index progress', async () => {
 		const response = await searchPagesHybrid(
 			' conservação de energia ',
 			{ limit: 20 },
@@ -65,13 +70,39 @@ describe('searchPagesHybrid', () => {
 			mode: 'hybrid',
 			reason: null,
 			embeddingModel: 'gemini-embedding-2',
-			index: { totalPages: 12, indexedPages: 8, indexedThisRun: 2, complete: false }
+			index: {
+				totalPages: 12,
+				indexedPages: 8,
+				remainingPages: 4,
+				coverage: 8 / 12,
+				indexedThisRun: 2,
+				complete: false
+			}
 		});
 		expect(response.results[0]).toEqual(
 			expect.objectContaining({
 				pageId,
 				matchMode: 'hybrid',
 				semanticSimilarity: 0.82
+			})
+		);
+	});
+
+	it('derives completion when the deployed response has no remaining pages', async () => {
+		const response = hybridResponse();
+		response.index = {
+			...response.index,
+			indexedPages: 12,
+			remainingPages: 0,
+			coverage: 1
+		};
+		await expect(
+			searchPagesHybrid('conservação de energia', { limit: 20 }, functionClient(response))
+		).resolves.toEqual(
+			expect.objectContaining({
+				analysis: expect.objectContaining({
+					index: expect.objectContaining({ complete: true })
+				})
 			})
 		);
 	});
@@ -92,28 +123,19 @@ describe('searchPagesHybrid', () => {
 		expect(called).toBe(false);
 	});
 
+	it('rejects inconsistent semantic index progress', async () => {
+		const response = hybridResponse();
+		response.index = { ...response.index, remainingPages: 3 };
+		await expect(
+			searchPagesHybrid('conservação de energia', { limit: 20 }, functionClient(response))
+		).rejects.toBeInstanceOf(SemanticSearchServiceError);
+	});
+
 	it('rejects malformed provider responses instead of trusting extra private fields', async () => {
 		const response = hybridResponse();
 		response.results[0] = { ...response.results[0], privateText: 'no' } as never;
 		await expect(
 			searchPagesHybrid('conservação de energia', { limit: 20 }, functionClient(response))
 		).rejects.toBeInstanceOf(SemanticSearchServiceError);
-	});
-});
-
-describe('recordSemanticSearchConsent', () => {
-	it('uses a dedicated consent RPC for the global search surface', async () => {
-		let received: unknown = null;
-		const client: ConsentClient = {
-			rpc(name, args) {
-				received = { name, args };
-				return Promise.resolve({ data: true, error: null });
-			}
-		};
-		await expect(recordSemanticSearchConsent(client)).resolves.toBeUndefined();
-		expect(received).toEqual({
-			name: 'record_search_semantic_consent',
-			args: { consent_version: 1 }
-		});
 	});
 });

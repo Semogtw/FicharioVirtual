@@ -33,7 +33,7 @@ describe('explicit Google Drive import page', () => {
 		expect(source).toContain("status: 'pending_inspection'");
 		expect(source).toContain('await deleteDocument(reference.documentId)');
 		expect(source).toContain('await loadPendingReferences()');
-		expect(source).toContain('PDFs grandes preservados');
+		expect(source).toContain('PDFs pendentes');
 		expect(source).toContain('label="Retomar"');
 		expect(source).toContain('label="Parar processamento"');
 		expect(source).toMatch(
@@ -41,18 +41,19 @@ describe('explicit Google Drive import page', () => {
 		);
 	});
 
-	it('describes the direct browser ceiling and the reference path for larger PDFs', () => {
+	it('keeps large-PDF implementation details out of the user-facing copy', () => {
 		const source = readFileSync(path, 'utf8');
-		expect(source).toContain('download direto no navegador aceita até 50 MiB');
-		expect(source).toMatch(/PDFs maiores são preservados no Drive e\s+preparados por referência/);
-		expect(source).toContain('não é do documento lógico nem dos lotes de OCR');
+		expect(source).toContain('Imagens e PDFs são aceitos, inclusive PDFs grandes.');
+		expect(source).not.toContain('download direto no navegador aceita até 50 MiB');
+		expect(source).not.toContain('preparados por referência');
+		expect(source).not.toContain('lotes de OCR');
 	});
 
-	it('requires explicit OCR consent and never exposes or persists credentials', () => {
+	it('avoids repeated OCR confirmations and never exposes or persists credentials', () => {
 		const source = readFileSync(path, 'utf8');
 
-		expect(source).toContain('Confirme a autorização de OCR antes de selecionar o arquivo.');
-		expect(source).toContain('Nenhuma leitura ampla da conta é realizada.');
+		expect(source).not.toContain('Confirme a autorização de OCR antes de selecionar o arquivo.');
+		expect(source).not.toContain('type="checkbox"');
 		expect(source).not.toContain('localStorage');
 		expect(source).not.toContain('sessionStorage');
 		expect(source).not.toContain('accessToken');

@@ -4,8 +4,23 @@ import { corsHeaders, parseAppOrigin } from '../_shared/cors.ts';
 import { claimStateHttpStatus, parseOcrClaimResult } from '../_shared/ocr-contract.ts';
 import { planOcrFailure } from '../_shared/ocr-failure.ts';
 import { randomJitterMs } from '../_shared/random-jitter.ts';
+import {
+	DEFAULT_GEMINI_OCR_FALLBACK_MODEL,
+	DEFAULT_GEMINI_OCR_MAX_QUEUE_WAIT_MS,
+	DEFAULT_GEMINI_OCR_PRIMARY_MODEL,
+	DEFAULT_GEMINI_OCR_RPM,
+	LocalOcrProviderRateLimitError,
+	localOcrProviderFailureCode,
+	parseGeminiRateReservation,
+	retryAtFromRateLimit,
+	shouldFallbackGeminiOcr
+} from '../_shared/gemini-ocr-routing.ts';
 import { requestGeminiOcrBatch, type GeminiOcrBatchPage } from '../_shared/gemini-ocr-client.ts';
 import { buildGeminiTelemetryRpcArgs } from '../_shared/ocr-provider-telemetry.ts';
+import {
+	enqueueVisualEmbeddingAfterOcr,
+	visualTemporaryMediaIsNeeded
+} from '../_shared/visual-embedding-enqueue.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MODEL = /^[A-Za-z0-9._-]{3,128}$/;
@@ -17,7 +32,6 @@ const MAX_REQUEST_BODY_BYTES = 16 * 1024;
 type ParsedRequest = {
 	pageIds: readonly string[];
 	batchId: string | null;
-	legacy: boolean;
 };
 
 type PageRow = {
@@ -62,11 +76,6 @@ function hasExactKeys(record: Record<string, unknown>, expected: readonly string
 function parseRequestBody(body: unknown): ParsedRequest | null {
 	if (body === null || typeof body !== 'object' || Array.isArray(body)) return null;
 	const record = body as Record<string, unknown>;
-	if (hasExactKeys(record, ['pageId'])) {
-		return typeof record.pageId === 'string' && UUID.test(record.pageId)
-			? Object.freeze({ pageIds: Object.freeze([record.pageId]), batchId: null, legacy: true })
-			: null;
-	}
 	if (!hasExactKeys(record, ['pageIds']) && !hasExactKeys(record, ['batchId', 'pageIds'])) {
 		return null;
 	}
@@ -83,8 +92,7 @@ function parseRequestBody(body: unknown): ParsedRequest | null {
 	}
 	return Object.freeze({
 		pageIds: Object.freeze([...(record.pageIds as string[])]),
-		batchId: typeof record.batchId === 'string' ? record.batchId : null,
-		legacy: false
+		batchId: typeof record.batchId === 'string' ? record.batchId : null
 	});
 }
 
@@ -124,7 +132,10 @@ function aggregateBody(input: {
 }
 
 Deno.serve(async (request) => {
-	const appOrigin = parseAppOrigin(Deno.env.get('APP_ORIGIN'));
+	const appOrigin = parseAppOrigin(
+		Deno.env.get('APP_ORIGIN_ALLOWLIST') ?? Deno.env.get('APP_ORIGIN'),
+		request.headers.get('Origin')
+	);
 	const respond = (status: number, body: Record<string, unknown>) => json(status, body, appOrigin);
 
 	if (!appOrigin) return respond(503, { code: 'ocr_not_configured' });
@@ -149,9 +160,19 @@ Deno.serve(async (request) => {
 
 	const supabaseUrl = Deno.env.get('SUPABASE_URL');
 	const publishableKey = Deno.env.get('SUPABASE_ANON_KEY');
+	const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 	const apiKey = Deno.env.get('GEMINI_API_KEY');
-	const model = Deno.env.get('OCR_MODEL_PRIMARY');
+	const model = Deno.env.get('OCR_MODEL_PRIMARY') ?? DEFAULT_GEMINI_OCR_PRIMARY_MODEL;
+	const fallbackModel = Deno.env.get('OCR_MODEL_FALLBACK') ?? DEFAULT_GEMINI_OCR_FALLBACK_MODEL;
 	const promptVersion = Number(Deno.env.get('OCR_PROMPT_VERSION') ?? '1');
+	const primaryRpm = envInteger('OCR_MODEL_PRIMARY_RPM', DEFAULT_GEMINI_OCR_RPM, 1, 60);
+	const fallbackRpm = envInteger('OCR_MODEL_FALLBACK_RPM', DEFAULT_GEMINI_OCR_RPM, 1, 60);
+	const maxQueueWaitMs = envInteger(
+		'OCR_PROVIDER_MAX_QUEUE_WAIT_MS',
+		DEFAULT_GEMINI_OCR_MAX_QUEUE_WAIT_MS,
+		0,
+		60_000
+	);
 	const maxBatchPages = envInteger('OCR_BATCH_MAX_PAGES', 40, 1, ABSOLUTE_MAX_BATCH_PAGES);
 	const maxBatchBytes = envInteger(
 		'OCR_BATCH_MAX_BYTES',
@@ -163,12 +184,17 @@ Deno.serve(async (request) => {
 	if (
 		!supabaseUrl ||
 		!publishableKey ||
+		!serviceRoleKey ||
 		!apiKey ||
-		!model ||
 		!MODEL.test(model) ||
+		!MODEL.test(fallbackModel) ||
+		model === fallbackModel ||
 		!Number.isInteger(promptVersion) ||
 		promptVersion < 1 ||
 		promptVersion > 10_000 ||
+		primaryRpm === null ||
+		fallbackRpm === null ||
+		maxQueueWaitMs === null ||
 		maxBatchPages === null ||
 		maxBatchBytes === null ||
 		requestTimeoutMs === null
@@ -188,6 +214,10 @@ Deno.serve(async (request) => {
 		error: userError
 	} = await supabase.auth.getUser();
 	if (userError || !user) return respond(401, { code: 'authentication_required' });
+
+	const admin = createClient(supabaseUrl, serviceRoleKey, {
+		auth: { persistSession: false, autoRefreshToken: false }
+	});
 
 	const failJob = async (
 		pageId: string,
@@ -221,6 +251,7 @@ Deno.serve(async (request) => {
 
 	const cleanupTemporaryImage = async (pageId: string, path: string | null) => {
 		if (!path) return;
+		if (await visualTemporaryMediaIsNeeded({ supabase, pageId, mediaPath: path })) return;
 		const { error } = await supabase.storage.from('documents').remove([path]);
 		if (!error) {
 			await supabase.rpc('clear_temporary_page_image', {
@@ -247,6 +278,24 @@ Deno.serve(async (request) => {
 			finished_at: new Date().toISOString()
 		});
 		return !error && data === true;
+	};
+
+	const reserveProviderSlot = async (targetModel: string, rpm: number) => {
+		const { data, error } = await admin.rpc('reserve_ocr_provider_rate_slot', {
+			target_model: targetModel,
+			target_rpm: rpm,
+			max_wait_ms: maxQueueWaitMs
+		});
+		const reservation = error ? null : parseGeminiRateReservation(data);
+		if (!reservation) {
+			throw new LocalOcrProviderRateLimitError('rate_limiter_unavailable', 5_000);
+		}
+		if (!reservation.allowed) {
+			throw new LocalOcrProviderRateLimitError('local_queue_full', reservation.waitMs || 5_000);
+		}
+		if (reservation.waitMs > 0) {
+			await new Promise<void>((resolve) => setTimeout(resolve, reservation.waitMs));
+		}
 	};
 
 	const { data: pageData, error: pageError } = await supabase
@@ -349,16 +398,10 @@ Deno.serve(async (request) => {
 			claimResult.state === 'quota_exhausted'
 		) {
 			pendingPageIds.push(page.id);
-			if (parsedRequest.legacy) {
-				return respond(claimStateHttpStatus(claimResult.state), { state: claimResult.state });
-			}
 			continue;
 		}
 		if (claimResult.state === 'not_retryable') {
 			failedPageIds.push(page.id);
-			if (parsedRequest.legacy) {
-				return respond(claimStateHttpStatus(claimResult.state), { state: claimResult.state });
-			}
 			continue;
 		}
 
@@ -406,6 +449,7 @@ Deno.serve(async (request) => {
 
 	const providerPages: GeminiOcrBatchPage[] = [];
 	const providerClaims = new Map<string, ClaimedPage>();
+	const providerSources = new Map<string, { mediaPath: string; mimeType: string }>();
 	let aggregateBytes = 0;
 	for (let index = 0; index < claimedPages.length; index += 1) {
 		const claimed = claimedPages[index]!;
@@ -475,6 +519,10 @@ Deno.serve(async (request) => {
 			bytes
 		});
 		providerClaims.set(claimed.page.id, claimed);
+		providerSources.set(claimed.page.id, {
+			mediaPath: sourcePath,
+			mimeType: sourceBlob.type || ''
+		});
 	}
 
 	if (providerPages.length === 0) {
@@ -488,19 +536,89 @@ Deno.serve(async (request) => {
 		return respond(pendingPageIds.length > 0 ? 202 : 200, result);
 	}
 
-	const abortController = new AbortController();
-	const timeout = setTimeout(() => abortController.abort(), requestTimeoutMs);
-	const telemetryEventId = crypto.randomUUID();
-	const providerStartedAt = performance.now();
+	const attemptProvider = async (targetModel: string, rpm: number) => {
+		try {
+			await reserveProviderSlot(targetModel, rpm);
+		} catch (error) {
+			return Object.freeze({ ok: false as const, error, latencyMs: 0 });
+		}
+		const abortController = new AbortController();
+		const timeout = setTimeout(() => abortController.abort(), requestTimeoutMs);
+		const startedAt = performance.now();
+		try {
+			const outcome = await requestGeminiOcrBatch({
+				apiKey,
+				model: targetModel,
+				promptVersion,
+				pages: providerPages,
+				signal: abortController.signal
+			});
+			return Object.freeze({
+				ok: true as const,
+				outcome,
+				latencyMs: performance.now() - startedAt
+			});
+		} catch (error) {
+			return Object.freeze({
+				ok: false as const,
+				error,
+				latencyMs: performance.now() - startedAt
+			});
+		} finally {
+			clearTimeout(timeout);
+		}
+	};
+
+	let activeModel = model;
+	let activeRouteReason = 'primary_gemini';
+	let telemetryEventId = crypto.randomUUID();
+	let providerLatencyMs = 0;
 	try {
-		const outcome = await requestGeminiOcrBatch({
-			apiKey,
-			model,
-			promptVersion,
-			pages: providerPages,
-			signal: abortController.signal
-		});
-		const providerLatencyMs = performance.now() - providerStartedAt;
+		let attempt = await attemptProvider(model, primaryRpm);
+		providerLatencyMs = attempt.latencyMs;
+
+		if (!attempt.ok && shouldFallbackGeminiOcr(attempt.error)) {
+			const firstClaim = providerClaims.get(providerPages[0]!.pageId)!;
+			const primaryErrorCode =
+				localOcrProviderFailureCode(attempt.error) ??
+				planOcrFailure(attempt.error, {
+					attemptCount: firstClaim.attemptCount,
+					failedAt: new Date(),
+					jitterMs: 0
+				}).persistence.code;
+			try {
+				await supabase.rpc(
+					'record_ocr_provider_usage',
+					buildGeminiTelemetryRpcArgs({
+						eventId: telemetryEventId,
+						documentId,
+						batchId: parsedRequest.batchId,
+						model,
+						promptVersion,
+						documentKind: document.kind as 'image' | 'pdf',
+						pages: providerPages,
+						outcome: null,
+						status: 'error',
+						safeErrorCode: primaryErrorCode,
+						latencyMs: providerLatencyMs,
+						recordedAt: new Date().toISOString(),
+						routeReason: 'primary_gemini'
+					})
+				);
+			} catch {
+				// The fallback must remain available even if primary-attempt telemetry fails.
+			}
+
+			activeModel = fallbackModel;
+			activeRouteReason = 'fallback_gemini_rate_limit';
+			telemetryEventId = crypto.randomUUID();
+			attempt = await attemptProvider(fallbackModel, fallbackRpm);
+			providerLatencyMs = attempt.latencyMs;
+		}
+
+		if (!attempt.ok) throw attempt.error;
+		const outcome = attempt.outcome;
+
 		try {
 			await supabase.rpc(
 				'record_ocr_provider_usage',
@@ -508,7 +626,7 @@ Deno.serve(async (request) => {
 					eventId: telemetryEventId,
 					documentId,
 					batchId: parsedRequest.batchId,
-					model,
+					model: activeModel,
 					promptVersion,
 					documentKind: document.kind as 'image' | 'pdf',
 					pages: providerPages,
@@ -516,7 +634,8 @@ Deno.serve(async (request) => {
 					status: 'success',
 					safeErrorCode: null,
 					latencyMs: providerLatencyMs,
-					recordedAt: new Date().toISOString()
+					recordedAt: new Date().toISOString(),
+					routeReason: activeRouteReason
 				})
 			);
 		} catch {
@@ -549,6 +668,18 @@ Deno.serve(async (request) => {
 			}
 			completedPageIds.push(result.pageId);
 			if (result.needsReview) reviewPageIds.push(result.pageId);
+			const visualSource = providerSources.get(result.pageId);
+			await enqueueVisualEmbeddingAfterOcr({
+				supabase,
+				pageId: result.pageId,
+				mediaPath: visualSource?.mediaPath ?? null,
+				mediaMimeType: visualSource?.mimeType ?? null,
+				contentClass: result.contentClass,
+				warnings: result.warnings,
+				needsReview: result.needsReview,
+				effectiveText: result.text,
+				wordGeometry: result.wordGeometry
+			});
 			await cleanupTemporaryImage(result.pageId, claimed.page.temporary_image_path);
 		}
 
@@ -581,9 +712,6 @@ Deno.serve(async (request) => {
 			splitRequiredPageIds,
 			unexpectedResultPageIds: outcome.unexpectedPageIds
 		});
-		if (parsedRequest.legacy && completedPageIds.includes(parsedRequest.pageIds[0]!)) {
-			return respond(200, { state: 'complete', needsReview: reviewPageIds.length > 0 });
-		}
 		await finishBatch(
 			parsedRequest.batchId,
 			body.state === 'complete' ? 'ready' : 'retryable',
@@ -593,7 +721,59 @@ Deno.serve(async (request) => {
 		);
 		return respond(body.state === 'complete' ? 200 : 202, body);
 	} catch (error) {
-		const providerLatencyMs = performance.now() - providerStartedAt;
+		if (error instanceof LocalOcrProviderRateLimitError) {
+			const failedAt = new Date();
+			const nextRetryAt = retryAtFromRateLimit(failedAt, error.retryAfterMs);
+			const code = localOcrProviderFailureCode(error) ?? 'ocr_rate_limiter_unavailable';
+			const message =
+				error.reason === 'local_queue_full'
+					? 'O OCR está aguardando uma vaga segura no limite de requisições do provedor.'
+					: 'O limitador compartilhado de requisições do OCR está temporariamente indisponível.';
+			for (const page of providerPages) {
+				await failJob(page.pageId, {
+					code,
+					message,
+					retryable: true,
+					failedAt: failedAt.toISOString(),
+					nextRetryAt
+				});
+				pendingPageIds.push(page.pageId);
+			}
+			try {
+				await supabase.rpc(
+					'record_ocr_provider_usage',
+					buildGeminiTelemetryRpcArgs({
+						eventId: telemetryEventId,
+						documentId,
+						batchId: parsedRequest.batchId,
+						model: activeModel,
+						promptVersion,
+						documentKind: document.kind as 'image' | 'pdf',
+						pages: providerPages,
+						outcome: null,
+						status: 'error',
+						safeErrorCode: code,
+						latencyMs: providerLatencyMs,
+						recordedAt: failedAt.toISOString(),
+						routeReason: activeRouteReason
+					})
+				);
+			} catch {
+				// Capacity telemetry must never hide the retryable OCR result.
+			}
+			await finishBatch(parsedRequest.batchId, 'retryable', code, message, nextRetryAt);
+			return respond(
+				202,
+				aggregateBody({
+					completedPageIds,
+					reviewPageIds,
+					pendingPageIds,
+					failedPageIds,
+					splitRequiredPageIds
+				})
+			);
+		}
+
 		const sharedFailedAt = new Date().toISOString();
 		const decisions = providerPages.map((page) => {
 			const claimed = providerClaims.get(page.pageId)!;
@@ -641,7 +821,7 @@ Deno.serve(async (request) => {
 					eventId: telemetryEventId,
 					documentId,
 					batchId: parsedRequest.batchId,
-					model,
+					model: activeModel,
 					promptVersion,
 					documentKind: document.kind as 'image' | 'pdf',
 					pages: providerPages,
@@ -649,7 +829,8 @@ Deno.serve(async (request) => {
 					status: 'error',
 					safeErrorCode: terminalCode,
 					latencyMs: providerLatencyMs,
-					recordedAt: sharedFailedAt
+					recordedAt: sharedFailedAt,
+					routeReason: activeRouteReason
 				})
 			);
 		} catch {
@@ -663,10 +844,6 @@ Deno.serve(async (request) => {
 			terminalMessage,
 			batchRetryAt
 		);
-		if (parsedRequest.legacy) {
-			const firstDecision = decisions[0]!.decision;
-			return respond(firstDecision.response.status, firstDecision.response.body);
-		}
 		const body = aggregateBody({
 			completedPageIds,
 			reviewPageIds,
@@ -675,7 +852,5 @@ Deno.serve(async (request) => {
 			splitRequiredPageIds
 		});
 		return respond(terminalStatus === 'failed' && pendingPageIds.length === 0 ? 503 : 202, body);
-	} finally {
-		clearTimeout(timeout);
 	}
 });

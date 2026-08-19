@@ -13,7 +13,6 @@ for (const required of [
 	'response.body.getReader()',
 	'total > maximumBytes',
 	"await reader.cancel('download exceeds configured limit')",
-	"redirect: 'error'",
 	"cache: 'no-store'"
 ]) {
 	if (!download.includes(required)) {

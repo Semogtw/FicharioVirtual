@@ -24,7 +24,8 @@ function result() {
 		warnings: [],
 		contentType: 'printed',
 		needsReview: false,
-		timingMs: 1000
+		timingMs: 1000,
+		wordGeometry: []
 	};
 }
 

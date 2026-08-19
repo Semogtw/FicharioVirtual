@@ -14,8 +14,8 @@ function client(response: Response): OcrFunctionClient {
 }
 
 describe('OCR claim rejection HTTP status', () => {
-	it('rejects a claim state delivered with the wrong HTTP status', async () => {
-		const response = new Response(JSON.stringify({ state: 'consent_required' }), {
+	it('rejects a current claim state delivered with the wrong HTTP status', async () => {
+		const response = new Response(JSON.stringify({ state: 'not_authorized' }), {
 			status: 503,
 			headers: { 'Content-Type': 'application/json' }
 		});

@@ -8,12 +8,17 @@ function read(path: string) {
 }
 
 describe('deployable static artifact workflow', () => {
-	it('is manual, read-only, and hard-coded to the protected staging environment', () => {
+	it('is main-triggered, recoverable manually, read-only, and hard-coded to staging', () => {
 		const workflow = read('.github/workflows/build-deployment-artifact.yml');
 
 		expect(workflow).toContain('workflow_dispatch:');
+		expect(workflow).toContain('push:');
+		expect(workflow).toContain('branches:\n      - main');
+		expect(workflow).not.toContain('pull_request:');
+		expect(workflow).not.toContain('schedule:');
 		expect(workflow).toContain('environment: staging');
 		expect(workflow).toContain('TARGET_ENVIRONMENT: staging');
+		expect(workflow).toContain('actions: read');
 		expect(workflow).toContain('contents: read');
 		expect(workflow).toContain('persist-credentials: false');
 		expect(workflow).not.toContain('target_environment:');
@@ -21,19 +26,57 @@ describe('deployable static artifact workflow', () => {
 		expect(workflow).not.toContain('- production');
 	});
 
-	it('builds with public Supabase values supplied through step environment variables', () => {
+	it('requires a successful current-head validation for the exact current main SHA', () => {
 		const workflow = read('.github/workflows/build-deployment-artifact.yml');
 
-		expect(workflow).toContain('PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}');
+		expect(workflow).toContain('- name: Require green current-head validation for this SHA');
+		expect(workflow).toContain('/git/ref/heads/main');
+		expect(workflow).toContain('if [[ "$main_sha" != "$GITHUB_SHA" ]]');
 		expect(workflow).toContain(
-			'PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_SUPABASE_PUBLISHABLE_KEY }}'
+			'/actions/workflows/validate-current-head.yml/runs?head_sha=${GITHUB_SHA}'
 		);
+		expect(workflow).toContain('.head_sha == \\"${GITHUB_SHA}\\"');
+		expect(workflow).toContain('.head_branch == \\"main\\"');
+		expect(workflow).toContain('.event == \\"push\\"');
+		expect(workflow).toContain('.status == \\"completed\\"');
+		expect(workflow).toContain('.conclusion == \\"success\\"');
+		expect(workflow).toContain(
+			'No successful Validate current head push run became available for main SHA $GITHUB_SHA.'
+		);
+	});
+
+	it('requires the complete public Supabase and Google Drive release configuration', () => {
+		const workflow = read('.github/workflows/build-deployment-artifact.yml');
+
+		for (const binding of [
+			'PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}',
+			'PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_SUPABASE_PUBLISHABLE_KEY }}',
+			'PUBLIC_GOOGLE_CLIENT_ID: ${{ secrets.PUBLIC_GOOGLE_CLIENT_ID }}',
+			'PUBLIC_GOOGLE_PICKER_API_KEY: ${{ secrets.PUBLIC_GOOGLE_PICKER_API_KEY }}',
+			'PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER: ${{ secrets.PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER }}'
+		]) {
+			expect(workflow).toContain(binding);
+		}
+		expect(workflow).toContain('run: node tools/checks/check-staging-public-config.mjs');
 		expect(workflow).toContain('pnpm install --frozen-lockfile');
 		expect(workflow).toContain('pnpm verify');
-		expect(workflow).toContain('PUBLIC_SUPABASE_URL');
-		expect(workflow).toContain('PUBLIC_SUPABASE_PUBLISHABLE_KEY');
 		expect(workflow.toLowerCase()).not.toContain('service_role');
 		expect(workflow).not.toContain('GEMINI_API_KEY');
+	});
+
+	it('proves every required public value is frozen into the built site', () => {
+		const workflow = read('.github/workflows/build-deployment-artifact.yml');
+
+		for (const name of [
+			'PUBLIC_SUPABASE_URL',
+			'PUBLIC_SUPABASE_PUBLISHABLE_KEY',
+			'PUBLIC_GOOGLE_CLIENT_ID',
+			'PUBLIC_GOOGLE_PICKER_API_KEY',
+			'PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER'
+		]) {
+			expect(workflow).toContain(`grep -R -F -- "$${name}" build >/dev/null`);
+		}
+		expect(workflow).not.toContain('if [[ -n "$PUBLIC_GOOGLE_CLIENT_ID" ]]');
 	});
 
 	it('verifies the packaged artifact with the reusable post-download command before upload', () => {
@@ -60,6 +103,7 @@ describe('deployable static artifact workflow', () => {
 		);
 		expect(packager).toContain('cp -a build/. "$output_name/site/"');
 		expect(packager).toContain('cp package.json pnpm-lock.yaml "$output_name/source/"');
+		expect(packager).toContain('tools/checks/check-deployed-ui.mjs');
 		expect(packager).toContain("echo 'schema_version=2'");
 		expect(packager).toContain('echo "source_commit=$source_commit"');
 		expect(packager).toContain("echo 'target_environment=staging'");

@@ -1,19 +1,11 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { RequestBodyTooLargeError, readBoundedJson } from '../_shared/bounded-json.ts';
 import { corsHeaders, parseAppOrigin } from '../_shared/cors.ts';
-import { generateDesktopWorkerCredential } from '../_shared/desktop-worker-auth.ts';
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PAIRING_CODE = /^[0-9A-Fa-f]{4}(-[0-9A-Fa-f]{4}){3}$/;
 const SHA256_HEX = /^[0-9a-f]{64}$/;
 const MAX_CAPABILITIES_BYTES = 12 * 1024;
 const MAX_REQUEST_BODY_BYTES = 16 * 1024;
-
-type PairRequest = Readonly<{
-	action: 'pair';
-	label: string;
-	capabilities: Readonly<Record<string, unknown>>;
-}>;
 
 type RedeemRequest = Readonly<{
 	action: 'redeem';
@@ -22,13 +14,6 @@ type RedeemRequest = Readonly<{
 	capabilities: Readonly<Record<string, unknown>>;
 	credentialDigest: string;
 }>;
-
-type RevokeRequest = Readonly<{
-	action: 'revoke';
-	deviceId: string;
-}>;
-
-type WorkerDeviceRequest = PairRequest | RedeemRequest | RevokeRequest;
 
 function json(status: number, body: Record<string, unknown>, appOrigin: string | null) {
 	return new Response(JSON.stringify(body), {
@@ -84,15 +69,9 @@ function parseCapabilities(value: unknown): Readonly<Record<string, unknown>> | 
 	return Object.freeze({ ...(value as Record<string, unknown>) });
 }
 
-function parsePairRequest(record: Record<string, unknown>): PairRequest | null {
-	if (!hasExactKeys(record, ['label', 'capabilities'])) return null;
-	const label = parseLabel(record.label);
-	const capabilities = parseCapabilities(record.capabilities);
-	if (!label || !capabilities) return null;
-	return Object.freeze({ action: 'pair', label, capabilities });
-}
-
-function parseRedeemRequest(record: Record<string, unknown>): RedeemRequest | null {
+function parseRedeemRequest(value: unknown): RedeemRequest | null {
+	if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+	const record = value as Record<string, unknown>;
 	if (
 		!hasExactKeys(record, ['action', 'pairingCode', 'label', 'capabilities', 'credentialDigest'])
 	) {
@@ -120,20 +99,6 @@ function parseRedeemRequest(record: Record<string, unknown>): RedeemRequest | nu
 	});
 }
 
-function parseWorkerDeviceRequest(value: unknown): WorkerDeviceRequest | null {
-	if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
-	const record = value as Record<string, unknown>;
-	if (record.action === 'redeem') return parseRedeemRequest(record);
-	if (hasExactKeys(record, ['action', 'deviceId'])) {
-		return record.action === 'revoke' &&
-			typeof record.deviceId === 'string' &&
-			UUID.test(record.deviceId)
-			? Object.freeze({ action: 'revoke', deviceId: record.deviceId })
-			: null;
-	}
-	return parsePairRequest(record);
-}
-
 function canonicalJson(value: unknown): string {
 	if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
 	if (value && typeof value === 'object') {
@@ -158,7 +123,6 @@ function parseRegisteredDevice(value: unknown): Readonly<{
 	const record = value as Record<string, unknown>;
 	if (
 		typeof record.deviceId !== 'string' ||
-		!UUID.test(record.deviceId) ||
 		typeof record.label !== 'string' ||
 		record.status !== 'active' ||
 		record.capabilities === null ||
@@ -178,37 +142,11 @@ function parseRegisteredDevice(value: unknown): Readonly<{
 	});
 }
 
-function parseRevokedDevice(
-	value: unknown,
-	expectedDeviceId: string
-): Readonly<{
-	deviceId: string;
-	status: 'revoked';
-	revokedAt: string;
-	requeuedJobs: number;
-}> | null {
-	if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
-	const record = value as Record<string, unknown>;
-	if (
-		record.deviceId !== expectedDeviceId ||
-		record.status !== 'revoked' ||
-		typeof record.revokedAt !== 'string' ||
-		!Number.isFinite(Date.parse(record.revokedAt)) ||
-		!Number.isSafeInteger(record.requeuedJobs) ||
-		(record.requeuedJobs as number) < 0
-	) {
-		return null;
-	}
-	return Object.freeze({
-		deviceId: expectedDeviceId,
-		status: 'revoked',
-		revokedAt: record.revokedAt,
-		requeuedJobs: record.requeuedJobs as number
-	});
-}
-
 Deno.serve(async (request) => {
-	const appOrigin = parseAppOrigin(Deno.env.get('APP_ORIGIN'));
+	const appOrigin = parseAppOrigin(
+		Deno.env.get('APP_ORIGIN_ALLOWLIST') ?? Deno.env.get('APP_ORIGIN'),
+		request.headers.get('Origin')
+	);
 	const respond = (status: number, body: Record<string, unknown>) => json(status, body, appOrigin);
 
 	if (!appOrigin) return respond(503, { code: 'desktop_ocr_not_configured' });
@@ -223,108 +161,38 @@ Deno.serve(async (request) => {
 			? respond(413, { code: 'pair_request_too_large' })
 			: respond(400, { code: 'invalid_json' });
 	}
-	const input = parseWorkerDeviceRequest(rawBody);
+	const input = parseRedeemRequest(rawBody);
 	if (!input) return respond(400, { code: 'invalid_pair_request' });
 
 	const supabaseUrl = Deno.env.get('SUPABASE_URL');
-	const publishableKey = Deno.env.get('SUPABASE_ANON_KEY');
-	if (!supabaseUrl || !publishableKey) {
+	const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+	if (!supabaseUrl || !serviceRoleKey) {
 		return respond(503, { code: 'desktop_ocr_not_configured' });
 	}
 
-	if (input.action === 'redeem') {
-		const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-		if (!serviceRoleKey) return respond(503, { code: 'desktop_ocr_not_configured' });
-		const admin = createClient(supabaseUrl, serviceRoleKey, {
-			auth: { persistSession: false, autoRefreshToken: false }
-		});
-		const { data, error } = await admin.rpc('redeem_ocr_worker_pairing_code', {
-			pairing_code: input.pairingCode,
-			device_label: input.label,
-			digest_hex: input.credentialDigest,
-			device_capabilities: input.capabilities
-		});
-		if (error) return respond(409, { code: 'desktop_ocr_pairing_code_unavailable' });
-		const device = parseRegisteredDevice(data);
-		if (
-			!device ||
-			device.label !== input.label ||
-			canonicalJson(device.capabilities) !== canonicalJson(input.capabilities)
-		) {
-			return respond(503, { code: 'desktop_ocr_pair_failed' });
-		}
-		return respond(201, {
-			deviceId: device.deviceId,
-			label: device.label,
-			status: device.status,
-			capabilities: device.capabilities,
-			createdAt: device.createdAt
-		});
-	}
-
-	const authorization = request.headers.get('Authorization');
-	if (!authorization?.startsWith('Bearer ')) {
-		return respond(401, { code: 'authentication_required' });
-	}
-
-	const userClient = createClient(supabaseUrl, publishableKey, {
-		global: { headers: { Authorization: authorization } },
-		auth: { persistSession: false, autoRefreshToken: false }
-	});
-	const {
-		data: { user },
-		error: userError
-	} = await userClient.auth.getUser();
-	if (userError || !user) return respond(401, { code: 'authentication_required' });
-
-	const { data: allowed, error: allowedError } = await userClient
-		.from('app_users')
-		.select('is_active')
-		.eq('user_id', user.id)
-		.eq('is_active', true)
-		.maybeSingle();
-	if (allowedError || !allowed) return respond(403, { code: 'desktop_ocr_forbidden' });
-
-	if (input.action === 'revoke') {
-		const { data, error } = await userClient.rpc('revoke_ocr_worker_device', {
-			target_device_id: input.deviceId
-		});
-		if (error) return respond(503, { code: 'desktop_ocr_revoke_failed' });
-		const revoked = parseRevokedDevice(data, input.deviceId);
-		if (!revoked) return respond(503, { code: 'desktop_ocr_revoke_failed' });
-		return respond(200, {
-			deviceId: revoked.deviceId,
-			status: revoked.status,
-			revokedAt: revoked.revokedAt,
-			requeuedJobs: revoked.requeuedJobs
-		});
-	}
-
-	const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-	if (!serviceRoleKey) return respond(503, { code: 'desktop_ocr_not_configured' });
-
-	const generated = await generateDesktopWorkerCredential();
 	const admin = createClient(supabaseUrl, serviceRoleKey, {
 		auth: { persistSession: false, autoRefreshToken: false }
 	});
-	const { data, error } = await admin.rpc('register_ocr_worker_device', {
-		target_user_id: user.id,
+	const { data, error } = await admin.rpc('redeem_ocr_worker_pairing_code', {
+		pairing_code: input.pairingCode,
 		device_label: input.label,
-		digest_hex: generated.digestHex,
+		digest_hex: input.credentialDigest,
 		device_capabilities: input.capabilities
 	});
-	if (error) return respond(503, { code: 'desktop_ocr_pair_failed' });
+	if (error) return respond(409, { code: 'desktop_ocr_pairing_code_unavailable' });
 	const device = parseRegisteredDevice(data);
-	if (!device || device.label !== input.label) {
+	if (
+		!device ||
+		device.label !== input.label ||
+		canonicalJson(device.capabilities) !== canonicalJson(input.capabilities)
+	) {
 		return respond(503, { code: 'desktop_ocr_pair_failed' });
 	}
-
 	return respond(201, {
 		deviceId: device.deviceId,
 		label: device.label,
 		status: device.status,
 		capabilities: device.capabilities,
-		createdAt: device.createdAt,
-		credential: generated.credential
+		createdAt: device.createdAt
 	});
 });

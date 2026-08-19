@@ -38,12 +38,9 @@
 
 <div class="page" aria-labelledby="page-title">
 	<header>
-		<p class="eyebrow">Operação local e gratuita</p>
+		<p class="eyebrow">Atividade do fichário</p>
 		<h1 id="page-title">Uso</h1>
-		<p>
-			Contadores informativos do seu próprio arquivo. Eles não criam franquia nem bloqueiam uma
-			chamada que o provedor ainda aceitaria.
-		</p>
+		<p>Veja um resumo dos documentos, páginas e leituras recentes.</p>
 	</header>
 
 	{#if loading}
@@ -59,56 +56,46 @@
 			<article><span>Documentos</span><strong>{overview.totals.documents}</strong></article>
 			<article><span>Páginas</span><strong>{overview.totals.pages}</strong></article>
 			<article class:attention={overview.totals.pendingPages > 0}>
-				<span>Pendentes</span><strong>{overview.totals.pendingPages}</strong>
-			</article>
-			<article class:attention={overview.totals.reviewPages > 0}>
-				<span>Para revisão</span><strong>{overview.totals.reviewPages}</strong>
+				<span>Em processamento</span><strong>{overview.totals.pendingPages}</strong>
 			</article>
 			<article class:danger={overview.totals.failedPages > 0}>
 				<span>Falhas</span><strong>{overview.totals.failedPages}</strong>
 			</article>
 			<article class:quota={overview.totals.blockedQuotaPages > 0}>
-				<span>Cota do provedor</span><strong>{overview.totals.blockedQuotaPages}</strong>
-			</article>
-			<article>
-				<span>Correções manuais</span><strong>{overview.totals.manualReviews}</strong>
+				<span>Aguardando</span><strong>{overview.totals.blockedQuotaPages}</strong>
 			</article>
 		</section>
 
 		<section class="today" aria-labelledby="today-title">
-			<div>
-				<p class="eyebrow">Hoje · {overview.today.date}</p>
-				<h2 id="today-title">Leitura automática</h2>
-				<p>
-					<strong>{overview.today.ocrPages}</strong> páginas ·
-					<strong>{overview.today.ocrBatches}</strong> lotes ·
-					<strong>{overview.today.ocrCalls}</strong> chamadas ·
-					<strong>{overview.today.ocrAttempts}</strong> tentativas
-				</p>
-				<p>
-					Média de {overview.today.averageBatchSize.toLocaleString('pt-BR', {
-						maximumFractionDigits: 2
-					})} páginas por chamada.
-					{#if overview.today.quotaErrors > 0}
-						O provedor registrou {overview.today.quotaErrors}
-						{overview.today.quotaErrors === 1 ? 'bloqueio de cota' : 'bloqueios de cota'}.
-					{/if}
-				</p>
-			</div>
-			<a href="/review/">Abrir pendências</a>
+			<p class="eyebrow">Hoje · {overview.today.date}</p>
+			<h2 id="today-title">Leitura automática</h2>
+			<p>
+				<strong>{overview.today.ocrPages}</strong> páginas ·
+				<strong>{overview.today.ocrBatches}</strong> lotes ·
+				<strong>{overview.today.ocrCalls}</strong> chamadas ·
+				<strong>{overview.today.ocrAttempts}</strong> tentativas
+			</p>
+			<p>
+				Média de {overview.today.averageBatchSize.toLocaleString('pt-BR', {
+					maximumFractionDigits: 2
+				})} páginas por chamada.
+				{#if overview.today.quotaErrors > 0}
+					O provedor registrou {overview.today.quotaErrors}
+					{overview.today.quotaErrors === 1 ? 'bloqueio de cota' : 'bloqueios de cota'}.
+				{/if}
+			</p>
 		</section>
 
 		<section class="history" aria-labelledby="history-title">
 			<div class="section-heading">
 				<div>
 					<p class="eyebrow">Últimos 30 dias</p>
-					<h2 id="history-title">Páginas enviadas ao OCR</h2>
+					<h2 id="history-title">Páginas lidas</h2>
 				</div>
-				<span>Laranja indica cota real do provedor, não limite interno.</span>
 			</div>
 
 			{#if overview.daily.length === 0}
-				<p class="empty-history">Nenhum uso OCR registrado neste período.</p>
+				<p class="empty-history">Nenhuma leitura registrada neste período.</p>
 			{:else}
 				<div class="chart" role="img" aria-label="Histórico diário de páginas processadas">
 					{#each overview.daily as day}
@@ -163,7 +150,7 @@
 	}
 	.metrics {
 		display: grid;
-		grid-template-columns: repeat(4, minmax(0, 1fr));
+		grid-template-columns: repeat(3, minmax(0, 1fr));
 		gap: 0.65rem;
 	}
 	.metrics article {
@@ -200,12 +187,6 @@
 		border-radius: var(--radius-md);
 		background: var(--surface);
 	}
-	.today {
-		display: flex;
-		align-items: end;
-		justify-content: space-between;
-		gap: 1rem;
-	}
 	.today h2,
 	.history h2 {
 		margin-bottom: 0.35rem;
@@ -218,18 +199,6 @@
 	.today p strong {
 		color: var(--ink);
 	}
-	.today a {
-		min-height: 2.5rem;
-		display: inline-flex;
-		align-items: center;
-		padding: 0.55rem 0.8rem;
-		border-radius: var(--radius-sm);
-		background: var(--archive);
-		color: white;
-		font-size: 0.8rem;
-		font-weight: 720;
-		white-space: nowrap;
-	}
 	.section-heading {
 		display: flex;
 		align-items: end;
@@ -237,7 +206,6 @@
 		gap: 1rem;
 		margin-bottom: 1rem;
 	}
-	.section-heading > span,
 	.generated {
 		color: var(--muted);
 		font-size: 0.76rem;
@@ -311,7 +279,6 @@
 		.metrics {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}
-		.today,
 		.section-heading {
 			align-items: flex-start;
 			flex-direction: column;
