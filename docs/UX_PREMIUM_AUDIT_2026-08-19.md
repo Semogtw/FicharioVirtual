@@ -14,9 +14,9 @@ Tratar o Fichário Virtual como um produto pronto para uso cotidiano, não apena
 - Importação de imagens/PDFs, captura por câmera e documento de fotos.
 - Pesquisa textual/por significado e abertura de resultado no documento original.
 - Documento, navegação entre páginas, correção e exclusão.
-- Fila de revisão.
+- Fila de revisão e rascunhos.
 - Cobertura de conteúdo e entrada por foto.
-- Google Drive, conflitos e filas relacionadas.
+- Google Drive, importação, pendências, conflitos e recuperação.
 - Configurações e telas avançadas de processamento/uso.
 
 ## Correções implementadas nesta vistoria
@@ -28,6 +28,7 @@ Tratar o Fichário Virtual como um produto pronto para uso cotidiano, não apena
 - A tela de organização em lote passa a ser descobrível pela navegação da Biblioteca.
 - O topo da tela de Pesquisa não mostra uma segunda caixa de busca concorrente.
 - O falso avatar “A”, que na verdade abria Configurações, foi substituído por um ícone com significado correto.
+- “Fila remota” e “Rascunhos locais” foram simplificados para “Para revisar” e “Rascunhos”.
 
 ### Importação
 
@@ -57,6 +58,14 @@ Tratar o Fichário Virtual como um produto pronto para uso cotidiano, não apena
 - A faixa de páginas não expõe mais estados internos como `pending`, `uploading`, `processing`, `ready` ou `failed`; todos são apresentados em português com rótulos curtos e consistentes.
 - A exclusão continua protegida por diálogo de confirmação e mantém recuperação caso a navegação posterior falhe.
 
+### Google Drive
+
+- As telas já implementadas de mudanças pendentes e resolução de conflitos deixaram de ser rotas escondidas: agora aparecem junto de “Visão geral”, com estado ativo claro.
+- “Importar do Drive” permanece destacado como ação contextual, separado das abas de diagnóstico/sincronização.
+- A tela de conflitos deixou de exigir termos como “snapshot remoto”, “estado local” e “ausência física”; as escolhas agora explicam a consequência em linguagem de produto.
+- A tela de pendências usa “Sincronizar agora”, estados mais curtos e mensagens com pluralização natural em vez de textos de fila/worker.
+- Conflitos continuam isolados por item e as duas resoluções seguras existentes foram preservadas, apenas com rótulos compreensíveis.
+
 ### Login
 
 - Textos sobre índice vetorial/plano interno foram substituídos por benefícios compreensíveis para o usuário.
@@ -70,8 +79,7 @@ Tratar o Fichário Virtual como um produto pronto para uso cotidiano, não apena
 1. Trocar carregamentos textuais remanescentes em Revisar, Organizar, Tags e detalhe de Caderno pelos padrões de skeleton/loading já usados nas telas principais.
 2. Tornar cartões de resumo da tela inicial acionáveis quando houver destino natural: Documentos → Biblioteca e Para revisar → Revisar.
 3. Simplificar subtítulos ainda técnicos em telas secundárias, por exemplo “Metadados em lote” e “Organização transversal”.
-4. Melhorar o estado de erro do Drive para manter a ação de recuperação visualmente junto da causa em todas as subtelas.
-5. No construtor de fotos, ocultar ou contextualizar o campo de título quando o modo “Separadas” estiver ativo, já que cada foto seguirá como documento independente.
+4. No construtor de fotos, ocultar ou contextualizar o campo de título quando o modo “Separadas” estiver ativo, já que cada foto seguirá como documento independente.
 
 ### Prioridade baixa / acabamento
 
@@ -93,6 +101,6 @@ Tratar o Fichário Virtual como um produto pronto para uso cotidiano, não apena
 ## Validação esperada antes do merge
 
 - `pnpm verify:full` no SHA final da branch.
-- Contratos unitários para navegação mobile, importação unificada, preservação do rascunho e shell de pesquisa/configurações.
+- Contratos unitários para navegação mobile, importação unificada, preservação do rascunho, shell de pesquisa/configurações e recuperação do Drive.
 - Smoke dos fluxos principais em viewport desktop e mobile sempre que o ambiente de staging/autenticação estiver disponível.
-- Conferir regressões de teclado, foco, estados vazios, botões desabilitados e mensagens de erro durante importação e pesquisa.
+- Conferir regressões de teclado, foco, estados vazios, botões desabilitados e mensagens de erro durante importação, pesquisa e sincronização.
