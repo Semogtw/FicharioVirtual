@@ -16,10 +16,12 @@ function successPayload() {
 					page: 1,
 					width: 1000,
 					height: 2000,
-					appearance: { styles: [{ name: 'handwriting', confidence: 0.9 }] },
 					lines: [
 						{
 							text: 'Olá mundo',
+							appearance: {
+								style: { name: 'handwriting', confidence: 0.9 }
+							},
 							words: [
 								{
 									text: 'Olá',
