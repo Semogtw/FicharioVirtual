@@ -51,7 +51,9 @@ function stage(name, status, detail = null) {
 }
 
 function safeError(error) {
-	return error instanceof Error ? `${error.name}: ${error.message}`.slice(0, 800) : String(error).slice(0, 800);
+	return error instanceof Error
+		? `${error.name}: ${error.message}`.slice(0, 800)
+		: String(error).slice(0, 800);
 }
 
 async function persistReport() {
@@ -106,7 +108,10 @@ async function makePdf() {
 }
 
 async function login(page) {
-	await page.goto(new URL('/login/', target).href, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+	await page.goto(new URL('/login/', target).href, {
+		waitUntil: 'domcontentloaded',
+		timeout: 45_000
+	});
 	await page.locator('#email').fill(email);
 	await page.locator('#password').fill(password);
 	await page.getByRole('button', { name: 'Entrar', exact: true }).click();
@@ -139,11 +144,16 @@ async function waitForQueueTerminal(page, filename, timeoutMs = 180_000) {
 }
 
 async function cleanupDocuments(client) {
-	const { data, error } = await client.from('documents').select('id').eq('original_filename', pdfFilename);
+	const { data, error } = await client
+		.from('documents')
+		.select('id')
+		.eq('original_filename', pdfFilename);
 	if (error) throw error;
 	const ids = [...new Set([...(data ?? []).map((row) => row.id), ...report.created.documents])];
 	for (const id of ids) {
-		const { error: deleteError } = await client.functions.invoke('delete-document', { body: { documentId: id } });
+		const { error: deleteError } = await client.functions.invoke('delete-document', {
+			body: { documentId: id }
+		});
 		if (deleteError) throw deleteError;
 	}
 }
@@ -154,10 +164,15 @@ async function cleanupNotebooks(client) {
 		.select('id')
 		.in('name', [notebookName, childNotebookName]);
 	if (error) throw error;
-	const ids = [...new Set([...(data ?? []).map((row) => row.id), ...report.created.notebooks])].reverse();
+	const ids = [
+		...new Set([...(data ?? []).map((row) => row.id), ...report.created.notebooks])
+	].reverse();
 	for (const id of ids) {
-		const { data: deleted, error: deleteError } = await client.rpc('delete_notebook', { target_notebook_id: id });
-		if (deleteError || deleted !== true) throw deleteError ?? new Error('delete_notebook rejected cleanup');
+		const { data: deleted, error: deleteError } = await client.rpc('delete_notebook', {
+			target_notebook_id: id
+		});
+		if (deleteError || deleted !== true)
+			throw deleteError ?? new Error('delete_notebook rejected cleanup');
 	}
 }
 
@@ -169,7 +184,10 @@ let context = null;
 
 try {
 	stage('backend-auth', 'running');
-	const { data: signIn, error: signInError } = await client.auth.signInWithPassword({ email, password });
+	const { data: signIn, error: signInError } = await client.auth.signInWithPassword({
+		email,
+		password
+	});
 	if (signInError || !signIn.session) throw new Error('Staging credentials could not authenticate');
 	stage('backend-auth', 'pass');
 
@@ -178,7 +196,8 @@ try {
 	const page = await context.newPage();
 	page.on('pageerror', (error) => report.browser.pageErrors.push(safeError(error)));
 	page.on('response', (response) => {
-		if (response.status() >= 500) report.browser.serverErrors.push(`${response.status()} ${response.url()}`.slice(0, 500));
+		if (response.status() >= 500)
+			report.browser.serverErrors.push(`${response.status()} ${response.url()}`.slice(0, 500));
 	});
 
 	stage('real-login', 'running');
@@ -218,19 +237,28 @@ try {
 	stage('pdf-import', 'pass', usableDocument.status);
 
 	stage('library-to-notebook', 'running');
-	await page.goto(new URL(`/notebooks/${notebook.id}/`, target).href, { waitUntil: 'domcontentloaded' });
+	await page.goto(new URL(`/notebooks/${notebook.id}/`, target).href, {
+		waitUntil: 'domcontentloaded'
+	});
 	await page.getByRole('button', { name: 'Da biblioteca', exact: true }).click();
 	const picker = page.locator('section.library-picker');
 	await picker.getByLabel('Buscar na biblioteca', { exact: true }).fill(usableDocument.title);
 	const row = picker.locator('li').filter({ hasText: usableDocument.title }).first();
 	await row.getByRole('button', { name: 'Adicionar', exact: true }).click();
-	const moved = await waitForRow(client, 'documents', { id: imported.id, notebook_id: notebook.id });
+	const moved = await waitForRow(client, 'documents', {
+		id: imported.id,
+		notebook_id: notebook.id
+	});
 	if (!moved) throw new Error('Document was not moved to notebook');
 	stage('library-to-notebook', 'pass');
 
 	stage('document-original-first', 'running');
-	await page.goto(new URL(`/documents/${imported.id}/`, target).href, { waitUntil: 'domcontentloaded' });
-	await page.getByRole('heading', { name: 'Original', exact: true }).waitFor({ state: 'visible', timeout: 30_000 });
+	await page.goto(new URL(`/documents/${imported.id}/`, target).href, {
+		waitUntil: 'domcontentloaded'
+	});
+	await page
+		.getByRole('heading', { name: 'Original', exact: true })
+		.waitFor({ state: 'visible', timeout: 30_000 });
 	if ((await page.getByLabel(/Texto corrigido/i).count()) > 0) {
 		throw new Error('Removed manual review editor is visible');
 	}
@@ -240,11 +268,15 @@ try {
 	stage('document-original-first', 'pass');
 
 	stage('search-original', 'running');
-	await page.goto(new URL(`/search/?q=${encodeURIComponent(runToken)}`, target).href, { waitUntil: 'domcontentloaded' });
+	await page.goto(new URL(`/search/?q=${encodeURIComponent(runToken)}`, target).href, {
+		waitUntil: 'domcontentloaded'
+	});
 	const result = page.locator(`section.results a[href^="/documents/${imported.id}/"]`).first();
 	await result.waitFor({ state: 'visible', timeout: 45_000 });
 	await result.click();
-	await page.getByText(/Aberto a partir da busca por/i).waitFor({ state: 'visible', timeout: 20_000 });
+	await page
+		.getByText(/Aberto a partir da busca por/i)
+		.waitFor({ state: 'visible', timeout: 20_000 });
 	await page.getByRole('heading', { name: 'Original', exact: true }).waitFor({ state: 'visible' });
 	stage('search-original', 'pass');
 
@@ -252,7 +284,10 @@ try {
 	await page.goto(new URL('/library/', target).href, { waitUntil: 'domcontentloaded' });
 	await page.getByLabel('Caderno', { exact: true }).selectOption(notebook.id);
 	await page.getByLabel('Tipo', { exact: true }).selectOption('pdf');
-	await page.getByText(usableDocument.title, { exact: true }).first().waitFor({ state: 'visible', timeout: 30_000 });
+	await page
+		.getByText(usableDocument.title, { exact: true })
+		.first()
+		.waitFor({ state: 'visible', timeout: 30_000 });
 	await assertNoFailure(page, 'library filters');
 	stage('library-filters', 'pass');
 
@@ -261,7 +296,8 @@ try {
 	const downloadPromise = page.waitForEvent('download', { timeout: 45_000 });
 	await page.getByRole('button', { name: 'Baixar cópia', exact: true }).click();
 	const download = await downloadPromise;
-	if (!download.suggestedFilename().endsWith('.json')) throw new Error('Portable export is not JSON');
+	if (!download.suggestedFilename().endsWith('.json'))
+		throw new Error('Portable export is not JSON');
 	const downloadedPath = await download.path();
 	if (!downloadedPath) throw new Error('Portable export did not create a file');
 	const exported = JSON.parse(await readFile(downloadedPath, 'utf8'));
@@ -271,10 +307,23 @@ try {
 	stage('mobile-responsive-sweep', 'running');
 	const mobile = await context.newPage();
 	await mobile.setViewportSize({ width: 390, height: 844 });
-	for (const route of ['/library/', '/notebooks/', '/import/', '/search/', '/drive/', '/settings/', '/coverage/']) {
-		await mobile.goto(new URL(route, target).href, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+	for (const route of [
+		'/library/',
+		'/notebooks/',
+		'/import/',
+		'/search/',
+		'/drive/',
+		'/settings/',
+		'/coverage/'
+	]) {
+		await mobile.goto(new URL(route, target).href, {
+			waitUntil: 'domcontentloaded',
+			timeout: 45_000
+		});
 		await mobile.locator('h1').first().waitFor({ state: 'visible', timeout: 20_000 });
-		const overflow = await mobile.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+		const overflow = await mobile.evaluate(
+			() => document.documentElement.scrollWidth - window.innerWidth
+		);
 		if (overflow > 2) throw new Error(`${route} overflows mobile viewport by ${overflow}px`);
 		await assertNoFailure(mobile, `mobile ${route}`);
 	}
@@ -282,7 +331,9 @@ try {
 	stage('mobile-responsive-sweep', 'pass');
 
 	stage('document-delete', 'running');
-	await page.goto(new URL(`/documents/${imported.id}/`, target).href, { waitUntil: 'domcontentloaded' });
+	await page.goto(new URL(`/documents/${imported.id}/`, target).href, {
+		waitUntil: 'domcontentloaded'
+	});
 	await page.getByRole('button', { name: 'Excluir', exact: true }).click();
 	const deleteDialog = page.getByRole('alertdialog');
 	await deleteDialog.getByRole('button', { name: 'Excluir', exact: true }).click();
@@ -292,19 +343,24 @@ try {
 		.select('id')
 		.eq('id', imported.id)
 		.maybeSingle();
-	if (deletedError || deletedDocument !== null) throw new Error('UI document deletion was not persisted');
+	if (deletedError || deletedDocument !== null)
+		throw new Error('UI document deletion was not persisted');
 	report.created.documents = report.created.documents.filter((id) => id !== imported.id);
 	stage('document-delete', 'pass');
 
-	if (report.browser.pageErrors.length > 0) throw new Error(`Browser page errors: ${report.browser.pageErrors.join(' | ')}`);
-	if (report.browser.serverErrors.length > 0) throw new Error(`Server 5xx responses: ${report.browser.serverErrors.join(' | ')}`);
+	if (report.browser.pageErrors.length > 0)
+		throw new Error(`Browser page errors: ${report.browser.pageErrors.join(' | ')}`);
+	if (report.browser.serverErrors.length > 0)
+		throw new Error(`Server 5xx responses: ${report.browser.serverErrors.join(' | ')}`);
 	report.status = 'pass';
 } catch (error) {
 	report.status = 'fail';
 	report.error = safeError(error);
 	stage('failure', 'fail', report.error);
 	const page = context?.pages()[0];
-	await page?.screenshot({ path: `${evidenceDir}/failure.png`, fullPage: true }).catch(() => undefined);
+	await page
+		?.screenshot({ path: `${evidenceDir}/failure.png`, fullPage: true })
+		.catch(() => undefined);
 	process.exitCode = 1;
 } finally {
 	try {
