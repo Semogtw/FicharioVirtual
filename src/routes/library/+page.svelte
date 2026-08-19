@@ -35,6 +35,11 @@
 	let hasActiveFilters = $derived(
 		Boolean(notebookId || kind || status || createdFrom || createdTo)
 	);
+	let dateRangeError = $derived(
+		createdFrom && createdTo && createdFrom > createdTo
+			? 'A data inicial precisa ser anterior ou igual à data final.'
+			: null
+	);
 
 	function clearFilters() {
 		notebookId = '';
@@ -47,6 +52,13 @@
 
 	async function load(reset: boolean) {
 		if (!reset && loadingMore) return;
+		if (dateRangeError) {
+			requests.next();
+			loading = false;
+			loadingMore = false;
+			error = null;
+			return;
+		}
 		const requestVersion = reset ? requests.next() : requests.current();
 		if (reset) loading = true;
 		else loadingMore = true;
@@ -160,14 +172,24 @@
 			<input
 				type="date"
 				aria-label="De"
+				aria-invalid={dateRangeError ? 'true' : undefined}
 				bind:value={createdFrom}
 				onchange={() => void load(true)}
 			/>
 		</label>
 		<label>
 			<span>Até</span>
-			<input type="date" aria-label="Até" bind:value={createdTo} onchange={() => void load(true)} />
+			<input
+				type="date"
+				aria-label="Até"
+				aria-invalid={dateRangeError ? 'true' : undefined}
+				bind:value={createdTo}
+				onchange={() => void load(true)}
+			/>
 		</label>
+		{#if dateRangeError}
+			<p class="filter-validation" role="alert">{dateRangeError}</p>
+		{/if}
 		{#if hasActiveFilters}
 			<div class="filter-actions">
 				<span>Filtros ativos</span>
@@ -297,6 +319,17 @@
 		border-radius: var(--radius-sm);
 		background: var(--surface-strong);
 		color: var(--ink);
+	}
+
+	input[aria-invalid='true'] {
+		border-color: var(--danger);
+	}
+
+	.filter-validation {
+		grid-column: 1 / -1;
+		margin: 0;
+		color: var(--danger);
+		font-size: 0.78rem;
 	}
 
 	.filter-actions {
