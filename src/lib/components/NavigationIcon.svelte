@@ -4,7 +4,6 @@
 		| 'library'
 		| 'notebooks'
 		| 'import'
-		| 'review'
 		| 'coverage'
 		| 'drive'
 		| 'settings'
@@ -43,10 +42,6 @@
 		<path d="M12 3v12" />
 		<path d="m7.5 10.5 4.5 4.5 4.5-4.5" />
 		<path d="M5 14.5V20h14v-5.5" />
-	{:else if name === 'review'}
-		<path d="M5 3.5h10l4 4V20H5z" />
-		<path d="M15 3.5V8h4" />
-		<path d="m8 14 2.2 2.2L15.5 11" />
 	{:else if name === 'coverage'}
 		<path d="M5 4h14v16H5z" />
 		<path d="m8 9 1.5 1.5L12 8" />
