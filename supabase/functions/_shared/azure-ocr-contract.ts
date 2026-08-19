@@ -87,15 +87,21 @@ function normalizedBox(
 	const maxY = Math.max(...ys);
 	if (maxX <= minX || maxY <= minY) return null;
 
-	const left = Math.max(0, Math.min(STORED_COORDINATE_MAX - 1, Math.round((minX / width) * 10_000)));
-	const top = Math.max(0, Math.min(STORED_COORDINATE_MAX - 1, Math.round((minY / height) * 10_000)));
+	const left = Math.max(
+		0,
+		Math.min(STORED_COORDINATE_MAX - 1, Math.round((minX / width) * STORED_COORDINATE_MAX))
+	);
+	const top = Math.max(
+		0,
+		Math.min(STORED_COORDINATE_MAX - 1, Math.round((minY / height) * STORED_COORDINATE_MAX))
+	);
 	const right = Math.max(
 		left + 1,
-		Math.min(STORED_COORDINATE_MAX, Math.round((maxX / width) * 10_000))
+		Math.min(STORED_COORDINATE_MAX, Math.round((maxX / width) * STORED_COORDINATE_MAX))
 	);
 	const bottom = Math.max(
 		top + 1,
-		Math.min(STORED_COORDINATE_MAX, Math.round((maxY / height) * 10_000))
+		Math.min(STORED_COORDINATE_MAX, Math.round((maxY / height) * STORED_COORDINATE_MAX))
 	);
 	if (right > STORED_COORDINATE_MAX || bottom > STORED_COORDINATE_MAX) return null;
 	return Object.freeze([text, left, top, right, bottom] as const);
@@ -107,19 +113,23 @@ function confidence(value: unknown): number | null {
 		: null;
 }
 
-function contentClass(readResult: Record<string, unknown>): OcrContentClass {
-	const appearance = record(readResult.appearance);
-	if (!appearance || !Array.isArray(appearance.styles)) return 'unknown';
-	let handwriting = false;
-	let other = false;
-	for (const rawStyle of appearance.styles) {
-		const style = record(rawStyle);
-		if (!style) continue;
-		if (style.name === 'handwriting') handwriting = true;
-		else if (typeof style.name === 'string') other = true;
+function lineStyleName(line: Record<string, unknown>): string | null {
+	const appearance = record(line.appearance);
+	const style = record(appearance?.style);
+	return typeof style?.name === 'string' && style.name.length <= 64 ? style.name : null;
+}
+
+function contentClass(lines: readonly Record<string, unknown>[]): OcrContentClass {
+	let handwriting = 0;
+	let explicitOther = 0;
+	for (const line of lines) {
+		const styleName = lineStyleName(line);
+		if (styleName === 'handwriting') handwriting += 1;
+		else if (styleName !== null) explicitOther += 1;
 	}
-	if (handwriting && other) return 'mixed';
-	return handwriting ? 'handwriting' : 'unknown';
+	if (handwriting > 0 && explicitOther > 0) return 'mixed';
+	if (handwriting > 0 && handwriting === lines.length) return 'handwriting';
+	return 'unknown';
 }
 
 function parseSucceededPage(
@@ -140,6 +150,7 @@ function parseSucceededPage(
 	}
 
 	const lines: string[] = [];
+	const parsedLines: Record<string, unknown>[] = [];
 	const geometry: OcrWordGeometry[] = [];
 	let uncertain = false;
 	for (const rawLine of readResult.lines) {
@@ -148,6 +159,7 @@ function parseSucceededPage(
 		const lineText = line.text.trimEnd();
 		if (hasForbiddenControlCharacter(lineText)) return null;
 		lines.push(lineText);
+		parsedLines.push(line);
 		if (!Array.isArray(line.words)) continue;
 		for (const rawWord of line.words) {
 			if (geometry.length >= MAX_WORDS) return null;
@@ -184,7 +196,7 @@ function parseSucceededPage(
 		text,
 		warnings: Object.freeze(warnings),
 		needsReview: warnings.length > 0,
-		contentClass: contentClass(readResult),
+		contentClass: contentClass(parsedLines),
 		wordGeometry: Object.freeze(geometry)
 	});
 }
