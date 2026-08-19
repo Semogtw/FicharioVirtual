@@ -57,7 +57,11 @@ async function kick(signal?: AbortSignal) {
 async function readCompletedPageState(pageId: string): Promise<OcrRunResult | null> {
 	try {
 		const client = getSupabaseClient() as unknown as PageStateQueryClient;
-		const { data, error } = await client.from('pages').select('status').eq('id', pageId).maybeSingle();
+		const { data, error } = await client
+			.from('pages')
+			.select('status')
+			.eq('id', pageId)
+			.maybeSingle();
 		if (error || data === null) return null;
 		if (data.status === 'ready') {
 			return Object.freeze({ state: 'complete' as const, needsReview: false });
