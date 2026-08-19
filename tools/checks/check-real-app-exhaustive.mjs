@@ -37,7 +37,6 @@ const pdfText = `Eletromagnetismo aplicado ao campo magnetico. Marcador ${runTok
 const organizedTitle = `Documento organizado ${runToken}`;
 const tagName = `Tag ${runToken}`;
 const renamedTagName = `Tag renomeada ${runToken}`;
-const draftText = `${pdfText}\nRascunho local ${runToken}`;
 
 const report = {
 	target: target.origin,
@@ -218,8 +217,8 @@ try {
 		['/library/tags/', 'Tags'],
 		['/library/organize/', 'Organizar documentos'],
 		['/drive/', 'Arquivos no Drive'],
-		['/drive/conflicts/', 'Conflitos do Google Drive'],
-		['/drive/jobs/', 'Mudanças locais'],
+		['/drive/conflicts/', 'Conflitos de sincronização'],
+		['/drive/jobs/', 'Pendências de sincronização'],
 		['/settings/computers/', 'Computadores'],
 		['/settings/computers/queue/', 'Fila de leitura']
 	]) {
@@ -258,12 +257,10 @@ try {
 			mimeType: 'application/pdf',
 			buffer: await makePdf()
 		});
-	await page
-		.getByText(/arquivo\(s\) adicionados\./i)
-		.waitFor({ state: 'visible', timeout: 25_000 });
+	await page.getByText(/arquivo adicionado\./i).waitFor({ state: 'visible', timeout: 25_000 });
 	const imported = await waitForRow(client, 'documents', { original_filename: pdfFilename });
 	report.created.documents.push(imported.id);
-	const importedPage = await waitForNativeText(client, imported.id);
+	await waitForNativeText(client, imported.id);
 	stage('native-pdf-fixture', 'pass');
 
 	stage('library-date-filter', 'running');
@@ -275,9 +272,9 @@ try {
 		.waitFor({ state: 'visible', timeout: 20_000 });
 	await page.getByLabel('De', { exact: true }).fill('2099-01-01');
 	await page
-		.getByText('Nenhum documento neste recorte', { exact: true })
+		.getByText('Nenhum documento com esses filtros', { exact: true })
 		.waitFor({ state: 'visible', timeout: 20_000 });
-	await page.getByLabel('De', { exact: true }).fill('');
+	await page.getByRole('button', { name: 'Limpar filtros', exact: true }).click();
 	await page
 		.getByText(imported.title, { exact: true })
 		.first()
@@ -348,8 +345,10 @@ try {
 	}
 	if (!createdTag || createdTag.document_count !== 1)
 		throw new Error('Tag membership was not persisted');
-	page.once('dialog', (dialog) => dialog.accept(renamedTagName));
 	await page.getByRole('button', { name: 'Renomear', exact: true }).click();
+	const renameDialog = page.getByRole('dialog', { name: 'Renomear tag' });
+	await renameDialog.getByLabel('Novo nome', { exact: true }).fill(renamedTagName);
+	await renameDialog.getByRole('button', { name: 'Renomear', exact: true }).click();
 	await page
 		.getByText('Tag renomeada.', { exact: true })
 		.waitFor({ state: 'visible', timeout: 20_000 });
@@ -357,8 +356,9 @@ try {
 		.getByText(renamedTagName, { exact: true })
 		.first()
 		.waitFor({ state: 'visible', timeout: 20_000 });
-	page.once('dialog', (dialog) => dialog.accept());
 	await page.getByRole('button', { name: 'Excluir', exact: true }).click();
+	const deleteTagDialog = page.getByRole('dialog', { name: 'Excluir tag?' });
+	await deleteTagDialog.getByRole('button', { name: 'Excluir', exact: true }).click();
 	await page
 		.getByText('Tag excluída.', { exact: true })
 		.waitFor({ state: 'visible', timeout: 20_000 });
@@ -383,64 +383,14 @@ try {
 	await page
 		.getByText(/Aberto a partir da busca por/)
 		.waitFor({ state: 'visible', timeout: 20_000 });
+	await page.getByRole('heading', { name: 'Original', exact: true }).waitFor({
+		state: 'visible',
+		timeout: 20_000
+	});
+	if ((await page.getByLabel(/Texto corrigido/i).count()) > 0) {
+		throw new Error('Document detail unexpectedly exposed the removed manual review editor');
+	}
 	stage('fuzzy-search', 'pass');
-
-	stage('local-draft-recovery-ui', 'running');
-	const correctionEndpoint = `${new URL(supabaseUrl).origin}/rest/v1/pages*`;
-	await page.route(correctionEndpoint, async (route) => {
-		if (route.request().method() === 'PATCH') {
-			await route.abort('failed');
-			return;
-		}
-		await route.continue();
-	});
-	const correctionEditor = page.getByLabel('Texto corrigido da página 1', { exact: true });
-	await correctionEditor.waitFor({ state: 'visible', timeout: 20_000 });
-	await correctionEditor.fill(draftText);
-	await page.getByRole('button', { name: 'Salvar agora', exact: true }).click();
-	await page
-		.getByRole('alert')
-		.filter({ hasText: 'A correção ficou salva neste dispositivo' })
-		.waitFor({ state: 'visible', timeout: 20_000 });
-	await page.unroute(correctionEndpoint);
-
-	await openRoute(page, '/review/drafts/', 'Rascunhos locais');
-	let draftRow = page
-		.locator('section.drafts article')
-		.filter({ hasText: `Rascunho local ${runToken}` })
-		.first();
-	await draftRow.waitFor({ state: 'visible', timeout: 30_000 });
-	await draftRow.getByRole('link', { name: 'Retomar no editor', exact: true }).click();
-	await page.waitForURL((url) => url.pathname === `/documents/${imported.id}/`, {
-		timeout: 30_000
-	});
-	const resumedEditor = page.getByLabel('Texto corrigido da página 1', { exact: true });
-	await resumedEditor.waitFor({ state: 'visible', timeout: 20_000 });
-	if ((await resumedEditor.inputValue()) !== draftText) {
-		throw new Error('Local correction draft was not restored in the editor');
-	}
-
-	await openRoute(page, '/review/drafts/', 'Rascunhos locais');
-	draftRow = page
-		.locator('section.drafts article')
-		.filter({ hasText: `Rascunho local ${runToken}` })
-		.first();
-	await draftRow.waitFor({ state: 'visible', timeout: 30_000 });
-	page.once('dialog', (dialog) => dialog.accept());
-	await draftRow.getByRole('button', { name: 'Descartar local', exact: true }).click();
-	await page
-		.getByText('Nenhum rascunho local', { exact: true })
-		.waitFor({ state: 'visible', timeout: 20_000 });
-	const { data: pageAfterDraft, error: pageAfterDraftError } = await client
-		.from('pages')
-		.select('corrected_text')
-		.eq('id', importedPage.id)
-		.single();
-	if (pageAfterDraftError) throw pageAfterDraftError;
-	if (pageAfterDraft.corrected_text === draftText) {
-		throw new Error('Failed correction unexpectedly reached the backend');
-	}
-	stage('local-draft-recovery-ui', 'pass');
 
 	stage('desktop-ocr-management-ui', 'running');
 	await openRoute(page, '/settings/computers/', 'Computadores');
