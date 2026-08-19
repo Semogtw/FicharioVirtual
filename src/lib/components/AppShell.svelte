@@ -26,7 +26,6 @@
 		{ href: '/library/', label: 'Biblioteca', icon: 'library' },
 		{ href: '/notebooks/', label: 'Cadernos', icon: 'notebooks' },
 		{ href: '/import/', label: 'Importar', icon: 'import' },
-		{ href: '/review/', label: 'Revisar', icon: 'review' },
 		{ href: '/coverage/', label: 'Cobertura', icon: 'coverage' },
 		{ href: '/drive/', label: 'Drive', icon: 'drive' }
 	] as const;
