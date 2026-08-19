@@ -18,7 +18,8 @@
 	const labels: Record<DriveConflictKind, string> = {
 		ambiguous_order: 'Este item aparece em mais de um lugar no Drive',
 		identity_mismatch: 'O arquivo no Drive não corresponde ao documento esperado',
-		remote_deleted_local_changed: 'O original foi apagado no Drive, mas o Fichário tem mudanças mais recentes',
+		remote_deleted_local_changed:
+			'O original foi apagado no Drive, mas o Fichário tem mudanças mais recentes',
 		local_deleted_remote_changed: 'O item foi removido do Fichário, mas mudou no Drive'
 	};
 
@@ -95,10 +96,12 @@
 		<h2 id="policy-title">O que você pode fazer</h2>
 		<ul>
 			<li>
-				<strong>Tentar novamente:</strong> usa as informações atuais do Fichário para sincronizar o item outra vez.
+				<strong>Tentar novamente:</strong> usa as informações atuais do Fichário para sincronizar o
+				item outra vez.
 			</li>
 			<li>
-				<strong>Manter sem o original:</strong> quando o arquivo foi apagado no Drive, mantém texto, correções e organização disponíveis no Fichário.
+				<strong>Manter sem o original:</strong> quando o arquivo foi apagado no Drive, mantém texto,
+				correções e organização disponíveis no Fichário.
 			</li>
 		</ul>
 	</section>
