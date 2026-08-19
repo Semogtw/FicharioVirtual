@@ -221,8 +221,8 @@ async function waitForQueueEntry(page, filename, { timeoutMs = 180_000, final = 
 			throw new Error(`Detached ArrayBuffer regression reproduced for ${filename}: ${last}`);
 		}
 		if (/Falhou/i.test(last)) throw new Error(`Import failed for ${filename}: ${last}`);
-		if (/Concluído|Pronto para revisão|Já existe/i.test(last)) return last;
-		if (!final && /Leitura em segundo plano/i.test(last)) return last;
+		if (/Concluído|Já existe/i.test(last)) return last;
+		if (!final && /Aguardando leitura/i.test(last)) return last;
 		await page.waitForTimeout(1_500);
 	}
 	throw new Error(`Timed out waiting for import queue entry ${filename}; last state: ${last}`);
@@ -398,7 +398,6 @@ try {
 		['/notebooks/', /Cadernos/i],
 		['/import/', /Adicionar ao fichário/i],
 		['/search/', /Pesquisar no fichário/i],
-		['/review/', /Revis/i],
 		['/drive/', /Arquivos no Drive/i],
 		['/settings/', /Configura/i],
 		['/coverage/', /conteúdo já está no seu fichário/i]
@@ -439,7 +438,7 @@ try {
 		mimeType: 'application/pdf',
 		buffer: await makePdf()
 	});
-	await page.getByText(/arquivo\(s\) adicionados\./i).waitFor({
+	await page.getByText(/arquivo adicionado\./i).waitFor({
 		state: 'visible',
 		timeout: 20_000
 	});
@@ -475,7 +474,7 @@ try {
 		mimeType: 'image/png',
 		buffer: imageBuffer
 	});
-	await page.getByText(/arquivo\(s\) adicionados\./i).waitFor({
+	await page.getByText(/arquivo adicionado\./i).waitFor({
 		state: 'visible',
 		timeout: 20_000
 	});
@@ -507,8 +506,15 @@ try {
 
 	stage('post-import-routes', 'running');
 	await navigateAndCheck(page, `/documents/${pdfDocument.id}/`, /.+/);
+	await page.getByRole('heading', { name: 'Original', exact: true }).waitFor({ state: 'visible' });
+	if ((await page.getByLabel(/Texto corrigido/i).count()) > 0) {
+		throw new Error('PDF document detail exposed the removed manual review editor');
+	}
 	await navigateAndCheck(page, `/documents/${imageDocument.id}/`, /.+/);
-	await navigateAndCheck(page, '/review/', /Revis/i);
+	await page.getByRole('heading', { name: 'Original', exact: true }).waitFor({ state: 'visible' });
+	if ((await page.getByLabel(/Texto corrigido/i).count()) > 0) {
+		throw new Error('Image document detail exposed the removed manual review editor');
+	}
 	await navigateAndCheck(page, '/coverage/', /conteúdo já está no seu fichário/i);
 	await navigateAndCheck(page, '/drive/', /Arquivos no Drive/i);
 	stage('post-import-routes', 'pass');
