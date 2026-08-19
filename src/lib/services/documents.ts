@@ -191,7 +191,11 @@ export async function listDocuments({
 
 	if (resolvedFilters.notebookId) query = query.eq('notebook_id', resolvedFilters.notebookId);
 	if (resolvedFilters.kind) query = query.eq('kind', resolvedFilters.kind);
-	if (resolvedFilters.status) query = query.eq('status', resolvedFilters.status);
+	if (resolvedFilters.status === 'ready') {
+		query = query.in('status', ['ready', 'needs_review']);
+	} else if (resolvedFilters.status) {
+		query = query.eq('status', resolvedFilters.status);
+	}
 	if (resolvedFilters.createdFrom) query = query.gte('created_at', resolvedFilters.createdFrom);
 	if (resolvedFilters.createdTo) query = query.lte('created_at', resolvedFilters.createdTo);
 	if (cursor) {
