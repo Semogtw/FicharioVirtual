@@ -239,12 +239,11 @@ export async function readLocalMediaPreview(key: MediaPreviewCacheKey): Promise<
 	}
 }
 
-export async function writeLocalMediaPreview(key: MediaPreviewCacheKey, blob: Blob): Promise<boolean> {
-	if (
-		blob.size < 1 ||
-		blob.size > MAX_SINGLE_PREVIEW_BYTES ||
-		!blob.type.startsWith('image/')
-	) {
+export async function writeLocalMediaPreview(
+	key: MediaPreviewCacheKey,
+	blob: Blob
+): Promise<boolean> {
+	if (blob.size < 1 || blob.size > MAX_SINGLE_PREVIEW_BYTES || !blob.type.startsWith('image/')) {
 		return false;
 	}
 	let serialized: string;
