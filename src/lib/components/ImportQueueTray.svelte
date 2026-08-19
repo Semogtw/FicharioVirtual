@@ -204,6 +204,19 @@
 		}, interval);
 	}
 
+	$effect(() => {
+		const hasWaiting = entries.some((entry) => entry.item.status === 'waiting');
+		if (!mounted) return;
+		if (!hasWaiting) {
+			if (pollTimer !== null) clearTimeout(pollTimer);
+			pollTimer = null;
+			return;
+		}
+		if (pollTimer === null && !refreshing) {
+			void refreshBackgroundOcr().finally(scheduleBackgroundPoll);
+		}
+	});
+
 	onMount(() => {
 		mounted = true;
 		const refreshWhenVisible = () => {
