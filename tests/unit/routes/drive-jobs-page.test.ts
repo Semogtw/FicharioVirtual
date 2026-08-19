@@ -4,15 +4,17 @@ import { describe, expect, it } from 'vitest';
 const path = 'src/routes/drive/jobs/+page.svelte';
 
 describe('Drive jobs page', () => {
-	it('loads public job receipts and runs one bounded worker batch', () => {
+	it('loads public job receipts and exposes a clear sync action', () => {
 		const source = readFileSync(path, 'utf8');
 
 		expect(source).toContain('listDriveJobs');
 		expect(source).toContain('runPendingDriveJobs');
-		expect(source).toContain("label={running ? 'Executando fila…' : 'Executar mudanças locais'}");
-		expect(source).toContain('Mudanças locais');
-		expect(source).toContain('Tentativa');
+		expect(source).toContain("label={running ? 'Sincronizando…' : 'Sincronizar agora'}");
+		expect(source).toContain('Pendências de sincronização');
+		expect(source).toContain('Tentativas');
 		expect(source).toContain('Próxima tentativa');
+		expect(source).not.toContain('mudança(s)');
+		expect(source).not.toContain('item(ns)');
 	});
 
 	it('does not render payloads, leases or credential material', () => {

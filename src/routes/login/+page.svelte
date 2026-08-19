@@ -8,6 +8,7 @@
 
 	let email = $state('');
 	let password = $state('');
+	let showPassword = $state(false);
 	let submitting = $state(false);
 	let authenticated = $state(false);
 	let authenticationError = $state<string | null>(null);
@@ -61,16 +62,16 @@
 			<strong>Fichário Virtual</strong>
 		</a>
 		<div>
-			<p class="eyebrow">Arquivo pessoal privado</p>
+			<p class="eyebrow">Seu arquivo pessoal</p>
 			<h1 id="login-title">Acesse seu fichário</h1>
 			<p class="summary">
-				Entre com a conta autorizada para consultar, importar e revisar suas anotações.
+				Entre com sua conta para consultar, importar e revisar seus documentos em um só lugar.
 			</p>
 		</div>
 		<ul>
-			<li>Arquivos mantidos em armazenamento privado</li>
-			<li>Busca textual e semântica com índice vetorial</li>
-			<li>Nenhuma ativação automática de plano pago</li>
+			<li>Seus arquivos originais continuam preservados</li>
+			<li>Encontre documentos por palavras, trechos ou ideias</li>
+			<li>Acesso restrito às contas autorizadas</li>
 		</ul>
 	</section>
 
@@ -90,13 +91,24 @@
 
 				<div class="field">
 					<label for="password">Senha</label>
-					<input
-						id="password"
-						type="password"
-						bind:value={password}
-						autocomplete="current-password"
-						required
-					/>
+					<div class="password-input">
+						<input
+							id="password"
+							type={showPassword ? 'text' : 'password'}
+							bind:value={password}
+							autocomplete="current-password"
+							required
+						/>
+						<button
+							type="button"
+							class="password-toggle"
+							aria-pressed={showPassword}
+							aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+							onclick={() => (showPassword = !showPassword)}
+						>
+							{showPassword ? 'Ocultar' : 'Mostrar'}
+						</button>
+					</div>
 				</div>
 
 				{#if authenticationError ?? sessionState.error}
@@ -111,8 +123,7 @@
 			</form>
 
 			<p class="access-note">
-				Este projeto possui <strong>cadastro público desativado</strong>. Novas contas são
-				adicionadas manualmente pelo proprietário.
+				O acesso é privado e novas contas precisam ser autorizadas pelo proprietário do fichário.
 			</p>
 		{/if}
 	</section>
@@ -224,12 +235,42 @@
 	}
 
 	input {
+		width: 100%;
 		min-height: 3.2rem;
 		padding: 0.75rem 0.9rem;
 		border: 1px solid var(--line-strong);
 		border-radius: var(--radius-sm);
 		background: var(--surface-strong);
 		color: var(--ink);
+	}
+
+	.password-input {
+		position: relative;
+	}
+
+	.password-input input {
+		padding-right: 5.2rem;
+	}
+
+	.password-toggle {
+		position: absolute;
+		top: 50%;
+		right: 0.45rem;
+		min-height: 2.3rem;
+		padding: 0.4rem 0.65rem;
+		border: 0;
+		border-radius: calc(var(--radius-sm) - 0.15rem);
+		background: transparent;
+		color: var(--archive);
+		font: inherit;
+		font-size: 0.78rem;
+		font-weight: 740;
+		cursor: pointer;
+		transform: translateY(-50%);
+	}
+
+	.password-toggle:hover {
+		background: var(--archive-soft);
 	}
 
 	.authenticated {

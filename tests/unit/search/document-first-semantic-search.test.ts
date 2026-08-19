@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const viewer = readFileSync('src/lib/components/DocumentMediaViewer.svelte', 'utf8');
-const correctionEditor = readFileSync('src/lib/components/CorrectionEditor.svelte', 'utf8');
+const documentPage = readFileSync('src/routes/documents/[id]/+page.svelte', 'utf8');
 const searchPage = readFileSync('src/routes/search/+page.svelte', 'utf8');
 const searchCard = readFileSync('src/lib/components/SearchDocumentCard.svelte', 'utf8');
 const searchEdge = readFileSync('supabase/functions/semantic-search/index.ts', 'utf8');
@@ -65,10 +65,12 @@ describe('document-first semantic search UX', () => {
 		expect(searchCard).not.toContain('countDocumentQueryOccurrences');
 	});
 
-	it('keeps OCR transcription as a collapsed auxiliary tool', () => {
-		expect(correctionEditor).toContain('<details class="transcript-tool">');
-		expect(correctionEditor).toContain('Ferramenta auxiliar para pesquisa e indexação');
-		expect(correctionEditor).toContain(':global(.reader)');
+	it('keeps the document detail original-first without a transcription or correction surface', () => {
+		expect(documentPage).toContain('<h2>Original</h2>');
+		expect(documentPage).toContain('<DocumentMediaViewer');
+		expect(documentPage).not.toContain('CorrectionEditor');
+		expect(documentPage).not.toContain('Texto corrigido');
+		expect(documentPage).not.toContain('transcript-tool');
 	});
 
 	it('does not add a second generative verifier after semantic retrieval', () => {

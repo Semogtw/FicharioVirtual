@@ -1,6 +1,6 @@
 <script lang="ts">
 	export type NavigationIconName =
-		'home' | 'library' | 'notebooks' | 'import' | 'review' | 'coverage' | 'drive' | 'settings';
+		'home' | 'library' | 'notebooks' | 'import' | 'coverage' | 'drive' | 'settings' | 'more';
 
 	interface NavigationIconProps {
 		name: NavigationIconName;
@@ -35,10 +35,6 @@
 		<path d="M12 3v12" />
 		<path d="m7.5 10.5 4.5 4.5 4.5-4.5" />
 		<path d="M5 14.5V20h14v-5.5" />
-	{:else if name === 'review'}
-		<path d="M5 3.5h10l4 4V20H5z" />
-		<path d="M15 3.5V8h4" />
-		<path d="m8 14 2.2 2.2L15.5 11" />
 	{:else if name === 'coverage'}
 		<path d="M5 4h14v16H5z" />
 		<path d="m8 9 1.5 1.5L12 8" />
@@ -52,6 +48,10 @@
 		<path
 			d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"
 		/>
+	{:else if name === 'more'}
+		<circle cx="5" cy="12" r="1.2" fill="currentColor" stroke="none" />
+		<circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" />
+		<circle cx="19" cy="12" r="1.2" fill="currentColor" stroke="none" />
 	{/if}
 </svg>
 

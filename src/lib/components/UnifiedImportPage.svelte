@@ -2,6 +2,7 @@
 	import { replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import { onDestroy } from 'svelte';
+	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import NativeSelect from '$lib/components/ui/native-select/NativeSelect.svelte';
 	import type { NotebookSummary } from '$lib/domain/notebook';
 	import type { ImagePreparationMode } from '$lib/import/image-types';
@@ -41,6 +42,7 @@
 	let documentTitle = $state('');
 	let savingPhotoDraft = $state(false);
 	let photoProgress = $state<PhotoDocumentProgress | null>(null);
+	let confirmDiscard = $state(false);
 
 	let requestedNotebookId = $derived(parseRequestedNotebookId(page.url.searchParams));
 	let notebookSelection = $derived(
@@ -62,6 +64,10 @@
 		return value.slice(0, 240) || 'Anotações';
 	}
 
+	function countLabel(count: number, singular: string, plural: string) {
+		return `${count} ${count === 1 ? singular : plural}`;
+	}
+
 	function releaseDraftPhoto(photo: DraftPhoto) {
 		URL.revokeObjectURL(photo.previewUrl);
 	}
@@ -72,6 +78,16 @@
 		documentTitle = '';
 		photoProgress = null;
 		photoGrouping = 'document';
+		confirmDiscard = false;
+	}
+
+	function requestClearPhotoDraft() {
+		if (savingPhotoDraft) return;
+		if (photoDraft.length <= 1) {
+			clearPhotoDraft();
+			return;
+		}
+		confirmDiscard = true;
 	}
 
 	function stageImages(files: readonly File[]) {
@@ -90,7 +106,7 @@
 		if (documentTitle.trim().length === 0 && photoDraft[0]) {
 			documentTitle = defaultPhotoDocumentTitle(photoDraft[0].file);
 		}
-		selectionMessage = `${photoDraft.length} foto(s) prontas. Revise a ordem e salve quando terminar.`;
+		selectionMessage = `${countLabel(photoDraft.length, 'foto pronta', 'fotos prontas')}. Revise a ordem e salve quando terminar.`;
 	}
 
 	function removeDraftPhoto(id: string) {
@@ -141,12 +157,12 @@
 		}
 
 		if (unsupported > 0) {
-			selectionError = `${unsupported} arquivo(s) ignorado(s). Use PDF, JPG, PNG ou WebP.`;
+			selectionError = `${countLabel(unsupported, 'arquivo ignorado', 'arquivos ignorados')}. Use PDF, JPG, PNG ou WebP.`;
 		}
 		if (queued > 0 && photoDraft.length === 0) {
-			selectionMessage = `${queued} arquivo(s) adicionados.`;
+			selectionMessage = `${countLabel(queued, 'arquivo adicionado', 'arquivos adicionados')}.`;
 		} else if (queued > 0 && photoDraft.length > 0) {
-			selectionMessage = `${queued} arquivo(s) adicionados; ${photoDraft.length} foto(s) aguardam sua revisão.`;
+			selectionMessage = `${countLabel(queued, 'arquivo adicionado', 'arquivos adicionados')}; ${countLabel(photoDraft.length, 'foto aguarda', 'fotos aguardam')} sua revisão.`;
 		}
 	}
 
@@ -210,7 +226,7 @@
 			addImages(files, { mode, notebookId: destinationNotebookId });
 			const count = files.length;
 			clearPhotoDraft();
-			selectionMessage = `${count} foto(s) adicionadas como documento(s) separado(s).`;
+			selectionMessage = `${countLabel(count, 'foto adicionada', 'fotos adicionadas')} como ${countLabel(count, 'documento separado', 'documentos separados')}.`;
 			return;
 		}
 
@@ -226,7 +242,7 @@
 			});
 			const count = result.pageIds.length;
 			clearPhotoDraft();
-			selectionMessage = `Documento salvo com ${count} páginas.`;
+			selectionMessage = `Documento salvo com ${countLabel(count, 'página', 'páginas')}.`;
 		} catch (error) {
 			if (error instanceof PartialPhotoDocumentImportError) {
 				clearPhotoDraft();
@@ -266,9 +282,12 @@
 			}
 		} catch {
 			if (notebookRequests.isCurrent(version)) {
-				pendingSelections = [];
 				notebookError = 'Não foi possível carregar os cadernos agora.';
 				notebookOptionsReady = false;
+				if (pendingSelections.length > 0) {
+					selectionMessage =
+						'Seus arquivos continuam selecionados. Tente carregar os cadernos novamente.';
+				}
 			}
 		} finally {
 			if (notebookRequests.isCurrent(version)) notebookLoading = false;
@@ -297,7 +316,7 @@
 
 <div class="page">
 	<header>
-		<p class="eyebrow">Entrada unificada</p>
+		<p class="eyebrow">Importar</p>
 		<h1>Adicionar ao fichário</h1>
 		<p>
 			Solte fotos e PDFs juntos. Para anotações fotografadas, você pode montar várias páginas como
@@ -331,7 +350,14 @@
 		</fieldset>
 	</section>
 
-	{#if notebookError}<p class="selection-error" role="alert">{notebookError}</p>{/if}
+	{#if notebookError}
+		<div class="selection-error recoverable-error" role="alert">
+			<span>{notebookError}</span>
+			<button type="button" disabled={notebookLoading} onclick={() => void loadNotebookOptions()}>
+				{notebookLoading ? 'Carregando…' : 'Tentar novamente'}
+			</button>
+		</div>
+	{/if}
 	{#if requestedNotebookUnavailable}
 		<p class="selection-error" role="alert">
 			O caderno solicitado não está disponível. Escolha outro destino antes de adicionar arquivos.
@@ -372,10 +398,12 @@
 			<div class="builder-heading">
 				<div>
 					<p class="eyebrow">Documento de fotos</p>
-					<h2 id="photo-builder-title">{photoDraft.length} página(s)</h2>
+					<h2 id="photo-builder-title">{countLabel(photoDraft.length, 'página', 'páginas')}</h2>
 				</div>
 				{#if !savingPhotoDraft}
-					<button class="text-button" type="button" onclick={clearPhotoDraft}>Descartar</button>
+					<button class="text-button" type="button" onclick={requestClearPhotoDraft}
+						>Descartar</button
+					>
 				{/if}
 			</div>
 
@@ -479,6 +507,16 @@
 	{/if}
 	{#if selectionError}<p class="selection-error" role="alert">{selectionError}</p>{/if}
 </div>
+
+<ConfirmDialog
+	open={confirmDiscard}
+	title="Descartar este documento de fotos?"
+	description={`As ${photoDraft.length} páginas preparadas serão removidas desta importação.`}
+	confirmLabel="Descartar"
+	danger
+	onConfirm={clearPhotoDraft}
+	onCancel={() => (confirmDiscard = false)}
+/>
 
 <style>
 	.page {
@@ -627,7 +665,8 @@
 	.camera-button,
 	.save-button,
 	.text-button,
-	.photo-card-actions button {
+	.photo-card-actions button,
+	.recoverable-error button {
 		border: 1px solid var(--line-strong);
 		border-radius: var(--radius-sm);
 		font: inherit;
@@ -747,7 +786,8 @@
 	}
 
 	.photo-card-actions button,
-	.text-button {
+	.text-button,
+	.recoverable-error button {
 		padding: 0.5rem 0.6rem;
 		background: var(--surface-strong);
 		color: inherit;
@@ -784,6 +824,13 @@
 	.selection-error {
 		background: var(--danger-soft);
 		color: var(--danger);
+	}
+
+	.recoverable-error {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
 	}
 
 	@media (max-width: 720px) {
@@ -839,7 +886,8 @@
 		}
 
 		.builder-heading,
-		.builder-footer {
+		.builder-footer,
+		.recoverable-error {
 			align-items: stretch;
 			flex-direction: column;
 		}

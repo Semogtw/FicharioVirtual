@@ -3,8 +3,9 @@
 	import Button from '$lib/components/Button.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
+	import LoadingCollection from '$lib/components/LoadingCollection.svelte';
 	import TextInputDialog from '$lib/components/TextInputDialog.svelte';
-	import type { DocumentSummary } from '$lib/domain/document';
+	import type { DocumentStatus, DocumentSummary } from '$lib/domain/document';
 	import { listAllDocuments } from '$lib/services/documents';
 	import { RequestVersion } from '$lib/services/request-version';
 	import {
@@ -39,6 +40,16 @@
 	let deleteDialogOpen = $state(false);
 
 	let activeTag = $derived(tags.find((tag) => tag.id === activeTagId) ?? null);
+
+	const statusLabels: Record<DocumentStatus, string> = {
+		uploading: 'Enviando',
+		pending: 'Na fila',
+		processing: 'Processando',
+		ready: 'Pronto',
+		partially_ready: 'Parcialmente pronto',
+		needs_review: 'Pronto',
+		failed: 'Falhou'
+	};
 
 	async function refreshTags(
 		preferredId: string | null = activeTagId,
@@ -232,9 +243,9 @@
 <div class="page" aria-labelledby="page-title">
 	<header>
 		<div>
-			<p class="eyebrow">Organização transversal</p>
+			<p class="eyebrow">Organização por temas</p>
 			<h1 id="page-title">Tags</h1>
-			<p>Associe o mesmo documento a temas diferentes sem duplicar arquivos ou páginas.</p>
+			<p>Agrupe o mesmo documento em diferentes temas sem duplicar arquivos ou páginas.</p>
 		</div>
 	</header>
 
@@ -267,7 +278,7 @@
 	{#if message}<p class="message" role="status">{message}</p>{/if}
 
 	{#if loading}
-		<p class="loading" role="status">Carregando tags e documentos…</p>
+		<LoadingCollection count={4} label="Carregando tags e documentos…" />
 	{:else if tags.length === 0}
 		<EmptyState
 			title="Nenhuma tag criada"
@@ -320,7 +331,7 @@
 				</div>
 
 				{#if loadingAssignments}
-					<p class="loading">Verificando associações…</p>
+					<LoadingCollection count={4} label="Carregando documentos desta tag…" />
 				{:else if assignmentError && activeTag}
 					<div class="assignment-error" role="alert">
 						<p>{assignmentError}</p>
@@ -350,7 +361,9 @@
 									/>
 									<span>
 										<strong>{document.title}</strong>
-										<small>{document.kind === 'pdf' ? 'PDF' : 'Imagem'} · {document.status}</small>
+										<small>
+											{document.kind === 'pdf' ? 'PDF' : 'Imagem'} · {statusLabels[document.status]}
+										</small>
 									</span>
 								</label>
 								<a href={`/documents/${document.id}/`}>Abrir</a>

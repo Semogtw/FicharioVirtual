@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import { onDestroy, untrack } from 'svelte';
 	import Button from '$lib/components/Button.svelte';
@@ -50,6 +51,16 @@
 		hasMore = false;
 	}
 
+	function syncQueryToUrl() {
+		if (typeof window === 'undefined') return;
+		const nextUrl = new URL(page.url);
+		const normalized = query.trim();
+		if (normalized) nextUrl.searchParams.set('q', normalized);
+		else nextUrl.searchParams.delete('q');
+		if (nextUrl.search === page.url.search) return;
+		replaceState(nextUrl, page.state);
+	}
+
 	async function run(reset: boolean, version = reset ? requests.next() : requests.current()) {
 		if (!reset && loadingMore) return;
 		const normalized = query.trim();
@@ -98,7 +109,10 @@
 	function schedule() {
 		cancelPending();
 		const version = requests.next();
-		timer = setTimeout(() => void run(true, version), 300);
+		timer = setTimeout(() => {
+			syncQueryToUrl();
+			void run(true, version);
+		}, 300);
 	}
 
 	function ensureNotebookOptions() {
@@ -111,16 +125,13 @@
 
 	function semanticStatus() {
 		if (!analysis) return null;
-		if (analysis.mode === 'hybrid' || analysis.mode === 'multimodal')
-			return 'Busca por palavras e significado ativa.';
-		if (analysis.reason === 'query_too_short') return 'Esta busca usa correspondência textual.';
 		if (
 			analysis.reason === 'semantic_quota_or_rate_limit' ||
 			analysis.reason === 'semantic_provider_unavailable' ||
 			analysis.reason === 'semantic_function_unavailable' ||
 			analysis.reason === 'semantic_rpc_unavailable'
 		) {
-			return 'Busca textual ativa; a busca por significado está temporariamente indisponível.';
+			return 'A busca por significado está temporariamente indisponível. Os resultados por texto continuam funcionando.';
 		}
 		return null;
 	}
@@ -156,6 +167,7 @@
 
 	$effect(() => {
 		const routeQuery = page.url.searchParams.get('q')?.slice(0, 200) ?? '';
+		if (routeQuery === untrack(() => query)) return;
 		query = routeQuery;
 		untrack(() => {
 			void run(true);
@@ -210,7 +222,14 @@
 				{/each}
 			</NativeSelect>
 		</label>
-		<Button label="Pesquisar" onclick={() => void run(true)} />
+		<Button
+			label={loading ? 'Pesquisando…' : 'Pesquisar'}
+			disabled={loading || query.trim().length === 0}
+			onclick={() => {
+				syncQueryToUrl();
+				void run(true);
+			}}
+		/>
 	</section>
 
 	{#if notebookError}
@@ -225,13 +244,7 @@
 	{/if}
 
 	{#if semanticStatus()}
-		<p
-			class:semantic-active={analysis?.mode === 'hybrid' || analysis?.mode === 'multimodal'}
-			class="semantic-status"
-			role="status"
-		>
-			{semanticStatus()}
-		</p>
+		<p class="semantic-status" role="status">{semanticStatus()}</p>
 	{/if}
 
 	{#if error}
@@ -340,11 +353,6 @@
 		background: rgb(var(--accent-rgb) / 7%);
 		color: var(--muted);
 		font-size: 0.83rem;
-	}
-
-	.semantic-status.semantic-active {
-		border-left-color: var(--archive);
-		background: rgb(var(--archive-rgb) / 7%);
 	}
 
 	.results-heading {

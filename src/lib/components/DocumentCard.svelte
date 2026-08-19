@@ -20,7 +20,7 @@
 		processing: 'Processando',
 		ready: 'Pronto',
 		partially_ready: 'Parcialmente pronto',
-		needs_review: 'Revisar',
+		needs_review: 'Pronto',
 		failed: 'Falhou'
 	} as const;
 
@@ -142,6 +142,7 @@
 	img {
 		width: 100%;
 		height: 100%;
+		display: block;
 		object-fit: cover;
 		transform: scale(1);
 		transition: transform var(--motion-slow) var(--ease-soft);
@@ -188,11 +189,11 @@
 			transform var(--motion-base) var(--ease-emphasized);
 	}
 
-	.status.ready {
+	.status.ready,
+	.status.needs_review {
 		color: var(--archive);
 	}
 
-	.status.needs_review,
 	.status.partially_ready {
 		color: var(--accent-strong);
 	}

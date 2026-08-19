@@ -16,10 +16,11 @@
 	let message = $state<string | null>(null);
 
 	const labels: Record<DriveConflictKind, string> = {
-		ambiguous_order: 'O arquivo ou pasta possui mais de um pai no Drive',
-		identity_mismatch: 'A identidade física não corresponde ao item local',
-		remote_deleted_local_changed: 'O original foi removido no Drive após mudanças locais',
-		local_deleted_remote_changed: 'O item local foi removido enquanto o Drive mudou'
+		ambiguous_order: 'Este item aparece em mais de um lugar no Drive',
+		identity_mismatch: 'O arquivo no Drive não corresponde ao documento esperado',
+		remote_deleted_local_changed:
+			'O original foi apagado no Drive, mas o Fichário tem mudanças mais recentes',
+		local_deleted_remote_changed: 'O item foi removido do Fichário, mas mudou no Drive'
 	};
 
 	function formatDate(value: string) {
@@ -55,8 +56,8 @@
 			conflicts = conflicts.filter((item) => item.id !== conflict.id);
 			message =
 				resolution === 'retry_local'
-					? 'O estado local atual foi reenfileirado sem reutilizar o snapshot do conflito.'
-					: 'A ausência física foi aceita. OCR, correções e metadados permanecem preservados.';
+					? 'As informações atuais do Fichário serão sincronizadas novamente com o Drive.'
+					: 'O documento continua no Fichário e o original foi marcado como ausente.';
 		} catch (caught) {
 			error =
 				caught instanceof Error
@@ -79,12 +80,9 @@
 <div class="page" aria-labelledby="page-title">
 	<header>
 		<div>
-			<p class="eyebrow">Resolução explícita</p>
-			<h1 id="page-title">Conflitos do Google Drive</h1>
-			<p>
-				Cada conflito bloqueia somente o item relacionado. As ações abaixo usam o estado local atual
-				e nunca aplicam snapshots remotos como dados confiáveis.
-			</p>
+			<p class="eyebrow">Google Drive</p>
+			<h1 id="page-title">Conflitos de sincronização</h1>
+			<p>Escolha como resolver cada divergência sem afetar os demais arquivos do seu Fichário.</p>
 		</div>
 		<Button
 			label={loading ? 'Atualizando…' : 'Atualizar'}
@@ -95,14 +93,15 @@
 	</header>
 
 	<section class="policy" aria-labelledby="policy-title">
-		<h2 id="policy-title">Escolhas disponíveis</h2>
+		<h2 id="policy-title">O que você pode fazer</h2>
 		<ul>
 			<li>
-				<strong>Tentar estado local:</strong> cria jobs novos a partir do caderno e documento atuais.
+				<strong>Tentar novamente:</strong> usa as informações atuais do Fichário para sincronizar o item
+				outra vez.
 			</li>
 			<li>
-				<strong>Aceitar ausência física:</strong> disponível apenas quando o Drive informou remoção do
-				original; texto e organização permanecem pesquisáveis.
+				<strong>Manter sem o original:</strong> quando o arquivo foi apagado no Drive, mantém texto, correções
+				e organização disponíveis no Fichário.
 			</li>
 		</ul>
 	</section>
@@ -113,8 +112,8 @@
 	<section class="panel" aria-labelledby="conflicts-title">
 		<div class="panel-heading">
 			<div>
-				<p class="eyebrow">Fila não bloqueante</p>
-				<h2 id="conflicts-title">Abertos</h2>
+				<p class="eyebrow">Precisa da sua atenção</p>
+				<h2 id="conflicts-title">Conflitos pendentes</h2>
 			</div>
 			<span>{conflicts.length}</span>
 		</div>
@@ -130,7 +129,7 @@
 						<div class="conflict-copy">
 							<strong>{labels[conflict.kind]}</strong>
 							<small>
-								{conflict.documentId ? 'Documento' : 'Caderno'} · isolado em
+								{conflict.documentId ? 'Documento' : 'Caderno'} · identificado em
 								{formatDate(conflict.createdAt)}
 							</small>
 							{#if conflict.documentId}
@@ -141,13 +140,13 @@
 						</div>
 						<div class="actions">
 							<Button
-								label={busyId === conflict.id ? 'Reenfileirando…' : 'Tentar estado local'}
+								label={busyId === conflict.id ? 'Tentando novamente…' : 'Tentar novamente'}
 								disabled={busyId !== null}
 								onclick={() => void resolve(conflict, 'retry_local')}
 							/>
 							{#if conflict.kind === 'remote_deleted_local_changed' && conflict.documentId}
 								<Button
-									label={busyId === conflict.id ? 'Aplicando…' : 'Aceitar ausência física'}
+									label={busyId === conflict.id ? 'Aplicando…' : 'Manter sem o original'}
 									variant="secondary"
 									disabled={busyId !== null}
 									onclick={() => void resolve(conflict, 'mark_missing')}
