@@ -5,7 +5,9 @@ const shellSource = readFileSync('src/lib/components/AppShell.svelte', 'utf8');
 
 describe('AppShell UX affordances', () => {
 	it('does not render a second global search field on the dedicated search route', () => {
-		expect(shellSource).toContain("let searchRoute = $derived(page.url.pathname.startsWith('/search'))");
+		expect(shellSource).toContain(
+			"let searchRoute = $derived(page.url.pathname.startsWith('/search'))"
+		);
 		expect(shellSource).toContain('{#if searchRoute}');
 		expect(shellSource).toContain('<div class="topbar-spacer" aria-hidden="true"></div>');
 		expect(shellSource).toContain('<TopSearch initialValue={searchQuery} onSearch={search} />');
