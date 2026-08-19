@@ -97,21 +97,23 @@
 	</header>
 
 	<section class="overview" aria-label="Resumo da biblioteca" aria-busy={loading || refreshing}>
-		<article>
+		<a class="overview-card actionable" href="/library/" aria-label="Abrir biblioteca">
 			<span>Documentos</span>
 			<strong><AnimatedNumber value={usage?.totals.documents ?? null} /></strong>
 			<small>Arquivos privados preservados no fichário</small>
-		</article>
-		<article>
+			<b aria-hidden="true">Abrir biblioteca →</b>
+		</a>
+		<article class="overview-card">
 			<span>Páginas no fichário</span>
 			<strong><AnimatedNumber value={usage?.totals.pages ?? null} /></strong>
 			<small>Texto nativo, leituras e correções manuais</small>
 		</article>
-		<article>
+		<a class="overview-card actionable" href="/review/" aria-label="Abrir páginas para revisar">
 			<span>Para revisar</span>
 			<strong><AnimatedNumber value={usage?.totals.reviewPages ?? null} /></strong>
 			<small>Páginas que ainda pedem atenção humana</small>
-		</article>
+			<b aria-hidden="true">Revisar agora →</b>
+		</a>
 	</section>
 
 	{#if warning}
@@ -225,7 +227,7 @@
 		gap: 1rem;
 	}
 
-	.overview article {
+	.overview-card {
 		display: grid;
 		gap: 0.35rem;
 		min-height: 10.5rem;
@@ -234,6 +236,16 @@
 		border: 1px solid var(--line);
 		border-radius: var(--radius-md);
 		background: var(--surface);
+		color: var(--ink);
+	}
+
+	.overview-card.actionable {
+		position: relative;
+		transform: translateY(0);
+		transition:
+			border-color var(--motion-fast) var(--ease-standard),
+			box-shadow var(--motion-base) var(--ease-standard),
+			transform var(--motion-base) var(--ease-emphasized);
 	}
 
 	.overview span,
@@ -256,6 +268,16 @@
 
 	.overview small {
 		line-height: 1.45;
+	}
+
+	.overview-card b {
+		color: var(--archive);
+		font-size: 0.76rem;
+		font-weight: 760;
+	}
+
+	.overview-card.actionable:active {
+		transform: translateY(1px) scale(0.99);
 	}
 
 	.recent {
@@ -339,6 +361,14 @@
 		cursor: pointer;
 	}
 
+	@media (hover: hover) and (pointer: fine) {
+		.overview-card.actionable:hover {
+			border-color: var(--archive);
+			box-shadow: var(--shadow-raised);
+			transform: translateY(-2px);
+		}
+	}
+
 	@media (max-width: 760px) {
 		.page-header {
 			align-items: flex-start;
@@ -349,7 +379,7 @@
 			grid-template-columns: 1fr;
 		}
 
-		.overview article {
+		.overview-card {
 			min-height: 8rem;
 		}
 	}
