@@ -33,6 +33,10 @@ Tratar o Fichário Virtual como um produto pronto para uso cotidiano, não apena
 
 - Removidas as abas “Imagens e câmera” / “PDFs e arquivos” que sugeriam dois fluxos diferentes embora ambas as rotas entregassem a mesma tela unificada.
 - As URLs antigas continuam compatíveis e chegam à mesma experiência de importação.
+- Arquivos aguardando a resolução de um caderno não são mais descartados se o carregamento dos cadernos falhar; a tela preserva a seleção e oferece tentativa explícita de recuperação.
+- Descartar um documento de fotos com várias páginas agora exige confirmação; remover uma página individual continua direto para não criar atrito excessivo.
+- Mensagens de quantidade usam pluralização natural em vez de `foto(s)`, `arquivo(s)`, `página(s)` e `documento(s)`.
+- “Entrada unificada” foi trocado por “Importar”, evitando expor uma decisão de arquitetura como título de produto.
 
 ### Biblioteca
 
@@ -40,12 +44,18 @@ Tratar o Fichário Virtual como um produto pronto para uso cotidiano, não apena
 - Há uma saída clara para voltar à biblioteca completa com “Limpar filtros”.
 - O estado vazio de um recorte filtrado deixa de sugerir que o usuário importe um novo arquivo; primeiro oferece desfazer o filtro.
 - “Estado” foi substituído por “Status”, termo mais natural nesse contexto.
+- Intervalos de data invertidos são detectados antes da consulta, com os dois campos marcados como inválidos e mensagem explicando a correção necessária.
 
 ### Pesquisa
 
 - A consulta digitada na página agora é preservada no parâmetro `q` da URL; recarregar, voltar ou compartilhar a tela mantém o contexto correto.
 - A interface deixa de anunciar detalhes internos quando a busca está saudável.
 - Quando a busca por significado está temporariamente indisponível, o aviso explica apenas o impacto e informa que a busca por texto continua funcionando.
+
+### Documento
+
+- A faixa de páginas não expõe mais estados internos como `pending`, `uploading`, `processing`, `ready` ou `failed`; todos são apresentados em português com rótulos curtos e consistentes.
+- A exclusão continua protegida por diálogo de confirmação e mantém recuperação caso a navegação posterior falhe.
 
 ### Login
 
@@ -55,20 +65,13 @@ Tratar o Fichário Virtual como um produto pronto para uso cotidiano, não apena
 
 ## Achados para o próximo passe
 
-### Prioridade alta
-
-1. **Documento — estados internos de página:** a faixa de páginas ainda pode mostrar valores técnicos como `pending`, `uploading`, `processing`, `ready` e `failed`. Traduzir todos para estados curtos e consistentes em português.
-2. **Importação — descarte destrutivo:** “Descartar” elimina o documento de fotos em preparação imediatamente. Adicionar confirmação quando houver múltiplas páginas ou alterações relevantes, preservando remoção individual sem confirmação excessiva.
-3. **Importação — falha ao carregar cadernos:** manter seleção de arquivos segura e oferecer tentativa explícita de recarregar cadernos no mesmo contexto.
-4. **Datas da Biblioteca:** validar visualmente intervalo invertido (“De” posterior a “Até”) antes de executar uma consulta que tende a retornar vazio e parecer defeito.
-
 ### Prioridade média
 
 1. Trocar carregamentos textuais remanescentes em Revisar, Organizar, Tags e detalhe de Caderno pelos padrões de skeleton/loading já usados nas telas principais.
 2. Tornar cartões de resumo da tela inicial acionáveis quando houver destino natural: Documentos → Biblioteca e Para revisar → Revisar.
 3. Simplificar subtítulos ainda técnicos em telas secundárias, por exemplo “Metadados em lote” e “Organização transversal”.
-4. Melhorar o estado de erro do Drive para manter a ação de recuperação visualmente junto da causa.
-5. Revisar microcopy do construtor de fotos (`foto(s)`, `página(s)`, `documento(s)`) para pluralização natural.
+4. Melhorar o estado de erro do Drive para manter a ação de recuperação visualmente junto da causa em todas as subtelas.
+5. No construtor de fotos, ocultar ou contextualizar o campo de título quando o modo “Separadas” estiver ativo, já que cada foto seguirá como documento independente.
 
 ### Prioridade baixa / acabamento
 
@@ -90,6 +93,6 @@ Tratar o Fichário Virtual como um produto pronto para uso cotidiano, não apena
 ## Validação esperada antes do merge
 
 - `pnpm verify:full` no SHA final da branch.
-- Contratos unitários para navegação mobile, importação unificada e shell de pesquisa/configurações.
+- Contratos unitários para navegação mobile, importação unificada, preservação do rascunho e shell de pesquisa/configurações.
 - Smoke dos fluxos principais em viewport desktop e mobile sempre que o ambiente de staging/autenticação estiver disponível.
 - Conferir regressões de teclado, foco, estados vazios, botões desabilitados e mensagens de erro durante importação e pesquisa.
