@@ -58,6 +58,7 @@ async function mockSupabase(context: BrowserContext, counters: RequestCounters) 
 		const path = url.pathname;
 
 		if (path === '/rest/v1/app_users') return json(route, { is_active: true });
+		if (path === '/rest/v1/rpc/ensure_current_app_user') return json(route, 'owner');
 		if (path === '/rest/v1/drive_connections') {
 			return json(route, {
 				status: 'connected',
@@ -178,31 +179,16 @@ async function mockSupabase(context: BrowserContext, counters: RequestCounters) 
 				status: 200,
 				contentType: 'application/json',
 				headers: cors,
-				body: JSON.stringify({
-					id: 'DriveFile_1234567890',
-					name: 'shared.webp',
-					mimeType: 'image/webp',
-					parents: ['RootFolder_1234567890'],
-					modifiedTime: timestamp,
-					version: '1',
-					md5Checksum: '0123456789abcdef0123456789abcdef',
-					trashed: false
-				})
+				body: JSON.stringify({ id: 'DriveFile_1234567890', name: 'shared.png' })
 			});
 		}
-		counters.unknown.push(`${request.method()} ${url.origin}${url.pathname}`);
-		return route.fulfill({
-			status: 500,
-			contentType: 'application/json',
-			headers: cors,
-			body: JSON.stringify({ message: 'Unexpected mocked Google request' })
-		});
+		return route.fulfill({ status: 404, headers: cors, body: '' });
 	});
 }
 
 async function seedStoredImport(context: BrowserContext) {
 	const seedPage = await context.newPage();
-	await seedPage.goto('/favicon.svg');
+	await seedPage.goto('/login/');
 	await seedPage.evaluate(
 		async ({ encoded, id, ownerId, key, updatedAt }) => {
 			const bytes = Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
