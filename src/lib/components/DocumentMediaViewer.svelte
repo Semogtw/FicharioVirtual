@@ -76,10 +76,14 @@
 
 	function resetRenderedPages() {
 		resetMediaCaches();
+		const directImageUrl =
+			detail.kind === 'image' && detail.originalReference.provider === 'supabase'
+				? detail.originalReference.url
+				: null;
 		renderedPages = pages.map((page) => ({
 			page,
 			detail: null,
-			url: null,
+			url: page.pageNumber === 1 ? directImageUrl : null,
 			nativeGeometry: EMPTY_GEOMETRY,
 			error: null,
 			loading: false
@@ -162,7 +166,13 @@
 	function requestPage(pageNumber: number) {
 		const index = renderedIndex(pageNumber);
 		const rendered = renderedPages[index];
-		if (!rendered || rendered.url || rendered.error || rendered.loading) return;
+		if (!rendered) return;
+		const needsImageMetadata =
+			detail.kind === 'image' &&
+			rendered.url !== null &&
+			query.trim().length > 0 &&
+			rendered.detail === null;
+		if ((!needsImageMetadata && rendered.url) || rendered.error || rendered.loading) return;
 		if (requestedPageNumbers.includes(pageNumber)) return;
 		requestedPageNumbers = Object.freeze([...requestedPageNumbers, pageNumber]);
 	}
@@ -358,6 +368,15 @@
 		if (targets.length === 0 || refreshIsStale(expectedGeneration, expectedRevision)) return;
 		if (detail.kind === 'image') {
 			for (const page of targets) {
+				const rendered = renderedPages[renderedIndex(page.pageNumber)];
+				if (
+					rendered?.url &&
+					page.pageNumber === 1 &&
+					detail.originalReference.provider === 'supabase'
+				) {
+					updateRendered(page.pageNumber, { detail: page, error: null, loading: false });
+					continue;
+				}
 				await renderImageTarget(page, expectedGeneration, expectedRevision);
 			}
 			return;
