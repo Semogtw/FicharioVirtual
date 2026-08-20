@@ -2,6 +2,7 @@ mod cache;
 mod cache_commands;
 mod catalog;
 mod commands;
+mod external;
 mod metrics;
 mod paths;
 mod storage;
@@ -10,6 +11,7 @@ mod sync_intent;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let paths = paths::ensure(app.handle())
                 .map_err(|error| std::io::Error::other(format!("native storage: {error}")))?;
@@ -40,6 +42,7 @@ pub fn run() {
             cache_commands::trim_native_cache,
             sync_intent::ensure_native_upload_intent,
             sync_intent::cancel_native_upload_intent,
+            external::open_native_oauth_url,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Fichário Virtual");

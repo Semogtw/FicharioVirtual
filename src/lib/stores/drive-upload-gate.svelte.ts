@@ -1,3 +1,5 @@
+import { openNativeOAuthUrl } from '$lib/native/external';
+import { isNativeRuntime } from '$lib/platform/native-bridge';
 import {
 	beginDriveConnection,
 	isDriveOAuthConfigured,
@@ -143,6 +145,21 @@ async function finishAuthorization(attempt: number, popup: Window) {
 	}
 }
 
+async function finishNativeAuthorization(attempt: number) {
+	for (let index = 0; index < 600 && attempt === oauthAttempt; index += 1) {
+		if (await checkConnection()) {
+			resolveWaiters();
+			return;
+		}
+		await delay(500);
+	}
+	if (attempt === oauthAttempt) {
+		driveUploadGate.connecting = false;
+		driveUploadGate.error =
+			'Não foi possível confirmar a conexão. Conclua o login no navegador e tente novamente.';
+	}
+}
+
 export async function requireDriveForUpload(signal?: AbortSignal): Promise<void> {
 	if (typeof window === 'undefined') return;
 	if (signal?.aborted) throw cancelledUpload();
@@ -181,6 +198,22 @@ export async function connectDriveForUpload(): Promise<void> {
 	driveUploadGate.connecting = true;
 	driveUploadGate.error = null;
 	const attempt = ++oauthAttempt;
+
+	if (isNativeRuntime()) {
+		try {
+			const authorizationUrl = await beginDriveConnection();
+			if (attempt !== oauthAttempt) return;
+			await openNativeOAuthUrl(authorizationUrl);
+			await finishNativeAuthorization(attempt);
+		} catch {
+			if (attempt === oauthAttempt) {
+				driveUploadGate.connecting = false;
+				driveUploadGate.error = 'Não foi possível abrir o login do Google Drive. Tente novamente.';
+			}
+		}
+		return;
+	}
+
 	const popup = window.open(
 		'about:blank',
 		'fichario-drive-oauth',
