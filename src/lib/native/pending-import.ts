@@ -3,6 +3,7 @@ import {
 	resolveNativeDocument,
 	type NativeDocument
 } from '$lib/native/local-document-store';
+import { ensureNativeUploadIntent } from '$lib/native/sync-intent';
 import { isNativeRuntime } from '$lib/platform/native-bridge';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -115,11 +116,16 @@ export async function ensurePendingNativeOriginal({
 		) {
 			throw new Error('A entrada local desta importação não corresponde ao arquivo selecionado.');
 		}
+		if (existing.remoteState === 'pending') {
+			await ensureNativeUploadIntent(resolvedDocumentId);
+		}
 		return existing;
 	}
-	return await importFileIntoNativeStore(file, {
+	const imported = await importFileIntoNativeStore(file, {
 		documentId: resolvedDocumentId,
 		ownerId,
 		remoteState: 'pending'
 	});
+	if (imported) await ensureNativeUploadIntent(resolvedDocumentId);
+	return imported;
 }

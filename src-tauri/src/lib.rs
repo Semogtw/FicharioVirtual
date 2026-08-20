@@ -5,6 +5,7 @@ mod commands;
 mod metrics;
 mod paths;
 mod storage;
+mod sync_intent;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -37,6 +38,8 @@ pub fn run() {
             commands::fail_native_sync_job,
             commands::mark_native_remote_synced,
             cache_commands::trim_native_cache,
+            sync_intent::ensure_native_upload_intent,
+            sync_intent::cancel_native_upload_intent,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Fichário Virtual");
