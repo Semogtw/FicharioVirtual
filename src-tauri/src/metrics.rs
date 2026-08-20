@@ -48,7 +48,9 @@ pub fn read(paths: &AppPaths) -> Result<StorageMetrics, String> {
             [],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
-        .map_err(|error| format!("Não foi possível calcular o uso dos documentos locais: {error}"))?;
+        .map_err(|error| {
+            format!("Não foi possível calcular o uso dos documentos locais: {error}")
+        })?;
     let pending_sync_count: i64 = connection
         .query_row(
             "SELECT COUNT(*) FROM sync_jobs WHERE state NOT IN ('completed', 'cancelled')",
@@ -81,10 +83,7 @@ pub fn disk_usage_bytes(paths: &AppPaths) -> Result<u64, String> {
         .saturating_add(metrics.staging_bytes))
 }
 
-pub fn list_oldest_evictable(
-    paths: &AppPaths,
-    limit: usize,
-) -> Result<Vec<EvictableDocument>, String> {
+pub fn list_oldest_evictable(paths: &AppPaths, limit: usize) -> Result<Vec<EvictableDocument>, String> {
     let connection = open(paths)?;
     let mut statement = connection
         .prepare(

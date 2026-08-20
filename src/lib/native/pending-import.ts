@@ -5,7 +5,8 @@ import {
 } from '$lib/native/local-document-store';
 import { isNativeRuntime } from '$lib/platform/native-bridge';
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID =
+	/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export class NativeOriginalPendingError extends Error {
 	readonly documentId: string;
@@ -28,7 +29,9 @@ function uuidFromBytes(bytes: Uint8Array) {
 }
 
 async function stableUuid(ownerId: string, resumeKey: string) {
-	if (!globalThis.crypto?.subtle) throw new Error('Secure hashing is unavailable in the native runtime.');
+	if (!globalThis.crypto?.subtle) {
+		throw new Error('Secure hashing is unavailable in the native runtime.');
+	}
 	const input = new TextEncoder().encode(`fichario-native-v1\0${ownerId}\0${resumeKey}`);
 	const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', input));
 	return uuidFromBytes(digest);

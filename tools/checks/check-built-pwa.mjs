@@ -1,9 +1,10 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 import { assertInlineScriptsAllowedByCsp, assertSecurityHeaders } from './deployment-contract.mjs';
 
-const root = resolve(new URL('../..', import.meta.url).pathname);
+const root = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const build = join(root, 'build');
 const failures = [];
 
