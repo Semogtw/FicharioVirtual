@@ -1,4 +1,4 @@
-use rusqlite::{params, Connection};
+use rusqlite::Connection;
 use std::{fs, time::Duration};
 
 use crate::paths::AppPaths;
@@ -81,31 +81,22 @@ pub fn disk_usage_bytes(paths: &AppPaths) -> Result<u64, String> {
         .saturating_add(metrics.staging_bytes))
 }
 
-pub fn list_evictable(
+pub fn list_oldest_evictable(
     paths: &AppPaths,
-    before_last_accessed_at_ms: Option<i64>,
-    before_document_id: Option<&str>,
     limit: usize,
 ) -> Result<Vec<EvictableDocument>, String> {
     let connection = open(paths)?;
-    let bounded_limit = limit.clamp(1, 256) as i64;
-    let (cursor_time, cursor_id) = match (before_last_accessed_at_ms, before_document_id) {
-        (Some(time), Some(id)) => (time, id),
-        _ => (i64::MAX, "\u{10ffff}"),
-    };
     let mut statement = connection
         .prepare(
             r#"SELECT document_id, relative_path, size_bytes
             FROM documents
-            WHERE local_state = 'present'
-              AND remote_state = 'synced'
-              AND (last_accessed_at_ms < ?1 OR (last_accessed_at_ms = ?1 AND document_id < ?2))
-            ORDER BY last_accessed_at_ms DESC, document_id DESC
-            LIMIT ?3"#,
+            WHERE local_state = 'present' AND remote_state = 'synced'
+            ORDER BY last_accessed_at_ms ASC, document_id ASC
+            LIMIT ?1"#,
         )
         .map_err(|error| format!("Não foi possível preparar a limpeza local: {error}"))?;
     let rows = statement
-        .query_map(params![cursor_time, cursor_id, bounded_limit], |row| {
+        .query_map([limit.clamp(1, 256) as i64], |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
