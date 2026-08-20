@@ -27,7 +27,8 @@
 		try {
 			status = native ? await getNativeStatus() : null;
 		} catch (caught) {
-			error = caught instanceof Error ? caught.message : 'Não foi possível ler o armazenamento local.';
+			error =
+				caught instanceof Error ? caught.message : 'Não foi possível ler o armazenamento local.';
 		} finally {
 			loading = false;
 		}
@@ -51,7 +52,10 @@
 					: 'Nada precisou ser removido. Arquivos sem backup continuam protegidos.';
 			}
 		} catch (caught) {
-			error = caught instanceof Error ? caught.message : 'Não foi possível reduzir o armazenamento local.';
+			error =
+				caught instanceof Error
+					? caught.message
+					: 'Não foi possível reduzir o armazenamento local.';
 		} finally {
 			trimming = false;
 		}
@@ -66,7 +70,9 @@
 	<header>
 		<p class="eyebrow">Aplicativo</p>
 		<h1 id="storage-title">Armazenamento local</h1>
-		<p>Originais salvos neste dispositivo abrem direto do armazenamento local, sem depender do Drive.</p>
+		<p>
+			Originais salvos neste dispositivo abrem direto do armazenamento local, sem depender do Drive.
+		</p>
 	</header>
 
 	{#if !native}
@@ -81,7 +87,9 @@
 		{#if message}<p class="message" role="status">{message}</p>{/if}
 		{#if status}
 			<section class="stats" aria-label="Resumo do armazenamento local">
-				<article><span>Espaço usado</span><strong>{formatBytes(status.diskUsageBytes)}</strong></article>
+				<article>
+					<span>Espaço usado</span><strong>{formatBytes(status.diskUsageBytes)}</strong>
+				</article>
 				<article><span>Originais locais</span><strong>{status.localDocumentCount}</strong></article>
 				<article><span>Sync pendente</span><strong>{status.pendingSyncCount}</strong></article>
 				<article><span>Plataforma</span><strong>{status.platform}</strong></article>
@@ -90,35 +98,142 @@
 		<section class="card controls">
 			<div>
 				<h2>Limite de cache</h2>
-				<p>Ao reduzir o uso, somente originais já sincronizados podem ser removidos. Arquivos ainda sem backup são sempre protegidos.</p>
+				<p>
+					Ao reduzir o uso, somente originais já sincronizados podem ser removidos. Arquivos ainda
+					sem backup são sempre protegidos.
+				</p>
 			</div>
 			<label for="cache-limit">Manter até</label>
-			<div class="limit"><input id="cache-limit" type="number" min="0" max="1024" step="1" bind:value={targetGb} disabled={trimming} /><span>GB</span></div>
-			<Button label={trimming ? 'Liberando…' : 'Aplicar agora'} variant="secondary" disabled={trimming} onclick={() => void trim()} />
+			<div class="limit">
+				<input
+					id="cache-limit"
+					type="number"
+					min="0"
+					max="1024"
+					step="1"
+					bind:value={targetGb}
+					disabled={trimming}
+				/><span>GB</span>
+			</div>
+			<Button
+				label={trimming ? 'Liberando…' : 'Aplicar agora'}
+				variant="secondary"
+				disabled={trimming}
+				onclick={() => void trim()}
+			/>
 		</section>
 		{#if lastTrim && lastTrim.protectedDocuments > 0}
-			<p class="message">{lastTrim.protectedDocuments} arquivo(s) sem backup permaneceram no dispositivo.</p>
+			<p class="message">
+				{lastTrim.protectedDocuments} arquivo(s) sem backup permaneceram no dispositivo.
+			</p>
 		{/if}
 	{/if}
 </div>
 
 <style>
-	.page { display: grid; gap: 1rem; }
-	.eyebrow { margin: 0 0 .35rem; color: var(--archive); font-size: .75rem; font-weight: 780; letter-spacing: .12em; text-transform: uppercase; }
-	h1, h2 { font-family: var(--font-heading); font-weight: 540; }
-	h1 { margin: 0 0 .55rem; font-size: clamp(2.4rem, 6vw, 4.5rem); letter-spacing: -.04em; }
-	header p:last-child, .card p { max-width: 52rem; margin: 0; color: var(--muted); line-height: 1.55; }
-	.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; }
-	.stats article, .card, .message, .error { padding: 1rem; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); }
-	.stats article { display: grid; gap: .35rem; }
-	.stats span, label { color: var(--muted); font-size: .8rem; font-weight: 700; }
-	.stats strong { font-size: 1.35rem; font-variant-numeric: tabular-nums; }
-	.controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .8rem 1rem; align-items: end; }
-	.controls > div:first-child { grid-row: span 2; align-self: center; }
-	.limit { display: flex; gap: .45rem; align-items: center; }
-	input { width: 8rem; min-height: 2.65rem; padding: .55rem .7rem; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface-strong); color: var(--ink); font: inherit; }
-	.error { color: var(--danger); }
-	.message { margin: 0; color: var(--muted); }
-	@media (max-width: 800px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } .controls { grid-template-columns: 1fr; } .controls > div:first-child { grid-row: auto; } }
-	@media (max-width: 430px) { .stats { grid-template-columns: 1fr; } }
+	.page {
+		display: grid;
+		gap: 1rem;
+	}
+	.eyebrow {
+		margin: 0 0 0.35rem;
+		color: var(--archive);
+		font-size: 0.75rem;
+		font-weight: 780;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+	}
+	h1,
+	h2 {
+		font-family: var(--font-heading);
+		font-weight: 540;
+	}
+	h1 {
+		margin: 0 0 0.55rem;
+		font-size: clamp(2.4rem, 6vw, 4.5rem);
+		letter-spacing: -0.04em;
+	}
+	header p:last-child,
+	.card p {
+		max-width: 52rem;
+		margin: 0;
+		color: var(--muted);
+		line-height: 1.55;
+	}
+	.stats {
+		display: grid;
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		gap: 0.75rem;
+	}
+	.stats article,
+	.card,
+	.message,
+	.error {
+		padding: 1rem;
+		border: 1px solid var(--line);
+		border-radius: var(--radius-md);
+		background: var(--surface);
+	}
+	.stats article {
+		display: grid;
+		gap: 0.35rem;
+	}
+	.stats span,
+	label {
+		color: var(--muted);
+		font-size: 0.8rem;
+		font-weight: 700;
+	}
+	.stats strong {
+		font-size: 1.35rem;
+		font-variant-numeric: tabular-nums;
+	}
+	.controls {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		gap: 0.8rem 1rem;
+		align-items: end;
+	}
+	.controls > div:first-child {
+		grid-row: span 2;
+		align-self: center;
+	}
+	.limit {
+		display: flex;
+		gap: 0.45rem;
+		align-items: center;
+	}
+	input {
+		width: 8rem;
+		min-height: 2.65rem;
+		padding: 0.55rem 0.7rem;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--radius-sm);
+		background: var(--surface-strong);
+		color: var(--ink);
+		font: inherit;
+	}
+	.error {
+		color: var(--danger);
+	}
+	.message {
+		margin: 0;
+		color: var(--muted);
+	}
+	@media (max-width: 800px) {
+		.stats {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+		.controls {
+			grid-template-columns: 1fr;
+		}
+		.controls > div:first-child {
+			grid-row: auto;
+		}
+	}
+	@media (max-width: 430px) {
+		.stats {
+			grid-template-columns: 1fr;
+		}
+	}
 </style>
