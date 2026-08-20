@@ -1,4 +1,5 @@
 import { calculateSha256 } from '$lib/import/hash';
+import { importFileIntoNativeStore } from '$lib/native/local-document-store';
 import { processOcrBatch as runOcrBatch, type OcrBatchRunResult } from '$lib/services/ocr';
 import { requireDriveForUpload } from '$lib/stores/drive-upload-gate.svelte';
 import type { DocumentStatus } from '$lib/types/database';
@@ -273,6 +274,12 @@ export async function uploadPdfWithGateway(
 	if (duplicateId) throw new DuplicatePdfError(duplicateId);
 
 	const documentId = uuid();
+	await importFileIntoNativeStore(file, {
+		documentId,
+		ownerId: userId,
+		remoteState: 'pending'
+	});
+	if (options.signal?.aborted) throw abortError();
 	const storageRoot = `${userId}/${documentId}`;
 	const originalStoragePath = `${storageRoot}/original.pdf`;
 	let pages = buildPdfImportPlan(inspection, storageRoot).map((page) => ({ ...page }));
