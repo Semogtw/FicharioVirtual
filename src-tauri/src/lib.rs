@@ -1,3 +1,5 @@
+mod cache;
+mod cache_commands;
 mod catalog;
 mod commands;
 mod paths;
@@ -33,6 +35,7 @@ pub fn run() {
             commands::complete_native_sync_job,
             commands::fail_native_sync_job,
             commands::mark_native_remote_synced,
+            cache_commands::trim_native_cache,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Fichário Virtual");
