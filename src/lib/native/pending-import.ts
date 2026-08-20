@@ -40,9 +40,8 @@ function concatBytes(parts: readonly Uint8Array[]) {
 }
 
 async function stableUuid(ownerId: string, resumeKey: string | null, file: File) {
-	if (!globalThis.crypto?.subtle) {
-		throw new Error('Secure hashing is unavailable in the native runtime.');
-	}
+	const subtle = globalThis.crypto?.subtle;
+	if (!subtle) throw new Error('Secure hashing is unavailable in the native runtime.');
 	const encoder = new TextEncoder();
 	const identity = resumeKey?.trim();
 	let input: Uint8Array;
@@ -63,11 +62,14 @@ async function stableUuid(ownerId: string, resumeKey: string | null, file: File)
 			new Uint8Array(last)
 		]);
 	}
+	const digestInput = new Uint8Array(input.byteLength);
+	digestInput.set(input);
 	try {
-		const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', input));
+		const digest = new Uint8Array(await subtle.digest('SHA-256', digestInput.buffer));
 		return uuidFromBytes(digest);
 	} finally {
 		input.fill(0);
+		digestInput.fill(0);
 	}
 }
 

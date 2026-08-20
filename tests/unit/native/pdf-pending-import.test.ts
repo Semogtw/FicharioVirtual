@@ -30,7 +30,7 @@ function pdf(contents = 'same pdf') {
 
 function inspection(): PdfInspection {
 	return {
-		type: 'Digital-born',
+		type: 'TextBased',
 		pageCount: 1,
 		nativePages: [{ pageNumber: 1, text: 'texto' }],
 		pagesNeedingOcr: [],

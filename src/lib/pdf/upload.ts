@@ -69,6 +69,7 @@ export type PdfUploadOptions = {
 	signal?: AbortSignal;
 	onProgress?: (progress: PdfUploadProgress) => void;
 	nativeDocumentId?: string | null;
+	nativeResumeKey?: string | null;
 };
 
 export type PdfUploadProgress = {
@@ -388,13 +389,24 @@ export async function uploadPdfWithGateway(
 	}
 }
 
+function cancelledByCaller(error: unknown, signal?: AbortSignal) {
+	return error instanceof DOMException && error.name === 'AbortError' && signal?.aborted === true;
+}
+
 export async function uploadPdf(file: File, options: PdfUploadOptions): Promise<UploadedPdf> {
 	const ownerId = sessionState.user?.id ?? null;
-	const pending = ownerId ? await ensurePendingNativeOriginal({ file, ownerId }) : null;
+	const pending = ownerId
+		? await ensurePendingNativeOriginal({
+				file,
+				ownerId,
+				resumeKey: options.nativeResumeKey
+			})
+		: null;
 	const nativeDocumentId = pending?.documentId ?? null;
 	try {
-		await requireDriveForUpload();
+		await requireDriveForUpload(options.signal);
 	} catch (error) {
+		if (cancelledByCaller(error, options.signal)) throw error;
 		if (nativeDocumentId) throw new NativeOriginalPendingError(nativeDocumentId, error);
 		throw error;
 	}
@@ -403,6 +415,7 @@ export async function uploadPdf(file: File, options: PdfUploadOptions): Promise<
 	try {
 		return await uploadPdfToDrive(file, { ...options, nativeDocumentId });
 	} catch (error) {
+		if (cancelledByCaller(error, options.signal)) throw error;
 		if (nativeDocumentId && error instanceof DuplicatePdfError) {
 			await markNativeDocumentRemoteSynced({
 				documentId: nativeDocumentId,

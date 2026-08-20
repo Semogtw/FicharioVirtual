@@ -19,6 +19,7 @@ export type UploadPreparedImageInput = {
 	promptVersion?: number;
 	signal?: AbortSignal;
 	nativeDocumentId?: string | null;
+	nativeResumeKey?: string | null;
 };
 
 export type ImageImportIdentifiers = {
@@ -129,15 +130,24 @@ function warmImportedImagePreview(input: UploadPreparedImageInput, uploaded: Upl
 	);
 }
 
+function cancelledByCaller(error: unknown, signal?: AbortSignal) {
+	return error instanceof DOMException && error.name === 'AbortError' && signal?.aborted === true;
+}
+
 export async function uploadPreparedImage(input: UploadPreparedImageInput): Promise<UploadedPage> {
 	const ownerId = sessionState.user?.id ?? null;
 	const pending = ownerId
-		? await ensurePendingNativeOriginal({ file: input.prepared.original, ownerId })
+		? await ensurePendingNativeOriginal({
+				file: input.prepared.original,
+				ownerId,
+				resumeKey: input.nativeResumeKey
+			})
 		: null;
 	const nativeDocumentId = pending?.documentId ?? null;
 	try {
-		await requireDriveForUpload();
+		await requireDriveForUpload(input.signal);
 	} catch (error) {
+		if (cancelledByCaller(error, input.signal)) throw error;
 		if (nativeDocumentId) throw new NativeOriginalPendingError(nativeDocumentId, error);
 		throw error;
 	}
@@ -148,6 +158,7 @@ export async function uploadPreparedImage(input: UploadPreparedImageInput): Prom
 		warmImportedImagePreview(input, uploaded);
 		return uploaded;
 	} catch (error) {
+		if (cancelledByCaller(error, input.signal)) throw error;
 		if (nativeDocumentId && error instanceof DuplicateImageError) {
 			await markNativeDocumentRemoteSynced({
 				documentId: nativeDocumentId,

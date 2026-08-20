@@ -15,6 +15,8 @@ export const driveUploadGate = $state({
 type Waiter = {
 	resolve: () => void;
 	reject: (error: DOMException) => void;
+	signal: AbortSignal | null;
+	onAbort: (() => void) | null;
 };
 
 const waiters = new Set<Waiter>();
@@ -28,6 +30,31 @@ function cancelledUpload() {
 
 function delay(milliseconds: number) {
 	return new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+function detachAbort(waiter: Waiter) {
+	if (waiter.signal && waiter.onAbort) {
+		waiter.signal.removeEventListener('abort', waiter.onAbort);
+	}
+	waiter.signal = null;
+	waiter.onAbort = null;
+}
+
+function settleWaiter(waiter: Waiter, outcome: 'resolve' | 'reject') {
+	if (!waiters.delete(waiter)) return;
+	detachAbort(waiter);
+	if (outcome === 'resolve') waiter.resolve();
+	else waiter.reject(cancelledUpload());
+}
+
+function closeGateIfIdle() {
+	if (waiters.size > 0) return;
+	driveUploadGate.visible = false;
+	driveUploadGate.connecting = false;
+	driveUploadGate.error = null;
+	if (oauthWindow && !oauthWindow.closed) oauthWindow.close();
+	oauthWindow = null;
+	oauthAttempt += 1;
 }
 
 async function checkConnection() {
@@ -49,16 +76,14 @@ async function checkConnection() {
 }
 
 function resolveWaiters() {
-	for (const waiter of [...waiters]) waiter.resolve();
-	waiters.clear();
+	for (const waiter of [...waiters]) settleWaiter(waiter, 'resolve');
 	driveUploadGate.visible = false;
 	driveUploadGate.connecting = false;
 	driveUploadGate.error = null;
 }
 
 function rejectWaiters() {
-	for (const waiter of [...waiters]) waiter.reject(cancelledUpload());
-	waiters.clear();
+	for (const waiter of [...waiters]) settleWaiter(waiter, 'reject');
 	driveUploadGate.visible = false;
 	driveUploadGate.connecting = false;
 	driveUploadGate.error = null;
@@ -118,9 +143,11 @@ async function finishAuthorization(attempt: number, popup: Window) {
 	}
 }
 
-export async function requireDriveForUpload(): Promise<void> {
+export async function requireDriveForUpload(signal?: AbortSignal): Promise<void> {
 	if (typeof window === 'undefined') return;
+	if (signal?.aborted) throw cancelledUpload();
 	if (await checkConnection()) return;
+	if (signal?.aborted) throw cancelledUpload();
 
 	driveUploadGate.visible = true;
 	if (!driveUploadGate.configured) {
@@ -128,7 +155,16 @@ export async function requireDriveForUpload(): Promise<void> {
 	}
 
 	return new Promise<void>((resolve, reject) => {
-		waiters.add({ resolve, reject });
+		const waiter: Waiter = { resolve, reject, signal: signal ?? null, onAbort: null };
+		if (signal) {
+			waiter.onAbort = () => {
+				settleWaiter(waiter, 'reject');
+				closeGateIfIdle();
+			};
+			signal.addEventListener('abort', waiter.onAbort, { once: true });
+		}
+		waiters.add(waiter);
+		if (signal?.aborted) waiter.onAbort?.();
 	});
 }
 
