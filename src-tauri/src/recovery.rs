@@ -29,7 +29,9 @@ fn import_ids(paths: &AppPaths) -> Result<Vec<String>, String> {
         .map_err(|error| format!("Não foi possível preparar a recuperação local: {error}"))?;
     let rows = statement
         .query_map([], |row| row.get::<_, String>(0))
-        .map_err(|error| format!("Não foi possível consultar importações interrompidas: {error}"))?;
+        .map_err(|error| {
+            format!("Não foi possível consultar importações interrompidas: {error}")
+        })?;
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(|error| format!("Não foi possível ler importações interrompidas: {error}"))
 }
@@ -40,9 +42,9 @@ fn hash_file(path: &std::path::Path) -> Result<String, String> {
     let mut hasher = Sha256::new();
     let mut buffer = vec![0_u8; 1024 * 1024];
     loop {
-        let read = file
-            .read(&mut buffer)
-            .map_err(|error| format!("Não foi possível verificar um original recuperável: {error}"))?;
+        let read = file.read(&mut buffer).map_err(|error| {
+            format!("Não foi possível verificar um original recuperável: {error}")
+        })?;
         if read == 0 {
             break;
         }
@@ -53,7 +55,10 @@ fn hash_file(path: &std::path::Path) -> Result<String, String> {
 }
 
 fn valid_hash_stem(value: &str) -> bool {
-    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
 }
 
 fn recover_moved_document(
@@ -75,15 +80,15 @@ fn recover_moved_document(
     entries.sort_by_key(|entry| entry.file_name());
 
     for entry in entries {
-        let file_type = entry
-            .file_type()
-            .map_err(|error| format!("Não foi possível verificar um original recuperável: {error}"))?;
+        let file_type = entry.file_type().map_err(|error| {
+            format!("Não foi possível verificar um original recuperável: {error}")
+        })?;
         if !file_type.is_file() {
             continue;
         }
-        let metadata = entry
-            .metadata()
-            .map_err(|error| format!("Não foi possível verificar um original recuperável: {error}"))?;
+        let metadata = entry.metadata().map_err(|error| {
+            format!("Não foi possível verificar um original recuperável: {error}")
+        })?;
         if metadata.len() != expected_size {
             continue;
         }
@@ -162,7 +167,8 @@ pub fn recover_abandoned_imports(paths: &AppPaths) -> Result<RecoverySummary, St
     for entry in fs::read_dir(&paths.staging)
         .map_err(|error| format!("Não foi possível verificar o staging local: {error}"))?
     {
-        let entry = entry.map_err(|error| format!("Não foi possível ler o staging local: {error}"))?;
+        let entry =
+            entry.map_err(|error| format!("Não foi possível ler o staging local: {error}"))?;
         if entry
             .file_type()
             .map_err(|error| format!("Não foi possível verificar o staging local: {error}"))?
