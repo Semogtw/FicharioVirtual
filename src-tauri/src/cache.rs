@@ -32,7 +32,9 @@ pub fn trim(paths: &paths::AppPaths, target_bytes: u64) -> Result<CacheTrimResul
             evicted_documents: 0,
             protected_documents: documents
                 .iter()
-                .filter(|document| document.local_state == "present" && document.remote_state != "synced")
+                .filter(|document| {
+                    document.local_state == "present" && document.remote_state != "synced"
+                })
                 .count(),
         });
     }

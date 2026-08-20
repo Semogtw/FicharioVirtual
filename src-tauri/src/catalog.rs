@@ -193,7 +193,10 @@ pub fn get_document(paths: &AppPaths, document_id: &str) -> Result<Option<Docume
         .map_err(|error| format!("Não foi possível consultar o documento local: {error}"))
 }
 
-pub fn get_document_by_drive_file_id(paths: &AppPaths, drive_file_id: &str) -> Result<Option<DocumentRow>, String> {
+pub fn get_document_by_drive_file_id(
+    paths: &AppPaths,
+    drive_file_id: &str,
+) -> Result<Option<DocumentRow>, String> {
     if drive_file_id.is_empty() || drive_file_id.len() > 512 {
         return Ok(None);
     }
@@ -312,7 +315,11 @@ pub fn get_import(paths: &AppPaths, document_id: &str) -> Result<Option<ImportSe
         .map_err(|error| format!("Não foi possível ler a importação local: {error}"))
 }
 
-pub fn update_import_written(paths: &AppPaths, document_id: &str, written_bytes: i64) -> Result<(), String> {
+pub fn update_import_written(
+    paths: &AppPaths,
+    document_id: &str,
+    written_bytes: i64,
+) -> Result<(), String> {
     let connection = open(paths)?;
     let changed = connection
         .execute(
@@ -329,7 +336,10 @@ pub fn update_import_written(paths: &AppPaths, document_id: &str, written_bytes:
 pub fn abort_import(paths: &AppPaths, document_id: &str) -> Result<(), String> {
     let connection = open(paths)?;
     connection
-        .execute("DELETE FROM import_sessions WHERE document_id = ?1", [document_id])
+        .execute(
+            "DELETE FROM import_sessions WHERE document_id = ?1",
+            [document_id],
+        )
         .map_err(|error| format!("Não foi possível cancelar a importação local: {error}"))?;
     Ok(())
 }
@@ -456,7 +466,11 @@ pub fn list_sync_jobs(paths: &AppPaths, limit: usize) -> Result<Vec<SyncJob>, St
         .map_err(|error| format!("Não foi possível ler a fila de sincronização: {error}"))
 }
 
-pub fn claim_sync_jobs(paths: &AppPaths, limit: usize, lease_ms: i64) -> Result<Vec<SyncJob>, String> {
+pub fn claim_sync_jobs(
+    paths: &AppPaths,
+    limit: usize,
+    lease_ms: i64,
+) -> Result<Vec<SyncJob>, String> {
     let mut connection = open(paths)?;
     let transaction = connection
         .transaction()
@@ -470,8 +484,12 @@ pub fn claim_sync_jobs(paths: &AppPaths, limit: usize, lease_ms: i64) -> Result<
             )
             .map_err(|error| format!("Não foi possível consultar a fila de sincronização: {error}"))?;
         let rows = statement
-            .query_map(params![now, limit.clamp(1, 20) as i64], |row| row.get::<_, i64>(0))
-            .map_err(|error| format!("Não foi possível consultar a fila de sincronização: {error}"))?;
+            .query_map(params![now, limit.clamp(1, 20) as i64], |row| {
+                row.get::<_, i64>(0)
+            })
+            .map_err(|error| {
+                format!("Não foi possível consultar a fila de sincronização: {error}")
+            })?;
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(|error| format!("Não foi possível ler a fila de sincronização: {error}"))?
     };
@@ -493,9 +511,9 @@ pub fn claim_sync_jobs(paths: &AppPaths, limit: usize, lease_ms: i64) -> Result<
             .map_err(|error| format!("Não foi possível ler a sincronização reservada: {error}"))?;
         jobs.push(job);
     }
-    transaction
-        .commit()
-        .map_err(|error| format!("Não foi possível confirmar a reserva de sincronização: {error}"))?;
+    transaction.commit().map_err(|error| {
+        format!("Não foi possível confirmar a reserva de sincronização: {error}")
+    })?;
     Ok(jobs)
 }
 
@@ -510,7 +528,12 @@ pub fn complete_sync_job(paths: &AppPaths, id: i64) -> Result<(), String> {
     Ok(())
 }
 
-pub fn fail_sync_job(paths: &AppPaths, id: i64, error: &str, retry_after_ms: i64) -> Result<(), String> {
+pub fn fail_sync_job(
+    paths: &AppPaths,
+    id: i64,
+    error: &str,
+    retry_after_ms: i64,
+) -> Result<(), String> {
     let connection = open(paths)?;
     let now = now_ms();
     let next = now.saturating_add(retry_after_ms.clamp(1_000, 24 * 60 * 60_000));

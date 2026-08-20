@@ -148,7 +148,10 @@ pub fn native_status(app: AppHandle) -> Result<NativeStatus, String> {
 }
 
 #[tauri::command]
-pub fn begin_local_import(app: AppHandle, request: storage::BeginImportRequest) -> Result<(), String> {
+pub fn begin_local_import(
+    app: AppHandle,
+    request: storage::BeginImportRequest,
+) -> Result<(), String> {
     storage::begin_import(&app_paths(&app)?, &request)
 }
 
@@ -158,7 +161,10 @@ pub fn append_local_import(app: AppHandle, request: AppendImportRequest) -> Resu
 }
 
 #[tauri::command]
-pub fn finish_local_import(app: AppHandle, request: DocumentRequest) -> Result<NativeDocument, String> {
+pub fn finish_local_import(
+    app: AppHandle,
+    request: DocumentRequest,
+) -> Result<NativeDocument, String> {
     storage::finish_import(&app_paths(&app)?, &request.document_id)?.try_into()
 }
 
@@ -168,29 +174,44 @@ pub fn abort_local_import(app: AppHandle, request: DocumentRequest) -> Result<()
 }
 
 #[tauri::command]
-pub fn get_local_document(app: AppHandle, request: DocumentRequest) -> Result<Option<NativeDocument>, String> {
+pub fn get_local_document(
+    app: AppHandle,
+    request: DocumentRequest,
+) -> Result<Option<NativeDocument>, String> {
     storage::local_document(&app_paths(&app)?, &request.document_id)?
         .map(TryInto::try_into)
         .transpose()
 }
 
 #[tauri::command]
-pub fn get_local_document_by_drive_file_id(app: AppHandle, request: DriveFileRequest) -> Result<Option<NativeDocument>, String> {
+pub fn get_local_document_by_drive_file_id(
+    app: AppHandle,
+    request: DriveFileRequest,
+) -> Result<Option<NativeDocument>, String> {
     storage::local_document_by_drive_file_id(&app_paths(&app)?, &request.drive_file_id)?
         .map(TryInto::try_into)
         .transpose()
 }
 
 #[tauri::command]
-pub fn list_local_documents(app: AppHandle, request: ListRequest) -> Result<Vec<NativeDocument>, String> {
-    catalog::list_documents(&app_paths(&app)?, request.limit.unwrap_or(200).clamp(1, 1000))?
-        .into_iter()
-        .map(TryInto::try_into)
-        .collect()
+pub fn list_local_documents(
+    app: AppHandle,
+    request: ListRequest,
+) -> Result<Vec<NativeDocument>, String> {
+    catalog::list_documents(
+        &app_paths(&app)?,
+        request.limit.unwrap_or(200).clamp(1, 1000),
+    )?
+    .into_iter()
+    .map(TryInto::try_into)
+    .collect()
 }
 
 #[tauri::command]
-pub fn read_local_document_range(app: AppHandle, request: ReadRangeRequest) -> Result<Vec<u8>, String> {
+pub fn read_local_document_range(
+    app: AppHandle,
+    request: ReadRangeRequest,
+) -> Result<Vec<u8>, String> {
     storage::read_range(
         &app_paths(&app)?,
         &request.document_id,
@@ -200,7 +221,10 @@ pub fn read_local_document_range(app: AppHandle, request: ReadRangeRequest) -> R
 }
 
 #[tauri::command]
-pub fn verify_local_document(app: AppHandle, request: VerifyDocumentRequest) -> Result<bool, String> {
+pub fn verify_local_document(
+    app: AppHandle,
+    request: VerifyDocumentRequest,
+) -> Result<bool, String> {
     storage::verify_document(&app_paths(&app)?, &request.document_id, request.full_hash)
 }
 
@@ -215,12 +239,18 @@ pub fn native_disk_usage(app: AppHandle) -> Result<u64, String> {
 }
 
 #[tauri::command]
-pub fn list_native_sync_jobs(app: AppHandle, request: ListRequest) -> Result<Vec<catalog::SyncJob>, String> {
+pub fn list_native_sync_jobs(
+    app: AppHandle,
+    request: ListRequest,
+) -> Result<Vec<catalog::SyncJob>, String> {
     catalog::list_sync_jobs(&app_paths(&app)?, request.limit.unwrap_or(50).clamp(1, 100))
 }
 
 #[tauri::command]
-pub fn claim_native_sync_jobs(app: AppHandle, request: ClaimSyncRequest) -> Result<Vec<catalog::SyncJob>, String> {
+pub fn claim_native_sync_jobs(
+    app: AppHandle,
+    request: ClaimSyncRequest,
+) -> Result<Vec<catalog::SyncJob>, String> {
     catalog::claim_sync_jobs(
         &app_paths(&app)?,
         request.limit.unwrap_or(2),
@@ -244,7 +274,10 @@ pub fn fail_native_sync_job(app: AppHandle, request: FailSyncJobRequest) -> Resu
 }
 
 #[tauri::command]
-pub fn mark_native_remote_synced(app: AppHandle, request: MarkRemoteSyncedRequest) -> Result<(), String> {
+pub fn mark_native_remote_synced(
+    app: AppHandle,
+    request: MarkRemoteSyncedRequest,
+) -> Result<(), String> {
     paths::validate_document_id(&request.document_id)?;
     catalog::mark_remote_synced(
         &app_paths(&app)?,

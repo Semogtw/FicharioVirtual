@@ -78,23 +78,23 @@ Criar interfaces independentes do Tauri para impedir que chamadas nativas vazem 
 
 ```ts
 interface LocalDocumentStore {
-  import(input: ImportInput): Promise<LocalDocument>;
-  open(documentId: string): Promise<DocumentHandle>;
-  exists(documentId: string): Promise<boolean>;
-  remove(documentId: string): Promise<void>;
-  getUsage(): Promise<StorageUsage>;
+	import(input: ImportInput): Promise<LocalDocument>;
+	open(documentId: string): Promise<DocumentHandle>;
+	exists(documentId: string): Promise<boolean>;
+	remove(documentId: string): Promise<void>;
+	getUsage(): Promise<StorageUsage>;
 }
 
 interface SecureCredentialStore {
-  get(key: string): Promise<string | null>;
-  set(key: string, value: string): Promise<void>;
-  delete(key: string): Promise<void>;
+	get(key: string): Promise<string | null>;
+	set(key: string, value: string): Promise<void>;
+	delete(key: string): Promise<void>;
 }
 
 interface SyncQueue {
-  enqueue(job: SyncJob): Promise<void>;
-  retryDue(): Promise<void>;
-  status(documentId: string): Promise<SyncStatus>;
+	enqueue(job: SyncJob): Promise<void>;
+	retryDue(): Promise<void>;
+	status(documentId: string): Promise<SyncStatus>;
 }
 ```
 

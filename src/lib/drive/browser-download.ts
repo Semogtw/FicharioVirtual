@@ -90,7 +90,9 @@ async function localDriveDocument(fileId: string) {
 
 function cacheFilename(blob: Blob) {
 	if (blob.type === 'application/pdf') return 'documento.pdf';
-	const subtype = blob.type.startsWith('image/') ? blob.type.slice('image/'.length).replace('jpeg', 'jpg') : '';
+	const subtype = blob.type.startsWith('image/')
+		? blob.type.slice('image/'.length).replace('jpeg', 'jpg')
+		: '';
 	return subtype ? `documento.${subtype}` : 'documento.bin';
 }
 
@@ -172,11 +174,7 @@ export async function downloadBrowserDriveRange({
 	const range = validDriveDownloadRange(start, endExclusive, totalBytes);
 	const local = await localDriveDocument(safeFileId);
 	if (local && local.sizeBytes === range.totalBytes) {
-		const bytes = await readNativeDocumentRange(
-			local.documentId,
-			range.start,
-			range.endExclusive
-		);
+		const bytes = await readNativeDocumentRange(local.documentId, range.start, range.endExclusive);
 		return new Blob([bytes], { type: local.mimeType });
 	}
 	try {

@@ -42,11 +42,15 @@ export type NativeImportOptions = Readonly<{
 export type ByteRange = Readonly<{ start: number; endExclusive: number }>;
 
 function positiveSafeInteger(value: number, label: string) {
-	if (!Number.isSafeInteger(value) || value < 1) throw new TypeError(`${label} must be a positive integer`);
+	if (!Number.isSafeInteger(value) || value < 1)
+		throw new TypeError(`${label} must be a positive integer`);
 	return value;
 }
 
-export function nativeImportRanges(size: number, chunkBytes = DEFAULT_CHUNK_BYTES): readonly ByteRange[] {
+export function nativeImportRanges(
+	size: number,
+	chunkBytes = DEFAULT_CHUNK_BYTES
+): readonly ByteRange[] {
 	positiveSafeInteger(size, 'size');
 	positiveSafeInteger(chunkBytes, 'chunkBytes');
 	if (chunkBytes > MAX_SAFE_CHUNK_BYTES) throw new TypeError('chunkBytes exceeds native IPC limit');
@@ -145,12 +149,14 @@ export async function importFileIntoNativeStore(
 			'finish_local_import',
 			request({ documentId: options.documentId })
 		);
-		if (!validNativeDocument(document)) throw new Error('O runtime nativo retornou um documento inválido.');
+		if (!validNativeDocument(document))
+			throw new Error('O runtime nativo retornou um documento inválido.');
 		return document;
 	} catch (error) {
-		await invokeNative<void>('abort_local_import', request({ documentId: options.documentId })).catch(
-			() => undefined
-		);
+		await invokeNative<void>(
+			'abort_local_import',
+			request({ documentId: options.documentId })
+		).catch(() => undefined);
 		throw error;
 	}
 }
@@ -202,7 +208,11 @@ export async function readNativeDocumentRange(
 export async function readNativeDocumentBlob(document: NativeDocument): Promise<Blob> {
 	const parts: BlobPart[] = [];
 	for (const range of nativeImportRanges(document.sizeBytes, DEFAULT_CHUNK_BYTES)) {
-		const bytes = await readNativeDocumentRange(document.documentId, range.start, range.endExclusive);
+		const bytes = await readNativeDocumentRange(
+			document.documentId,
+			range.start,
+			range.endExclusive
+		);
 		parts.push(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
 	}
 	return new Blob(parts, { type: document.mimeType });
@@ -210,10 +220,7 @@ export async function readNativeDocumentBlob(document: NativeDocument): Promise<
 
 export async function verifyNativeDocument(documentId: string, fullHash = false) {
 	if (!isNativeRuntime()) return false;
-	return await invokeNative<boolean>(
-		'verify_local_document',
-		request({ documentId, fullHash })
-	);
+	return await invokeNative<boolean>('verify_local_document', request({ documentId, fullHash }));
 }
 
 export async function markNativeDocumentRemoteSynced(options: {

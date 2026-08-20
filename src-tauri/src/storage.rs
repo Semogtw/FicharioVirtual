@@ -104,8 +104,10 @@ pub fn append_import(paths: &AppPaths, document_id: &str, chunk: &[u8]) -> Resul
     }
     let session = catalog::get_import(paths, document_id)?
         .ok_or_else(|| "Importação local não encontrada".to_string())?;
-    let current = u64::try_from(session.written_bytes).map_err(|_| "Estado de importação inválido")?;
-    let expected = u64::try_from(session.expected_size).map_err(|_| "Estado de importação inválido")?;
+    let current =
+        u64::try_from(session.written_bytes).map_err(|_| "Estado de importação inválido")?;
+    let expected =
+        u64::try_from(session.expected_size).map_err(|_| "Estado de importação inválido")?;
     let next = current
         .checked_add(chunk.len() as u64)
         .ok_or_else(|| "Tamanho da importação excedeu o limite".to_string())?;
@@ -148,7 +150,8 @@ fn hash_file(path: &std::path::Path) -> Result<String, String> {
     let mut encoded = String::with_capacity(64);
     for byte in digest {
         use std::fmt::Write as _;
-        write!(&mut encoded, "{byte:02x}").map_err(|_| "Não foi possível codificar o hash local")?;
+        write!(&mut encoded, "{byte:02x}")
+            .map_err(|_| "Não foi possível codificar o hash local")?;
     }
     Ok(encoded)
 }
@@ -169,10 +172,7 @@ pub fn finish_import(paths: &AppPaths, document_id: &str) -> Result<DocumentRow,
 
     let sha256 = hash_file(&staging_path)?;
     let extension = paths::extension_for(&session.original_filename, &session.mime_type);
-    let relative_path = format!(
-        "documents/{}/{}.{}",
-        session.document_id, sha256, extension
-    );
+    let relative_path = format!("documents/{}/{}.{}", session.document_id, sha256, extension);
     let destination = paths::resolve_relative(&paths.root, &relative_path)?;
     let parent = destination
         .parent()
@@ -190,8 +190,9 @@ pub fn finish_import(paths: &AppPaths, document_id: &str) -> Result<DocumentRow,
         fs::remove_file(&staging_path)
             .map_err(|error| format!("Não foi possível finalizar a cópia local: {error}"))?;
     } else {
-        fs::rename(&staging_path, &destination)
-            .map_err(|error| format!("Não foi possível tornar a cópia local permanente: {error}"))?;
+        fs::rename(&staging_path, &destination).map_err(|error| {
+            format!("Não foi possível tornar a cópia local permanente: {error}")
+        })?;
     }
 
     let old = catalog::get_document(paths, document_id)?;
@@ -216,7 +217,8 @@ pub fn finish_import(paths: &AppPaths, document_id: &str) -> Result<DocumentRow,
 
     if let Some(previous) = old {
         if previous.relative_path != relative_path {
-            if let Ok(previous_path) = paths::resolve_relative(&paths.root, &previous.relative_path) {
+            if let Ok(previous_path) = paths::resolve_relative(&paths.root, &previous.relative_path)
+            {
                 let _ = fs::remove_file(previous_path);
             }
         }
@@ -234,7 +236,10 @@ pub fn abort_import(paths: &AppPaths, document_id: &str) -> Result<(), String> {
     catalog::abort_import(paths, document_id)
 }
 
-fn validate_present_document(paths: &AppPaths, document: DocumentRow) -> Result<Option<DocumentRow>, String> {
+fn validate_present_document(
+    paths: &AppPaths,
+    document: DocumentRow,
+) -> Result<Option<DocumentRow>, String> {
     if document.local_state != "present" {
         return Ok(None);
     }
@@ -262,7 +267,10 @@ pub fn local_document(paths: &AppPaths, document_id: &str) -> Result<Option<Docu
     validate_present_document(paths, document)
 }
 
-pub fn local_document_by_drive_file_id(paths: &AppPaths, drive_file_id: &str) -> Result<Option<DocumentRow>, String> {
+pub fn local_document_by_drive_file_id(
+    paths: &AppPaths,
+    drive_file_id: &str,
+) -> Result<Option<DocumentRow>, String> {
     let Some(document) = catalog::get_document_by_drive_file_id(paths, drive_file_id)? else {
         return Ok(None);
     };
@@ -296,7 +304,11 @@ pub fn read_range(
     Ok(bytes)
 }
 
-pub fn verify_document(paths: &AppPaths, document_id: &str, full_hash: bool) -> Result<bool, String> {
+pub fn verify_document(
+    paths: &AppPaths,
+    document_id: &str,
+    full_hash: bool,
+) -> Result<bool, String> {
     let Some(document) = local_document(paths, document_id)? else {
         return Ok(false);
     };
@@ -349,8 +361,8 @@ pub fn cleanup_staging(paths: &AppPaths) -> Result<(), String> {
     for entry in fs::read_dir(&paths.staging)
         .map_err(|error| format!("Não foi possível verificar importações interrompidas: {error}"))?
     {
-        let entry = entry
-            .map_err(|error| format!("Não foi possível ler a área temporária: {error}"))?;
+        let entry =
+            entry.map_err(|error| format!("Não foi possível ler a área temporária: {error}"))?;
         if entry
             .file_type()
             .map_err(|error| format!("Não foi possível verificar a área temporária: {error}"))?

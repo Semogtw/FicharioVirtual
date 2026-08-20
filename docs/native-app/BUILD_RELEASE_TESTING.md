@@ -55,13 +55,13 @@ Quando a implementação começar, padronizar comandos como:
 
 ```json
 {
-  "scripts": {
-    "native:dev": "tauri dev",
-    "native:build": "tauri build",
-    "android:dev": "tauri android dev",
-    "android:build": "tauri android build",
-    "verify:native": "..."
-  }
+	"scripts": {
+		"native:dev": "tauri dev",
+		"native:build": "tauri build",
+		"android:dev": "tauri android dev",
+		"android:build": "tauri android build",
+		"verify:native": "..."
+	}
 }
 ```
 
