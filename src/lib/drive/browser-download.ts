@@ -1,8 +1,10 @@
 import {
+	cacheRemoteFileInNativeStore,
 	readNativeDocumentBlob,
 	readNativeDocumentRange,
 	resolveNativeDocumentByDriveFileId
 } from '$lib/native/local-document-store';
+import { sessionState } from '$lib/stores/session.svelte';
 
 const DRIVE_ID = /^[A-Za-z0-9_-]{10,256}$/;
 
@@ -86,6 +88,36 @@ async function localDriveDocument(fileId: string) {
 	}
 }
 
+function cacheFilename(blob: Blob) {
+	if (blob.type === 'application/pdf') return 'documento.pdf';
+	const subtype = blob.type.startsWith('image/') ? blob.type.slice('image/'.length).replace('jpeg', 'jpg') : '';
+	return subtype ? `documento.${subtype}` : 'documento.bin';
+}
+
+async function syntheticDriveDocumentId(fileId: string) {
+	if (!globalThis.crypto?.subtle) return null;
+	const bytes = new TextEncoder().encode(fileId);
+	const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', bytes));
+	return `drive_${Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+}
+
+async function warmNativeDriveCache(fileId: string, blob: Blob) {
+	const ownerId = sessionState.user?.id;
+	if (!ownerId) return;
+	if (blob.type !== 'application/pdf' && !blob.type.startsWith('image/')) return;
+	const documentId = await syntheticDriveDocumentId(fileId);
+	if (!documentId) return;
+	const file = new File([blob], cacheFilename(blob), {
+		type: blob.type,
+		lastModified: Date.now()
+	});
+	await cacheRemoteFileInNativeStore(file, {
+		documentId,
+		ownerId,
+		driveFileId: fileId
+	});
+}
+
 export async function downloadBrowserDriveFile({
 	client,
 	fileId,
@@ -111,9 +143,12 @@ export async function downloadBrowserDriveFile({
 			throw new Error('invalid drive media response');
 		}
 		const mediaType = response?.headers.get('X-Drive-Media-Type')?.trim() ?? '';
-		return mediaType.length > 0 && mediaType.length <= 256 && mediaType.includes('/')
-			? data.slice(0, data.size, mediaType)
-			: data;
+		const media =
+			mediaType.length > 0 && mediaType.length <= 256 && mediaType.includes('/')
+				? data.slice(0, data.size, mediaType)
+				: data;
+		void warmNativeDriveCache(safeFileId, media).catch(() => undefined);
+		return media;
 	} catch (error) {
 		if (error instanceof TypeError && error.message.startsWith('Invalid Google Drive')) throw error;
 		throw new Error('Não foi possível baixar o arquivo selecionado no Google Drive.');
