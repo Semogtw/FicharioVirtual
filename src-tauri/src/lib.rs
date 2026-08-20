@@ -5,8 +5,12 @@ mod commands;
 mod external;
 mod metrics;
 mod paths;
+mod recovery;
 mod storage;
 mod sync_intent;
+
+#[cfg(test)]
+mod storage_tests;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -17,8 +21,8 @@ pub fn run() {
                 .map_err(|error| std::io::Error::other(format!("native storage: {error}")))?;
             catalog::initialize(&paths)
                 .map_err(|error| std::io::Error::other(format!("native catalog: {error}")))?;
-            storage::cleanup_staging(&paths)
-                .map_err(|error| std::io::Error::other(format!("native staging: {error}")))?;
+            recovery::recover_abandoned_imports(&paths)
+                .map_err(|error| std::io::Error::other(format!("native recovery: {error}")))?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
