@@ -1,13 +1,19 @@
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
+const NATIVE_APP_ORIGINS = new Set(['http://tauri.localhost', 'tauri://localhost']);
 
 type OriginRule =
 	| Readonly<{ kind: 'exact'; origin: string }>
 	| Readonly<{ kind: 'single-subdomain'; hostnameSuffix: string }>;
 
 function normalizeExactOrigin(value: string): string | null {
+	const candidate = value.trim();
+	if (candidate === 'tauri://localhost' || candidate === 'tauri://localhost/') {
+		return 'tauri://localhost';
+	}
+
 	let url: URL;
 	try {
-		url = new URL(value);
+		url = new URL(candidate);
 	} catch {
 		return null;
 	}
@@ -24,6 +30,9 @@ function normalizeExactOrigin(value: string): string | null {
 
 	if (url.protocol === 'https:') return url.origin;
 	if (url.protocol === 'http:' && LOCAL_HOSTS.has(url.hostname)) return url.origin;
+	if (url.protocol === 'http:' && url.hostname === 'tauri.localhost' && !url.port) {
+		return 'http://tauri.localhost';
+	}
 	return null;
 }
 
@@ -78,6 +87,12 @@ function ruleAllowsOrigin(rule: OriginRule, origin: string): boolean {
 	return label.length > 0 && !label.includes('.');
 }
 
+export function isNativeAppOrigin(value: string | null | undefined): boolean {
+	if (!value) return false;
+	const normalized = normalizeExactOrigin(value);
+	return normalized !== null && NATIVE_APP_ORIGINS.has(normalized);
+}
+
 export function parseAppOrigin(
 	value: string | undefined,
 	requestOrigin?: string | null
@@ -88,6 +103,7 @@ export function parseAppOrigin(
 	if (requestOrigin !== undefined && requestOrigin !== null) {
 		const normalizedRequestOrigin = normalizeExactOrigin(requestOrigin.trim());
 		if (!normalizedRequestOrigin) return null;
+		if (NATIVE_APP_ORIGINS.has(normalizedRequestOrigin)) return normalizedRequestOrigin;
 		return rules.some((rule) => ruleAllowsOrigin(rule, normalizedRequestOrigin))
 			? normalizedRequestOrigin
 			: null;

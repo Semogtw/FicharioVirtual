@@ -4,6 +4,7 @@ import { uploadBrowserBlobToDrive } from '$lib/drive/browser-upload';
 import { resolveDriveFolder } from '$lib/drive/resolve-folder';
 import type { DriveFile } from '$lib/drive/types';
 import { parseDuplicateDocumentId } from '$lib/import/duplicate-result';
+import { cacheRemoteFileInNativeStore } from '$lib/native/local-document-store';
 import { getSupabaseClient } from '$lib/services/supabase';
 import type { Database } from '$lib/types/database';
 import {
@@ -29,6 +30,7 @@ class DrivePdfGateway implements PdfImportGateway {
 	readonly #operations: DrivePdfOperations;
 	#driveFile: DriveFile | null = null;
 	#originalLogicalPath: string | null = null;
+	#originalFile: File | null = null;
 
 	constructor(
 		client: SupabaseClient<Database>,
@@ -67,6 +69,7 @@ class DrivePdfGateway implements PdfImportGateway {
 			const name = blob instanceof File && blob.name.trim() ? blob.name : 'documento.pdf';
 			this.#driveFile = await this.#operations.uploadOriginal(blob, name, parentFolderId);
 			this.#originalLogicalPath = path;
+			this.#originalFile = blob instanceof File ? blob : null;
 			return;
 		}
 		const { error } = await this.#client.storage.from('documents').upload(path, blob, {
@@ -119,11 +122,28 @@ class DrivePdfGateway implements PdfImportGateway {
 			}
 		);
 		if (error) throw new PdfUploadError('metadata_failed');
+		let publication: PdfImportPublication;
 		try {
-			return parsePdfImportPublication(data, input.documentId);
+			publication = parsePdfImportPublication(data, input.documentId);
 		} catch {
 			throw new PdfUploadError('metadata_failed');
 		}
+
+		const originalFile = this.#originalFile;
+		const driveFileId = this.#driveFile.id;
+		if (originalFile) {
+			void this.currentUserId()
+				.then((ownerId) =>
+					cacheRemoteFileInNativeStore(originalFile, {
+						documentId: input.documentId,
+						ownerId,
+						remoteDocumentId: input.documentId,
+						driveFileId
+					})
+				)
+				.catch(() => undefined);
+		}
+		return publication;
 	}
 }
 

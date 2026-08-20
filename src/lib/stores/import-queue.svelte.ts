@@ -15,6 +15,7 @@ import {
 	type StoredImageImportRecord
 } from '$lib/import/resume-store';
 import { DuplicateImageError, uploadPreparedImage, type UploadedPage } from '$lib/import/upload';
+import { NativeOriginalPendingError } from '$lib/native/pending-import';
 import {
 	createImportSession,
 	listImportSessionsByResumeKeys,
@@ -54,6 +55,7 @@ export type ImportQueueItem = {
 export const importQueue = $state<{ items: ImportQueueItem[] }>({ items: [] });
 
 const IMPORT_LOCK_RETRY_MS = 1_000;
+const SYNC_RETRY_MS = 30_000;
 const controllers = new Map<string, AbortController>();
 const queuedFiles = new WeakSet<File>();
 const persistenceChains = new Map<string, Promise<void>>();
@@ -190,7 +192,9 @@ async function synchronizeItem(item: ImportQueueItem) {
 				item.status === 'failed'
 					? 'import_failed'
 					: item.status === 'waiting'
-						? 'ocr_pending'
+						? item.result
+							? 'ocr_pending'
+							: 'sync_pending'
 						: null,
 			finishedAt: status === 'completed' || status === 'cancelled' ? new Date().toISOString() : null
 		});
@@ -261,7 +265,8 @@ subscribeImportUpdates(handleImportUpdate);
 function scheduleImportRetry(
 	item: ImportQueueItem,
 	retry: () => void = () => void processItemWithLock(item),
-	expectedStatus: ImportQueueStatus = 'queued'
+	expectedStatus: ImportQueueStatus = 'queued',
+	delayMs = IMPORT_LOCK_RETRY_MS
 ) {
 	if (
 		importRetryTimers.has(item.id) ||
@@ -273,7 +278,7 @@ function scheduleImportRetry(
 	const timer = setTimeout(() => {
 		importRetryTimers.delete(item.id);
 		if (importQueue.items.includes(item) && item.status === expectedStatus) retry();
-	}, IMPORT_LOCK_RETRY_MS);
+	}, delayMs);
 	importRetryTimers.set(item.id, timer);
 }
 
@@ -317,7 +322,6 @@ async function processItem(item: ImportQueueItem) {
 	item.duplicateDocumentId = null;
 	item.status = 'preparing';
 	void persistItem(item);
-
 	try {
 		if (controller.signal.aborted) throw new DOMException('Import cancelled', 'AbortError');
 		const prepared = await prepareImage(item.file, item.mode, { signal: controller.signal });
@@ -329,7 +333,8 @@ async function processItem(item: ImportQueueItem) {
 		item.result = await uploadPreparedImage({
 			prepared,
 			notebookId: item.notebookId,
-			signal: controller.signal
+			signal: controller.signal,
+			nativeResumeKey: item.resumeKey
 		});
 		void persistItem(item);
 		if (controller.signal.aborted) throw new DOMException('Import cancelled', 'AbortError');
@@ -344,6 +349,14 @@ async function processItem(item: ImportQueueItem) {
 			item.status = 'duplicate';
 			item.duplicateDocumentId = error.documentId;
 			item.error = error.message;
+		} else if (error instanceof NativeOriginalPendingError) {
+			item.status = 'waiting';
+			item.error = error.message;
+			const explicitlyCancelled =
+				error.cause instanceof DOMException && error.cause.name === 'AbortError';
+			if (!explicitlyCancelled) {
+				scheduleImportRetry(item, () => void processItemWithLock(item), 'waiting', SYNC_RETRY_MS);
+			}
 		} else {
 			item.status = 'failed';
 			item.error = message(error);

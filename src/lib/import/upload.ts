@@ -1,3 +1,8 @@
+import { markNativeDocumentRemoteSynced } from '$lib/native/local-document-store';
+import {
+	ensurePendingNativeOriginal,
+	NativeOriginalPendingError
+} from '$lib/native/pending-import';
 import { writeLocalMediaPreview } from '$lib/pwa/media-preview-cache';
 import { sessionState } from '$lib/stores/session.svelte';
 import { requireDriveForUpload } from '$lib/stores/drive-upload-gate.svelte';
@@ -13,6 +18,8 @@ export type UploadPreparedImageInput = {
 	sourceCreatedAt?: string | null;
 	promptVersion?: number;
 	signal?: AbortSignal;
+	nativeDocumentId?: string | null;
+	nativeResumeKey?: string | null;
 };
 
 export type ImageImportIdentifiers = {
@@ -123,10 +130,48 @@ function warmImportedImagePreview(input: UploadPreparedImageInput, uploaded: Upl
 	);
 }
 
+function cancelledByCaller(error: unknown, signal?: AbortSignal) {
+	return error instanceof DOMException && error.name === 'AbortError' && signal?.aborted === true;
+}
+
 export async function uploadPreparedImage(input: UploadPreparedImageInput): Promise<UploadedPage> {
-	await requireDriveForUpload();
+	const ownerId = sessionState.user?.id ?? null;
+	const pending = ownerId
+		? await ensurePendingNativeOriginal({
+				file: input.prepared.original,
+				ownerId,
+				resumeKey: input.nativeResumeKey
+			})
+		: null;
+	const nativeDocumentId = pending?.documentId ?? null;
+	try {
+		await requireDriveForUpload(input.signal);
+	} catch (error) {
+		if (cancelledByCaller(error, input.signal)) throw error;
+		if (nativeDocumentId) throw new NativeOriginalPendingError(nativeDocumentId, error);
+		throw error;
+	}
+
 	const { uploadPreparedImageToDrive } = await import('./drive-upload');
-	const uploaded = await uploadPreparedImageToDrive(input);
-	warmImportedImagePreview(input, uploaded);
-	return uploaded;
+	try {
+		const uploaded = await uploadPreparedImageToDrive({ ...input, nativeDocumentId });
+		warmImportedImagePreview(input, uploaded);
+		return uploaded;
+	} catch (error) {
+		if (cancelledByCaller(error, input.signal)) throw error;
+		if (nativeDocumentId && error instanceof DuplicateImageError) {
+			await markNativeDocumentRemoteSynced({
+				documentId: nativeDocumentId,
+				remoteDocumentId: error.documentId
+			}).catch(() => undefined);
+			throw error;
+		}
+		if (
+			nativeDocumentId &&
+			!(error instanceof ImageUploadError && error.code === 'not_authenticated')
+		) {
+			throw new NativeOriginalPendingError(nativeDocumentId, error);
+		}
+		throw error;
+	}
 }

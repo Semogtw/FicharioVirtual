@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { corsHeaders, parseAppOrigin } from '../../../supabase/functions/_shared/cors';
+import {
+	corsHeaders,
+	isNativeAppOrigin,
+	parseAppOrigin
+} from '../../../supabase/functions/_shared/cors';
 
 const cloudflareAllowlist =
 	'https://staging.fichario-virtual.pages.dev,https://fichario-virtual.pages.dev,https://*.fichario-virtual.pages.dev';
@@ -42,6 +46,26 @@ describe('parseAppOrigin', () => {
 		expect(parseAppOrigin('http://fichario.example')).toBeNull();
 	});
 
+	it('allows only the exact Tauri production WebView origins', () => {
+		expect(parseAppOrigin(cloudflareAllowlist, 'http://tauri.localhost')).toBe(
+			'http://tauri.localhost'
+		);
+		expect(parseAppOrigin(cloudflareAllowlist, 'tauri://localhost')).toBe('tauri://localhost');
+		expect(isNativeAppOrigin('http://tauri.localhost')).toBe(true);
+		expect(isNativeAppOrigin('tauri://localhost/')).toBe(true);
+
+		for (const value of [
+			'http://tauri.localhost:8080',
+			'http://tauri.localhost.example.invalid',
+			'https://tauri.localhost',
+			'tauri://other',
+			'tauri://localhost/path'
+		]) {
+			expect(parseAppOrigin(cloudflareAllowlist, value)).toBeNull();
+			expect(isNativeAppOrigin(value)).toBe(false);
+		}
+	});
+
 	it('rejects wildcard-all, malformed allowlists, credentials, paths, query strings and fragments', () => {
 		for (const value of [
 			undefined,
@@ -66,6 +90,15 @@ describe('corsHeaders', () => {
 		expect(headers['Access-Control-Allow-Origin']).toBe('https://fichario.example');
 		expect(headers['Access-Control-Allow-Origin']).not.toBe('*');
 		expect(headers.Vary).toBe('Origin');
+	});
+
+	it('echoes exact native origins without broadening them', () => {
+		expect(corsHeaders('http://tauri.localhost')['Access-Control-Allow-Origin']).toBe(
+			'http://tauri.localhost'
+		);
+		expect(corsHeaders('tauri://localhost')['Access-Control-Allow-Origin']).toBe(
+			'tauri://localhost'
+		);
 	});
 
 	it('allows the current Supabase browser request headers explicitly', () => {

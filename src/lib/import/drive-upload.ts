@@ -3,8 +3,12 @@ import { deleteBrowserDriveFile } from '$lib/drive/browser-files';
 import { uploadBrowserBlobToDrive } from '$lib/drive/browser-upload';
 import { resolveDriveFolder } from '$lib/drive/resolve-folder';
 import type { DriveFile } from '$lib/drive/types';
-import type { Database } from '$lib/types/database';
+import {
+	importFileIntoNativeStore,
+	markNativeDocumentRemoteSynced
+} from '$lib/native/local-document-store';
 import { getSupabaseClient } from '$lib/services/supabase';
+import type { Database } from '$lib/types/database';
 import { parseDuplicateDocumentId } from './duplicate-result';
 import { calculateSha256 } from './hash';
 import type { ImagePreprocessingMetadata } from './image-types';
@@ -86,6 +90,9 @@ function validateBoundaryInput(input: UploadPreparedImageInput) {
 	if (input.notebookId !== null && input.notebookId !== undefined) {
 		requireUuid(input.notebookId, 'notebook identifier');
 	}
+	if (input.nativeDocumentId !== null && input.nativeDocumentId !== undefined) {
+		requireUuid(input.nativeDocumentId, 'native document identifier');
+	}
 }
 
 const defaultDependencies: DriveImageUploadDependencies = {
@@ -126,9 +133,19 @@ export async function uploadPreparedImageToDriveWithGateway(
 	if (duplicateId) throw new DuplicateImageError(duplicateId);
 	if (input.signal?.aborted) throw abortError();
 
-	const documentId = requireUuid(dependencies.generateUuid(), 'document identifier');
+	const documentId = input.nativeDocumentId
+		? requireUuid(input.nativeDocumentId, 'native document identifier')
+		: requireUuid(dependencies.generateUuid(), 'document identifier');
 	const pageId = requireUuid(dependencies.generateUuid(), 'page identifier');
 	const ocrJobId = requireUuid(dependencies.generateUuid(), 'OCR job identifier');
+	if (!input.nativeDocumentId) {
+		await importFileIntoNativeStore(input.prepared.original, {
+			documentId,
+			ownerId: userId,
+			remoteState: 'pending'
+		});
+	}
+	if (input.signal?.aborted) throw abortError();
 	const parentFolderId = await gateway.resolveFolder(input.notebookId ?? null);
 	if (input.signal?.aborted) throw abortError();
 
@@ -169,6 +186,11 @@ export async function uploadPreparedImageToDriveWithGateway(
 			preparedBytes: input.prepared.image.size,
 			sourceCreatedAt: input.sourceCreatedAt ?? null,
 			promptVersion
+		});
+		await markNativeDocumentRemoteSynced({
+			documentId,
+			remoteDocumentId: documentId,
+			driveFileId: driveFile.id
 		});
 		return Object.freeze({
 			...imported,
