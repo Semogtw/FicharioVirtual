@@ -29,54 +29,15 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: native-app-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  format:
-    name: Canonical formatting
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Checkout native branch
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          ref: ${{ github.event.pull_request.head.ref }}
-          persist-credentials: true
-      - name: Set up pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-        with:
-          version: 10
-      - name: Set up Node.js
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: 22.16.0
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Format native frontend changes
-        run: pnpm exec prettier --write src/lib/components/ImportQueueTray.svelte src/lib/stores/import-queue.svelte.ts
-      - name: Commit formatting
-        shell: bash
-        run: |
-          if git diff --quiet; then
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/lib/components/ImportQueueTray.svelte src/lib/stores/import-queue.svelte.ts
-          git commit -m "style(native): apply canonical queue formatting"
-          git push origin HEAD:${{ github.event.pull_request.head.ref }}
-
   frontend:
     name: Frontend contracts
-    needs: format
-    if: ${{ always() && (needs.format.result == 'success' || needs.format.result == 'skipped') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -103,8 +64,6 @@ jobs:
 
   rust-desktop:
     name: Rust ${{ matrix.os }}
-    needs: format
-    if: ${{ always() && (needs.format.result == 'success' || needs.format.result == 'skipped') }}
     strategy:
       fail-fast: false
       matrix:
@@ -146,11 +105,12 @@ jobs:
         run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
       - name: Compile native shell
         run: cargo check --locked --manifest-path src-tauri/Cargo.toml
+      - name: Run native Rust unit tests
+        if: runner.os == 'Linux'
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml --lib
 
   android-smoke:
     name: Android aarch64 smoke build
-    needs: format
-    if: ${{ always() && (needs.format.result == 'success' || needs.format.result == 'skipped') }}
     runs-on: ubuntu-latest
     timeout-minutes: 55
     env:
