@@ -182,7 +182,7 @@ export async function readNativeDocumentRange(
 	documentId: string,
 	start: number,
 	endExclusive: number
-): Promise<Uint8Array> {
+): Promise<Uint8Array<ArrayBuffer>> {
 	if (!isNativeRuntime()) throw new Error('O documento não está em um runtime nativo.');
 	if (
 		!Number.isSafeInteger(start) ||
@@ -197,7 +197,8 @@ export async function readNativeDocumentRange(
 		'read_local_document_range',
 		request({ documentId, start, endExclusive })
 	);
-	const bytes = Uint8Array.from(raw);
+	const bytes = new Uint8Array(raw.length);
+	bytes.set(raw);
 	if (bytes.byteLength !== endExclusive - start) {
 		bytes.fill(0);
 		throw new Error('O runtime nativo retornou uma faixa incompleta.');
@@ -213,7 +214,7 @@ export async function readNativeDocumentBlob(document: NativeDocument): Promise<
 			range.start,
 			range.endExclusive
 		);
-		parts.push(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+		parts.push(bytes.buffer);
 	}
 	return new Blob(parts, { type: document.mimeType });
 }
