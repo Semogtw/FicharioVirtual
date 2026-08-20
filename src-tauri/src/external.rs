@@ -34,8 +34,10 @@ mod tests {
 
     #[test]
     fn accepts_google_accounts_https_urls() {
-        assert!(validate_google_oauth_url("https://accounts.google.com/o/oauth2/v2/auth?client_id=x")
-            .is_ok());
+        assert!(validate_google_oauth_url(
+            "https://accounts.google.com/o/oauth2/v2/auth?client_id=x"
+        )
+        .is_ok());
     }
 
     #[test]
