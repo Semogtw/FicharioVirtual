@@ -1,0 +1,21 @@
+[package]
+name = "fichario-native"
+version = "0.1.0"
+description = "Native shell for Fichário Virtual"
+authors = ["Arthur Almeida"]
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "fichario_native_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2.11", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.40", features = ["bundled"] }
+sha2 = "0.10"
