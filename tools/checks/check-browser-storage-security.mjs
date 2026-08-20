@@ -9,7 +9,7 @@ const failures = [];
 const allowedLocalStorage = new Set([
 	'src/lib/components/DataProcessingNotice.svelte',
 	'src/lib/import/browser-exclusive.ts',
-	'src/lib/review/draft-index.ts',
+	'src/lib/pwa/media-preview-cache.ts',
 	'src/lib/theme/theme.ts'
 ]);
 const allowedIndexedDb = new Set(['src/lib/import/resume-database.ts']);
@@ -41,27 +41,6 @@ for (const path of await sourceFiles(sourceRoot)) {
 			`${repositoryPath}: direct IndexedDB access is restricted to the resume database`
 		);
 	}
-}
-
-const drafts = await readFile(join(root, 'src/lib/review/drafts.ts'), 'utf8');
-const draftIndex = await readFile(join(root, 'src/lib/review/draft-index.ts'), 'utf8');
-if (!drafts.includes("const PREFIX = 'fichario:correction-draft:v2:'")) {
-	failures.push(
-		'src/lib/review/drafts.ts: correction drafts must keep the account-scoped v2 namespace'
-	);
-}
-if (
-	!drafts.includes('userId: ownerUserId') ||
-	!drafts.includes('record.userId !== expectedUserId')
-) {
-	failures.push(
-		'src/lib/review/drafts.ts: stored correction drafts must bind and verify the owning user'
-	);
-}
-if (!draftIndex.includes('correctionDraftKey(userId, pageId)')) {
-	failures.push(
-		'src/lib/review/draft-index.ts: correction draft reads must derive keys from userId'
-	);
 }
 
 const resumeDatabase = await readFile(join(root, 'src/lib/import/resume-database.ts'), 'utf8');

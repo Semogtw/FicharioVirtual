@@ -15,10 +15,9 @@
 	}
 
 	let { children }: AppShellProps = $props();
+	let searchRoute = $derived(page.url.pathname.startsWith('/search'));
 	let searchQuery = $derived(
-		page.url.pathname.startsWith('/search')
-			? (page.url.searchParams.get('q')?.slice(0, 200) ?? '')
-			: ''
+		searchRoute ? (page.url.searchParams.get('q')?.slice(0, 200) ?? '') : ''
 	);
 	let documentRoute = $derived(page.url.pathname.startsWith('/documents/'));
 
@@ -27,7 +26,6 @@
 		{ href: '/library/', label: 'Biblioteca', icon: 'library' },
 		{ href: '/notebooks/', label: 'Cadernos', icon: 'notebooks' },
 		{ href: '/import/', label: 'Importar', icon: 'import' },
-		{ href: '/review/', label: 'Revisar', icon: 'review' },
 		{ href: '/coverage/', label: 'Cobertura', icon: 'coverage' },
 		{ href: '/drive/', label: 'Drive', icon: 'drive' }
 	] as const;
@@ -105,9 +103,15 @@
 
 	<div class="workspace">
 		<header class="topbar">
-			<TopSearch initialValue={searchQuery} onSearch={search} />
+			{#if searchRoute}
+				<div class="topbar-spacer" aria-hidden="true"></div>
+			{:else}
+				<TopSearch initialValue={searchQuery} onSearch={search} />
+			{/if}
 			<ImportQueueTray />
-			<a class="profile-link" href="/settings/" aria-label="Abrir configurações">A</a>
+			<a class="profile-link" href="/settings/" aria-label="Abrir configurações">
+				<NavigationIcon name="settings" />
+			</a>
 		</header>
 
 		<DataProcessingNotice />
@@ -178,6 +182,11 @@
 			box-shadow var(--motion-base) var(--ease-standard);
 	}
 
+	.topbar-spacer {
+		min-width: 0;
+		flex: 1 1 auto;
+	}
+
 	.profile-link {
 		width: 2.7rem;
 		height: 2.7rem;
@@ -188,9 +197,6 @@
 		border-radius: 50%;
 		background: var(--surface-strong);
 		color: var(--archive);
-		font-family: var(--font-heading);
-		font-size: 1.1rem;
-		font-weight: 700;
 		transform: translateY(0) scale(1);
 		transition:
 			background-color var(--motion-fast) var(--ease-standard),

@@ -7,9 +7,26 @@ import {
 	type OcrFunctionClient,
 	type OcrRunResult
 } from './ocr-runtime';
+import { getSupabaseClient } from './supabase';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_BATCH_PAGES = 100;
+
+type PageStateQueryClient = {
+	from(table: 'pages'): {
+		select(columns: 'status'): {
+			eq(
+				column: 'id',
+				value: string
+			): {
+				maybeSingle(): Promise<{
+					data: { status: unknown } | null;
+					error: unknown;
+				}>;
+			};
+		};
+	};
+};
 
 function abortError() {
 	return new DOMException('OCR request was cancelled', 'AbortError');
@@ -38,6 +55,28 @@ async function kick(signal?: AbortSignal) {
 		);
 	}
 	if (signal?.aborted) throw abortError();
+}
+
+async function readCompletedPageState(pageId: string): Promise<OcrRunResult | null> {
+	try {
+		const client = getSupabaseClient() as unknown as PageStateQueryClient;
+		const { data, error } = await client
+			.from('pages')
+			.select('status')
+			.eq('id', pageId)
+			.maybeSingle();
+		if (error || data === null) return null;
+		if (data.status === 'ready') {
+			return Object.freeze({ state: 'complete' as const, needsReview: false });
+		}
+		if (data.status === 'needs_review') {
+			return Object.freeze({ state: 'complete' as const, needsReview: true });
+		}
+		return null;
+	} catch {
+		// Reconciliation is an optimization. The existing queue polling remains the fallback.
+		return null;
+	}
 }
 
 export async function processOcrBatch(
@@ -70,5 +109,8 @@ export async function processPageOcr(
 	if (client) return processPageOcrForeground(pageId, client, options);
 	if (!UUID.test(pageId)) throw new TypeError('Invalid page identifier');
 	await kick(options.signal);
+	const completed = await readCompletedPageState(pageId);
+	if (options.signal?.aborted) throw abortError();
+	if (completed) return completed;
 	return Object.freeze({ state: 'retry_later' as const });
 }

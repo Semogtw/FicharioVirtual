@@ -297,7 +297,7 @@ try {
 		.first()
 		.setInputFiles({ name: filename, mimeType: 'application/pdf', buffer: await makePdf() });
 	await page
-		.getByText(/arquivo\(s\) adicionados\./i)
+		.getByText(/arquivo(?:s)? adicionado(?:s)?\./i)
 		.waitFor({ state: 'visible', timeout: 20_000 });
 	const queueState = await waitForQueue(page);
 	const document = await waitForRow(client, 'documents', { original_filename: filename });

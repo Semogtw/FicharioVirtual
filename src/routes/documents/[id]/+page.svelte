@@ -2,25 +2,19 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
-	import CorrectionEditor from '$lib/components/CorrectionEditor.svelte';
 	import DocumentMediaViewer from '$lib/components/DocumentMediaViewer.svelte';
-	import type { PageDetail } from '$lib/domain/page';
 	import { deleteDocument } from '$lib/services/documents';
 	import {
 		invalidateDocumentDetail,
 		loadDocumentDetail,
-		loadDocumentPage,
-		prefetchDocumentPages,
 		type DocumentDetail
 	} from '$lib/services/document-detail';
 	import { resumeDocumentOcr } from '$lib/services/ocr-resume';
 	import { RequestVersion } from '$lib/services/request-version';
 
 	let detail = $state<DocumentDetail | null>(null);
-	let selectedPage = $state<PageDetail | null>(null);
 	let selectedPageNumber = $state(1);
 	let loading = $state(true);
-	let pageLoading = $state(false);
 	let retrying = $state(false);
 	let deleting = $state(false);
 	let deleted = $state(false);
@@ -28,27 +22,22 @@
 	let error = $state<string | null>(null);
 	let highlightedQuery = $derived(page.url.searchParams.get('highlight')?.slice(0, 200) ?? '');
 	const refreshRequests = new RequestVersion();
-	const pageRequests = new RequestVersion();
 
-	async function loadSelectedPage(documentId: string, pageNumber: number) {
-		const version = pageRequests.next();
-		pageLoading = true;
-		try {
-			const loaded = await loadDocumentPage(documentId, pageNumber);
-			if (!pageRequests.isCurrent(version) || page.params.id !== documentId) return;
-			selectedPage = loaded;
-			const neighborNumbers = [pageNumber - 1, pageNumber + 1].filter(
-				(candidate) => detail?.pages.some((item) => item.pageNumber === candidate) === true
-			);
-			if (neighborNumbers.length > 0) {
-				void prefetchDocumentPages(documentId, neighborNumbers);
-			}
-		} catch (caught) {
-			if (!pageRequests.isCurrent(version) || page.params.id !== documentId) return;
-			selectedPage = null;
-			error = caught instanceof Error ? caught.message : 'Não foi possível abrir esta página.';
-		} finally {
-			if (pageRequests.isCurrent(version) && page.params.id === documentId) pageLoading = false;
+	function pageStatusLabel(status: DocumentDetail['pages'][number]['status']) {
+		switch (status) {
+			case 'pending':
+				return 'Na fila';
+			case 'processing':
+				return 'Processando';
+			case 'retryable':
+				return 'Aguardando';
+			case 'blocked_quota':
+				return 'Aguardando';
+			case 'failed':
+				return 'Falhou';
+			case 'ready':
+			case 'needs_review':
+				return 'Pronta';
 		}
 	}
 
@@ -57,10 +46,7 @@
 		requestedPageNumber = selectedPageNumber
 	) {
 		const version = refreshRequests.next();
-		pageRequests.next();
 		loading = true;
-		pageLoading = false;
-		selectedPage = null;
 		error = null;
 		if (!documentId) {
 			if (refreshRequests.isCurrent(version)) {
@@ -79,7 +65,6 @@
 			)
 				? requestedPageNumber
 				: (loaded.pages[0]?.pageNumber ?? 1);
-			if (loaded.pages.length > 0) void loadSelectedPage(documentId, selectedPageNumber);
 		} catch (caught) {
 			if (!refreshRequests.isCurrent(version)) return;
 			detail = null;
@@ -89,31 +74,10 @@
 		}
 	}
 
-	function pageSaved(saved: PageDetail) {
-		selectedPage = saved;
-		if (!detail) return;
-		detail = Object.freeze({
-			...detail,
-			pages: Object.freeze(
-				detail.pages.map((candidate) =>
-					candidate.id === saved.id
-						? Object.freeze({
-								...candidate,
-								status: saved.status,
-								updatedAt: saved.updatedAt
-							})
-						: candidate
-				)
-			)
-		});
-	}
-
 	function selectPage(pageNumber: number) {
 		if (!detail || pageNumber === selectedPageNumber) return;
 		selectedPageNumber = pageNumber;
-		selectedPage = null;
 		error = null;
-		void loadSelectedPage(detail.id, pageNumber);
 		requestAnimationFrame(() => {
 			document
 				.getElementById(`document-page-${pageNumber}`)
@@ -160,7 +124,6 @@
 		confirmDelete = false;
 		deleted = true;
 		detail = null;
-		selectedPage = null;
 		try {
 			await goto('/library/');
 		} catch {
@@ -176,7 +139,6 @@
 		const requestedPage = Number(page.url.searchParams.get('page') ?? '1');
 		const pageNumber = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
 		detail = null;
-		selectedPage = null;
 		selectedPageNumber = pageNumber;
 		retrying = false;
 		deleting = false;
@@ -194,7 +156,7 @@
 	<a class="back" href="/library/">← Biblioteca</a>
 
 	{#if loading}
-		<p class="loading" role="status">Abrindo o documento privado…</p>
+		<p class="loading" role="status">Abrindo o documento…</p>
 	{:else if deleted}
 		<div class="deleted" role="status">
 			<p>O documento foi excluído.</p>
@@ -217,7 +179,7 @@
 				</p>
 			</div>
 			<div class="header-actions">
-				{#if ['processing', 'partially_ready', 'needs_review', 'failed'].includes(detail.status)}
+				{#if ['processing', 'partially_ready', 'failed'].includes(detail.status)}
 					<button
 						type="button"
 						class="secondary"
@@ -241,13 +203,13 @@
 		{#if highlightedQuery}
 			<p class="search-context">
 				Aberto a partir da busca por <strong>“{highlightedQuery}”</strong>. A correspondência é
-				marcada diretamente nas páginas e na transcrição auxiliar.
+				marcada diretamente no documento.
 			</p>
 		{/if}
 		{#if error}<p class="inline-error" role="alert">{error}</p>{/if}
 
 		{#if detail.pages.length > 1}
-			<nav class="page-strip" aria-label="Páginas para revisão">
+			<nav class="page-strip" aria-label="Páginas do documento">
 				{#each detail.pages as item}
 					<button
 						type="button"
@@ -256,7 +218,7 @@
 						onclick={() => selectPage(item.pageNumber)}
 					>
 						<span>{item.pageNumber}</span>
-						<small>{item.status === 'needs_review' ? 'Revisar' : item.status}</small>
+						<small>{pageStatusLabel(item.status)}</small>
 					</button>
 				{/each}
 			</nav>
@@ -284,14 +246,6 @@
 						/>
 					</div>
 				</div>
-
-				{#if pageLoading}
-					<p class="page-detail-loading" role="status">Carregando esta página…</p>
-				{:else if selectedPage}
-					{#key selectedPage.id}
-						<CorrectionEditor page={selectedPage} onSaved={pageSaved} />
-					{/key}
-				{/if}
 			</section>
 		{/if}
 	{/if}
@@ -424,10 +378,7 @@
 	}
 
 	.reader {
-		display: grid;
-		grid-template-columns: minmax(20rem, 1fr) minmax(22rem, 1fr);
-		gap: 1rem;
-		align-items: start;
+		display: block;
 	}
 
 	.original-panel {
@@ -455,18 +406,6 @@
 	.original-body {
 		position: relative;
 		min-height: 28rem;
-	}
-
-	.page-detail-loading {
-		min-height: 12rem;
-		display: grid;
-		place-items: center;
-		margin: 0;
-		padding: 1rem;
-		border: 1px solid var(--line);
-		border-radius: var(--radius-md);
-		background: var(--surface);
-		color: var(--muted);
 	}
 
 	.loading {
@@ -517,12 +456,6 @@
 	.fatal p {
 		margin: 0;
 		color: var(--danger);
-	}
-
-	@media (max-width: 980px) {
-		.reader {
-			grid-template-columns: 1fr;
-		}
 	}
 
 	@media (max-width: 620px) {

@@ -74,19 +74,21 @@ select is(
 
 select is(
   (select schedule from cron.job where jobname = 'fichario-background-ocr-wakeup'),
-  '*/5 * * * *',
-  'background OCR idle wake-up runs every five minutes'
+  '* * * * *',
+  'background OCR due-work wake-up runs every minute'
 );
 
 select ok(
   (
     select command like '%vault.decrypted_secrets%'
       and command like '%ocr_background_worker_key%'
+      and command like '%due_work.has_due%'
+      and command like '%cron-due-work%'
       and command not like '%SUPABASE_SERVICE_ROLE_KEY%'
     from cron.job
     where jobname = 'fichario-background-ocr-wakeup'
   ),
-  'cron resolves its worker credential from Vault instead of embedding a service key'
+  'cron resolves its worker credential from Vault and only wakes for due work'
 );
 
 select * from finish();

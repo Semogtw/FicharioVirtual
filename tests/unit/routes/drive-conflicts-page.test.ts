@@ -10,15 +10,15 @@ describe('Drive conflict resolution page', () => {
 		expect(source).toContain('listOpenDriveConflicts');
 		expect(source).toContain('resolveDriveConflict');
 		expect(source).toContain(
-			"label={busyId === conflict.id ? 'Reenfileirando…' : 'Tentar estado local'}"
+			"label={busyId === conflict.id ? 'Tentando novamente…' : 'Tentar novamente'}"
 		);
 		expect(source).toContain(
-			"label={busyId === conflict.id ? 'Aplicando…' : 'Aceitar ausência física'}"
+			"label={busyId === conflict.id ? 'Aplicando…' : 'Manter sem o original'}"
 		);
 		expect(source).toContain("conflict.kind === 'remote_deleted_local_changed'");
 	});
 
-	it('never renders snapshots or credentials', () => {
+	it('never renders snapshots, credentials or implementation jargon', () => {
 		const source = readFileSync(path, 'utf8');
 
 		expect(source).not.toContain('localSnapshot');
@@ -26,5 +26,8 @@ describe('Drive conflict resolution page', () => {
 		expect(source).not.toContain('payload');
 		expect(source).not.toContain('accessToken');
 		expect(source).not.toContain('refreshToken');
+		expect(source).not.toContain('snapshots remotos');
+		expect(source).not.toContain('Aceitar ausência física');
+		expect(source).not.toContain('Tentar estado local');
 	});
 });

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
+	import LoadingCollection from '$lib/components/LoadingCollection.svelte';
 	import NativeSelect from '$lib/components/ui/native-select/NativeSelect.svelte';
 	import type { DocumentSummary } from '$lib/domain/document';
 	import type { NotebookSummary } from '$lib/domain/notebook';
@@ -13,6 +14,7 @@
 		document: DocumentSummary;
 		title: string;
 		notebookId: string;
+		dirty: boolean;
 		saving: boolean;
 		saved: boolean;
 		error: string | null;
@@ -35,6 +37,7 @@
 			document,
 			title: document.title,
 			notebookId: document.notebookId ?? '',
+			dirty: false,
 			saving: false,
 			saved: false,
 			error: null
@@ -77,12 +80,14 @@
 	}
 
 	function changed(row: EditableDocument) {
+		row.dirty =
+			row.title.trim() !== row.document.title || row.notebookId !== (row.document.notebookId ?? '');
 		row.saved = false;
 		row.error = null;
 	}
 
 	async function save(row: EditableDocument) {
-		if (row.saving) return;
+		if (row.saving || !row.dirty || !row.title.trim()) return;
 		row.saving = true;
 		row.saved = false;
 		row.error = null;
@@ -100,6 +105,7 @@
 				notebookId: updated.notebookId,
 				updatedAt: updated.updatedAt
 			});
+			row.dirty = false;
 			row.saved = true;
 		} catch (caught) {
 			if (routeLifecycle.isCurrent(lifecycleVersion)) {
@@ -128,11 +134,9 @@
 
 <div class="page" aria-labelledby="page-title">
 	<header>
-		<p class="eyebrow">Metadados em lote</p>
+		<p class="eyebrow">Organização rápida</p>
 		<h1 id="page-title">Organizar documentos</h1>
-		<p>
-			Renomeie e mova documentos entre cadernos sem alterar páginas, arquivos, tags ou histórico.
-		</p>
+		<p>Ajuste títulos e cadernos em um só lugar, sem alterar o conteúdo dos documentos.</p>
 	</header>
 
 	{#if notebookError}
@@ -145,7 +149,7 @@
 	{/if}
 
 	{#if loading}
-		<p class="loading" role="status">Carregando documentos…</p>
+		<LoadingCollection count={6} label="Carregando documentos para organizar…" />
 	{:else if error}
 		<div class="fatal" role="alert">
 			<p>{error}</p>
@@ -159,7 +163,7 @@
 	{:else}
 		<section class="documents" aria-label="Organização dos documentos">
 			{#each rows as row (row.document.id)}
-				<article>
+				<article class:changed={row.dirty}>
 					<div class={`kind ${row.document.kind}`} aria-hidden="true">
 						{row.document.kind === 'pdf' ? 'PDF' : 'IMG'}
 					</div>
@@ -189,12 +193,12 @@
 					</div>
 					<div class="actions">
 						<span class:problem={row.error !== null} role="status">
-							{row.error ?? (row.saved ? 'Salvo' : '')}
+							{row.error ?? (row.saved ? 'Salvo' : row.dirty ? 'Alterações não salvas' : '')}
 						</span>
 						<a href={`/documents/${row.document.id}/`}>Abrir</a>
 						<button
 							type="button"
-							disabled={row.saving || !row.title.trim()}
+							disabled={row.saving || !row.dirty || !row.title.trim()}
 							onclick={() => void save(row)}
 						>
 							{row.saving ? 'Salvando…' : 'Salvar'}
@@ -245,6 +249,14 @@
 		border: 1px solid var(--line);
 		border-radius: var(--radius-md);
 		background: var(--surface);
+		transition:
+			border-color var(--motion-fast) var(--ease-standard),
+			box-shadow var(--motion-base) var(--ease-soft);
+	}
+
+	article.changed {
+		border-color: rgb(var(--archive-rgb) / 35%);
+		box-shadow: 0 0 0 1px rgb(var(--archive-rgb) / 6%);
 	}
 
 	.kind {
@@ -301,6 +313,7 @@
 	.actions > span {
 		grid-column: 1 / -1;
 		max-width: 16rem;
+		min-height: 1rem;
 		color: var(--archive);
 		font-size: 0.7rem;
 		text-align: right;
@@ -333,10 +346,9 @@
 		color: white;
 	}
 
-	.loading {
-		padding: 3rem;
-		color: var(--muted);
-		text-align: center;
+	.actions button:disabled {
+		cursor: default;
+		opacity: 0.48;
 	}
 
 	.notebook-warning,

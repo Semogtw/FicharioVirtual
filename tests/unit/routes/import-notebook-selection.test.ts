@@ -41,10 +41,11 @@ describe('import notebook query selection', () => {
 		(path) => expect(read(path)).toContain('$lib/components/UnifiedImportPage.svelte')
 	);
 
-	it('preserves the selected notebook when switching import tabs', () => {
+	it('does not reintroduce separate import tabs around the unified surface', () => {
 		const source = read('src/routes/import/+layout.svelte');
-		expect(source).toContain('parseRequestedNotebookId(page.url.searchParams)');
-		expect(source).toContain("importHref('/import/', requestedNotebookId)");
-		expect(source).toContain("importHref('/import/pdf/', requestedNotebookId)");
+		expect(source).toContain('{@render children()}');
+		expect(source).not.toContain('importHref(');
+		expect(source).not.toContain("href='/import/pdf/'");
+		expect(source).not.toContain('parseRequestedNotebookId');
 	});
 });

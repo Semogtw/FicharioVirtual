@@ -27,7 +27,8 @@ describe('premium continuity motion', () => {
 		expect(animatedNumber).toContain('aria-hidden="true"');
 		expect(home).toContain('<AnimatedNumber value={usage?.totals.documents ?? null} />');
 		expect(home).toContain('<AnimatedNumber value={usage?.totals.pages ?? null} />');
-		expect(home).toContain('<AnimatedNumber value={usage?.totals.reviewPages ?? null} />');
+		expect(home).toContain('<AnimatedNumber value={usage?.totals.notebooks ?? null} />');
+		expect(home).not.toContain('usage?.totals.reviewPages');
 	});
 
 	it('gives transient panels both entrance and exit motion', () => {

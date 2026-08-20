@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { DocumentSummary } from '$lib/domain/document';
+	import { loadDocumentDetail } from '$lib/services/document-detail';
 
 	interface DocumentCardProps {
 		document: DocumentSummary;
@@ -13,6 +14,7 @@
 		href = `/documents/${documentSummary.id}/`
 	}: DocumentCardProps = $props();
 	let transitioning = $state(false);
+	let detailPrefetched = false;
 
 	const statusLabels = {
 		uploading: 'Enviando',
@@ -20,7 +22,7 @@
 		processing: 'Processando',
 		ready: 'Pronto',
 		partially_ready: 'Parcialmente pronto',
-		needs_review: 'Revisar',
+		needs_review: 'Pronto',
 		failed: 'Falhou'
 	} as const;
 
@@ -29,6 +31,14 @@
 		month: 'short',
 		year: 'numeric'
 	});
+
+	function prefetchDocumentDetail() {
+		if (detailPrefetched) return;
+		detailPrefetched = true;
+		void loadDocumentDetail(documentSummary.id).catch(() => {
+			detailPrefetched = false;
+		});
+	}
 
 	function prepareDocumentTransition(event: MouseEvent) {
 		if (
@@ -49,7 +59,13 @@
 </script>
 
 <article class="document-card" class:transitioning>
-	<a {href} onclick={prepareDocumentTransition}>
+	<a
+		{href}
+		onclick={prepareDocumentTransition}
+		onpointerenter={prefetchDocumentDetail}
+		onpointerdown={prefetchDocumentDetail}
+		onfocus={prefetchDocumentDetail}
+	>
 		<div class="preview">
 			{#if thumbnailUrl}
 				<img src={thumbnailUrl} alt="" loading="lazy" />
@@ -142,6 +158,7 @@
 	img {
 		width: 100%;
 		height: 100%;
+		display: block;
 		object-fit: cover;
 		transform: scale(1);
 		transition: transform var(--motion-slow) var(--ease-soft);
@@ -188,11 +205,11 @@
 			transform var(--motion-base) var(--ease-emphasized);
 	}
 
-	.status.ready {
+	.status.ready,
+	.status.needs_review {
 		color: var(--archive);
 	}
 
-	.status.needs_review,
 	.status.partially_ready {
 		color: var(--accent-strong);
 	}

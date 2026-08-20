@@ -3,13 +3,20 @@ import { describe, expect, it } from 'vitest';
 
 const source = readFileSync('tools/checks/check-real-app-actions.mjs', 'utf8');
 
-describe('real deployed action cleanup contract', () => {
-	it('detaches synthetic documents before deleting them', () => {
-		expect(source).toContain('.update({ notebook_id: null })');
-		expect(source).toContain(".in('id', ids)");
+describe('real deployed action contract', () => {
+	it('cleans synthetic documents through the production deletion path before notebooks', () => {
+		expect(source).toContain("client.functions.invoke('delete-document'");
+		expect(source).toContain('await cleanupDocuments(client);');
+		expect(source).toContain('await cleanupNotebooks(client);');
+		expect(source.indexOf('await cleanupDocuments(client);')).toBeLessThan(
+			source.indexOf('await cleanupNotebooks(client);')
+		);
 	});
 
-	it('allows the background OCR-backed coverage photo flow enough time to finish', () => {
-		expect(source).toContain('timeout: 300_000');
+	it('validates the original-first product without resurrecting manual review', () => {
+		expect(source).toContain("stage('document-original-first', 'running');");
+		expect(source).toContain('Removed manual review editor is visible');
+		expect(source).toContain('Removed review semantics are visible in document detail');
+		expect(source).toContain("stage('mobile-responsive-sweep', 'running');");
 	});
 });

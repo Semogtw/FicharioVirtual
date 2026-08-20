@@ -59,14 +59,6 @@ describe('async route safety', () => {
 		expect(notebookRoute).not.toContain('onMount(() =>');
 	});
 
-	it('remounts the correction editor when the selected page changes', () => {
-		const documentRoute = read('src/routes/documents/[id]/+page.svelte');
-
-		expect(documentRoute).toMatch(
-			/\{#key selectedPage\.id\}[\s\S]*<CorrectionEditor page=\{selectedPage\}[\s\S]*\{\/key\}/
-		);
-	});
-
 	it('does not let an older notebook refresh hide a newly created notebook', () => {
 		const notebooksRoute = read('src/routes/notebooks/+page.svelte');
 
@@ -78,26 +70,5 @@ describe('async route safety', () => {
 		expect(notebooksRoute).toMatch(
 			/const notebook = await createNotebook[\s\S]*await refresh\(\);/
 		);
-	});
-
-	it('ignores stale review pages after a newer queue reload', () => {
-		const reviewRoute = read('src/routes/review/+page.svelte');
-
-		expect(reviewRoute).toContain(
-			"import { RequestVersion } from '$lib/services/request-version';"
-		);
-		expect(reviewRoute).toContain('const loadRequests = new RequestVersion();');
-		expect(reviewRoute).toContain('loadRequests.next()');
-		expect(reviewRoute).toContain('loadRequests.isCurrent(version)');
-		expect(reviewRoute).toMatch(
-			/const offset = reset \? 0 : items\.length;[\s\S]*if \(!loadRequests\.isCurrent\(version\)\) return;[\s\S]*items = reset/
-		);
-	});
-
-	it('offers OCR retry only for states accepted by claim_ocr_job', () => {
-		const reviewRoute = read('src/routes/review/+page.svelte');
-
-		expect(reviewRoute).toContain("{#if ['retryable', 'blocked_quota'].includes(item.pageStatus)}");
-		expect(reviewRoute).not.toContain("item.pageStatus !== 'needs_review'");
 	});
 });

@@ -13,6 +13,12 @@ describe('import queue OCR state', () => {
 		);
 	});
 
+	it('keeps a normal deferred read informational instead of presenting it as an error', () => {
+		expect(source).toMatch(
+			/item\.status = 'waiting';\s*item\.error = null;\s*void persistItem\(item\);\s*\} catch \(error\)/
+		);
+	});
+
 	it('does not branch on removed single-page response states', () => {
 		expect(source).not.toContain("result.state === 'already_complete'");
 		expect(source).not.toContain("result.state === 'quota_exhausted'");

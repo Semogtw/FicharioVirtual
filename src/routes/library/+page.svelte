@@ -32,9 +32,33 @@
 	let status = $state<DocumentStatus | ''>('');
 	let createdFrom = $state('');
 	let createdTo = $state('');
+	let hasActiveFilters = $derived(
+		Boolean(notebookId || kind || status || createdFrom || createdTo)
+	);
+	let dateRangeError = $derived(
+		createdFrom && createdTo && createdFrom > createdTo
+			? 'A data inicial precisa ser anterior ou igual à data final.'
+			: null
+	);
+
+	function clearFilters() {
+		notebookId = '';
+		kind = '';
+		status = '';
+		createdFrom = '';
+		createdTo = '';
+		void load(true);
+	}
 
 	async function load(reset: boolean) {
 		if (!reset && loadingMore) return;
+		if (dateRangeError) {
+			requests.next();
+			loading = false;
+			loadingMore = false;
+			error = null;
+			return;
+		}
 		const requestVersion = reset ? requests.next() : requests.current();
 		if (reset) loading = true;
 		else loadingMore = true;
@@ -138,12 +162,11 @@
 			</NativeSelect>
 		</label>
 		<label>
-			<span>Estado</span>
-			<NativeSelect ariaLabel="Estado" bind:value={status} onchange={() => void load(true)}>
+			<span>Status</span>
+			<NativeSelect ariaLabel="Status" bind:value={status} onchange={() => void load(true)}>
 				<option value="">Todos</option>
 				<option value="ready">Pronto</option>
 				<option value="processing">Processando</option>
-				<option value="needs_review">Revisar</option>
 				<option value="failed">Falhou</option>
 			</NativeSelect>
 		</label>
@@ -152,14 +175,30 @@
 			<input
 				type="date"
 				aria-label="De"
+				aria-invalid={dateRangeError ? 'true' : undefined}
 				bind:value={createdFrom}
 				onchange={() => void load(true)}
 			/>
 		</label>
 		<label>
 			<span>Até</span>
-			<input type="date" aria-label="Até" bind:value={createdTo} onchange={() => void load(true)} />
+			<input
+				type="date"
+				aria-label="Até"
+				aria-invalid={dateRangeError ? 'true' : undefined}
+				bind:value={createdTo}
+				onchange={() => void load(true)}
+			/>
 		</label>
+		{#if dateRangeError}
+			<p class="filter-validation" role="alert">{dateRangeError}</p>
+		{/if}
+		{#if hasActiveFilters}
+			<div class="filter-actions">
+				<span>Filtros ativos</span>
+				<Button label="Limpar filtros" variant="quiet" onclick={clearFilters} />
+			</div>
+		{/if}
 	</form>
 
 	{#if notebookError}
@@ -182,10 +221,14 @@
 		<LoadingCollection label="Organizando seus documentos…" />
 	{:else if documents.length === 0}
 		<EmptyState
-			title="Nenhum documento neste recorte"
-			description="Ajuste os filtros ou importe um novo arquivo para começar sua biblioteca."
-			actionLabel="Importar documento"
-			onAction={() => (window.location.href = '/import/')}
+			title={hasActiveFilters
+				? 'Nenhum documento com esses filtros'
+				: 'Sua biblioteca ainda está vazia'}
+			description={hasActiveFilters
+				? 'Limpe ou ajuste os filtros para voltar a ver outros documentos.'
+				: 'Importe uma imagem ou PDF para começar sua biblioteca.'}
+			actionLabel={hasActiveFilters ? 'Limpar filtros' : 'Importar documento'}
+			onAction={hasActiveFilters ? clearFilters : () => (window.location.href = '/import/')}
 		/>
 	{:else}
 		<section class="grid" aria-label="Documentos">
@@ -193,7 +236,6 @@
 				<DocumentCard {document} />
 			{/each}
 		</section>
-
 		{#if nextCursor}
 			<div class="load-more">
 				<Button
@@ -282,6 +324,29 @@
 		border-radius: var(--radius-sm);
 		background: var(--surface-strong);
 		color: var(--ink);
+	}
+
+	input[aria-invalid='true'] {
+		border-color: var(--danger);
+	}
+
+	.filter-validation {
+		grid-column: 1 / -1;
+		margin: 0;
+		color: var(--danger);
+		font-size: 0.78rem;
+	}
+
+	.filter-actions {
+		grid-column: 1 / -1;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		padding-top: 0.15rem;
+		border-top: 1px solid var(--line);
+		color: var(--muted);
+		font-size: 0.78rem;
 	}
 
 	.grid {
