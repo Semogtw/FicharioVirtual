@@ -161,7 +161,14 @@ export async function cacheRemoteFileInNativeStore(
 ): Promise<NativeDocument | null> {
 	if (!isNativeRuntime()) return null;
 	const existing = await resolveNativeDocument(options.documentId);
-	if (existing?.localState === 'present' && existing.sizeBytes === file.size) return existing;
+	if (existing?.localState === 'present' && existing.sizeBytes === file.size) {
+		await markNativeDocumentRemoteSynced({
+			documentId: options.documentId,
+			remoteDocumentId: options.remoteDocumentId,
+			driveFileId: options.driveFileId
+		});
+		return (await resolveNativeDocument(options.documentId)) ?? existing;
+	}
 	return await importFileIntoNativeStore(file, { ...options, remoteState: 'synced' });
 }
 
@@ -193,9 +200,10 @@ export async function readNativeDocumentRange(
 }
 
 export async function readNativeDocumentBlob(document: NativeDocument): Promise<Blob> {
-	const parts: Uint8Array[] = [];
+	const parts: BlobPart[] = [];
 	for (const range of nativeImportRanges(document.sizeBytes, DEFAULT_CHUNK_BYTES)) {
-		parts.push(await readNativeDocumentRange(document.documentId, range.start, range.endExclusive));
+		const bytes = await readNativeDocumentRange(document.documentId, range.start, range.endExclusive);
+		parts.push(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
 	}
 	return new Blob(parts, { type: document.mimeType });
 }
