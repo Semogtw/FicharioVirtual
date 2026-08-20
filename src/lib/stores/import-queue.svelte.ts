@@ -355,12 +355,7 @@ async function processItem(item: ImportQueueItem) {
 			const explicitlyCancelled =
 				error.cause instanceof DOMException && error.cause.name === 'AbortError';
 			if (!explicitlyCancelled) {
-				scheduleImportRetry(
-					item,
-					() => void processItemWithLock(item),
-					'waiting',
-					SYNC_RETRY_MS
-				);
+				scheduleImportRetry(item, () => void processItemWithLock(item), 'waiting', SYNC_RETRY_MS);
 			}
 		} else {
 			item.status = 'failed';
