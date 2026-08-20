@@ -3,6 +3,7 @@ import { deleteBrowserDriveFile } from '$lib/drive/browser-files';
 import { uploadBrowserBlobToDrive } from '$lib/drive/browser-upload';
 import { resolveDriveFolder } from '$lib/drive/resolve-folder';
 import type { DriveFile } from '$lib/drive/types';
+import { cacheRemoteFileInNativeStore } from '$lib/native/local-document-store';
 import type { Database } from '$lib/types/database';
 import { getSupabaseClient } from '$lib/services/supabase';
 import { parseDuplicateDocumentId } from './duplicate-result';
@@ -170,6 +171,12 @@ export async function uploadPreparedImageToDriveWithGateway(
 			sourceCreatedAt: input.sourceCreatedAt ?? null,
 			promptVersion
 		});
+		void cacheRemoteFileInNativeStore(input.prepared.original, {
+			documentId,
+			ownerId: userId,
+			remoteDocumentId: documentId,
+			driveFileId: driveFile.id
+		}).catch(() => undefined);
 		return Object.freeze({
 			...imported,
 			sha256: preparedSha256,
