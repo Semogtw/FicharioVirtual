@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
 	getNativeStatus,
 	nativeImportRanges,
+	readNativeDocumentRange,
 	resolveNativeDocument
 } from '../../../src/lib/native/local-document-store';
 import { isNativeRuntime } from '../../../src/lib/platform/native-bridge';
@@ -38,6 +39,19 @@ describe('native runtime bridge', () => {
 		expect(isNativeRuntime()).toBe(true);
 		expect((await getNativeStatus())?.platform).toBe('linux');
 		expect(invoke).toHaveBeenCalledWith('native_status', undefined);
+	});
+
+	it('reads native ranges from Tauri raw ArrayBuffer responses', async () => {
+		const expected = Uint8Array.from([1, 2, 3, 4]);
+		const invoke = vi.fn().mockResolvedValue(expected.buffer.slice(0));
+		root.__TAURI__ = { core: { invoke } };
+
+		const bytes = await readNativeDocumentRange('doc-1', 4, 8);
+
+		expect(bytes).toEqual(expected);
+		expect(invoke).toHaveBeenCalledWith('read_local_document_range', {
+			request: { documentId: 'doc-1', start: 4, endExclusive: 8 }
+		});
 	});
 });
 

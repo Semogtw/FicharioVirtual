@@ -193,12 +193,11 @@ export async function readNativeDocumentRange(
 	) {
 		throw new TypeError('Invalid native document range');
 	}
-	const raw = await invokeNative<number[]>(
+	const raw = await invokeNative<ArrayBuffer>(
 		'read_local_document_range',
 		request({ documentId, start, endExclusive })
 	);
-	const bytes = new Uint8Array(raw.length);
-	bytes.set(raw);
+	const bytes = new Uint8Array(raw.slice(0));
 	if (bytes.byteLength !== endExclusive - start) {
 		bytes.fill(0);
 		throw new Error('O runtime nativo retornou uma faixa incompleta.');

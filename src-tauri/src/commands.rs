@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use tauri::AppHandle;
+use tauri::{ipc::Response, AppHandle};
 
 use crate::{catalog, metrics, paths, storage};
 
@@ -209,13 +209,14 @@ pub fn list_local_documents(
 pub fn read_local_document_range(
     app: AppHandle,
     request: ReadRangeRequest,
-) -> Result<Vec<u8>, String> {
-    storage::read_range(
+) -> Result<Response, String> {
+    let bytes = storage::read_range(
         &app_paths(&app)?,
         &request.document_id,
         request.start,
         request.end_exclusive,
-    )
+    )?;
+    Ok(Response::new(bytes))
 }
 
 #[tauri::command]
