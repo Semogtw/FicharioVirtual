@@ -175,7 +175,7 @@ export async function downloadBrowserDriveRange({
 	const local = await localDriveDocument(safeFileId);
 	if (local && local.sizeBytes === range.totalBytes) {
 		const bytes = await readNativeDocumentRange(local.documentId, range.start, range.endExclusive);
-		return new Blob([bytes], { type: local.mimeType });
+		return new Blob([bytes.buffer], { type: local.mimeType });
 	}
 	try {
 		return await readDriveMediaRange({
