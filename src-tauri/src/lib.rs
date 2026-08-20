@@ -2,6 +2,7 @@ mod cache;
 mod cache_commands;
 mod catalog;
 mod commands;
+mod metrics;
 mod paths;
 mod storage;
 
