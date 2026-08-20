@@ -73,6 +73,9 @@ async function mockSupabase(context: BrowserContext, counters: RequestCounters) 
 		if (path === '/rest/v1/notebooks') return json(route, []);
 		if (path === '/rest/v1/rpc/list_notebooks_v2') return json(route, []);
 		if (path === '/rest/v1/documents') return json(route, null);
+		if (path === '/rest/v1/pages' && request.method() === 'GET') {
+			return json(route, { status: 'processing' });
+		}
 		if (path === '/rest/v1/rpc/get_document_ocr_summary') {
 			return json(route, [{ total: 1, completed: 0, needs_review: 0, pending: 1, failed: 0 }]);
 		}
@@ -179,16 +182,31 @@ async function mockSupabase(context: BrowserContext, counters: RequestCounters) 
 				status: 200,
 				contentType: 'application/json',
 				headers: cors,
-				body: JSON.stringify({ id: 'DriveFile_1234567890', name: 'shared.png' })
+				body: JSON.stringify({
+					id: 'DriveFile_1234567890',
+					name: 'shared.webp',
+					mimeType: 'image/webp',
+					parents: ['RootFolder_1234567890'],
+					modifiedTime: timestamp,
+					version: '1',
+					md5Checksum: '0123456789abcdef0123456789abcdef',
+					trashed: false
+				})
 			});
 		}
-		return route.fulfill({ status: 404, headers: cors, body: '' });
+		counters.unknown.push(`${request.method()} ${url.origin}${url.pathname}`);
+		return route.fulfill({
+			status: 500,
+			contentType: 'application/json',
+			headers: cors,
+			body: JSON.stringify({ message: 'Unexpected mocked Google request' })
+		});
 	});
 }
 
 async function seedStoredImport(context: BrowserContext) {
 	const seedPage = await context.newPage();
-	await seedPage.goto('/login/');
+	await seedPage.goto('/favicon.svg');
 	await seedPage.evaluate(
 		async ({ encoded, id, ownerId, key, updatedAt }) => {
 			const bytes = Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));

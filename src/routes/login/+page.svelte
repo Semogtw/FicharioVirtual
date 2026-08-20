@@ -11,6 +11,7 @@
 	let mode = $state<AuthMode>('sign_in');
 	let email = $state('');
 	let password = $state('');
+	let showPassword = $state(false);
 	let submitting = $state(false);
 	let authenticated = $state(false);
 	let authenticationError = $state<string | null>(null);
@@ -129,14 +130,25 @@
 
 				<div class="field">
 					<label for="password">Senha</label>
-					<input
-						id="password"
-						type="password"
-						bind:value={password}
-						autocomplete={mode === 'sign_up' ? 'new-password' : 'current-password'}
-						minlength={mode === 'sign_up' ? 8 : undefined}
-						required
-					/>
+					<div class="password-input">
+						<input
+							id="password"
+							type={showPassword ? 'text' : 'password'}
+							bind:value={password}
+							autocomplete={mode === 'sign_up' ? 'new-password' : 'current-password'}
+							minlength={mode === 'sign_up' ? 8 : undefined}
+							required
+						/>
+						<button
+							type="button"
+							class="password-toggle"
+							aria-pressed={showPassword}
+							aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+							onclick={() => (showPassword = !showPassword)}
+						>
+							{showPassword ? 'Ocultar' : 'Mostrar'}
+						</button>
+					</div>
 				</div>
 
 				{#if authenticationError ?? sessionState.error}
@@ -301,12 +313,42 @@
 	}
 
 	input {
+		width: 100%;
 		min-height: 3.2rem;
 		padding: 0.75rem 0.9rem;
 		border: 1px solid var(--line-strong);
 		border-radius: var(--radius-sm);
 		background: var(--surface-strong);
 		color: var(--ink);
+	}
+
+	.password-input {
+		position: relative;
+	}
+
+	.password-input input {
+		padding-right: 5.2rem;
+	}
+
+	.password-toggle {
+		position: absolute;
+		top: 50%;
+		right: 0.45rem;
+		min-height: 2.3rem;
+		padding: 0.4rem 0.65rem;
+		border: 0;
+		border-radius: calc(var(--radius-sm) - 0.15rem);
+		background: transparent;
+		color: var(--archive);
+		font: inherit;
+		font-size: 0.78rem;
+		font-weight: 740;
+		cursor: pointer;
+		transform: translateY(-50%);
+	}
+
+	.password-toggle:hover {
+		background: var(--archive-soft);
 	}
 
 	.authenticated {

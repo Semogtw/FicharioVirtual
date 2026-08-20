@@ -177,7 +177,7 @@ export function createAzureOcrProvider(options: AzureOcrProviderOptions): OcrPro
 					'Ocp-Apim-Subscription-Key': options.apiKey,
 					'Content-Type': page.mimeType
 				},
-				body: page.bytes,
+				body: new Uint8Array(page.bytes).buffer,
 				signal: request.signal
 			});
 			if (submission.status !== 202) throw new AzureOcrHttpError(submission.status);

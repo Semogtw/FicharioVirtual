@@ -14,6 +14,10 @@ test('login screen exposes both sign-in and public signup modes', async ({ page 
 	await expect(signInMode).toHaveAttribute('aria-pressed', 'true');
 	await expect(signUpMode).toBeVisible();
 	await expect(page.getByText('Ainda não tem uma conta?')).toBeVisible();
+	await expect(page.getByLabel('Mostrar senha')).toBeVisible();
+	await page.getByLabel('Mostrar senha').click();
+	await expect(page.getByLabel('Ocultar senha')).toBeVisible();
+	await expect(page.getByLabel('Senha')).toHaveAttribute('type', 'text');
 
 	await signUpMode.click();
 	await expect(signUpMode).toHaveAttribute('aria-pressed', 'true');

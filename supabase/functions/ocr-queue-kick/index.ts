@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, parseAppOrigin } from '../_shared/cors.ts';
+import { resolveCurrentProviderPolicy } from '../_shared/provider-profile-resolver.ts';
 
 function json(status: number, body: Record<string, unknown>, appOrigin: string | null) {
 	return new Response(JSON.stringify(body), {
@@ -51,13 +52,11 @@ Deno.serve(async (request) => {
 	} = await userClient.auth.getUser();
 	if (userError || !user) return respond(401, { code: 'authentication_required' });
 
-	const { data: allowed, error: allowedError } = await userClient
-		.from('app_users')
-		.select('is_active')
-		.eq('user_id', user.id)
-		.eq('is_active', true)
-		.maybeSingle();
-	if (allowedError || !allowed) return respond(403, { code: 'not_authorized' });
+	const providerPolicy = await resolveCurrentProviderPolicy(userClient);
+	if (!providerPolicy) return respond(403, { code: 'provider_profile_unavailable' });
+	if (!providerPolicy.geminiAllowed) {
+		return respond(403, { code: 'ocr_background_route_forbidden' });
+	}
 
 	try {
 		const workerResponse = await fetch(`${supabaseUrl}/functions/v1/ocr-queue-worker`, {
