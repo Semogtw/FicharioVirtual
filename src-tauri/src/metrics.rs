@@ -83,7 +83,10 @@ pub fn disk_usage_bytes(paths: &AppPaths) -> Result<u64, String> {
         .saturating_add(metrics.staging_bytes))
 }
 
-pub fn list_oldest_evictable(paths: &AppPaths, limit: usize) -> Result<Vec<EvictableDocument>, String> {
+pub fn list_oldest_evictable(
+    paths: &AppPaths,
+    limit: usize,
+) -> Result<Vec<EvictableDocument>, String> {
     let connection = open(paths)?;
     let mut statement = connection
         .prepare(

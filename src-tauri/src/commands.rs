@@ -223,11 +223,7 @@ pub fn verify_local_document(
     app: AppHandle,
     request: VerifyDocumentRequest,
 ) -> Result<bool, String> {
-    storage::verify_document(
-        &app_paths(&app)?,
-        &request.document_id,
-        request.full_hash,
-    )
+    storage::verify_document(&app_paths(&app)?, &request.document_id, request.full_hash)
 }
 
 #[tauri::command]
@@ -245,10 +241,7 @@ pub fn list_native_sync_jobs(
     app: AppHandle,
     request: ListRequest,
 ) -> Result<Vec<catalog::SyncJob>, String> {
-    catalog::list_sync_jobs(
-        &app_paths(&app)?,
-        request.limit.unwrap_or(50).clamp(1, 100),
-    )
+    catalog::list_sync_jobs(&app_paths(&app)?, request.limit.unwrap_or(50).clamp(1, 100))
 }
 
 #[tauri::command]

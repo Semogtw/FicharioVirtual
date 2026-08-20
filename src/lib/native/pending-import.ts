@@ -5,8 +5,7 @@ import {
 } from '$lib/native/local-document-store';
 import { isNativeRuntime } from '$lib/platform/native-bridge';
 
-const UUID =
-	/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ID_SAMPLE_BYTES = 64 * 1024;
 
 export class NativeOriginalPendingError extends Error {
