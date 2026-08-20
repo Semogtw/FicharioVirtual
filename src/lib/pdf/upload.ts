@@ -1,7 +1,15 @@
 import { calculateSha256 } from '$lib/import/hash';
-import { importFileIntoNativeStore } from '$lib/native/local-document-store';
+import {
+	importFileIntoNativeStore,
+	markNativeDocumentRemoteSynced
+} from '$lib/native/local-document-store';
+import {
+	ensurePendingNativeOriginal,
+	NativeOriginalPendingError
+} from '$lib/native/pending-import';
 import { processOcrBatch as runOcrBatch, type OcrBatchRunResult } from '$lib/services/ocr';
 import { requireDriveForUpload } from '$lib/stores/drive-upload-gate.svelte';
+import { sessionState } from '$lib/stores/session.svelte';
 import type { DocumentStatus } from '$lib/types/database';
 import { buildPdfImportPlan, type PdfImportPagePlan } from './import-plan';
 import { inspectPdf } from './inspector-client';
@@ -60,6 +68,7 @@ export type PdfUploadOptions = {
 	promptVersion?: number;
 	signal?: AbortSignal;
 	onProgress?: (progress: PdfUploadProgress) => void;
+	nativeDocumentId?: string | null;
 };
 
 export type PdfUploadProgress = {
@@ -205,6 +214,9 @@ function validate(file: File, options: PdfUploadOptions) {
 	if (!Number.isInteger(promptVersion) || promptVersion < 1 || promptVersion > 10_000) {
 		throw new TypeError('Invalid OCR prompt version');
 	}
+	if (options.nativeDocumentId != null && !UUID.test(options.nativeDocumentId)) {
+		throw new TypeError('Invalid native document identifier');
+	}
 	return promptVersion;
 }
 
@@ -273,12 +285,14 @@ export async function uploadPdfWithGateway(
 	const duplicateId = await gateway.findDuplicate(sha256);
 	if (duplicateId) throw new DuplicatePdfError(duplicateId);
 
-	const documentId = uuid();
-	await importFileIntoNativeStore(file, {
-		documentId,
-		ownerId: userId,
-		remoteState: 'pending'
-	});
+	const documentId = options.nativeDocumentId ?? uuid();
+	if (options.nativeDocumentId == null) {
+		await importFileIntoNativeStore(file, {
+			documentId,
+			ownerId: userId,
+			remoteState: 'pending'
+		});
+	}
 	if (options.signal?.aborted) throw abortError();
 	const storageRoot = `${userId}/${documentId}`;
 	const originalStoragePath = `${storageRoot}/original.pdf`;
@@ -375,7 +389,33 @@ export async function uploadPdfWithGateway(
 }
 
 export async function uploadPdf(file: File, options: PdfUploadOptions): Promise<UploadedPdf> {
-	await requireDriveForUpload();
+	const ownerId = sessionState.user?.id ?? null;
+	const pending = ownerId ? await ensurePendingNativeOriginal({ file, ownerId }) : null;
+	const nativeDocumentId = pending?.documentId ?? null;
+	try {
+		await requireDriveForUpload();
+	} catch (error) {
+		if (nativeDocumentId) throw new NativeOriginalPendingError(nativeDocumentId, error);
+		throw error;
+	}
+
 	const { uploadPdfToDrive } = await import('./drive-upload');
-	return uploadPdfToDrive(file, options);
+	try {
+		return await uploadPdfToDrive(file, { ...options, nativeDocumentId });
+	} catch (error) {
+		if (nativeDocumentId && error instanceof DuplicatePdfError) {
+			await markNativeDocumentRemoteSynced({
+				documentId: nativeDocumentId,
+				remoteDocumentId: error.documentId
+			}).catch(() => undefined);
+			throw error;
+		}
+		if (
+			nativeDocumentId &&
+			!(error instanceof PdfUploadError && error.code === 'not_authenticated')
+		) {
+			throw new NativeOriginalPendingError(nativeDocumentId, error);
+		}
+		throw error;
+	}
 }
