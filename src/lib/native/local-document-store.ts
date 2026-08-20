@@ -89,6 +89,17 @@ export async function resolveNativeDocument(documentId: string): Promise<NativeD
 	return validNativeDocument(result) ? result : null;
 }
 
+export async function resolveNativeDocumentByDriveFileId(
+	driveFileId: string
+): Promise<NativeDocument | null> {
+	if (!isNativeRuntime()) return null;
+	const result = await invokeNative<NativeDocument | null>(
+		'get_local_document_by_drive_file_id',
+		request({ driveFileId })
+	);
+	return validNativeDocument(result) ? result : null;
+}
+
 export async function importFileIntoNativeStore(
 	file: File,
 	options: NativeImportOptions

@@ -22,6 +22,7 @@ pub fn run() {
             commands::finish_local_import,
             commands::abort_local_import,
             commands::get_local_document,
+            commands::get_local_document_by_drive_file_id,
             commands::list_local_documents,
             commands::read_local_document_range,
             commands::verify_local_document,

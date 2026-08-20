@@ -234,11 +234,7 @@ pub fn abort_import(paths: &AppPaths, document_id: &str) -> Result<(), String> {
     catalog::abort_import(paths, document_id)
 }
 
-pub fn local_document(paths: &AppPaths, document_id: &str) -> Result<Option<DocumentRow>, String> {
-    paths::validate_document_id(document_id)?;
-    let Some(document) = catalog::get_document(paths, document_id)? else {
-        return Ok(None);
-    };
+fn validate_present_document(paths: &AppPaths, document: DocumentRow) -> Result<Option<DocumentRow>, String> {
     if document.local_state != "present" {
         return Ok(None);
     }
@@ -246,16 +242,31 @@ pub fn local_document(paths: &AppPaths, document_id: &str) -> Result<Option<Docu
     let metadata = match fs::metadata(path) {
         Ok(value) => value,
         Err(_) => {
-            catalog::set_local_state(paths, document_id, "missing")?;
+            catalog::set_local_state(paths, &document.document_id, "missing")?;
             return Ok(None);
         }
     };
     if metadata.len() != document.size_bytes as u64 {
-        catalog::set_local_state(paths, document_id, "corrupt")?;
+        catalog::set_local_state(paths, &document.document_id, "corrupt")?;
         return Ok(None);
     }
-    catalog::touch_document(paths, document_id)?;
+    catalog::touch_document(paths, &document.document_id)?;
     Ok(Some(document))
+}
+
+pub fn local_document(paths: &AppPaths, document_id: &str) -> Result<Option<DocumentRow>, String> {
+    paths::validate_document_id(document_id)?;
+    let Some(document) = catalog::get_document(paths, document_id)? else {
+        return Ok(None);
+    };
+    validate_present_document(paths, document)
+}
+
+pub fn local_document_by_drive_file_id(paths: &AppPaths, drive_file_id: &str) -> Result<Option<DocumentRow>, String> {
+    let Some(document) = catalog::get_document_by_drive_file_id(paths, drive_file_id)? else {
+        return Ok(None);
+    };
+    validate_present_document(paths, document)
 }
 
 pub fn read_range(

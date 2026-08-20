@@ -63,6 +63,12 @@ pub struct DocumentRequest {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DriveFileRequest {
+    pub drive_file_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AppendImportRequest {
     pub document_id: String,
     pub chunk: Vec<u8>,
@@ -164,6 +170,13 @@ pub fn abort_local_import(app: AppHandle, request: DocumentRequest) -> Result<()
 #[tauri::command]
 pub fn get_local_document(app: AppHandle, request: DocumentRequest) -> Result<Option<NativeDocument>, String> {
     storage::local_document(&app_paths(&app)?, &request.document_id)?
+        .map(TryInto::try_into)
+        .transpose()
+}
+
+#[tauri::command]
+pub fn get_local_document_by_drive_file_id(app: AppHandle, request: DriveFileRequest) -> Result<Option<NativeDocument>, String> {
+    storage::local_document_by_drive_file_id(&app_paths(&app)?, &request.drive_file_id)?
         .map(TryInto::try_into)
         .transpose()
 }

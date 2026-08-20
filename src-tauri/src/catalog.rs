@@ -113,6 +113,7 @@ CREATE TABLE documents (
 );
 CREATE INDEX documents_local_state_idx ON documents(local_state, last_accessed_at_ms DESC);
 CREATE INDEX documents_remote_idx ON documents(remote_document_id);
+CREATE INDEX documents_drive_file_idx ON documents(drive_file_id);
 
 CREATE TABLE import_sessions (
     document_id TEXT PRIMARY KEY NOT NULL,
@@ -190,6 +191,21 @@ pub fn get_document(paths: &AppPaths, document_id: &str) -> Result<Option<Docume
         )
         .optional()
         .map_err(|error| format!("Não foi possível consultar o documento local: {error}"))
+}
+
+pub fn get_document_by_drive_file_id(paths: &AppPaths, drive_file_id: &str) -> Result<Option<DocumentRow>, String> {
+    if drive_file_id.is_empty() || drive_file_id.len() > 512 {
+        return Ok(None);
+    }
+    let connection = open(paths)?;
+    connection
+        .query_row(
+            &format!("{} WHERE drive_file_id = ?1 AND local_state = 'present' ORDER BY updated_at_ms DESC LIMIT 1", select_document_sql()),
+            [drive_file_id],
+            document_from_row,
+        )
+        .optional()
+        .map_err(|error| format!("Não foi possível consultar o arquivo local do Drive: {error}"))
 }
 
 pub fn list_documents(paths: &AppPaths, limit: usize) -> Result<Vec<DocumentRow>, String> {

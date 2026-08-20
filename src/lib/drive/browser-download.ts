@@ -1,3 +1,9 @@
+import {
+	readNativeDocumentBlob,
+	readNativeDocumentRange,
+	resolveNativeDocumentByDriveFileId
+} from '$lib/native/local-document-store';
+
 const DRIVE_ID = /^[A-Za-z0-9_-]{10,256}$/;
 
 export type DriveMediaClientLike = {
@@ -72,6 +78,14 @@ async function readDriveMediaRange({
 	return data;
 }
 
+async function localDriveDocument(fileId: string) {
+	try {
+		return await resolveNativeDocumentByDriveFileId(fileId);
+	} catch {
+		return null;
+	}
+}
+
 export async function downloadBrowserDriveFile({
 	client,
 	fileId,
@@ -83,6 +97,10 @@ export async function downloadBrowserDriveFile({
 }): Promise<Blob> {
 	const safeFileId = validDriveId(fileId);
 	const safeMaximumBytes = validMaximumBytes(maximumBytes);
+	const local = await localDriveDocument(safeFileId);
+	if (local && local.sizeBytes <= safeMaximumBytes) {
+		return await readNativeDocumentBlob(local);
+	}
 	try {
 		const { data, response } = await invokeDriveMedia(client, {
 			operation: 'download',
@@ -117,6 +135,15 @@ export async function downloadBrowserDriveRange({
 }): Promise<Blob> {
 	const safeFileId = validDriveId(fileId);
 	const range = validDriveDownloadRange(start, endExclusive, totalBytes);
+	const local = await localDriveDocument(safeFileId);
+	if (local && local.sizeBytes === range.totalBytes) {
+		const bytes = await readNativeDocumentRange(
+			local.documentId,
+			range.start,
+			range.endExclusive
+		);
+		return new Blob([bytes], { type: local.mimeType });
+	}
 	try {
 		return await readDriveMediaRange({
 			client,
