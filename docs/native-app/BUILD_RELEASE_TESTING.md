@@ -465,7 +465,7 @@ Casos a suportar:
 - metadado remoto presente sem blob remoto esperado;
 - arquivo local com hash divergente.
 
-Planejar comando interno de `library doctor`/reconciliation para desenvolvimento e suporte, sem expor complexidade desnecessária na UI comum.
+A reconciliação nativa já existe para desenvolvimento e suporte: a tela `Configurações → Armazenamento` expõe uma verificação rápida e uma verificação completa por SHA-256, apresentando ausências, corrupção e itens inalterados sem expor caminhos internos. A mesma tela mostra erros e tentativas da fila nativa e permite disparar o worker novamente.
 
 ## 19. Atualização de schema
 
@@ -495,7 +495,7 @@ Antes de marcar stable:
 - [ ] sync interrompido/retomado testado
 - [ ] auth expirada testada
 - [ ] assinatura dos artefatos validada quando habilitada
-- [ ] checksums publicados/registrados
+- [x] checksums publicados/registrados no artifact Linux do CI e registrados na documentação da branch
 - [ ] release notes atualizadas
 - [ ] documentação de blockers conhecida atualizada
 
