@@ -153,7 +153,8 @@ export async function uploadPreparedImageToDriveWithGateway(
 		title: input.title?.trim() || defaultTitle(input.prepared.originalName),
 		notebookId: input.notebookId ?? null,
 		pageCount: 1,
-		status: 'processing'
+		status: 'processing',
+		pages: [{ pageNumber: 1, nativeText: null }]
 	}).catch(() => undefined);
 	const parentFolderId = await gateway.resolveFolder(input.notebookId ?? null);
 	if (input.signal?.aborted) throw abortError();

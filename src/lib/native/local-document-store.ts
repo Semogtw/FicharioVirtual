@@ -40,7 +40,7 @@ export type NativeDocumentMetadataInput = Readonly<{
 	notebookId?: string | null;
 	pageCount: number;
 	status: Exclude<DocumentStatus, 'uploading' | 'pending'>;
-	pages?: readonly Readonly<{ pageNumber: number; nativeText: string | null }>[];
+	pages: readonly Readonly<{ pageNumber: number; nativeText: string | null }>[];
 }>;
 
 export type NativeSearchPage = Readonly<{
@@ -333,7 +333,7 @@ export async function updateNativeDocumentMetadata(
 	if (!Number.isSafeInteger(input.pageCount) || input.pageCount < 1 || input.pageCount > 10_000) {
 		throw new TypeError('Invalid native document page count');
 	}
-	const pages = input.pages ?? [];
+	const pages = input.pages;
 	const seen = new Set<number>();
 	for (const page of pages) {
 		if (

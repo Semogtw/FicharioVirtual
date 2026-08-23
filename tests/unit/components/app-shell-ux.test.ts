@@ -18,4 +18,9 @@ describe('AppShell UX affordances', () => {
 		expect(shellSource).toContain('<NavigationIcon name="settings" />');
 		expect(shellSource).not.toContain('aria-label="Abrir configurações">A</a>');
 	});
+
+	it('retries native synchronization immediately after network recovery', () => {
+		expect(shellSource).toContain("window.addEventListener('online', kick);");
+		expect(shellSource).toContain("window.removeEventListener('online', kick);");
+	});
 });

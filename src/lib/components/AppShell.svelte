@@ -32,10 +32,12 @@
 		};
 		kick();
 		window.addEventListener('focus', kick);
+		window.addEventListener('online', kick);
 		document.addEventListener('visibilitychange', onVisibilityChange);
 		const interval = window.setInterval(kick, 60_000);
 		return () => {
 			window.removeEventListener('focus', kick);
+			window.removeEventListener('online', kick);
 			document.removeEventListener('visibilitychange', onVisibilityChange);
 			window.clearInterval(interval);
 		};
