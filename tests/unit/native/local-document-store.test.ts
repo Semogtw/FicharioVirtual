@@ -76,6 +76,20 @@ describe('native runtime bridge', () => {
 		});
 	});
 
+	it('rejects malformed reconciliation summaries from the native runtime', async () => {
+		const invoke = vi.fn().mockResolvedValue({
+			inspectedDocuments: 3,
+			missingDocuments: 1,
+			corruptDocuments: '1',
+			unchangedDocuments: 1
+		});
+		root.__TAURI__ = { core: { invoke } };
+
+		await expect(reconcileNativeDocuments()).rejects.toThrow(
+			'Invalid native reconciliation summary'
+		);
+	});
+
 	it('reads a cursor page without imposing a library-wide limit', async () => {
 		const invoke = vi.fn().mockResolvedValue({
 			documents: [

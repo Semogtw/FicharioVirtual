@@ -126,6 +126,7 @@ A branch já deixou de ser apenas planejamento. O núcleo abaixo existe em códi
 - trim LRU seguro;
 - arquivos sem backup remoto confirmado são protegidos da limpeza;
 - tela `Configurações → Armazenamento` no runtime nativo mostra uso, quantidade local, sync pendente e plataforma, além de permitir aplicar um alvo de cache.
+- a mesma tela oferece reconciliação manual do catálogo: a verificação rápida confere presença/tamanho/tipo e a opção explícita de SHA-256 valida o conteúdo completo; o resumo distingue arquivos ausentes, corrompidos e inalterados.
 
 ## Validação
 

@@ -2,7 +2,12 @@
 	import { onMount } from 'svelte';
 	import Button from '$lib/components/Button.svelte';
 	import { trimNativeCache, type NativeCacheTrimResult } from '$lib/native/cache-management';
-	import { getNativeStatus, type NativeStatus } from '$lib/native/local-document-store';
+	import {
+		getNativeStatus,
+		reconcileNativeDocuments,
+		type NativeReconciliationSummary,
+		type NativeStatus
+	} from '$lib/native/local-document-store';
 	import { isNativeRuntime } from '$lib/platform/native-bridge';
 
 	const native = isNativeRuntime();
@@ -13,6 +18,9 @@
 	let message = $state<string | null>(null);
 	let error = $state<string | null>(null);
 	let lastTrim = $state<NativeCacheTrimResult | null>(null);
+	let reconciling = $state(false);
+	let fullHash = $state(false);
+	let lastReconciliation = $state<NativeReconciliationSummary | null>(null);
 
 	function formatBytes(bytes: number) {
 		if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
@@ -35,7 +43,7 @@
 	}
 
 	async function trim() {
-		if (!native || trimming) return;
+		if (!native || trimming || reconciling) return;
 		if (!Number.isFinite(targetGb) || targetGb < 0 || targetGb > 1024) {
 			error = 'Escolha um limite entre 0 e 1024 GB.';
 			return;
@@ -58,6 +66,28 @@
 					: 'Não foi possível reduzir o armazenamento local.';
 		} finally {
 			trimming = false;
+		}
+	}
+
+	async function reconcile() {
+		if (!native || trimming || reconciling) return;
+		reconciling = true;
+		error = null;
+		message = null;
+		try {
+			lastReconciliation = await reconcileNativeDocuments(fullHash);
+			await refresh();
+			if (lastReconciliation) {
+				const issues = lastReconciliation.missingDocuments + lastReconciliation.corruptDocuments;
+				message = issues
+					? `Verificação concluída: ${issues} arquivo(s) precisam de atenção.`
+					: 'Verificação concluída: todos os arquivos catalogados estão íntegros.';
+			}
+		} catch (caught) {
+			error =
+				caught instanceof Error ? caught.message : 'Não foi possível verificar os arquivos locais.';
+		} finally {
+			reconciling = false;
 		}
 	}
 
@@ -95,6 +125,38 @@
 				<article><span>Plataforma</span><strong>{status.platform}</strong></article>
 			</section>
 		{/if}
+		<section class="card diagnostics" aria-labelledby="diagnostics-title" aria-busy={reconciling}>
+			<div>
+				<h2 id="diagnostics-title">Integridade dos arquivos</h2>
+				<p>
+					Confirme se os arquivos catalogados ainda existem e podem ser abertos. A verificação
+					completa confere também o SHA-256 e pode levar mais tempo em bibliotecas grandes.
+				</p>
+			</div>
+			<label class="check" for="full-hash">
+				<input
+					id="full-hash"
+					type="checkbox"
+					bind:checked={fullHash}
+					disabled={reconciling || trimming}
+				/>
+				Verificação completa por SHA-256
+			</label>
+			<Button
+				label={reconciling ? 'Verificando…' : 'Verificar arquivos'}
+				variant="secondary"
+				disabled={reconciling || trimming}
+				onclick={() => void reconcile()}
+			/>
+			{#if lastReconciliation}
+				<p class="diagnostic-result" role="status">
+					{lastReconciliation.inspectedDocuments} verificado(s),
+					{lastReconciliation.missingDocuments} ausente(s),
+					{lastReconciliation.corruptDocuments} corrompido(s) e
+					{lastReconciliation.unchangedDocuments} sem alteração.
+				</p>
+			{/if}
+		</section>
 		<section class="card controls">
 			<div>
 				<h2>Limite de cache</h2>
@@ -112,7 +174,7 @@
 					max="1024"
 					step="1"
 					bind:value={targetGb}
-					disabled={trimming}
+					disabled={trimming || reconciling}
 				/><span>GB</span>
 			</div>
 			<Button
@@ -198,6 +260,33 @@
 		grid-row: span 2;
 		align-self: center;
 	}
+	.diagnostics {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		gap: 0.8rem 1rem;
+		align-items: center;
+	}
+	.diagnostics > div {
+		grid-row: span 2;
+	}
+	.check {
+		display: flex;
+		gap: 0.5rem;
+		align-items: center;
+		color: var(--muted);
+		font-size: 0.8rem;
+		font-weight: 700;
+	}
+	.check input {
+		width: auto;
+		min-height: auto;
+	}
+	.diagnostic-result {
+		grid-column: 1 / -1;
+		margin: 0;
+		color: var(--muted);
+		font-size: 0.9rem;
+	}
 	.limit {
 		display: flex;
 		gap: 0.45rem;
@@ -226,6 +315,12 @@
 		}
 		.controls {
 			grid-template-columns: 1fr;
+		}
+		.diagnostics {
+			grid-template-columns: 1fr;
+		}
+		.diagnostics > div {
+			grid-row: auto;
 		}
 		.controls > div:first-child {
 			grid-row: auto;

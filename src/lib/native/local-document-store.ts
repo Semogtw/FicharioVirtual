@@ -109,6 +109,34 @@ function validNativeDocumentPageCursor(value: unknown): value is NativeDocumentP
 	);
 }
 
+function parseNativeReconciliationSummary(value: unknown): NativeReconciliationSummary {
+	if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+		throw new TypeError('Invalid native reconciliation summary');
+	}
+	const row = value as Record<keyof NativeReconciliationSummary, unknown>;
+	const counts = [
+		row.inspectedDocuments,
+		row.missingDocuments,
+		row.corruptDocuments,
+		row.unchangedDocuments
+	];
+	if (
+		!counts.every((count) => Number.isSafeInteger(count) && (count as number) >= 0) ||
+		(row.missingDocuments as number) +
+			(row.corruptDocuments as number) +
+			(row.unchangedDocuments as number) >
+			(row.inspectedDocuments as number)
+	) {
+		throw new TypeError('Invalid native reconciliation summary');
+	}
+	return Object.freeze({
+		inspectedDocuments: row.inspectedDocuments as number,
+		missingDocuments: row.missingDocuments as number,
+		corruptDocuments: row.corruptDocuments as number,
+		unchangedDocuments: row.unchangedDocuments as number
+	});
+}
+
 function parseNativeDocumentPage(value: unknown): NativeDocumentPage {
 	if (value === null || typeof value !== 'object' || Array.isArray(value)) {
 		throw new TypeError('Invalid native document page');
@@ -136,10 +164,8 @@ export async function reconcileNativeDocuments(
 	fullHash = false
 ): Promise<NativeReconciliationSummary | null> {
 	if (!isNativeRuntime()) return null;
-	return await invokeNative<NativeReconciliationSummary>(
-		'reconcile_native_documents',
-		request({ fullHash })
-	);
+	const result = await invokeNative<unknown>('reconcile_native_documents', request({ fullHash }));
+	return parseNativeReconciliationSummary(result);
 }
 
 export async function listNativeDocumentsPage(
