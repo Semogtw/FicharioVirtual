@@ -4,6 +4,7 @@ import { mapPageRecord, type PageDetail, type PageRecord } from '$lib/domain/pag
 import {
 	listNativeDocumentPages,
 	resolveNativeDocument,
+	updateNativeDocumentPageMetadata,
 	type NativeDocument,
 	type NativeDocumentPageMetadata
 } from '$lib/native/local-document-store';
@@ -383,14 +384,21 @@ function mapNativePageDetail(
 		id: `${document.documentId}:native:${pageNumber}`,
 		page_number: pageNumber,
 		native_text: page?.nativeText ?? null,
-		ocr_raw_text: null,
-		corrected_text: null,
-		extraction_source: page?.nativeText ? 'native_pdf' : null,
+		ocr_raw_text: page?.ocrRawText ?? null,
+		corrected_text: page?.correctedText ?? null,
+		extraction_source: page?.extractionSource ?? (page?.nativeText ? 'native_pdf' : null),
 		source_drive_file_id: null,
-		ocr_word_geometry: [],
-		warnings: [],
+		ocr_word_geometry:
+			page?.wordGeometry?.map((word) => [
+				word.text,
+				word.left,
+				word.top,
+				word.right,
+				word.bottom
+			]) ?? [],
+		warnings: page?.warnings ? [...page.warnings] : [],
 		status: page?.status ?? fallbackStatus,
-		was_manually_reviewed: false,
+		was_manually_reviewed: page?.wasManuallyReviewed ?? false,
 		updated_at: nativePageUpdatedAt(document, page)
 	});
 }
@@ -513,6 +521,37 @@ async function loadNativeDocumentPage(
 	}
 }
 
+async function cacheRemotePageMetadata(
+	documentId: string,
+	page: PageRecord,
+	mappedPage: PageDetail
+) {
+	if (!isNativeRuntime()) return;
+	const ownerId = sessionState.user?.id;
+	if (!ownerId) return;
+	try {
+		const local = await resolveNativeDocument(documentId);
+		if (!local || local.ownerId !== ownerId) return;
+		await updateNativeDocumentPageMetadata({
+			documentId,
+			ownerId,
+			status: mappedPage.status,
+			page: {
+				pageNumber: mappedPage.pageNumber,
+				nativeText: mappedPage.nativeText,
+				ocrRawText: mappedPage.ocrRawText,
+				correctedText: mappedPage.correctedText,
+				extractionSource: mappedPage.extractionSource,
+				wordGeometry: mappedPage.wordGeometry,
+				warnings: mappedPage.warnings,
+				wasManuallyReviewed: mappedPage.wasManuallyReviewed
+			}
+		});
+	} catch {
+		// Remote detail remains authoritative if the local metadata cache is unavailable.
+	}
+}
+
 async function loadNativeDocumentPreview(
 	documentId: string,
 	pageNumber: number
@@ -594,6 +633,8 @@ export async function loadDocumentPreviewWithGateway(
 		if (rawPage === null) throw new DocumentDetailError('not_found');
 		const page = pageRecordSchema.parse(rawPage);
 		if (page.page_number !== validatedPageNumber) throw new DocumentDetailError('unavailable');
+		const mappedPage = mapPageRecord(page);
+		void cacheRemotePageMetadata(validatedDocumentId, page, mappedPage);
 		const detail = Object.freeze({
 			id: document.id,
 			title: document.title,
@@ -617,7 +658,7 @@ export async function loadDocumentPreviewWithGateway(
 			createdAt: document.created_at,
 			updatedAt: document.updated_at
 		});
-		return Object.freeze({ detail, page: mapPageRecord(page) });
+		return Object.freeze({ detail, page: mappedPage });
 	} catch (error) {
 		preserveNotFound(error);
 	}
@@ -635,7 +676,9 @@ export async function loadDocumentPageWithGateway(
 		if (rawPage === null) throw new DocumentDetailError('not_found');
 		const page = pageRecordSchema.parse(rawPage);
 		if (page.page_number !== validatedPageNumber) throw new DocumentDetailError('unavailable');
-		return mapPageRecord(page);
+		const mappedPage = mapPageRecord(page);
+		void cacheRemotePageMetadata(validatedDocumentId, page, mappedPage);
+		return mappedPage;
 	} catch (error) {
 		preserveNotFound(error);
 	}

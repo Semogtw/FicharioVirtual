@@ -178,6 +178,35 @@ pub struct ReconcileDocumentsRequest {
 pub struct NativePageMetadataInput {
     pub page_number: i64,
     pub native_text: Option<String>,
+    #[serde(default)]
+    pub ocr_raw_text: Option<String>,
+    #[serde(default)]
+    pub corrected_text: Option<String>,
+    #[serde(default)]
+    pub extraction_source: Option<String>,
+    #[serde(default)]
+    pub word_geometry: Vec<NativeWordGeometry>,
+    #[serde(default)]
+    pub warnings: Vec<NativePageWarning>,
+    #[serde(default)]
+    pub was_manually_reviewed: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeWordGeometry {
+    pub text: String,
+    pub left: i64,
+    pub top: i64,
+    pub right: i64,
+    pub bottom: i64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativePageWarning {
+    pub code: String,
+    pub message: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -192,12 +221,27 @@ pub struct UpdateDocumentMetadataRequest {
     pub pages: Vec<NativePageMetadataInput>,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateNativeDocumentPageMetadataRequest {
+    pub document_id: String,
+    pub owner_id: String,
+    pub status: String,
+    pub page: NativePageMetadataInput,
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NativeDocumentPageMetadata {
     pub document_id: String,
     pub page_number: i64,
     pub native_text: Option<String>,
+    pub ocr_raw_text: Option<String>,
+    pub corrected_text: Option<String>,
+    pub extraction_source: Option<String>,
+    pub word_geometry: Vec<NativeWordGeometry>,
+    pub warnings: Vec<NativePageWarning>,
+    pub was_manually_reviewed: bool,
     pub status: String,
     pub updated_at_ms: i64,
 }
@@ -249,6 +293,12 @@ impl From<catalog::DocumentPageMetadataRow> for NativeDocumentPageMetadata {
             document_id: value.document_id,
             page_number: value.page_number,
             native_text: value.native_text,
+            ocr_raw_text: value.ocr_raw_text,
+            corrected_text: value.corrected_text,
+            extraction_source: value.extraction_source,
+            word_geometry: serde_json::from_str(&value.ocr_word_geometry_json).unwrap_or_default(),
+            warnings: serde_json::from_str(&value.warnings_json).unwrap_or_default(),
+            was_manually_reviewed: value.was_manually_reviewed,
             status: value.status,
             updated_at_ms: value.updated_at_ms,
         }
@@ -265,7 +315,7 @@ pub fn native_status(app: AppHandle) -> Result<NativeStatus, String> {
     let summary = metrics::read(&paths)?;
     Ok(NativeStatus {
         platform: std::env::consts::OS.to_string(),
-        schema_version: 4,
+        schema_version: 5,
         local_document_count: summary.present_document_count,
         pending_sync_count: summary.pending_sync_count,
         disk_usage_bytes: summary
@@ -368,11 +418,21 @@ pub fn update_native_document_metadata(
     let pages = request
         .pages
         .into_iter()
-        .map(|page| catalog::DocumentPageMetadataInput {
-            page_number: page.page_number,
-            native_text: page.native_text,
+        .map(|page| {
+            Ok(catalog::DocumentPageMetadataInput {
+                page_number: page.page_number,
+                native_text: page.native_text,
+                ocr_raw_text: page.ocr_raw_text,
+                corrected_text: page.corrected_text,
+                extraction_source: page.extraction_source,
+                ocr_word_geometry_json: serde_json::to_string(&page.word_geometry)
+                    .map_err(|_| "Geometria local inválida".to_string())?,
+                warnings_json: serde_json::to_string(&page.warnings)
+                    .map_err(|_| "Avisos locais inválidos".to_string())?,
+                was_manually_reviewed: page.was_manually_reviewed,
+            })
         })
-        .collect::<Vec<_>>();
+        .collect::<Result<Vec<_>, String>>()?;
     catalog::update_document_metadata(
         &app_paths(&app)?,
         &request.document_id,
@@ -383,6 +443,36 @@ pub fn update_native_document_metadata(
             page_count: request.page_count,
             status: request.status,
             pages,
+        },
+    )
+}
+
+#[tauri::command]
+pub fn update_native_document_page_metadata(
+    app: AppHandle,
+    request: UpdateNativeDocumentPageMetadataRequest,
+) -> Result<(), String> {
+    paths::validate_document_id(&request.document_id)?;
+    if request.owner_id.is_empty() || request.owner_id.len() > 128 {
+        return Err("Proprietário local inválido".into());
+    }
+    let page = request.page;
+    catalog::update_document_page_metadata(
+        &app_paths(&app)?,
+        &request.document_id,
+        &request.owner_id,
+        &request.status,
+        catalog::DocumentPageMetadataInput {
+            page_number: page.page_number,
+            native_text: page.native_text,
+            ocr_raw_text: page.ocr_raw_text,
+            corrected_text: page.corrected_text,
+            extraction_source: page.extraction_source,
+            ocr_word_geometry_json: serde_json::to_string(&page.word_geometry)
+                .map_err(|_| "Geometria local inválida".to_string())?,
+            warnings_json: serde_json::to_string(&page.warnings)
+                .map_err(|_| "Avisos locais inválidos".to_string())?,
+            was_manually_reviewed: page.was_manually_reviewed,
         },
     )
 }

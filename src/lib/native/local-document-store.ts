@@ -1,5 +1,8 @@
 import { invokeNative, isNativeRuntime } from '$lib/platform/native-bridge';
 import type { DocumentStatus } from '$lib/domain/document';
+import type { PageWarning } from '$lib/domain/page';
+import type { WordGeometry } from '$lib/ocr/word-geometry';
+import type { ExtractionSource, ProcessingStatus } from '$lib/types/database';
 
 const DEFAULT_CHUNK_BYTES = 256 * 1024;
 const MAX_SAFE_CHUNK_BYTES = 512 * 1024;
@@ -28,6 +31,12 @@ export type NativeDocumentPageMetadata = Readonly<{
 	documentId: string;
 	pageNumber: number;
 	nativeText: string | null;
+	ocrRawText?: string | null;
+	correctedText?: string | null;
+	extractionSource?: ExtractionSource | null;
+	wordGeometry?: readonly WordGeometry[];
+	warnings?: readonly PageWarning[];
+	wasManuallyReviewed?: boolean;
 	status:
 		'pending' | 'processing' | 'ready' | 'retryable' | 'blocked_quota' | 'needs_review' | 'failed';
 	updatedAtMs: number;
@@ -40,7 +49,16 @@ export type NativeDocumentMetadataInput = Readonly<{
 	notebookId?: string | null;
 	pageCount: number;
 	status: Exclude<DocumentStatus, 'uploading' | 'pending'>;
-	pages: readonly Readonly<{ pageNumber: number; nativeText: string | null }>[];
+	pages: readonly Readonly<{
+		pageNumber: number;
+		nativeText: string | null;
+		ocrRawText?: string | null;
+		correctedText?: string | null;
+		extractionSource?: ExtractionSource | null;
+		wordGeometry?: readonly WordGeometry[];
+		warnings?: readonly PageWarning[];
+		wasManuallyReviewed?: boolean;
+	}>[];
 }>;
 
 export type NativeSearchPage = Readonly<{
@@ -140,18 +158,77 @@ function validNativeDocument(value: NativeDocument | null): value is NativeDocum
 	);
 }
 
-function validNativeDocumentPageMetadata(value: unknown): value is NativeDocumentPageMetadata {
+function validNativeWordGeometry(value: unknown): value is WordGeometry {
 	if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
-	const row = value as Partial<NativeDocumentPageMetadata>;
+	const row = value as Partial<WordGeometry>;
 	return (
+		typeof row.text === 'string' &&
+		row.text.length > 0 &&
+		row.text.length <= 256 &&
+		row.text === row.text.trim() &&
+		Number.isInteger(row.left) &&
+		(row.left as number) >= 0 &&
+		(row.left as number) <= 10_000 &&
+		Number.isInteger(row.top) &&
+		(row.top as number) >= 0 &&
+		(row.top as number) <= 10_000 &&
+		Number.isInteger(row.right) &&
+		(row.right as number) > (row.left as number) &&
+		(row.right as number) <= 10_000 &&
+		Number.isInteger(row.bottom) &&
+		(row.bottom as number) > (row.top as number) &&
+		(row.bottom as number) <= 10_000
+	);
+}
+
+function validNativePageWarning(value: unknown): value is PageWarning {
+	if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+	const row = value as Partial<PageWarning>;
+	return (
+		typeof row.code === 'string' &&
+		/^[a-z][a-z0-9_]{1,63}$/.test(row.code) &&
+		typeof row.message === 'string' &&
+		row.message.trim().length > 0 &&
+		row.message.length <= 300
+	);
+}
+
+function parseNativeDocumentPageMetadata(value: unknown): NativeDocumentPageMetadata | null {
+	if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+	const row = value as Partial<NativeDocumentPageMetadata> & {
+		wordGeometry?: unknown;
+		warnings?: unknown;
+	};
+	if (!(
 		typeof row.documentId === 'string' &&
 		row.documentId.length > 0 &&
 		row.documentId.length <= 128 &&
 		Number.isSafeInteger(row.pageNumber) &&
 		(row.pageNumber as number) >= 1 &&
 		(row.pageNumber as number) <= 10_000 &&
-		(row.nativeText === null ||
+		(row.nativeText === undefined ||
+			row.nativeText === null ||
 			(typeof row.nativeText === 'string' && row.nativeText.length <= 1_000_000)) &&
+		(row.ocrRawText === undefined ||
+			row.ocrRawText === null ||
+			(typeof row.ocrRawText === 'string' && row.ocrRawText.length <= 1_000_000)) &&
+		(row.correctedText === undefined ||
+			row.correctedText === null ||
+			(typeof row.correctedText === 'string' && row.correctedText.length <= 1_000_000)) &&
+		(row.extractionSource === undefined ||
+			row.extractionSource === null ||
+			row.extractionSource === 'native_pdf' ||
+			row.extractionSource === 'ocr' ||
+			row.extractionSource === 'manual') &&
+		(row.wordGeometry === undefined ||
+			(Array.isArray(row.wordGeometry) &&
+				row.wordGeometry.length <= 20_000 &&
+				row.wordGeometry.every(validNativeWordGeometry))) &&
+		(row.warnings === undefined ||
+			(Array.isArray(row.warnings) &&
+				row.warnings.length <= 100 &&
+				row.warnings.every(validNativePageWarning))) &&
+		(row.wasManuallyReviewed === undefined || typeof row.wasManuallyReviewed === 'boolean') &&
 		(row.status === 'pending' ||
 			row.status === 'processing' ||
 			row.status === 'ready' ||
@@ -161,7 +238,22 @@ function validNativeDocumentPageMetadata(value: unknown): value is NativeDocumen
 			row.status === 'failed') &&
 		Number.isSafeInteger(row.updatedAtMs) &&
 		(row.updatedAtMs as number) >= 0
-	);
+	)) {
+		return null;
+	}
+	return Object.freeze({
+		documentId: row.documentId as string,
+		pageNumber: row.pageNumber as number,
+		nativeText: row.nativeText ?? null,
+		ocrRawText: row.ocrRawText ?? null,
+		correctedText: row.correctedText ?? null,
+		extractionSource: row.extractionSource ?? null,
+		wordGeometry: Object.freeze((row.wordGeometry ?? []) as WordGeometry[]),
+		warnings: Object.freeze((row.warnings ?? []) as PageWarning[]),
+		wasManuallyReviewed: row.wasManuallyReviewed ?? false,
+		status: row.status as NonNullable<NativeDocumentPageMetadata['status']>,
+		updatedAtMs: row.updatedAtMs as number
+	});
 }
 
 function validNativeSearchPage(value: unknown): value is NativeSearchPage {
@@ -314,10 +406,14 @@ export async function listNativeDocumentPages(
 		'list_native_document_pages',
 		request({ documentId, ownerId })
 	);
-	if (!Array.isArray(result) || !result.every(validNativeDocumentPageMetadata)) {
+	if (!Array.isArray(result)) {
 		throw new TypeError('Invalid native document page metadata');
 	}
-	return Object.freeze(result as NativeDocumentPageMetadata[]);
+	const pages = result.map(parseNativeDocumentPageMetadata);
+	if (pages.some((page) => page === null)) {
+		throw new TypeError('Invalid native document page metadata');
+	}
+	return Object.freeze(pages as NativeDocumentPageMetadata[]);
 }
 
 export async function updateNativeDocumentMetadata(
@@ -336,12 +432,27 @@ export async function updateNativeDocumentMetadata(
 	const pages = input.pages;
 	const seen = new Set<number>();
 	for (const page of pages) {
+		const wordGeometry = page.wordGeometry ?? [];
+		const warnings = page.warnings ?? [];
 		if (
 			!Number.isSafeInteger(page.pageNumber) ||
 			page.pageNumber < 1 ||
 			page.pageNumber > input.pageCount ||
 			seen.has(page.pageNumber) ||
-			(page.nativeText !== null && page.nativeText.length > 1_000_000)
+			(page.nativeText !== null && page.nativeText.length > 1_000_000) ||
+			(page.ocrRawText !== undefined &&
+				page.ocrRawText !== null &&
+				page.ocrRawText.length > 1_000_000) ||
+			(page.correctedText !== undefined &&
+				page.correctedText !== null &&
+				page.correctedText.length > 1_000_000) ||
+			(page.extractionSource !== undefined &&
+				page.extractionSource !== null &&
+				!['native_pdf', 'ocr', 'manual'].includes(page.extractionSource)) ||
+			wordGeometry.length > 20_000 ||
+			!wordGeometry.every(validNativeWordGeometry) ||
+			warnings.length > 100 ||
+			!warnings.every(validNativePageWarning)
 		) {
 			throw new TypeError('Invalid native page metadata');
 		}
@@ -356,7 +467,79 @@ export async function updateNativeDocumentMetadata(
 			notebookId: input.notebookId ?? null,
 			pageCount: input.pageCount,
 			status: input.status,
-			pages: pages.map((page) => ({ pageNumber: page.pageNumber, nativeText: page.nativeText }))
+			pages: pages.map((page) => ({
+				pageNumber: page.pageNumber,
+				nativeText: page.nativeText,
+				ocrRawText: page.ocrRawText ?? null,
+				correctedText: page.correctedText ?? null,
+				extractionSource: page.extractionSource ?? null,
+				wordGeometry: page.wordGeometry ?? [],
+				warnings: page.warnings ?? [],
+				wasManuallyReviewed: page.wasManuallyReviewed ?? false
+			}))
+		})
+	);
+}
+
+export async function updateNativeDocumentPageMetadata(input: {
+	documentId: string;
+	ownerId: string;
+	status: ProcessingStatus;
+	page: {
+		pageNumber: number;
+		nativeText: string | null;
+		ocrRawText?: string | null;
+		correctedText?: string | null;
+		extractionSource?: ExtractionSource | null;
+		wordGeometry?: readonly WordGeometry[];
+		warnings?: readonly PageWarning[];
+		wasManuallyReviewed?: boolean;
+	};
+}): Promise<void> {
+	if (!isNativeRuntime()) return;
+	if (input.ownerId.trim().length === 0 || input.ownerId.length > 128) {
+		throw new TypeError('Invalid native document owner');
+	}
+	const page = input.page;
+	const wordGeometry = page.wordGeometry ?? [];
+	const warnings = page.warnings ?? [];
+	if (
+		!Number.isSafeInteger(page.pageNumber) ||
+		page.pageNumber < 1 ||
+		page.pageNumber > 10_000 ||
+		(page.nativeText !== null && page.nativeText.length > 1_000_000) ||
+		(page.ocrRawText !== undefined &&
+			page.ocrRawText !== null &&
+			page.ocrRawText.length > 1_000_000) ||
+		(page.correctedText !== undefined &&
+			page.correctedText !== null &&
+			page.correctedText.length > 1_000_000) ||
+		(page.extractionSource !== undefined &&
+			page.extractionSource !== null &&
+			!['native_pdf', 'ocr', 'manual'].includes(page.extractionSource)) ||
+		wordGeometry.length > 20_000 ||
+		!wordGeometry.every(validNativeWordGeometry) ||
+		warnings.length > 100 ||
+		!warnings.every(validNativePageWarning)
+	) {
+		throw new TypeError('Invalid native page metadata');
+	}
+	await invokeNative<void>(
+		'update_native_document_page_metadata',
+		request({
+			documentId: input.documentId,
+			ownerId: input.ownerId,
+			status: input.status,
+			page: {
+				pageNumber: page.pageNumber,
+				nativeText: page.nativeText,
+				ocrRawText: page.ocrRawText ?? null,
+				correctedText: page.correctedText ?? null,
+				extractionSource: page.extractionSource ?? null,
+				wordGeometry,
+				warnings,
+				wasManuallyReviewed: page.wasManuallyReviewed ?? false
+			}
 		})
 	);
 }

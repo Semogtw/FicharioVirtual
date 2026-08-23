@@ -90,9 +90,11 @@ A branch já deixou de ser apenas planejamento. O núcleo abaixo existe em códi
 - o `DocumentMediaViewer` consulta o catálogo nativo antes de buscar resumos/metadados remotos; PDFs presentes usam `NativePdfDataRangeTransport` e imagens presentes usam o original local antes do fallback Drive/Supabase;
 - falhas transitórias do catálogo nativo são tratadas como cache miss, preservando o fallback remoto quando ele existir;
 - quando a consulta remota da biblioteca falha no runtime nativo, a lista local filtra pelo proprietário da sessão e pagina os documentos do catálogo; a rota de detalhe reconstrói um índice de páginas local e descobre a contagem real de PDFs por faixas;
-- a migration 3 acrescenta título, caderno, status e contagem de páginas ao catálogo e mantém um snapshot owner-scoped de texto nativo por página, substituído atomicamente a cada inspeção;
-- o detalhe local lê esse snapshot para reconstruir status/texto nativo de páginas após reinício; páginas sem texto permanecem `processing`/`needs_review`, sem serem tratadas como OCR concluído;
-- a busca textual usa o índice FTS5 local sobre esse texto nativo como fallback offline, com filtro de caderno, paginação e excerpt limitado; OCR/semântica continuam dependentes do próximo slice;
+- a migration 3 acrescenta título, caderno, status e contagem de páginas ao catálogo e mantém um snapshot owner-scoped de metadados por página, substituído atomicamente a cada inspeção;
+- a migration 5 acrescenta texto OCR bruto/corrigido, fonte de extração, geometria por palavra, warnings e revisão manual, com validação de limites e JSON; migrations v1–v4 continuam atualizáveis sem perder documentos, páginas ou jobs;
+- o detalhe local lê esse snapshot para reconstruir status, texto e análise de páginas após reinício; páginas sem texto permanecem `processing`/`needs_review`, sem serem tratadas como OCR concluído;
+- a busca textual usa o índice FTS5 local sobre o texto efetivo (corrigido, nativo ou OCR bruto) como fallback offline, com filtro de caderno, paginação e excerpt limitado; semântica continua dependente do próximo slice;
+- páginas abertas pela fonte remota são hidratadas no catálogo nativo em best effort, preservando o remoto como fonte imediata e mantendo o fallback quando o cache falhar;
 - testes unitários provam que o fast path local não chama a função remota;
 - se o original não existe localmente, o fluxo web/Drive continua funcionando como fallback;
 - downloads remotos completos compatíveis aquecem o cache nativo em best effort.
@@ -113,7 +115,7 @@ A branch já deixou de ser apenas planejamento. O núcleo abaixo existe em códi
 - contador de tentativas, próximo retry e último erro;
 - importações locais pendentes criam job de upload;
 - confirmação remota conclui o job ativo correspondente.
-- `schema_migrations` registra os schemas 1–4: a migration 2 adiciona `payload_json`, a migration 3 adiciona metadados/páginas locais, e a migration 4 cria/reconstrói o FTS5 sem perder documentos ou jobs existentes;
+- `schema_migrations` registra os schemas 1–5: a migration 2 adiciona `payload_json`, a migration 3 adiciona metadados/páginas locais, a migration 4 cria/reconstrói o FTS5 nativo e a migration 5 adiciona a análise completa de página sem perder documentos, páginas ou jobs existentes;
 - o payload durável preserva documento, proprietário, título, caderno, MIME, hash, tamanho e versão de OCR;
 - o bridge TypeScript lista, reserva, conclui, cancela e reagenda jobs nativos com validação do contrato IPC;
 - o bridge limita identificadores, erros persistidos e payloads de jobs antes de entregá-los ao worker;
@@ -187,6 +189,8 @@ No head `50c1720`, o build de produção do frontend passou com `vite build`, a 
 
 No ciclo do timer Linux, o frontend passou por `svelte-check` sem erros/avisos, `vite build` e 343 arquivos Vitest (1470 testes); Rust passou por `cargo fmt --check`, `cargo test --lib` (16 aprovados, 1 ignorado por depender do keyring) e `cargo clippy --lib -- -D warnings`. O release `--sync-once` iniciou com XDG temporário e encerrou com status `0`; o `.deb` correspondente contém `/usr/bin/fichario-native`, teve o `.desktop` validado e tem SHA-256 `1803563d19ff00061094e3203f5b6bd2f2aa895691da0b9ede896a3a4083a731`. O timer também passou por `systemd-analyze verify`; a unidade de serviço foi validada por contrato sem instalação global do pacote.
 
+No ciclo de metadata v5, o Rust passou por `cargo test --lib` com 16 testes aprovados e o contrato do bridge/documento passou por 24 testes unitários direcionados. A validação cobre round-trip de OCR bruto/corrigido, fonte de extração, geometria, warnings, revisão manual, reindexação FTS5 pelo texto corrigido e hidratação best-effort de páginas remotas para o catálogo local. A suíte frontend completa, `svelte-check`, build Linux e clippy ainda precisam ser repetidos para este head antes da publicação do checkpoint.
+
 Não há alegação de validação em Android/Windows nem de sessão Supabase autenticada nesta branch. Após a decisão de focar Linux, não foi usado `adb` nem houve instalação/execução de APK em dispositivo.
 
 ## Trabalho importante restante
@@ -196,7 +200,7 @@ Prioridade alta antes de considerar o app pronto:
 1. adicionar scheduler nativo equivalente a WorkManager no Android e retomar sincronização de desktop após suspensão/encerramento sem depender da ativação manual do timer Linux;
 2. ampliar migrations versionadas para futuras mudanças de catálogo e testar upgrades de várias versões;
 3. migrar eventuais consumidores legados para `list_native_documents_page` e validar acervos grandes com fixtures de paginação;
-4. completar o armazenamento de OCR, geometria, warnings e destaques offline após reinício/sem sessão remota; o catálogo já cobre título, caderno, status, contagem, texto nativo e busca FTS5, sem inventar OCR remoto;
+4. integrar a apresentação de destaques/edição offline ao snapshot de análise já persistido; o catálogo agora cobre título, caderno, status, contagem, texto nativo, OCR bruto/corrigido, fonte, geometria, warnings, revisão manual e busca FTS5, sem inventar OCR remoto;
 5. validar instalação/execução do bundle Linux em uma máquina desktop real além do runner;
 6. instalar e executar APK em dispositivo Android real;
 7. concluir OAuth/deep link e o adapter de armazenamento seguro Android; o adapter Linux já está implementado e teve o ciclo operacional `keyring` validado em sessão desktop, mas o login/refresh Supabase completo ainda precisa de execução autenticada;

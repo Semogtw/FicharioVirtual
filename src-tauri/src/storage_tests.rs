@@ -73,8 +73,8 @@ fn catalog_records_explicit_schema_migrations_and_payload_column() {
         )
         .expect("inspect sync job schema");
 
-    assert_eq!(version, 4);
-    assert_eq!(migrations, vec![1, 2, 3, 4]);
+    assert_eq!(version, 5);
+    assert_eq!(migrations, vec![1, 2, 3, 4, 5]);
     assert_eq!(payload_columns, 1);
 }
 
@@ -106,7 +106,7 @@ fn existing_v1_catalog_is_upgraded_without_losing_documents_or_jobs() {
         .expect("legacy document survives");
     let jobs = catalog::list_sync_jobs(paths, 10).expect("read upgraded jobs");
 
-    assert_eq!(version, 4);
+    assert_eq!(version, 5);
     assert_eq!(document.document_id, "doc-legacy");
     assert_eq!(jobs.len(), 1);
     assert!(jobs[0].payload_json.is_some());
@@ -141,7 +141,7 @@ fn existing_v2_catalog_is_upgraded_to_v3_and_keeps_metadata_rows() {
             |row| row.get(0),
         )
         .expect("inspect page metadata table");
-    assert_eq!(version, 4);
+    assert_eq!(version, 5);
     assert_eq!(pages_table, 1);
     assert_eq!(
         catalog::get_document(paths, "doc-v2")
@@ -256,10 +256,23 @@ fn native_document_metadata_round_trip_replaces_page_snapshot_and_checks_owner()
                 catalog::DocumentPageMetadataInput {
                     page_number: 1,
                     native_text: Some("primeira página".into()),
+                    ocr_raw_text: Some("texto OCR".into()),
+                    corrected_text: Some("texto corrigido".into()),
+                    extraction_source: Some("ocr".into()),
+                    ocr_word_geometry_json:
+                        r#"[{"text":"texto","left":10,"top":20,"right":80,"bottom":50}]"#.into(),
+                    warnings_json: r#"[{"code":"ocr_review","message":"Revisar"}]"#.into(),
+                    was_manually_reviewed: true,
                 },
                 catalog::DocumentPageMetadataInput {
                     page_number: 2,
                     native_text: None,
+                    ocr_raw_text: None,
+                    corrected_text: None,
+                    extraction_source: None,
+                    ocr_word_geometry_json: "[]".into(),
+                    warnings_json: "[]".into(),
+                    was_manually_reviewed: false,
                 },
             ],
         },
@@ -275,8 +288,12 @@ fn native_document_metadata_round_trip_replaces_page_snapshot_and_checks_owner()
     let pages = catalog::list_document_pages(paths, "doc-metadata", owner_id).expect("read pages");
     assert_eq!(pages.len(), 2);
     assert_eq!(pages[0].native_text.as_deref(), Some("primeira página"));
+    assert_eq!(pages[0].ocr_raw_text.as_deref(), Some("texto OCR"));
+    assert_eq!(pages[0].corrected_text.as_deref(), Some("texto corrigido"));
+    assert_eq!(pages[0].extraction_source.as_deref(), Some("ocr"));
+    assert!(pages[0].was_manually_reviewed);
     assert_eq!(pages[1].status, "processing");
-    let search = catalog::search_document_pages(paths, owner_id, "primeira", 10, 0, None)
+    let search = catalog::search_document_pages(paths, owner_id, "corrigido", 10, 0, None)
         .expect("search local page text");
     assert_eq!(search.len(), 1);
     assert_eq!(search[0].page_number, 1);
@@ -293,6 +310,12 @@ fn native_document_metadata_round_trip_replaces_page_snapshot_and_checks_owner()
             pages: vec![catalog::DocumentPageMetadataInput {
                 page_number: 1,
                 native_text: Some("página atualizada".into()),
+                ocr_raw_text: None,
+                corrected_text: None,
+                extraction_source: Some("native_pdf".into()),
+                ocr_word_geometry_json: "[]".into(),
+                warnings_json: "[]".into(),
+                was_manually_reviewed: false,
             }],
         },
     )

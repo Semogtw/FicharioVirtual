@@ -187,6 +187,12 @@ describe('native runtime bridge', () => {
 					documentId: 'doc-metadata',
 					pageNumber: 1,
 					nativeText: 'texto nativo',
+					ocrRawText: 'texto OCR',
+					correctedText: 'texto corrigido',
+					extractionSource: 'ocr',
+					wordGeometry: [{ text: 'texto', left: 10, top: 20, right: 80, bottom: 50 }],
+					warnings: [{ code: 'ocr_review', message: 'Revisar' }],
+					wasManuallyReviewed: true,
 					status: 'ready',
 					updatedAtMs: 10
 				}
@@ -200,7 +206,18 @@ describe('native runtime bridge', () => {
 			notebookId: null,
 			pageCount: 1,
 			status: 'ready',
-			pages: [{ pageNumber: 1, nativeText: 'texto nativo' }]
+			pages: [
+				{
+					pageNumber: 1,
+					nativeText: 'texto nativo',
+					ocrRawText: 'texto OCR',
+					correctedText: 'texto corrigido',
+					extractionSource: 'ocr',
+					wordGeometry: [{ text: 'texto', left: 10, top: 20, right: 80, bottom: 50 }],
+					warnings: [{ code: 'ocr_review', message: 'Revisar' }],
+					wasManuallyReviewed: true
+				}
+			]
 		});
 		await expect(
 			listNativeDocumentPages('doc-metadata', '11111111-1111-4111-8111-111111111111')
@@ -213,7 +230,18 @@ describe('native runtime bridge', () => {
 				notebookId: null,
 				pageCount: 1,
 				status: 'ready',
-				pages: [{ pageNumber: 1, nativeText: 'texto nativo' }]
+				pages: [
+					{
+						pageNumber: 1,
+						nativeText: 'texto nativo',
+						ocrRawText: 'texto OCR',
+						correctedText: 'texto corrigido',
+						extractionSource: 'ocr',
+						wordGeometry: [{ text: 'texto', left: 10, top: 20, right: 80, bottom: 50 }],
+						warnings: [{ code: 'ocr_review', message: 'Revisar' }],
+						wasManuallyReviewed: true
+					}
+				]
 			}
 		});
 		expect(invoke).toHaveBeenNthCalledWith(2, 'list_native_document_pages', {

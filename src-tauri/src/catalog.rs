@@ -1,5 +1,6 @@
 use rusqlite::{params, Connection, OptionalExtension, Row, Transaction};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::paths::AppPaths;
@@ -31,6 +32,12 @@ pub struct DocumentPageMetadataRow {
     pub document_id: String,
     pub page_number: i64,
     pub native_text: Option<String>,
+    pub ocr_raw_text: Option<String>,
+    pub corrected_text: Option<String>,
+    pub extraction_source: Option<String>,
+    pub ocr_word_geometry_json: String,
+    pub warnings_json: String,
+    pub was_manually_reviewed: bool,
     pub status: String,
     pub updated_at_ms: i64,
 }
@@ -39,6 +46,12 @@ pub struct DocumentPageMetadataRow {
 pub struct DocumentPageMetadataInput {
     pub page_number: i64,
     pub native_text: Option<String>,
+    pub ocr_raw_text: Option<String>,
+    pub corrected_text: Option<String>,
+    pub extraction_source: Option<String>,
+    pub ocr_word_geometry_json: String,
+    pub warnings_json: String,
+    pub was_manually_reviewed: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -132,23 +145,30 @@ pub fn initialize(paths: &AppPaths) -> Result<(), String> {
     let version: i64 = connection
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .map_err(|error| format!("Não foi possível ler a versão do catálogo local: {error}"))?;
-    if version > 4 {
+    if version > 5 {
         return Err(format!(
             "Catálogo local criado por uma versão mais nova do Fichário (schema {version})"
         ));
     }
+    if version == 5 {
+        reset_abandoned_sync_jobs(paths)?;
+        return Ok(());
+    }
     if version == 4 {
+        migrate_to_v5(&mut connection)?;
         reset_abandoned_sync_jobs(paths)?;
         return Ok(());
     }
     if version == 3 {
         migrate_to_v4(&mut connection)?;
+        migrate_to_v5(&mut connection)?;
         reset_abandoned_sync_jobs(paths)?;
         return Ok(());
     }
     if version == 2 {
         migrate_to_v3(&mut connection)?;
         migrate_to_v4(&mut connection)?;
+        migrate_to_v5(&mut connection)?;
         reset_abandoned_sync_jobs(paths)?;
         return Ok(());
     }
@@ -156,6 +176,7 @@ pub fn initialize(paths: &AppPaths) -> Result<(), String> {
         migrate_to_v2(&mut connection)?;
         migrate_to_v3(&mut connection)?;
         migrate_to_v4(&mut connection)?;
+        migrate_to_v5(&mut connection)?;
         reset_abandoned_sync_jobs(paths)?;
         return Ok(());
     }
@@ -229,6 +250,7 @@ PRAGMA user_version = 1;
     migrate_to_v2(&mut connection)?;
     migrate_to_v3(&mut connection)?;
     migrate_to_v4(&mut connection)?;
+    migrate_to_v5(&mut connection)?;
     reset_abandoned_sync_jobs(paths)?;
     Ok(())
 }
@@ -350,6 +372,88 @@ WHERE native_text IS NOT NULL AND length(native_text) > 0;
         })?;
     transaction.commit().map_err(|error| {
         format!("Não foi possível concluir a migration de busca local: {error}")
+    })?;
+    Ok(())
+}
+
+fn migrate_to_v5(connection: &mut Connection) -> Result<(), String> {
+    let transaction = connection.transaction().map_err(|error| {
+        format!("Não foi possível iniciar a migration de análise local: {error}")
+    })?;
+    for (column, definition) in [
+        ("ocr_raw_text", "TEXT"),
+        ("corrected_text", "TEXT"),
+        (
+            "extraction_source",
+            "TEXT CHECK(extraction_source IS NULL OR extraction_source IN ('native_pdf', 'ocr', 'manual'))",
+        ),
+        (
+            "ocr_word_geometry_json",
+            "TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(ocr_word_geometry_json) AND json_type(ocr_word_geometry_json) = 'array')",
+        ),
+        (
+            "warnings_json",
+            "TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(warnings_json) AND json_type(warnings_json) = 'array')",
+        ),
+        (
+            "was_manually_reviewed",
+            "INTEGER NOT NULL DEFAULT 0 CHECK(was_manually_reviewed IN (0, 1))",
+        ),
+    ] {
+        let exists: i64 = transaction
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('document_pages') WHERE name = ?1",
+                [column],
+                |row| row.get(0),
+            )
+            .map_err(|error| format!("Não foi possível inspecionar a análise local: {error}"))?;
+        if exists == 0 {
+            transaction
+                .execute_batch(&format!(
+                    "ALTER TABLE document_pages ADD COLUMN {column} {definition};"
+                ))
+                .map_err(|error| {
+                    format!("Não foi possível ampliar a análise local com {column}: {error}")
+                })?;
+        }
+    }
+    transaction
+        .execute_batch(
+            r#"
+DELETE FROM document_pages_fts;
+INSERT INTO document_pages_fts (document_id, page_number, native_text)
+SELECT document_id, page_number,
+       COALESCE(NULLIF(corrected_text, ''), NULLIF(native_text, ''), NULLIF(ocr_raw_text, ''))
+FROM document_pages
+WHERE COALESCE(NULLIF(corrected_text, ''), NULLIF(native_text, ''), NULLIF(ocr_raw_text, '')) IS NOT NULL;
+"#,
+        )
+        .map_err(|error| format!("Não foi possível reconstruir a busca da análise local: {error}"))?;
+    let migration_exists: Option<i64> = transaction
+        .query_row(
+            "SELECT version FROM schema_migrations WHERE version = 5",
+            [],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| format!("Não foi possível ler o histórico de migrations: {error}"))?;
+    if migration_exists.is_none() {
+        transaction
+            .execute(
+                "INSERT INTO schema_migrations (version, applied_at_ms) VALUES (5, ?1)",
+                [now_ms()],
+            )
+            .map_err(|error| {
+                format!("Não foi possível registrar a migration de análise: {error}")
+            })?;
+    }
+    transaction
+        .execute_batch("PRAGMA user_version = 5;")
+        .map_err(|error| {
+            format!("Não foi possível atualizar a versão do catálogo local: {error}")
+        })?;
+    transaction.commit().map_err(|error| {
+        format!("Não foi possível concluir a migration de análise local: {error}")
     })?;
     Ok(())
 }
@@ -867,9 +971,77 @@ fn document_page_metadata_from_row(row: &Row<'_>) -> rusqlite::Result<DocumentPa
         document_id: row.get(0)?,
         page_number: row.get(1)?,
         native_text: row.get(2)?,
-        status: row.get(3)?,
-        updated_at_ms: row.get(4)?,
+        ocr_raw_text: row.get(3)?,
+        corrected_text: row.get(4)?,
+        extraction_source: row.get(5)?,
+        ocr_word_geometry_json: row.get(6)?,
+        warnings_json: row.get(7)?,
+        was_manually_reviewed: row.get::<_, i64>(8)? != 0,
+        status: row.get(9)?,
+        updated_at_ms: row.get(10)?,
     })
+}
+
+fn validate_page_json(value: &str, label: &str) -> Result<(), String> {
+    let parsed: Value =
+        serde_json::from_str(value).map_err(|_| format!("JSON de {label} local inválido"))?;
+    let entries = parsed
+        .as_array()
+        .ok_or_else(|| format!("JSON de {label} local deve ser uma lista"))?;
+    let maximum = if label == "geometria" { 20_000 } else { 100 };
+    if entries.len() > maximum {
+        return Err(format!("Quantidade de {label} local excede o limite"));
+    }
+    for entry in entries {
+        if label == "geometria" {
+            let object = entry
+                .as_object()
+                .ok_or_else(|| "Geometria local inválida".to_string())?;
+            let _text = object
+                .get("text")
+                .and_then(Value::as_str)
+                .filter(|text| !text.is_empty() && text.len() <= 256 && *text == text.trim())
+                .ok_or_else(|| "Texto da geometria local inválido".to_string())?;
+            let coordinates = ["left", "top", "right", "bottom"]
+                .iter()
+                .map(|key| object.get(*key).and_then(Value::as_i64))
+                .collect::<Option<Vec<_>>>()
+                .ok_or_else(|| "Coordenada da geometria local inválida".to_string())?;
+            if coordinates
+                .iter()
+                .any(|value| !(0..=10_000).contains(value))
+                || coordinates[2] <= coordinates[0]
+                || coordinates[3] <= coordinates[1]
+            {
+                return Err("Coordenada da geometria local inválida".into());
+            }
+        } else {
+            let object = entry
+                .as_object()
+                .ok_or_else(|| "Aviso local inválido".to_string())?;
+            let code = object
+                .get("code")
+                .and_then(Value::as_str)
+                .filter(|code| {
+                    (2..=64).contains(&code.len())
+                        && code
+                            .chars()
+                            .next()
+                            .is_some_and(|value| value.is_ascii_lowercase())
+                        && code.chars().all(|value| {
+                            value.is_ascii_lowercase() || value.is_ascii_digit() || value == '_'
+                        })
+                })
+                .ok_or_else(|| "Código do aviso local inválido".to_string())?;
+            let message = object
+                .get("message")
+                .and_then(Value::as_str)
+                .filter(|message| !message.trim().is_empty() && message.len() <= 300)
+                .ok_or_else(|| "Mensagem do aviso local inválida".to_string())?;
+            let _ = (code, message);
+        }
+    }
+    Ok(())
 }
 
 pub fn update_document_metadata(
@@ -933,18 +1105,45 @@ pub fn update_document_metadata(
         {
             return Err("Texto nativo local excede o limite".into());
         }
+        if page
+            .ocr_raw_text
+            .as_ref()
+            .is_some_and(|text| text.len() > 1_000_000)
+            || page
+                .corrected_text
+                .as_ref()
+                .is_some_and(|text| text.len() > 1_000_000)
+        {
+            return Err("Texto de análise local excede o limite".into());
+        }
+        if !matches!(
+            page.extraction_source.as_deref(),
+            None | Some("native_pdf") | Some("ocr") | Some("manual")
+        ) {
+            return Err("Origem de extração local inválida".into());
+        }
+        validate_page_json(&page.ocr_word_geometry_json, "geometria")?;
+        validate_page_json(&page.warnings_json, "avisos")?;
         transaction
             .execute(
                 r#"INSERT INTO document_pages (
-                    document_id, page_number, native_text, status, updated_at_ms
-                ) VALUES (?1, ?2, ?3,
-                    CASE WHEN ?3 IS NULL AND ?4 = 'ready' THEN 'needs_review'
-                         WHEN ?3 IS NULL THEN 'processing'
-                         ELSE 'ready' END, ?5)"#,
+                    document_id, page_number, native_text, ocr_raw_text, corrected_text,
+                    extraction_source, ocr_word_geometry_json, warnings_json,
+                    was_manually_reviewed, status, updated_at_ms
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9,
+                    CASE WHEN COALESCE(?5, ?4, ?3) IS NULL AND ?10 = 'ready' THEN 'needs_review'
+                         WHEN COALESCE(?5, ?4, ?3) IS NULL THEN 'processing'
+                         ELSE 'ready' END, ?11)"#,
                 params![
                     document_id,
                     page.page_number,
                     page.native_text,
+                    page.ocr_raw_text,
+                    page.corrected_text,
+                    page.extraction_source,
+                    page.ocr_word_geometry_json,
+                    page.warnings_json,
+                    page.was_manually_reviewed as i64,
                     metadata.status,
                     now
                 ],
@@ -961,13 +1160,123 @@ pub fn update_document_metadata(
         .map_err(|error| format!("Não foi possível atualizar a busca local: {error}"))?;
     transaction
         .execute(
-            "INSERT INTO document_pages_fts (document_id, page_number, native_text) SELECT document_id, page_number, native_text FROM document_pages WHERE document_id = ?1 AND native_text IS NOT NULL AND length(native_text) > 0",
+            "INSERT INTO document_pages_fts (document_id, page_number, native_text) SELECT document_id, page_number, COALESCE(NULLIF(corrected_text, ''), NULLIF(native_text, ''), NULLIF(ocr_raw_text, '')) FROM document_pages WHERE document_id = ?1 AND COALESCE(NULLIF(corrected_text, ''), NULLIF(native_text, ''), NULLIF(ocr_raw_text, '')) IS NOT NULL",
             [document_id],
         )
         .map_err(|error| format!("Não foi possível indexar o texto local: {error}"))?;
     transaction
         .commit()
         .map_err(|error| format!("Não foi possível confirmar os metadados locais: {error}"))?;
+    Ok(())
+}
+
+pub fn update_document_page_metadata(
+    paths: &AppPaths,
+    document_id: &str,
+    owner_id: &str,
+    status: &str,
+    page: DocumentPageMetadataInput,
+) -> Result<(), String> {
+    if !matches!(
+        status,
+        "pending"
+            | "processing"
+            | "ready"
+            | "retryable"
+            | "blocked_quota"
+            | "needs_review"
+            | "failed"
+    ) {
+        return Err("Status da página local inválido".into());
+    }
+    if page
+        .native_text
+        .as_ref()
+        .is_some_and(|text| text.len() > 1_000_000)
+        || page
+            .ocr_raw_text
+            .as_ref()
+            .is_some_and(|text| text.len() > 1_000_000)
+        || page
+            .corrected_text
+            .as_ref()
+            .is_some_and(|text| text.len() > 1_000_000)
+    {
+        return Err("Texto de análise local excede o limite".into());
+    }
+    if !matches!(
+        page.extraction_source.as_deref(),
+        None | Some("native_pdf") | Some("ocr") | Some("manual")
+    ) {
+        return Err("Origem de extração local inválida".into());
+    }
+    validate_page_json(&page.ocr_word_geometry_json, "geometria")?;
+    validate_page_json(&page.warnings_json, "avisos")?;
+
+    let mut connection = open(paths)?;
+    let transaction = connection.transaction().map_err(|error| {
+        format!("Não foi possível iniciar a atualização da página local: {error}")
+    })?;
+    let page_count: i64 = transaction
+        .query_row(
+            "SELECT page_count FROM documents WHERE document_id = ?1 AND owner_id = ?2",
+            params![document_id, owner_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| format!("Não foi possível consultar a página local: {error}"))?
+        .ok_or_else(|| "Documento local não encontrado para este proprietário".to_string())?;
+    if !(1..=page_count).contains(&page.page_number) {
+        return Err("Página local fora do documento".into());
+    }
+    let now = now_ms();
+    transaction
+        .execute(
+            r#"INSERT INTO document_pages (
+                document_id, page_number, native_text, ocr_raw_text, corrected_text,
+                extraction_source, ocr_word_geometry_json, warnings_json,
+                was_manually_reviewed, status, updated_at_ms
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+            ON CONFLICT(document_id, page_number) DO UPDATE SET
+                native_text = excluded.native_text,
+                ocr_raw_text = excluded.ocr_raw_text,
+                corrected_text = excluded.corrected_text,
+                extraction_source = excluded.extraction_source,
+                ocr_word_geometry_json = excluded.ocr_word_geometry_json,
+                warnings_json = excluded.warnings_json,
+                was_manually_reviewed = excluded.was_manually_reviewed,
+                status = excluded.status,
+                updated_at_ms = MAX(document_pages.updated_at_ms, excluded.updated_at_ms)"#,
+            params![
+                document_id,
+                page.page_number,
+                page.native_text,
+                page.ocr_raw_text,
+                page.corrected_text,
+                page.extraction_source,
+                page.ocr_word_geometry_json,
+                page.warnings_json,
+                page.was_manually_reviewed as i64,
+                status,
+                now
+            ],
+        )
+        .map_err(|error| format!("Não foi possível salvar a página local: {error}"))?;
+    transaction
+        .execute(
+            "DELETE FROM document_pages_fts WHERE document_id = ?1",
+            [document_id],
+        )
+        .map_err(|error| format!("Não foi possível atualizar a busca local: {error}"))?;
+    transaction
+        .execute(
+            "INSERT INTO document_pages_fts (document_id, page_number, native_text) SELECT document_id, page_number, COALESCE(NULLIF(corrected_text, ''), NULLIF(native_text, ''), NULLIF(ocr_raw_text, '')) FROM document_pages WHERE document_id = ?1 AND COALESCE(NULLIF(corrected_text, ''), NULLIF(native_text, ''), NULLIF(ocr_raw_text, '')) IS NOT NULL",
+            [document_id],
+        )
+        .map_err(|error| format!("Não foi possível indexar a página local: {error}"))?;
+    transaction
+        .commit()
+        .map_err(|error| format!("Não foi possível confirmar a página local: {error}"))?;
     Ok(())
 }
 
@@ -979,7 +1288,7 @@ pub fn list_document_pages(
     let connection = open(paths)?;
     let mut statement = connection
         .prepare(
-            "SELECT p.document_id, p.page_number, p.native_text, p.status, p.updated_at_ms FROM document_pages p INNER JOIN documents d ON d.document_id = p.document_id WHERE p.document_id = ?1 AND d.owner_id = ?2 ORDER BY p.page_number ASC",
+            "SELECT p.document_id, p.page_number, p.native_text, p.ocr_raw_text, p.corrected_text, p.extraction_source, p.ocr_word_geometry_json, p.warnings_json, p.was_manually_reviewed, p.status, p.updated_at_ms FROM document_pages p INNER JOIN documents d ON d.document_id = p.document_id WHERE p.document_id = ?1 AND d.owner_id = ?2 ORDER BY p.page_number ASC",
         )
         .map_err(|error| format!("Não foi possível preparar as páginas locais: {error}"))?;
     let rows = statement
