@@ -103,6 +103,27 @@ jobs:
           test -x squashfs-root/AppRun
           rm -rf squashfs-root "$deb_extract_dir"
 
+      - name: Generate and verify Linux checksums
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle_root="src-tauri/target/release/bundle"
+          mapfile -d '' bundle_files < <(
+            find "$bundle_root" -type f \( -name '*.deb' -o -name '*.AppImage' \) -print0 | sort -z
+          )
+          test "${#bundle_files[@]}" -gt 0
+          relative_files=()
+          for file in "${bundle_files[@]}"; do
+            relative_files+=("${file#"$bundle_root/"}")
+          done
+          (
+            cd "$bundle_root"
+            sha256sum "${relative_files[@]}" > SHA256SUMS
+            sha256sum --check SHA256SUMS
+          )
+          test -s "$bundle_root/SHA256SUMS"
+
       - name: Upload bundle
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
