@@ -109,6 +109,7 @@ A branch já deixou de ser apenas planejamento. O núcleo abaixo existe em códi
 - `schema_migrations` registra o schema 1 e a migration 2, que adiciona `payload_json` sem perder documentos ou jobs existentes;
 - o payload durável preserva documento, proprietário, título, caderno, MIME, hash, tamanho e versão de OCR;
 - o bridge TypeScript lista, reserva, conclui, cancela e reagenda jobs nativos com validação do contrato IPC;
+- o bridge limita identificadores, erros persistidos e payloads de jobs antes de entregá-los ao worker;
 - `runNativeSyncWorker` é iniciado no shell nativo ao abrir, voltar ao foco, ficar visível e a cada 60 segundos;
 - o worker reconstrói o original local e reutiliza os fluxos existentes de publicação de PDF e imagem, confirma `remote_state`/`drive_file_id` e usa backoff determinístico em falhas transitórias;
 - payload inválido ou operação desconhecida é cancelado com erro persistido, evitando retry infinito;

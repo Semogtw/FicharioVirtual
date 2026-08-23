@@ -60,6 +60,13 @@ describe('native sync queue bridge', () => {
 		await expect(listNativeSyncJobs()).rejects.toThrow('Invalid native sync job');
 	});
 
+	it('rejects unbounded native job diagnostics', async () => {
+		const invoke = vi.fn().mockResolvedValue([{ ...job, lastError: 'x'.repeat(2_001) }]);
+		root.__TAURI__ = { core: { invoke } };
+
+		await expect(listNativeSyncJobs()).rejects.toThrow('Invalid native sync job');
+	});
+
 	it('forwards completion and retry state changes', async () => {
 		const invoke = vi.fn().mockResolvedValue(undefined);
 		root.__TAURI__ = { core: { invoke } };

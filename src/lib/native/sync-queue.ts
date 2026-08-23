@@ -1,5 +1,9 @@
 import { invokeNative, isNativeRuntime } from '$lib/platform/native-bridge';
 
+const MAX_DOCUMENT_ID_LENGTH = 128;
+const MAX_ERROR_LENGTH = 2_000;
+const MAX_PAYLOAD_JSON_LENGTH = 256 * 1024;
+
 export type NativeSyncOperation = 'upload' | 'download' | 'metadata' | 'delete';
 export type NativeSyncState = 'pending' | 'running' | 'retry' | 'completed' | 'cancelled';
 
@@ -37,12 +41,15 @@ function parseJob(value: unknown): NativeSyncJob {
 	const operation = row.operation;
 	const state = row.state;
 	if (
-		typeof row.documentId !== 'string' ||
-		row.documentId.length === 0 ||
 		!['upload', 'download', 'metadata', 'delete'].includes(operation as string) ||
 		!['pending', 'running', 'retry', 'completed', 'cancelled'].includes(state as string) ||
+		typeof row.documentId !== 'string' ||
+		row.documentId.length === 0 ||
+		row.documentId.length > MAX_DOCUMENT_ID_LENGTH ||
 		(typeof row.lastError !== 'string' && row.lastError !== null) ||
-		(typeof row.payloadJson !== 'string' && row.payloadJson !== null)
+		(typeof row.lastError === 'string' && row.lastError.length > MAX_ERROR_LENGTH) ||
+		(typeof row.payloadJson !== 'string' && row.payloadJson !== null) ||
+		(typeof row.payloadJson === 'string' && row.payloadJson.length > MAX_PAYLOAD_JSON_LENGTH)
 	) {
 		throw new TypeError('Invalid native sync job');
 	}
