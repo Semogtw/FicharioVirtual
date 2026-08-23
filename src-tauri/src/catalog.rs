@@ -506,7 +506,26 @@ pub fn ensure_upload_job(
         })?;
         return Ok(false);
     }
-    let payload = upload_payload_json(&document, title, notebook_id, prompt_version)?;
+    let existing_payload: Option<Option<String>> = transaction
+        .query_row(
+            "SELECT payload_json FROM sync_jobs WHERE document_id = ?1 AND operation = 'upload' AND state IN ('pending', 'running', 'retry') LIMIT 1",
+            [document_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| {
+            format!("Não foi possível consultar o payload da sincronização: {error}")
+        })?;
+    let payload = if title.is_none() && notebook_id.is_none() && prompt_version == 1 {
+        existing_payload.flatten().unwrap_or(upload_payload_json(
+            &document,
+            None,
+            None,
+            prompt_version,
+        )?)
+    } else {
+        upload_payload_json(&document, title, notebook_id, prompt_version)?
+    };
     enqueue_sync_job_tx(
         &transaction,
         document_id,

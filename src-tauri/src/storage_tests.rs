@@ -157,6 +157,26 @@ fn reasserting_an_upload_intent_rebuilds_a_missing_payload() {
     assert_eq!(payload["title"], "Caderno recuperado");
     assert_eq!(payload["notebookId"], "notebook-1");
     assert_eq!(payload["promptVersion"], 3);
+
+    assert!(
+        catalog::ensure_upload_job(paths, "doc-payload-repair", None, None, 1)
+            .expect("reassert upload job")
+    );
+    let preserved_job = catalog::list_sync_jobs(paths, 10)
+        .expect("list preserved jobs")
+        .into_iter()
+        .find(|candidate| candidate.document_id == "doc-payload-repair")
+        .expect("preserved upload job exists");
+    let preserved_payload: serde_json::Value = serde_json::from_str(
+        preserved_job
+            .payload_json
+            .as_deref()
+            .expect("preserved payload exists"),
+    )
+    .expect("valid preserved payload");
+    assert_eq!(preserved_payload["title"], "Caderno recuperado");
+    assert_eq!(preserved_payload["notebookId"], "notebook-1");
+    assert_eq!(preserved_payload["promptVersion"], 3);
 }
 
 fn begin_request(document_id: &str, expected_size: usize) -> BeginImportRequest {
