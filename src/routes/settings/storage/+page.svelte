@@ -8,6 +8,8 @@
 		type NativeReconciliationSummary,
 		type NativeStatus
 	} from '$lib/native/local-document-store';
+	import { listNativeSyncJobs, type NativeSyncJob } from '$lib/native/sync-queue';
+	import { runNativeSyncWorker } from '$lib/native/sync-worker';
 	import { isNativeRuntime } from '$lib/platform/native-bridge';
 
 	const native = isNativeRuntime();
@@ -21,6 +23,23 @@
 	let reconciling = $state(false);
 	let fullHash = $state(false);
 	let lastReconciliation = $state<NativeReconciliationSummary | null>(null);
+	let syncJobs = $state<readonly NativeSyncJob[]>([]);
+	let syncing = $state(false);
+
+	const syncStateLabels: Record<NativeSyncJob['state'], string> = {
+		pending: 'Aguardando',
+		running: 'Em andamento',
+		retry: 'Nova tentativa agendada',
+		completed: 'Concluído',
+		cancelled: 'Cancelado'
+	};
+
+	const syncOperationLabels: Record<NativeSyncJob['operation'], string> = {
+		upload: 'Upload do original',
+		download: 'Download do original',
+		metadata: 'Metadados',
+		delete: 'Remoção remota'
+	};
 
 	function formatBytes(bytes: number) {
 		if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
@@ -33,7 +52,14 @@
 		loading = true;
 		error = null;
 		try {
-			status = native ? await getNativeStatus() : null;
+			if (!native) {
+				status = null;
+				syncJobs = [];
+				return;
+			}
+			const [nextStatus, nextJobs] = await Promise.all([getNativeStatus(), listNativeSyncJobs(20)]);
+			status = nextStatus;
+			syncJobs = nextJobs ?? [];
 		} catch (caught) {
 			error =
 				caught instanceof Error ? caught.message : 'Não foi possível ler o armazenamento local.';
@@ -43,7 +69,7 @@
 	}
 
 	async function trim() {
-		if (!native || trimming || reconciling) return;
+		if (!native || trimming || reconciling || syncing) return;
 		if (!Number.isFinite(targetGb) || targetGb < 0 || targetGb > 1024) {
 			error = 'Escolha um limite entre 0 e 1024 GB.';
 			return;
@@ -70,7 +96,7 @@
 	}
 
 	async function reconcile() {
-		if (!native || trimming || reconciling) return;
+		if (!native || trimming || reconciling || syncing) return;
 		reconciling = true;
 		error = null;
 		message = null;
@@ -88,6 +114,31 @@
 				caught instanceof Error ? caught.message : 'Não foi possível verificar os arquivos locais.';
 		} finally {
 			reconciling = false;
+		}
+	}
+
+	async function syncNow() {
+		if (!native || trimming || reconciling || syncing) return;
+		syncing = true;
+		error = null;
+		message = null;
+		try {
+			const result = await runNativeSyncWorker();
+			await refresh();
+			if (result) {
+				message = result.retried
+					? `${result.completed} sincronizado(s); ${result.retried} aguardando nova tentativa.`
+					: result.completed
+						? `${result.completed} item(ns) sincronizado(s).`
+						: 'Nenhuma pendência pronta para sincronizar agora.';
+			}
+		} catch (caught) {
+			error =
+				caught instanceof Error
+					? caught.message
+					: 'Não foi possível sincronizar os arquivos locais.';
+		} finally {
+			syncing = false;
 		}
 	}
 
@@ -138,14 +189,14 @@
 					id="full-hash"
 					type="checkbox"
 					bind:checked={fullHash}
-					disabled={reconciling || trimming}
+					disabled={reconciling || trimming || syncing}
 				/>
 				Verificação completa por SHA-256
 			</label>
 			<Button
 				label={reconciling ? 'Verificando…' : 'Verificar arquivos'}
 				variant="secondary"
-				disabled={reconciling || trimming}
+				disabled={reconciling || trimming || syncing}
 				onclick={() => void reconcile()}
 			/>
 			{#if lastReconciliation}
@@ -155,6 +206,39 @@
 					{lastReconciliation.corruptDocuments} corrompido(s) e
 					{lastReconciliation.unchangedDocuments} sem alteração.
 				</p>
+			{/if}
+		</section>
+		<section class="card sync" aria-labelledby="sync-title" aria-busy={syncing}>
+			<div class="sync-heading">
+				<div>
+					<h2 id="sync-title">Sincronização local</h2>
+					<p>
+						Uploads locais permanecem protegidos até serem confirmados no Drive. Veja falhas aqui e
+						tente novamente após recuperar a conexão.
+					</p>
+				</div>
+				<Button
+					label={syncing ? 'Sincronizando…' : 'Sincronizar agora'}
+					variant="secondary"
+					disabled={syncing || trimming || reconciling || syncJobs.length === 0}
+					onclick={() => void syncNow()}
+				/>
+			</div>
+			{#if syncJobs.length === 0}
+				<p class="empty-sync">Nenhuma pendência nativa aguarda sincronização.</p>
+			{:else}
+				<ul class="sync-list">
+					{#each syncJobs as job (job.id)}
+						<li class:attention={job.state === 'retry'}>
+							<div class="sync-job-heading">
+								<strong>{syncOperationLabels[job.operation]}</strong>
+								<span>{syncStateLabels[job.state]}</span>
+							</div>
+							<p>{job.attempts} tentativa(s)</p>
+							{#if job.lastError}<p class="job-error">{job.lastError}</p>{/if}
+						</li>
+					{/each}
+				</ul>
 			{/if}
 		</section>
 		<section class="card controls">
@@ -174,13 +258,13 @@
 					max="1024"
 					step="1"
 					bind:value={targetGb}
-					disabled={trimming || reconciling}
+					disabled={trimming || reconciling || syncing}
 				/><span>GB</span>
 			</div>
 			<Button
 				label={trimming ? 'Liberando…' : 'Aplicar agora'}
 				variant="secondary"
-				disabled={trimming}
+				disabled={trimming || reconciling || syncing}
 				onclick={() => void trim()}
 			/>
 		</section>
@@ -287,6 +371,50 @@
 		color: var(--muted);
 		font-size: 0.9rem;
 	}
+	.sync-heading {
+		display: flex;
+		gap: 1rem;
+		align-items: end;
+		justify-content: space-between;
+	}
+	.empty-sync {
+		margin: 1rem 0 0;
+		color: var(--muted);
+	}
+	.sync-list {
+		display: grid;
+		gap: 0.65rem;
+		margin: 1rem 0 0;
+		padding: 0;
+		list-style: none;
+	}
+	.sync-list li {
+		display: grid;
+		gap: 0.35rem;
+		padding: 0.8rem;
+		border: 1px solid var(--line);
+		border-radius: var(--radius-sm);
+		background: var(--surface-strong);
+	}
+	.sync-list li.attention {
+		border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+	}
+	.sync-job-heading {
+		display: flex;
+		gap: 0.75rem;
+		justify-content: space-between;
+	}
+	.sync-job-heading span,
+	.sync-list li > p {
+		margin: 0;
+		color: var(--muted);
+		font-size: 0.82rem;
+	}
+	.job-error {
+		color: var(--danger) !important;
+		line-height: 1.45;
+		word-break: break-word;
+	}
 	.limit {
 		display: flex;
 		gap: 0.45rem;
@@ -321,6 +449,10 @@
 		}
 		.diagnostics > div {
 			grid-row: auto;
+		}
+		.sync-heading {
+			align-items: stretch;
+			flex-direction: column;
 		}
 		.controls > div:first-child {
 			grid-row: auto;
