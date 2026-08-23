@@ -40,6 +40,7 @@ describe('local media preview cache', () => {
 		expect(nativeLookup).toBeGreaterThan(-1);
 		expect(nativeLookup).toBeLessThan(cacheLookup);
 		expect(viewer).toContain('localPageDetail(page)');
+		expect(viewer).toContain('loadDocumentPage(detail.id, page.pageNumber)');
 		expect(viewer).toContain('openNativePdfRangeDocument');
 	});
 

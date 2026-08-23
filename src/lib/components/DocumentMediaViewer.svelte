@@ -609,14 +609,21 @@
 		}
 		const nativeDocument = await ensureNativePdfRangeDocument(expectedGeneration, expectedRevision);
 		if (nativeDocument) {
-			const targets = pageNumbers
-				.map((pageNumber) => pages.find((page) => page.pageNumber === pageNumber) ?? null)
-				.filter((page): page is DocumentPageSummary => page !== null)
-				.map((page) =>
-					initialPageDetail?.pageNumber === page.pageNumber
-						? initialPageDetail
-						: localPageDetail(page)
-				);
+			const targets = (
+				await Promise.all(
+					pageNumbers.map(async (pageNumber) => {
+						const page = pages.find((candidate) => candidate.pageNumber === pageNumber);
+						if (!page) return null;
+						if (initialPageDetail?.pageNumber === page.pageNumber) return initialPageDetail;
+						if (query.trim().length === 0) return localPageDetail(page);
+						try {
+							return await loadDocumentPage(detail.id, page.pageNumber);
+						} catch {
+							return localPageDetail(page);
+						}
+					})
+				)
+			).filter((page): page is PageDetail => page !== null);
 			targets.forEach((page) => updateRendered(page.pageNumber, { loading: true, error: null }));
 			await renderPdfDocumentTargets(
 				nativeDocument.document,
