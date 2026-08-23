@@ -42,6 +42,7 @@ pub fn run() {
             commands::claim_native_sync_jobs,
             commands::complete_native_sync_job,
             commands::fail_native_sync_job,
+            commands::cancel_native_sync_job,
             commands::mark_native_remote_synced,
             cache_commands::trim_native_cache,
             sync_intent::ensure_native_upload_intent,

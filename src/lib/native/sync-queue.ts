@@ -13,6 +13,7 @@ export type NativeSyncJob = Readonly<{
 	nextAttemptAtMs: number;
 	leaseUntilMs: number | null;
 	lastError: string | null;
+	payloadJson: string | null;
 	createdAtMs: number;
 	updatedAtMs: number;
 }>;
@@ -40,7 +41,8 @@ function parseJob(value: unknown): NativeSyncJob {
 		row.documentId.length === 0 ||
 		!['upload', 'download', 'metadata', 'delete'].includes(operation as string) ||
 		!['pending', 'running', 'retry', 'completed', 'cancelled'].includes(state as string) ||
-		(typeof row.lastError !== 'string' && row.lastError !== null)
+		(typeof row.lastError !== 'string' && row.lastError !== null) ||
+		(typeof row.payloadJson !== 'string' && row.payloadJson !== null)
 	) {
 		throw new TypeError('Invalid native sync job');
 	}
@@ -55,6 +57,7 @@ function parseJob(value: unknown): NativeSyncJob {
 		leaseUntilMs:
 			row.leaseUntilMs === null ? null : safeInteger(row.leaseUntilMs, 'native sync lease time'),
 		lastError: row.lastError,
+		payloadJson: row.payloadJson,
 		createdAtMs: safeInteger(row.createdAtMs, 'native sync creation time'),
 		updatedAtMs: safeInteger(row.updatedAtMs, 'native sync update time')
 	});
@@ -116,4 +119,14 @@ export async function failNativeSyncJob(input: {
 		'fail_native_sync_job',
 		request({ id: jobId(input.id), error, retryAfterMs })
 	);
+}
+
+export async function cancelNativeSyncJob(input: {
+	id: number;
+	error: string;
+}): Promise<void | null> {
+	if (!isNativeRuntime()) return null;
+	const error = input.error.trim();
+	if (error.length === 0 || error.length > 2_000) throw new TypeError('Invalid native sync error');
+	await invokeNative<void>('cancel_native_sync_job', request({ id: jobId(input.id), error }));
 }

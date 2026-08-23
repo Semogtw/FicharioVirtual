@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto, onNavigate } from '$app/navigation';
 	import { page } from '$app/state';
+	import { onMount } from 'svelte';
 	import type { Snippet } from 'svelte';
 	import DataProcessingNotice from './DataProcessingNotice.svelte';
 	import DriveUploadGate from './DriveUploadGate.svelte';
@@ -9,6 +10,7 @@
 	import MobileNavigation from './MobileNavigation.svelte';
 	import NavigationIcon from './NavigationIcon.svelte';
 	import TopSearch from './TopSearch.svelte';
+	import { runNativeSyncWorker } from '$lib/native/sync-worker';
 
 	interface AppShellProps {
 		children: Snippet;
@@ -20,6 +22,24 @@
 		searchRoute ? (page.url.searchParams.get('q')?.slice(0, 200) ?? '') : ''
 	);
 	let documentRoute = $derived(page.url.pathname.startsWith('/documents/'));
+
+	onMount(() => {
+		const kick = () => {
+			void runNativeSyncWorker().catch(() => undefined);
+		};
+		const onVisibilityChange = () => {
+			if (document.visibilityState === 'visible') kick();
+		};
+		kick();
+		window.addEventListener('focus', kick);
+		document.addEventListener('visibilitychange', onVisibilityChange);
+		const interval = window.setInterval(kick, 60_000);
+		return () => {
+			window.removeEventListener('focus', kick);
+			document.removeEventListener('visibilitychange', onVisibilityChange);
+			window.clearInterval(interval);
+		};
+	});
 
 	const navigation = [
 		{ href: '/', label: 'Início', icon: 'home' },

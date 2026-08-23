@@ -48,6 +48,7 @@ pub struct SyncJob {
     pub next_attempt_at_ms: i64,
     pub lease_until_ms: Option<i64>,
     pub last_error: Option<String>,
+    pub payload_json: Option<String>,
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
 }
@@ -79,12 +80,17 @@ pub fn initialize(paths: &AppPaths) -> Result<(), String> {
     let version: i64 = connection
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .map_err(|error| format!("Não foi possível ler a versão do catálogo local: {error}"))?;
-    if version > 1 {
+    if version > 2 {
         return Err(format!(
             "Catálogo local criado por uma versão mais nova do Fichário (schema {version})"
         ));
     }
+    if version == 2 {
+        reset_abandoned_sync_jobs(paths)?;
+        return Ok(());
+    }
     if version == 1 {
+        migrate_to_v2(&mut connection)?;
         reset_abandoned_sync_jobs(paths)?;
         return Ok(());
     }
@@ -155,6 +161,79 @@ PRAGMA user_version = 1;
     transaction
         .commit()
         .map_err(|error| format!("Não foi possível concluir a migração local: {error}"))?;
+    migrate_to_v2(&mut connection)?;
+    reset_abandoned_sync_jobs(paths)?;
+    Ok(())
+}
+
+fn migrate_to_v2(connection: &mut Connection) -> Result<(), String> {
+    let transaction = connection.transaction().map_err(|error| {
+        format!("Não foi possível iniciar a migration do catálogo local: {error}")
+    })?;
+    transaction
+        .execute_batch(
+            r#"
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    version INTEGER PRIMARY KEY NOT NULL,
+    applied_at_ms INTEGER NOT NULL
+);
+"#,
+        )
+        .map_err(|error| format!("Não foi possível criar o histórico de migrations: {error}"))?;
+    let migration_one_exists: Option<i64> = transaction
+        .query_row(
+            "SELECT version FROM schema_migrations WHERE version = 1",
+            [],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| format!("Não foi possível ler o histórico de migrations: {error}"))?;
+    if migration_one_exists.is_none() {
+        transaction
+            .execute(
+                "INSERT INTO schema_migrations (version, applied_at_ms) VALUES (1, ?1)",
+                [now_ms()],
+            )
+            .map_err(|error| format!("Não foi possível registrar a migration inicial: {error}"))?;
+    }
+
+    let payload_column_count: i64 = transaction
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('sync_jobs') WHERE name = 'payload_json'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| format!("Não foi possível inspecionar a fila local: {error}"))?;
+    if payload_column_count == 0 {
+        transaction
+            .execute_batch("ALTER TABLE sync_jobs ADD COLUMN payload_json TEXT;")
+            .map_err(|error| format!("Não foi possível atualizar a fila local: {error}"))?;
+    }
+
+    let migration_two_exists: Option<i64> = transaction
+        .query_row(
+            "SELECT version FROM schema_migrations WHERE version = 2",
+            [],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| format!("Não foi possível ler o histórico de migrations: {error}"))?;
+    if migration_two_exists.is_none() {
+        transaction
+            .execute(
+                "INSERT INTO schema_migrations (version, applied_at_ms) VALUES (2, ?1)",
+                [now_ms()],
+            )
+            .map_err(|error| format!("Não foi possível registrar a migration da fila: {error}"))?;
+    }
+    transaction
+        .execute_batch("PRAGMA user_version = 2;")
+        .map_err(|error| {
+            format!("Não foi possível atualizar a versão do catálogo local: {error}")
+        })?;
+    transaction.commit().map_err(|error| {
+        format!("Não foi possível concluir a migration do catálogo local: {error}")
+    })?;
     Ok(())
 }
 
@@ -349,20 +428,97 @@ fn enqueue_sync_job_tx(
     document_id: &str,
     operation: &str,
     priority: i64,
+    payload_json: Option<&str>,
     now: i64,
 ) -> Result<(), String> {
     transaction
         .execute(
             r#"INSERT INTO sync_jobs (
                 document_id, operation, state, priority, attempts, next_attempt_at_ms,
-                lease_until_ms, last_error, created_at_ms, updated_at_ms
-            ) VALUES (?1, ?2, 'pending', ?3, 0, ?4, NULL, NULL, ?4, ?4)
+                lease_until_ms, last_error, payload_json, created_at_ms, updated_at_ms
+            ) VALUES (?1, ?2, 'pending', ?3, 0, 0, NULL, NULL, ?4, ?5, ?5)
             ON CONFLICT(document_id, operation) WHERE state IN ('pending', 'running', 'retry')
-            DO UPDATE SET priority = MAX(priority, excluded.priority), updated_at_ms = excluded.updated_at_ms"#,
-            params![document_id, operation, priority, now],
+            DO UPDATE SET
+                priority = MAX(priority, excluded.priority),
+                payload_json = COALESCE(excluded.payload_json, sync_jobs.payload_json),
+                updated_at_ms = excluded.updated_at_ms"#,
+            params![document_id, operation, priority, payload_json, now],
         )
         .map_err(|error| format!("Não foi possível enfileirar a sincronização: {error}"))?;
     Ok(())
+}
+
+fn upload_payload_json(
+    document: &DocumentRow,
+    title: Option<&str>,
+    notebook_id: Option<&str>,
+    prompt_version: i64,
+) -> Result<String, String> {
+    serde_json::to_string(&serde_json::json!({
+        "version": 1,
+        "kind": "upload_original",
+        "documentId": document.document_id,
+        "ownerId": document.owner_id,
+        "originalFilename": document.original_filename,
+        "title": title.unwrap_or(&document.original_filename),
+        "notebookId": notebook_id,
+        "promptVersion": prompt_version,
+        "mimeType": document.mime_type,
+        "sizeBytes": document.size_bytes,
+        "sha256": document.sha256,
+        "relativePath": document.relative_path,
+        "remoteDocumentId": document.remote_document_id,
+        "driveFileId": document.drive_file_id
+    }))
+    .map_err(|error| format!("Não foi possível serializar o payload de sincronização: {error}"))
+}
+
+pub fn ensure_upload_job(
+    paths: &AppPaths,
+    document_id: &str,
+    title: Option<&str>,
+    notebook_id: Option<&str>,
+    prompt_version: i64,
+) -> Result<bool, String> {
+    let mut connection = open(paths)?;
+    let transaction = connection.transaction().map_err(|error| {
+        format!("Não foi possível iniciar a recuperação da sincronização: {error}")
+    })?;
+    let document = transaction
+        .query_row(
+            &format!("{} WHERE document_id = ?1", select_document_sql()),
+            [document_id],
+            document_from_row,
+        )
+        .optional()
+        .map_err(|error| {
+            format!("Não foi possível consultar o documento da sincronização: {error}")
+        })?;
+    let Some(document) = document else {
+        transaction.commit().map_err(|error| {
+            format!("Não foi possível concluir a recuperação da sincronização: {error}")
+        })?;
+        return Ok(false);
+    };
+    if document.remote_state != "pending" {
+        transaction.commit().map_err(|error| {
+            format!("Não foi possível concluir a recuperação da sincronização: {error}")
+        })?;
+        return Ok(false);
+    }
+    let payload = upload_payload_json(&document, title, notebook_id, prompt_version)?;
+    enqueue_sync_job_tx(
+        &transaction,
+        document_id,
+        "upload",
+        50,
+        Some(&payload),
+        now_ms(),
+    )?;
+    transaction.commit().map_err(|error| {
+        format!("Não foi possível confirmar a recuperação da sincronização: {error}")
+    })?;
+    Ok(true)
 }
 
 pub fn commit_import(paths: &AppPaths, document: &DocumentRow) -> Result<(), String> {
@@ -415,7 +571,15 @@ pub fn commit_import(paths: &AppPaths, document: &DocumentRow) -> Result<(), Str
         )
         .map_err(|error| format!("Não foi possível concluir a importação local: {error}"))?;
     if document.remote_state == "pending" {
-        enqueue_sync_job_tx(&transaction, &document.document_id, "upload", 50, now_ms())?;
+        let payload = upload_payload_json(document, None, None, 1)?;
+        enqueue_sync_job_tx(
+            &transaction,
+            &document.document_id,
+            "upload",
+            50,
+            Some(&payload),
+            now_ms(),
+        )?;
     }
     transaction
         .commit()
@@ -442,13 +606,14 @@ fn sync_job_from_row(row: &Row<'_>) -> rusqlite::Result<SyncJob> {
         next_attempt_at_ms: row.get(6)?,
         lease_until_ms: row.get(7)?,
         last_error: row.get(8)?,
-        created_at_ms: row.get(9)?,
-        updated_at_ms: row.get(10)?,
+        payload_json: row.get(9)?,
+        created_at_ms: row.get(10)?,
+        updated_at_ms: row.get(11)?,
     })
 }
 
 fn select_sync_job_sql() -> &'static str {
-    "SELECT id, document_id, operation, state, priority, attempts, next_attempt_at_ms, lease_until_ms, last_error, created_at_ms, updated_at_ms FROM sync_jobs"
+    "SELECT id, document_id, operation, state, priority, attempts, next_attempt_at_ms, lease_until_ms, last_error, payload_json, created_at_ms, updated_at_ms FROM sync_jobs"
 }
 
 pub fn list_sync_jobs(paths: &AppPaths, limit: usize) -> Result<Vec<SyncJob>, String> {
@@ -544,6 +709,19 @@ pub fn fail_sync_job(
             params![id, message, next, now],
         )
         .map_err(|db_error| format!("Não foi possível reagendar a sincronização: {db_error}"))?;
+    Ok(())
+}
+
+pub fn cancel_sync_job(paths: &AppPaths, id: i64, error: &str) -> Result<(), String> {
+    let connection = open(paths)?;
+    let now = now_ms();
+    let message: String = error.chars().take(2_000).collect();
+    connection
+        .execute(
+            "UPDATE sync_jobs SET state = 'cancelled', lease_until_ms = NULL, last_error = ?2, updated_at_ms = ?3 WHERE id = ?1 AND state = 'running'",
+            params![id, message, now],
+        )
+        .map_err(|db_error| format!("Não foi possível cancelar a sincronização: {db_error}"))?;
     Ok(())
 }
 

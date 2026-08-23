@@ -35,4 +35,24 @@ describe('native upload intent bridge', () => {
 			request: { documentId: 'doc-1' }
 		});
 	});
+
+	it('persists publication context for a later offline retry', async () => {
+		const invoke = vi.fn().mockResolvedValue(true);
+		root.__TAURI__ = { core: { invoke } };
+
+		await ensureNativeUploadIntent('doc-2', {
+			title: 'Apostila',
+			notebookId: 'notebook-2',
+			promptVersion: 4
+		});
+
+		expect(invoke).toHaveBeenCalledWith('ensure_native_upload_intent', {
+			request: {
+				documentId: 'doc-2',
+				title: 'Apostila',
+				notebookId: 'notebook-2',
+				promptVersion: 4
+			}
+		});
+	});
 });

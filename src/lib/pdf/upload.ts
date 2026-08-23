@@ -9,6 +9,7 @@ import {
 } from '$lib/native/pending-import';
 import { processOcrBatch as runOcrBatch, type OcrBatchRunResult } from '$lib/services/ocr';
 import { requireDriveForUpload } from '$lib/stores/drive-upload-gate.svelte';
+import { ensureNativeUploadIntent } from '$lib/native/sync-intent';
 import { sessionState } from '$lib/stores/session.svelte';
 import type { DocumentStatus } from '$lib/types/database';
 import { buildPdfImportPlan, type PdfImportPagePlan } from './import-plan';
@@ -46,6 +47,7 @@ export interface PdfImportGateway {
 	upload(path: string, blob: Blob): Promise<void>;
 	remove(paths: readonly string[]): Promise<void>;
 	createImport(input: PdfCreateImportInput): Promise<PdfImportPublication>;
+	remoteDriveFileId?(): string | null;
 }
 
 export type PdfUploadDependencies = {
@@ -87,6 +89,7 @@ export type UploadedPdf = PdfImportPublication & {
 	ocrNeedsReview: number;
 	ocrPending: number;
 	ocrFailed: number;
+	driveFileId?: string | null;
 };
 
 export class DuplicatePdfError extends Error {
@@ -379,7 +382,8 @@ export async function uploadPdfWithGateway(
 			ocrCompleted: ocr.complete,
 			ocrNeedsReview: ocr.needsReview,
 			ocrPending: ocr.pending,
-			ocrFailed: ocr.failed
+			ocrFailed: ocr.failed,
+			driveFileId: gateway.remoteDriveFileId?.() ?? null
 		});
 	} catch (error) {
 		if (!metadataPublished && uploadedPaths.length > 0) {
@@ -403,6 +407,13 @@ export async function uploadPdf(file: File, options: PdfUploadOptions): Promise<
 			})
 		: null;
 	const nativeDocumentId = pending?.documentId ?? null;
+	if (nativeDocumentId) {
+		await ensureNativeUploadIntent(nativeDocumentId, {
+			title: options.title ?? null,
+			notebookId: options.notebookId ?? null,
+			promptVersion: options.promptVersion ?? 1
+		});
+	}
 	try {
 		await requireDriveForUpload(options.signal);
 	} catch (error) {

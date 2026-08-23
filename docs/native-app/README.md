@@ -106,9 +106,14 @@ A branch já deixou de ser apenas planejamento. O núcleo abaixo existe em códi
 - contador de tentativas, próximo retry e último erro;
 - importações locais pendentes criam job de upload;
 - confirmação remota conclui o job ativo correspondente.
-- o bridge TypeScript já lista, reserva, conclui e reagenda jobs nativos com validação do contrato IPC;
+- `schema_migrations` registra o schema 1 e a migration 2, que adiciona `payload_json` sem perder documentos ou jobs existentes;
+- o payload durável preserva documento, proprietário, título, caderno, MIME, hash, tamanho e versão de OCR;
+- o bridge TypeScript lista, reserva, conclui, cancela e reagenda jobs nativos com validação do contrato IPC;
+- `runNativeSyncWorker` é iniciado no shell nativo ao abrir, voltar ao foco, ficar visível e a cada 60 segundos;
+- o worker reconstrói o original local e reutiliza os fluxos existentes de publicação de PDF e imagem, confirma `remote_state`/`drive_file_id` e usa backoff determinístico em falhas transitórias;
+- payload inválido ou operação desconhecida é cancelado com erro persistido, evitando retry infinito;
 
-**Limitação atual:** a fila persistente existe, mas ainda não contém todo o payload necessário para reconstruir e publicar automaticamente uma importação complexa após um início totalmente offline. Portanto ela não deve ser descrita como um worker de sync offline completo ainda.
+**Limitação atual:** o worker é executado enquanto o shell está vivo; ainda não há um scheduler nativo equivalente a WorkManager no Android nem execução garantida depois de suspensão/encerramento forçado. O fluxo de publicação também precisa de validação em hardware e de cobertura operacional de rede/autenticação.
 
 ### Gestão de espaço
 
@@ -132,7 +137,7 @@ Existe workflow dedicado `.github/workflows/validate-native-app.yml` com:
 
 Já houve ciclo com frontend completo verde e compilação Rust/Linux do núcleo verde. O gate multiplataforma continua sendo tratado como fonte de verdade: uma plataforma só passa para **validada em CI** quando o workflow do head correspondente termina verde.
 
-No head `bf7e5f1`, a validação nativa passou para frontend, Rust Ubuntu/Windows e Android aarch64; os bundles Linux e Windows também foram publicados como artifacts pelos workflows. A evidência de Windows permanece separada e não faz parte do caminho crítico Android/Linux.
+No head `bac7ce2`, a validação nativa passou para frontend, Rust Ubuntu/Windows e Android aarch64; os bundles Linux e Windows também foram publicados como artifacts pelos workflows. A evidência de Windows permanece separada e não faz parte do caminho crítico Android/Linux.
 
 Ainda não há alegação de validação em hardware Android/Windows/Linux real nesta branch.
 
@@ -140,16 +145,16 @@ Ainda não há alegação de validação em hardware Android/Windows/Linux real 
 
 Prioridade alta antes de considerar o app pronto:
 
-1. completar payload + worker da fila para importação realmente offline desde o primeiro clique;
-2. migration/versionamento robusto do schema SQLite para upgrades futuros;
+1. adicionar scheduler nativo para retomada após suspensão/encerramento no Android e desktop;
+2. ampliar migrations versionadas para futuras mudanças de catálogo e testar upgrades de várias versões;
 3. eliminar limites de consulta que possam prejudicar bibliotecas muito grandes;
-4. validar bundle instalável real Linux/Windows além de `cargo check`;
+4. validar instalação e execução do bundle Linux real além do build de artifact;
 5. instalar e executar APK em dispositivo Android real;
-6. tratar OAuth/deep link especificamente no shell nativo;
-7. definir CSP nativa em vez de `csp: null` antes de release;
-8. signing de Android e Windows, política de update e checksums;
-9. validar suspensão/reabertura, falta de espaço, crash durante cópia e perda de rede;
-10. medir abertura local em hardware real e registrar p50/p95.
+6. tratar OAuth/deep link e armazenamento seguro de credenciais especificamente no shell nativo;
+7. signing de Android e Windows, política de update e checksums;
+8. validar falta de espaço, crash durante cópia, perda de rede e expiração de autenticação;
+9. medir abertura local em hardware real e registrar p50/p95;
+10. validar atualizações/rollback com artefatos assinados.
 
 ## Invariantes que não podem regredir
 

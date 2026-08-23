@@ -1,4 +1,5 @@
 import { markNativeDocumentRemoteSynced } from '$lib/native/local-document-store';
+import { ensureNativeUploadIntent } from '$lib/native/sync-intent';
 import {
 	ensurePendingNativeOriginal,
 	NativeOriginalPendingError
@@ -144,6 +145,13 @@ export async function uploadPreparedImage(input: UploadPreparedImageInput): Prom
 			})
 		: null;
 	const nativeDocumentId = pending?.documentId ?? null;
+	if (nativeDocumentId) {
+		await ensureNativeUploadIntent(nativeDocumentId, {
+			title: input.title ?? null,
+			notebookId: input.notebookId ?? null,
+			promptVersion: input.promptVersion ?? 1
+		});
+	}
 	try {
 		await requireDriveForUpload(input.signal);
 	} catch (error) {

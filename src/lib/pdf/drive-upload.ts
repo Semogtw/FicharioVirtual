@@ -145,6 +145,10 @@ class DrivePdfGateway implements PdfImportGateway {
 		}
 		return publication;
 	}
+
+	remoteDriveFileId() {
+		return this.#driveFile?.id ?? null;
+	}
 }
 
 export function createDrivePdfGateway(

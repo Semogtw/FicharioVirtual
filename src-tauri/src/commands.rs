@@ -118,6 +118,13 @@ pub struct FailSyncJobRequest {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CancelSyncJobRequest {
+    pub id: i64,
+    pub error: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MarkRemoteSyncedRequest {
     pub document_id: String,
     pub remote_document_id: Option<String>,
@@ -134,7 +141,7 @@ pub fn native_status(app: AppHandle) -> Result<NativeStatus, String> {
     let summary = metrics::read(&paths)?;
     Ok(NativeStatus {
         platform: std::env::consts::OS.to_string(),
-        schema_version: 1,
+        schema_version: 2,
         local_document_count: summary.present_document_count,
         pending_sync_count: summary.pending_sync_count,
         disk_usage_bytes: summary
@@ -270,6 +277,11 @@ pub fn fail_native_sync_job(app: AppHandle, request: FailSyncJobRequest) -> Resu
         &request.error,
         request.retry_after_ms,
     )
+}
+
+#[tauri::command]
+pub fn cancel_native_sync_job(app: AppHandle, request: CancelSyncJobRequest) -> Result<(), String> {
+    catalog::cancel_sync_job(&app_paths(&app)?, request.id, &request.error)
 }
 
 #[tauri::command]

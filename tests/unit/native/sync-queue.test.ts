@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
 	claimNativeSyncJobs,
+	cancelNativeSyncJob,
 	completeNativeSyncJob,
 	failNativeSyncJob,
 	listNativeSyncJobs
@@ -22,6 +23,7 @@ const job = {
 	nextAttemptAtMs: 0,
 	leaseUntilMs: null,
 	lastError: null,
+	payloadJson: null,
 	createdAtMs: 100,
 	updatedAtMs: 100
 };
@@ -64,12 +66,16 @@ describe('native sync queue bridge', () => {
 
 		await completeNativeSyncJob(7);
 		await failNativeSyncJob({ id: 7, error: 'offline', retryAfterMs: 5_000 });
+		await cancelNativeSyncJob({ id: 7, error: 'unsupported' });
 
 		expect(invoke).toHaveBeenNthCalledWith(1, 'complete_native_sync_job', {
 			request: { id: 7 }
 		});
 		expect(invoke).toHaveBeenNthCalledWith(2, 'fail_native_sync_job', {
 			request: { id: 7, error: 'offline', retryAfterMs: 5_000 }
+		});
+		expect(invoke).toHaveBeenNthCalledWith(3, 'cancel_native_sync_job', {
+			request: { id: 7, error: 'unsupported' }
 		});
 	});
 });
