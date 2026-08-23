@@ -106,6 +106,7 @@ A branch já deixou de ser apenas planejamento. O núcleo abaixo existe em códi
 - contador de tentativas, próximo retry e último erro;
 - importações locais pendentes criam job de upload;
 - confirmação remota conclui o job ativo correspondente.
+- o bridge TypeScript já lista, reserva, conclui e reagenda jobs nativos com validação do contrato IPC;
 
 **Limitação atual:** a fila persistente existe, mas ainda não contém todo o payload necessário para reconstruir e publicar automaticamente uma importação complexa após um início totalmente offline. Portanto ela não deve ser descrita como um worker de sync offline completo ainda.
 
@@ -130,6 +131,8 @@ Existe workflow dedicado `.github/workflows/validate-native-app.yml` com:
 - preservação temporária do `Cargo.lock` gerado e do APK como artifacts.
 
 Já houve ciclo com frontend completo verde e compilação Rust/Linux do núcleo verde. O gate multiplataforma continua sendo tratado como fonte de verdade: uma plataforma só passa para **validada em CI** quando o workflow do head correspondente termina verde.
+
+No head `bf7e5f1`, a validação nativa passou para frontend, Rust Ubuntu/Windows e Android aarch64; o bundle Linux também foi publicado como artifact pelo workflow. O bundle Windows permaneceu em execução separada e não é usado como evidência para Android/Linux.
 
 Ainda não há alegação de validação em hardware Android/Windows/Linux real nesta branch.
 
