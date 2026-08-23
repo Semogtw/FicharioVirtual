@@ -679,14 +679,6 @@ pub fn commit_import(paths: &AppPaths, document: &DocumentRow) -> Result<(), Str
     Ok(())
 }
 
-pub fn clear_import_sessions(paths: &AppPaths) -> Result<(), String> {
-    let connection = open(paths)?;
-    connection
-        .execute("DELETE FROM import_sessions", [])
-        .map_err(|error| format!("Não foi possível limpar importações interrompidas: {error}"))?;
-    Ok(())
-}
-
 fn sync_job_from_row(row: &Row<'_>) -> rusqlite::Result<SyncJob> {
     Ok(SyncJob {
         id: row.get(0)?,

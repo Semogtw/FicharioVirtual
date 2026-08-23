@@ -389,39 +389,3 @@ pub fn evict_document(paths: &AppPaths, document_id: &str) -> Result<(), String>
     }
     catalog::set_local_state(paths, document_id, "missing")
 }
-
-pub fn disk_usage(paths: &AppPaths) -> Result<u64, String> {
-    let documents = catalog::list_all_documents(paths)?;
-    let document_bytes = documents
-        .iter()
-        .filter(|document| document.local_state == "present")
-        .filter_map(|document| u64::try_from(document.size_bytes).ok())
-        .sum::<u64>();
-    let staging_bytes = fs::read_dir(&paths.staging)
-        .map_err(|error| format!("Não foi possível calcular o uso local: {error}"))?
-        .filter_map(Result::ok)
-        .filter_map(|entry| entry.metadata().ok())
-        .filter(|metadata| metadata.is_file())
-        .map(|metadata| metadata.len())
-        .sum::<u64>();
-    Ok(document_bytes.saturating_add(staging_bytes))
-}
-
-pub fn cleanup_staging(paths: &AppPaths) -> Result<(), String> {
-    for entry in fs::read_dir(&paths.staging)
-        .map_err(|error| format!("Não foi possível verificar importações interrompidas: {error}"))?
-    {
-        let entry =
-            entry.map_err(|error| format!("Não foi possível ler a área temporária: {error}"))?;
-        if entry
-            .file_type()
-            .map_err(|error| format!("Não foi possível verificar a área temporária: {error}"))?
-            .is_file()
-        {
-            fs::remove_file(entry.path()).map_err(|error| {
-                format!("Não foi possível limpar uma importação interrompida: {error}")
-            })?;
-        }
-    }
-    catalog::clear_import_sessions(paths)
-}
