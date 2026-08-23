@@ -60,10 +60,13 @@ describe('openNativePdfRangeDocument', () => {
 		const document = { numPages: 321 } as never;
 		const destroy = vi.fn().mockResolvedValue(undefined);
 		const configureWorker = vi.fn().mockResolvedValue(undefined);
-		const createLoadingTask = vi.fn(() => ({
-			promise: Promise.resolve(document),
-			destroy
-		}));
+		const createLoadingTask = vi.fn((source: unknown) => {
+			void source;
+			return {
+				promise: Promise.resolve(document),
+				destroy
+			};
+		});
 
 		const opened = await openNativePdfRangeDocument({
 			documentId,
@@ -78,7 +81,7 @@ describe('openNativePdfRangeDocument', () => {
 		expect(opened.document).toBe(document);
 		expect(configureWorker).toHaveBeenCalledOnce();
 		expect(createLoadingTask).toHaveBeenCalledOnce();
-		const source = createLoadingTask.mock.calls[0]?.[0] as Record<string, unknown>;
+		const source = createLoadingTask.mock.calls[0]?.[0] as unknown as Record<string, unknown>;
 		expect(source).toMatchObject({
 			rangeChunkSize: NATIVE_PDF_RANGE_CHUNK_BYTES,
 			disableStream: true,

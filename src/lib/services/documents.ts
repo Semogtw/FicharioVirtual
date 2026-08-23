@@ -5,13 +5,22 @@ import {
 	type DocumentCursor,
 	type DocumentFilters,
 	type DocumentPage,
+	type DocumentKind,
 	type DocumentRecord,
 	type DocumentSummary,
+	type DocumentStatus,
 	type NewDocumentInput,
 	type UpdateDocumentInput
 } from '$lib/domain/document';
 import type { Database } from '$lib/types/database';
 import { isIsoTimestamp } from '$lib/validation/iso-timestamp';
+import {
+	listNativeDocumentsPage,
+	type NativeDocument,
+	type NativeDocumentPageCursor
+} from '$lib/native/local-document-store';
+import { isNativeRuntime } from '$lib/platform/native-bridge';
+import { sessionState } from '$lib/stores/session.svelte';
 import { getSupabaseClient } from './supabase';
 
 const DEFAULT_PAGE_SIZE = 30;
@@ -132,6 +141,49 @@ function pageSize(value: number): number {
 	return value;
 }
 
+function nativeTimestamp(value: number) {
+	if (!Number.isSafeInteger(value) || value < 0) return null;
+	const timestamp = new Date(value).toISOString();
+	return isIsoTimestamp(timestamp) ? timestamp : null;
+}
+
+function nativeTitle(filename: string) {
+	const title = filename
+		.replace(/\.[^.]+$/u, '')
+		.trim()
+		.slice(0, 240);
+	return title || 'Documento local';
+}
+
+function nativeKind(mimeType: string): DocumentKind | null {
+	if (mimeType === 'application/pdf') return 'pdf';
+	if (mimeType.startsWith('image/')) return 'image';
+	return null;
+}
+
+function nativeStatus(document: NativeDocument): DocumentStatus {
+	if (document.localState !== 'present') return 'failed';
+	return document.remoteState === 'pending' ? 'pending' : 'ready';
+}
+
+export function mapNativeDocumentSummary(document: NativeDocument): DocumentSummary | null {
+	const kind = nativeKind(document.mimeType);
+	const createdAt = nativeTimestamp(document.createdAtMs);
+	const updatedAt = nativeTimestamp(document.updatedAtMs);
+	if (!kind || !createdAt || !updatedAt) return null;
+	return Object.freeze({
+		id: document.documentId,
+		title: nativeTitle(document.originalFilename),
+		kind,
+		status: nativeStatus(document),
+		pageCount: 1,
+		thumbnailPath: null,
+		notebookId: null,
+		createdAt,
+		updatedAt
+	});
+}
+
 async function currentUserId(client: SupabaseClient<Database>): Promise<string> {
 	try {
 		const { data, error } = await client.auth.getSession();
@@ -145,6 +197,65 @@ async function currentUserId(client: SupabaseClient<Database>): Promise<string> 
 }
 
 export type DocumentPageLoader = (cursor: DocumentCursor | null) => Promise<DocumentPage>;
+
+async function listNativeDocumentFallback(
+	filters: DocumentFilters,
+	cursor: DocumentCursor | null,
+	limit: number
+): Promise<DocumentPage | null> {
+	if (!isNativeRuntime()) return null;
+	const ownerId = sessionState.user?.id;
+	if (!ownerId) return null;
+	if (filters.notebookId) return Object.freeze({ items: [], nextCursor: null });
+
+	const nativeDocuments: NativeDocument[] = [];
+	const seenCursors = new Set<string>();
+	let nativeCursor: NativeDocumentPageCursor | null = null;
+	while (true) {
+		const page = await listNativeDocumentsPage({ limit: 1_000, cursor: nativeCursor });
+		if (!page) return null;
+		nativeDocuments.push(...page.documents.filter((document) => document.ownerId === ownerId));
+		if (!page.nextCursor) break;
+		const cursorKey = `${page.nextCursor.lastAccessedAtMs}:${page.nextCursor.documentId}`;
+		if (seenCursors.has(cursorKey)) throw new DocumentServiceError();
+		seenCursors.add(cursorKey);
+		nativeCursor = page.nextCursor;
+	}
+
+	let items = nativeDocuments
+		.map(mapNativeDocumentSummary)
+		.filter((document): document is DocumentSummary => document !== null)
+		.filter((document) => {
+			if (filters.kind && document.kind !== filters.kind) return false;
+			if (filters.status === 'ready' && document.status !== 'ready') return false;
+			if (filters.status && filters.status !== 'ready' && document.status !== filters.status) {
+				return false;
+			}
+			if (filters.createdFrom && document.createdAt < filters.createdFrom) return false;
+			if (filters.createdTo && document.createdAt > filters.createdTo) return false;
+			return true;
+		});
+	items.sort((left, right) => {
+		const byDate = right.createdAt.localeCompare(left.createdAt);
+		return byDate || right.id.localeCompare(left.id);
+	});
+	if (cursor) {
+		const index = items.findIndex(
+			(item) =>
+				item.createdAt < cursor.createdAt ||
+				(item.createdAt === cursor.createdAt && item.id < cursor.id)
+		);
+		items = index < 0 ? [] : items.slice(index);
+	}
+	const visibleItems = items.slice(0, limit);
+	const last = visibleItems.at(-1);
+	const hasNextPage = items.length > visibleItems.length;
+	return Object.freeze({
+		items: Object.freeze(visibleItems),
+		nextCursor:
+			hasNextPage && last ? Object.freeze({ createdAt: last.createdAt, id: last.id }) : null
+	});
+}
 
 export async function collectAllDocumentPages(
 	loadPage: DocumentPageLoader
@@ -211,6 +322,10 @@ export async function listDocuments({
 		if (response.error) throw new DocumentServiceError();
 		data = response.data;
 	} catch {
+		const fallback = await listNativeDocumentFallback(resolvedFilters, cursor, resolvedLimit).catch(
+			() => null
+		);
+		if (fallback) return fallback;
 		throw new DocumentServiceError();
 	}
 

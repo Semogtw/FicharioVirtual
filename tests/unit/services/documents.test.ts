@@ -8,6 +8,7 @@ import { mapNotebookRecord } from '../../../src/lib/domain/notebook';
 import {
 	collectAllDocumentPages,
 	DocumentServiceError,
+	mapNativeDocumentSummary,
 	parseDocumentFilters,
 	parseDocumentRecord,
 	parseDocumentRecords
@@ -54,6 +55,36 @@ describe('document mapping', () => {
 		});
 		expect(summary).not.toHaveProperty('storage_path');
 		expect(summary).not.toHaveProperty('user_id');
+	});
+
+	it('maps a native catalog entry into an offline-safe library summary', () => {
+		expect(
+			mapNativeDocumentSummary({
+				documentId: '11111111-1111-4111-8111-111111111111',
+				ownerId: '22222222-2222-4222-8222-222222222222',
+				originalFilename: 'Aula de biologia.pdf',
+				mimeType: 'application/pdf',
+				sizeBytes: 128,
+				sha256: 'a'.repeat(64),
+				localState: 'present',
+				remoteState: 'pending',
+				remoteDocumentId: null,
+				driveFileId: null,
+				createdAtMs: Date.parse('2026-08-02T01:00:00.000Z'),
+				updatedAtMs: Date.parse('2026-08-02T02:00:00.000Z'),
+				lastAccessedAtMs: Date.parse('2026-08-02T03:00:00.000Z')
+			})
+		).toEqual({
+			id: '11111111-1111-4111-8111-111111111111',
+			title: 'Aula de biologia',
+			kind: 'pdf',
+			status: 'pending',
+			pageCount: 1,
+			thumbnailPath: null,
+			notebookId: null,
+			createdAt: '2026-08-02T01:00:00.000Z',
+			updatedAt: '2026-08-02T02:00:00.000Z'
+		});
 	});
 });
 

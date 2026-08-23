@@ -3,6 +3,7 @@ import {
 	loadDocumentDetailWithGateway,
 	loadDocumentPreviewWithGateway,
 	loadDocumentPageWithGateway,
+	mapNativeDocumentDetail,
 	type DocumentDetailGateway,
 	type DocumentDetailRecord,
 	type DocumentPageSummaryRecord
@@ -188,6 +189,44 @@ describe('loadDocumentDetailWithGateway', () => {
 			provider: 'missing',
 			url: null,
 			driveFileId: pageDriveFileId
+		});
+	});
+});
+
+describe('native document detail mapping', () => {
+	it('creates an offline detail shell and deterministic page index', () => {
+		expect(
+			mapNativeDocumentDetail(
+				{
+					documentId,
+					ownerId: '33333333-3333-4333-8333-333333333333',
+					originalFilename: 'Apostila.pdf',
+					mimeType: 'application/pdf',
+					sizeBytes: 128,
+					sha256: 'a'.repeat(64),
+					localState: 'present',
+					remoteState: 'synced',
+					remoteDocumentId: documentId,
+					driveFileId: pageDriveFileId,
+					createdAtMs: Date.parse('2026-08-02T01:00:00.000Z'),
+					updatedAtMs: Date.parse('2026-08-02T02:00:00.000Z'),
+					lastAccessedAtMs: Date.parse('2026-08-02T03:00:00.000Z')
+				},
+				2
+			)
+		).toMatchObject({
+			title: 'Apostila',
+			kind: 'pdf',
+			status: 'ready',
+			pageCount: 2,
+			originalReference: {
+				provider: 'google_drive',
+				driveFileId: pageDriveFileId
+			},
+			pages: [
+				{ pageNumber: 1, status: 'ready' },
+				{ pageNumber: 2, status: 'ready' }
+			]
 		});
 	});
 });

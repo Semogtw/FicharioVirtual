@@ -1,6 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { mapPageRecord, type PageDetail, type PageRecord } from '$lib/domain/page';
+import { resolveNativeDocument, type NativeDocument } from '$lib/native/local-document-store';
+import { openNativePdfRangeDocument } from '$lib/pdf/native-range-transport';
+import { isNativeRuntime } from '$lib/platform/native-bridge';
+import { sessionState } from '$lib/stores/session.svelte';
 import type {
 	Database,
 	DocumentKind,
@@ -294,6 +298,110 @@ function mapPageSummary(record: z.infer<typeof pageSummaryRecordSchema>): Docume
 	});
 }
 
+function nativeTimestamp(value: number) {
+	if (!Number.isSafeInteger(value) || value < 0) return null;
+	const result = new Date(value).toISOString();
+	return isIsoTimestamp(result) ? result : null;
+}
+
+function nativeTitle(filename: string) {
+	return (
+		filename
+			.replace(/\.[^.]+$/u, '')
+			.trim()
+			.slice(0, 240) || 'Documento local'
+	);
+}
+
+function nativeKind(mimeType: string): DocumentKind | null {
+	if (mimeType === 'application/pdf') return 'pdf';
+	if (mimeType.startsWith('image/')) return 'image';
+	return null;
+}
+
+export function mapNativeDocumentDetail(
+	document: NativeDocument,
+	pageCount = 1
+): DocumentDetail | null {
+	const kind = nativeKind(document.mimeType);
+	const createdAt = nativeTimestamp(document.createdAtMs);
+	const updatedAt = nativeTimestamp(document.updatedAtMs);
+	const normalizedPageCount =
+		Number.isSafeInteger(pageCount) && pageCount >= 1 && pageCount <= 10_000 ? pageCount : 1;
+	if (!kind || !createdAt || !updatedAt) return null;
+	const driveFileId = document.driveFileId;
+	const originalReference =
+		driveFileId && driveFileIdSchema.safeParse(driveFileId).success
+			? Object.freeze({
+					provider: 'google_drive' as const,
+					url: driveReferenceUrl(driveFileId),
+					driveFileId
+				})
+			: Object.freeze({ provider: 'missing' as const, url: null, driveFileId: null });
+	const pageStatus: ProcessingStatus = document.localState === 'present' ? 'ready' : 'failed';
+	return Object.freeze({
+		id: document.documentId,
+		title: nativeTitle(document.originalFilename),
+		kind,
+		status:
+			document.localState === 'present'
+				? document.remoteState === 'pending'
+					? ('pending' as const)
+					: ('ready' as const)
+				: ('failed' as const),
+		pageCount: normalizedPageCount,
+		notebookId: null,
+		originalFilename: document.originalFilename,
+		originalUrl: originalReference.url,
+		originalReference,
+		physicalState: document.localState === 'present' ? 'available' : 'missing',
+		pages: Object.freeze(
+			Array.from({ length: normalizedPageCount }, (_, index) =>
+				Object.freeze({
+					id: `${document.documentId}:native:${index + 1}`,
+					pageNumber: index + 1,
+					sourceDriveFileId: null,
+					status: pageStatus,
+					updatedAt
+				})
+			)
+		),
+		createdAt,
+		updatedAt
+	});
+}
+
+async function loadNativeDocumentDetail(documentId: string): Promise<DocumentDetail | null> {
+	if (!isNativeRuntime()) return null;
+	const ownerId = sessionState.user?.id;
+	if (!ownerId) return null;
+	try {
+		const local = await resolveNativeDocument(documentId);
+		if (!local || local.ownerId !== ownerId) return null;
+		let pageCount = 1;
+		if (local.localState === 'present' && local.mimeType === 'application/pdf') {
+			try {
+				const opened = await openNativePdfRangeDocument({
+					documentId: local.documentId,
+					totalBytes: local.sizeBytes
+				});
+				try {
+					if (Number.isSafeInteger(opened.document.numPages) && opened.document.numPages > 0) {
+						pageCount = Math.min(opened.document.numPages, 10_000);
+					}
+				} finally {
+					await opened.destroy();
+				}
+			} catch {
+				// Keep a one-page shell; the viewer will surface a precise render error if needed.
+			}
+		}
+		return mapNativeDocumentDetail(local, pageCount);
+	} catch {
+		return null;
+	}
+}
+
 export async function loadDocumentDetailWithGateway(
 	documentId: string,
 	gateway: DocumentDetailGateway
@@ -489,15 +597,34 @@ export async function loadDocumentDetail(
 	const resolvedClient = client ?? getSupabaseClient();
 	const gateway = new SupabaseDocumentGateway(resolvedClient);
 	if (client) return loadDocumentDetailWithGateway(validatedDocumentId, gateway);
+	const preferNative =
+		isNativeRuntime() && typeof navigator !== 'undefined' && navigator.onLine === false;
+	if (preferNative) {
+		const nativeDetail = await loadNativeDocumentDetail(validatedDocumentId);
+		if (nativeDetail) return nativeDetail;
+	}
 
 	const userId = await currentCacheUserId(resolvedClient);
-	if (!userId) return loadDocumentDetailWithGateway(validatedDocumentId, gateway);
+	if (!userId) {
+		try {
+			return await loadDocumentDetailWithGateway(validatedDocumentId, gateway);
+		} catch (error) {
+			const nativeDetail = await loadNativeDocumentDetail(validatedDocumentId);
+			if (nativeDetail) return nativeDetail;
+			throw error;
+		}
+	}
 	const key = detailCacheKey(userId, validatedDocumentId);
 	const cached = getCached(detailCache, key);
 	if (cached) return cached;
 	const existing = detailInflight.get(key);
 	if (existing) return existing;
 	const request = loadDocumentDetailWithGateway(validatedDocumentId, gateway)
+		.catch(async (error) => {
+			const nativeDetail = await loadNativeDocumentDetail(validatedDocumentId);
+			if (nativeDetail) return nativeDetail;
+			throw error;
+		})
 		.then((detail) => {
 			putCached(detailCache, key, detail, DETAIL_CACHE_TTL_MS, DETAIL_CACHE_MAX_ENTRIES);
 			return detail;

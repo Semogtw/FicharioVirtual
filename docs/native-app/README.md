@@ -89,6 +89,7 @@ A branch já deixou de ser apenas planejamento. O núcleo abaixo existe em códi
 - PDF.js recebe faixas do arquivo nativo por `PDFDataRangeTransport`, sem exigir carregar PDFs grandes inteiros na memória;
 - o `DocumentMediaViewer` consulta o catálogo nativo antes de buscar resumos/metadados remotos; PDFs presentes usam `NativePdfDataRangeTransport` e imagens presentes usam o original local antes do fallback Drive/Supabase;
 - falhas transitórias do catálogo nativo são tratadas como cache miss, preservando o fallback remoto quando ele existir;
+- quando a consulta remota da biblioteca falha no runtime nativo, a lista local filtra pelo proprietário da sessão e pagina os documentos do catálogo; a rota de detalhe reconstrói um índice de páginas local e descobre a contagem real de PDFs por faixas;
 - testes unitários provam que o fast path local não chama a função remota;
 - se o original não existe localmente, o fluxo web/Drive continua funcionando como fallback;
 - downloads remotos completos compatíveis aquecem o cache nativo em best effort.
@@ -181,7 +182,7 @@ Prioridade alta antes de considerar o app pronto:
 1. adicionar scheduler nativo para retomada após suspensão/encerramento no Android e desktop;
 2. ampliar migrations versionadas para futuras mudanças de catálogo e testar upgrades de várias versões;
 3. migrar eventuais consumidores legados para `list_native_documents_page` e validar acervos grandes com fixtures de paginação;
-4. persistir metadados locais de documento/página suficientes para biblioteca, busca e destaques offline após reinício/sem sessão remota;
+4. persistir metadados de páginas, OCR e geometria suficientes para busca e destaques offline após reinício/sem sessão remota; o fallback atual reconstrói biblioteca, shell de detalhe e renderização, mas ainda não inventa texto remoto;
 5. validar instalação/execução do bundle Linux em uma máquina desktop real além do runner;
 6. instalar e executar APK em dispositivo Android real;
 7. concluir OAuth/deep link e o adapter de armazenamento seguro Android; o adapter Linux já está implementado e teve o ciclo operacional `keyring` validado em sessão desktop, mas o login/refresh Supabase completo ainda precisa de execução autenticada;
