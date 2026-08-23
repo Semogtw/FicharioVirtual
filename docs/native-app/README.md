@@ -142,6 +142,8 @@ No head `bac7ce2`, a validação nativa passou para frontend, Rust Ubuntu/Window
 
 No head validado `ce00482`, o job Linux do workflow de bundles (`32628886922`, job `97168460730`) terminou verde: compilou o Tauri, validou o `.desktop` com `desktop-file-validate`, instalou o `.deb` por caminho absoluto com `apt-get`/`dpkg-query` e extraiu o AppImage. O caminho crítico deste ciclo permanece Linux; Windows fica secundário e a validação mobile em dispositivo foi adiada.
 
+O artifact Linux desse head também foi inspecionado localmente sem instalação: o pacote `fichario-virtual` `0.1.0` `amd64`, o `.desktop` e o ELF foram validados, e o binário permaneceu executando por 10 segundos em diretórios XDG temporários antes de ser encerrado pelo timeout (`124`). Isso é smoke de inicialização Linux, não validação de sessão em hardware adicional.
+
 Não há alegação de validação em hardware Android/Windows/Linux real nesta branch. Após a decisão de focar Linux, não foi usado `adb` nem houve instalação/execução de APK em dispositivo.
 
 ## Trabalho importante restante
