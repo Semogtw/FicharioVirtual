@@ -63,7 +63,8 @@ jobs:
             libwebkit2gtk-4.1-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
-            patchelf
+            patchelf \
+            desktop-file-utils
 
       - name: Ensure Rust toolchain
         shell: bash
@@ -78,6 +79,28 @@ jobs:
 
       - name: Build native bundle
         run: cargo tauri build
+
+      - name: Install and inspect Linux bundles
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          deb_path="$(find src-tauri/target/release/bundle/deb -type f -name '*.deb' -print -quit)"
+          appimage_path="$(find src-tauri/target/release/bundle/appimage -type f -name '*.AppImage' -print -quit)"
+          test -n "$deb_path"
+          test -n "$appimage_path"
+          desktop_file="$(find src-tauri/target/release/bundle -type f -name '*.desktop' -print -quit)"
+          test -n "$desktop_file"
+          desktop-file-validate "$desktop_file"
+          package_name="$(dpkg-deb -f "$deb_path" Package)"
+          test -n "$package_name"
+          sudo apt-get install -y "$deb_path"
+          dpkg-query --show "$package_name"
+          extract_dir="$(mktemp -d)"
+          "$appimage_path" --appimage-extract >/dev/null
+          test -x squashfs-root/AppRun
+          test -d "$extract_dir"
+          rm -rf squashfs-root "$extract_dir"
 
       - name: Upload bundle
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

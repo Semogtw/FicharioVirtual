@@ -133,6 +133,7 @@ Existe workflow dedicado `.github/workflows/validate-native-app.yml` com:
 - `cargo fmt --check`;
 - `cargo check --locked` em Linux e Windows;
 - smoke build Android aarch64 com geração de APK de debug;
+- instalação do `.deb`, validação do `.desktop` e extração do AppImage em runner Linux;
 - preservação temporária do `Cargo.lock` gerado e do APK como artifacts.
 
 Já houve ciclo com frontend completo verde e compilação Rust/Linux do núcleo verde. O gate multiplataforma continua sendo tratado como fonte de verdade: uma plataforma só passa para **validada em CI** quando o workflow do head correspondente termina verde.
@@ -148,7 +149,7 @@ Prioridade alta antes de considerar o app pronto:
 1. adicionar scheduler nativo para retomada após suspensão/encerramento no Android e desktop;
 2. ampliar migrations versionadas para futuras mudanças de catálogo e testar upgrades de várias versões;
 3. eliminar limites de consulta que possam prejudicar bibliotecas muito grandes;
-4. validar instalação e execução do bundle Linux real além do build de artifact;
+4. validar instalação/execução do bundle Linux em uma máquina desktop real além do runner;
 5. instalar e executar APK em dispositivo Android real;
 6. tratar OAuth/deep link e armazenamento seguro de credenciais especificamente no shell nativo;
 7. signing de Android e Windows, política de update e checksums;
