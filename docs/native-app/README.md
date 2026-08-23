@@ -168,6 +168,8 @@ Também foi executado um smoke operacional Linux fora da suíte obrigatória: o 
 
 Na mesma sessão Linux/Wayland sob Hyprland, o binário release foi iniciado com diretórios XDG temporários: uma segunda cópia encerrou com status `0` mantendo a primeira ativa, e o fechamento controlado da janela gerou um `.window-state.json` válido com tamanho/posição/maximização. Isso é validação operacional do desktop Linux atual; X11, outra distribuição e instalação global do `.deb` continuam fora desta evidência.
 
+No head `8edd2bf`, os artefatos foram regenerados depois do endurecimento do ciclo desktop: `.deb` SHA-256 `d9cd8f28da9dff86a2dcbcd4d83485bd430edf9714702fc1718f2cf75ae805cf` e AppImage SHA-256 `0aebafc5f5679c47b937aa258f64cfe86c08716b46c915cbe0c0b78e2547932c`. `sha256sum --check`, `desktop-file-validate`, a extração do `.deb` e o smoke de inicialização dos dois artefatos passaram; cada processo permaneceu vivo por 10 segundos e terminou com status `124` pelo timeout esperado. A criação padrão do AppImage ainda falha no `linuxdeploy` cacheado deste CachyOS; o arquivo foi finalizado com o linuxdeploy extraído e o `strip` do sistema, mantendo esse bloqueio de reprodutibilidade explícito.
+
 Não há alegação de validação em Android/Windows nem de sessão Supabase autenticada nesta branch. Após a decisão de focar Linux, não foi usado `adb` nem houve instalação/execução de APK em dispositivo.
 
 ## Trabalho importante restante
