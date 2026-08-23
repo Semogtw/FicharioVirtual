@@ -42,10 +42,8 @@
 			},
 			"devCsp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost http://localhost:* ws://localhost:* https://*.supabase.co wss://*.supabase.co https://www.googleapis.com; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co; font-src 'self' data:; worker-src 'self' blob:; media-src 'self' blob: https://*.supabase.co",
 			"headers": {
-				"Referrer-Policy": "no-referrer",
 				"X-Content-Type-Options": "nosniff",
-				"Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
-				"Cross-Origin-Opener-Policy": "same-origin"
+				"Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
 			}
 		}
 	},
