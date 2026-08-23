@@ -109,6 +109,8 @@ jobs:
           retention-days: 3
       - name: Check Rust formatting
         run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+      - name: Run Rust Clippy
+        run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
       - name: Compile native shell
         run: cargo check --locked --manifest-path src-tauri/Cargo.toml
       - name: Run native Rust unit tests

@@ -138,6 +138,7 @@ Existe workflow dedicado `.github/workflows/validate-native-app.yml` com:
 - prova de fast path sem rede;
 - `pnpm verify` completo;
 - `cargo fmt --check`;
+- `cargo clippy --locked --all-targets -- -D warnings`;
 - `cargo check --locked` em Linux e Windows;
 - smoke build Android aarch64 com geração de APK de debug, disponível somente em execução manual autorizada;
 - instalação do `.deb`, validação do `.desktop` e extração do AppImage em runner Linux;
