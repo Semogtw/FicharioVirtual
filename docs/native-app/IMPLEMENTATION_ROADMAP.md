@@ -230,8 +230,8 @@ Remover dependências frágeis de redirect dentro do webview.
 - testar Wayland e X11 quando possível;
 - testar WebKitGTK em distro suportada;
 - associação de arquivos opcional;
-- single instance;
-- persistência de estado de janela;
+- single instance (implementado para desktop e validado na sessão Linux/Wayland atual);
+- persistência de estado de janela (implementada e validada na sessão Linux/Wayland atual);
 - integração controlada com desktop OCR worker existente;
 - garantir que ausência do worker OCR não impeça abertura/importação.
 

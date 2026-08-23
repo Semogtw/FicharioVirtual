@@ -494,7 +494,8 @@ Avaliar/adotar somente conforme uso real:
 - `@tauri-apps/plugin-stronghold` ou alternativa segura;
 - `@tauri-apps/plugin-log`;
 - `@tauri-apps/plugin-os`;
-- `@tauri-apps/plugin-single-instance` no desktop;
+- `@tauri-apps/plugin-single-instance` no desktop (adotado para Linux/Windows);
+- `tauri-plugin-window-state` no desktop para tamanho, posição e maximização sem guardar conteúdo sensível;
 - `@tauri-apps/plugin-deep-link` quando OAuth/deep links forem implementados;
 - `@tauri-apps/plugin-updater` no desktop quando distribuição estiver pronta.
 

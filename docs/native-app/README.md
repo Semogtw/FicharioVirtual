@@ -63,6 +63,7 @@ A branch já deixou de ser apenas planejamento. O núcleo abaixo existe em códi
 - capabilities mínimas: o frontend não recebe acesso genérico ao filesystem; operações passam por comandos próprios validados;
 - configs específicas para Android, Linux e Windows;
 - Linux alvo: `.deb` + AppImage;
+- desktop Linux/Windows com single-instance e persistência de tamanho/posição da janela em arquivo de configuração não sensível;
 - Windows alvo: NSIS;
 - Android alvo mínimo: API 24;
 - ícones nativos derivados da identidade visual existente.
@@ -165,7 +166,9 @@ No head `7e8113b`, a validação local Linux foi repetida após a integração d
 
 Também foi executado um smoke operacional Linux fora da suíte obrigatória: o Secret Service/libsecret respondeu ao ciclo `set/get/remove` via `secret-tool`, e o teste opt-in `secure_storage::tests::linux_keyring_round_trip_when_desktop_keyring_is_available`, compilado com `keyring 3.6.3` e as mesmas features/serviço do adapter Rust, confirmou `set/get/remove` sem deixar a chave temporária. Ele pode ser repetido com `CARGO_BUILD_JOBS=1 cargo test --locked --manifest-path src-tauri/Cargo.toml --lib -- --ignored --exact secure_storage::tests::linux_keyring_round_trip_when_desktop_keyring_is_available`. Isso valida a sessão local do keyring; ainda não substitui uma execução autenticada do fluxo completo Supabase dentro do aplicativo.
 
-Não há alegação de validação em hardware Android/Windows/Linux real nesta branch. Após a decisão de focar Linux, não foi usado `adb` nem houve instalação/execução de APK em dispositivo.
+Na mesma sessão Linux/Wayland sob Hyprland, o binário release foi iniciado com diretórios XDG temporários: uma segunda cópia encerrou com status `0` mantendo a primeira ativa, e o fechamento controlado da janela gerou um `.window-state.json` válido com tamanho/posição/maximização. Isso é validação operacional do desktop Linux atual; X11, outra distribuição e instalação global do `.deb` continuam fora desta evidência.
+
+Não há alegação de validação em Android/Windows nem de sessão Supabase autenticada nesta branch. Após a decisão de focar Linux, não foi usado `adb` nem houve instalação/execução de APK em dispositivo.
 
 ## Trabalho importante restante
 
