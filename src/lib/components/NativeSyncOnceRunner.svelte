@@ -18,9 +18,7 @@
 			if (!syncOnce) return;
 			await Promise.race([
 				runNativeSyncWorker().catch(() => undefined),
-				new Promise<void>((resolve) =>
-					window.setTimeout(resolve, NATIVE_SYNC_ONCE_TIMEOUT_MS)
-				)
+				new Promise<void>((resolve) => window.setTimeout(resolve, NATIVE_SYNC_ONCE_TIMEOUT_MS))
 			]);
 			await finishNativeSyncOnce().catch(() => undefined);
 		};

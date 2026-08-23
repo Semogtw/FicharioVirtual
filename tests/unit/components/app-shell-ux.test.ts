@@ -23,5 +23,4 @@ describe('AppShell UX affordances', () => {
 		expect(shellSource).toContain("window.addEventListener('online', kick);");
 		expect(shellSource).toContain("window.removeEventListener('online', kick);");
 	});
-
 });

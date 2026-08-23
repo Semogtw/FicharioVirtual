@@ -5,9 +5,7 @@ const runnerSource = readFileSync('src/lib/components/NativeSyncOnceRunner.svelt
 
 describe('native sync-once runner', () => {
 	it('is mounted outside the authenticated shell so an expired session can still exit', () => {
-		expect(readFileSync('src/routes/+layout.svelte', 'utf8')).toContain(
-			'<NativeSyncOnceRunner />'
-		);
+		expect(readFileSync('src/routes/+layout.svelte', 'utf8')).toContain('<NativeSyncOnceRunner />');
 		expect(runnerSource).toContain('getNativeSyncOnceMode()');
 		expect(runnerSource).toContain('finishNativeSyncOnce()');
 	});
