@@ -138,9 +138,11 @@ Existe workflow dedicado `.github/workflows/validate-native-app.yml` com:
 
 Já houve ciclo com frontend completo verde e compilação Rust/Linux do núcleo verde. O gate multiplataforma continua sendo tratado como fonte de verdade: uma plataforma só passa para **validada em CI** quando o workflow do head correspondente termina verde.
 
-No head `bac7ce2`, a validação nativa passou para frontend, Rust Ubuntu/Windows e Android aarch64; os bundles Linux e Windows também foram publicados como artifacts pelos workflows. A evidência de Windows permanece separada e não faz parte do caminho crítico Android/Linux.
+No head `bac7ce2`, a validação nativa passou para frontend, Rust Ubuntu/Windows e Android aarch64; os bundles Linux e Windows também foram publicados como artifacts pelos workflows. Essa é uma evidência histórica do gate multiplataforma, não uma validação de hardware.
 
-Ainda não há alegação de validação em hardware Android/Windows/Linux real nesta branch.
+No head validado `ce00482`, o job Linux do workflow de bundles (`32628886922`, job `97168460730`) terminou verde: compilou o Tauri, validou o `.desktop` com `desktop-file-validate`, instalou o `.deb` por caminho absoluto com `apt-get`/`dpkg-query` e extraiu o AppImage. O caminho crítico deste ciclo permanece Linux; Windows fica secundário e a validação mobile em dispositivo foi adiada.
+
+Não há alegação de validação em hardware Android/Windows/Linux real nesta branch. Após a decisão de focar Linux, não foi usado `adb` nem houve instalação/execução de APK em dispositivo.
 
 ## Trabalho importante restante
 
