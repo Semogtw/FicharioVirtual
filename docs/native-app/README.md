@@ -161,6 +161,10 @@ No head `4fc53b9`, o job Linux do workflow de bundles (`32631426195`, job `97174
 
 O artifact Linux do head `ce00482` também foi inspecionado localmente sem instalação: o pacote `fichario-virtual` `0.1.0` `amd64`, o `.desktop` e o ELF foram validados, e o binário permaneceu executando por 10 segundos em diretórios XDG temporários antes de ser encerrado pelo timeout (`124`). Isso é smoke de inicialização Linux, não validação de sessão em hardware adicional.
 
+No head `7e8113b`, a validação local Linux foi repetida após a integração do secure store: `.deb` e AppImage foram gerados, o metadata do pacote e o `.desktop` foram validados, os dois artefatos passaram por `sha256sum --check` e o AppImage iniciou por 10 segundos em diretórios XDG temporários (`124` por timeout esperado). O `.deb` local tem SHA-256 `3ed649bb7516c899d5d466ef14f83355869fa6d78d8b5ac25bae56c3e45c9813` e o AppImage `2728a9c174365ad845ba7fa7db708ffbd8a3b210208341640c5776fe0a9a1719`. A versão cacheada do `linuxdeploy` falhou no CachyOS ao usar o `strip` antigo contra ELF com `.relr.dyn`; o AppImage foi então finalizado com o mesmo bundle e o `strip` do sistema, mantendo o bloqueio visível para o gate CI reproduzível.
+
+Também foi executado um smoke operacional Linux fora da suíte obrigatória: o Secret Service/libsecret respondeu ao ciclo `set/get/remove` via `secret-tool`, e um harness descartável compilado com `keyring 3.6.3` e as mesmas features/serviço do adapter Rust confirmou `set/get/remove` sem deixar a chave temporária. Isso valida a sessão local do keyring; ainda não substitui uma execução autenticada do fluxo completo Supabase dentro do aplicativo.
+
 Não há alegação de validação em hardware Android/Windows/Linux real nesta branch. Após a decisão de focar Linux, não foi usado `adb` nem houve instalação/execução de APK em dispositivo.
 
 ## Trabalho importante restante
