@@ -176,6 +176,8 @@ Na mesma sessão Linux/Wayland sob Hyprland, o binário release foi iniciado com
 
 No head `8edd2bf`, os artefatos foram regenerados depois do endurecimento do ciclo desktop: `.deb` SHA-256 `d9cd8f28da9dff86a2dcbcd4d83485bd430edf9714702fc1718f2cf75ae805cf` e AppImage SHA-256 `0aebafc5f5679c47b937aa258f64cfe86c08716b46c915cbe0c0b78e2547932c`. `sha256sum --check`, `desktop-file-validate`, a extração do `.deb` e o smoke de inicialização dos dois artefatos passaram; cada processo permaneceu vivo por 10 segundos e terminou com status `124` pelo timeout esperado. A criação padrão do AppImage ainda falha no `linuxdeploy` cacheado deste CachyOS; o arquivo foi finalizado com o linuxdeploy extraído e o `strip` do sistema, mantendo esse bloqueio de reprodutibilidade explícito.
 
+No head `50c1720`, o build de produção do frontend passou com `vite build`, a compilação Tauri Linux release passou com `cargo tauri build --no-bundle` usando o `beforeBuildCommand` desativado apenas para reutilizar o frontend já construído, e o smoke do binário permaneceu vivo por 10 segundos em diretórios XDG temporários (`124` pelo timeout esperado). O `.deb` do mesmo head foi gerado, inspecionado com `dpkg-deb`, extraído, teve o `.desktop` validado com `desktop-file-validate` e o ELF conferido; SHA-256: `5d7e6d7afa4f157fc5c7987b3c1858d5b7aa7363c974e4b4f3e7e3cff08a838`. Isso fecha o gate local Linux do head atual, sem equivaler a instalação global, outra distribuição ou hardware adicional.
+
 Não há alegação de validação em Android/Windows nem de sessão Supabase autenticada nesta branch. Após a decisão de focar Linux, não foi usado `adb` nem houve instalação/execução de APK em dispositivo.
 
 ## Trabalho importante restante
