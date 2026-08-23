@@ -32,7 +32,7 @@
 		"benchmark:visual-semantic": "vitest run tests/unit/search/visual-semantic-benchmark.test.ts tests/unit/search/visual-semantic-ranking.test.ts"
 	},
 	"dependencies": {
-		"@firecrawl/pdf-inspector-wasm": "0.1.1",
+		"@firecrawl/pdf-inspector-wasm": "0.1.4",
 		"@supabase/supabase-js": "^2.0.0",
 		"pdfjs-dist": "6.2.108",
 		"zod": "^4.0.0"
