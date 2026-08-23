@@ -153,6 +153,75 @@ fn existing_v2_catalog_is_upgraded_to_v3_and_keeps_metadata_rows() {
 }
 
 #[test]
+fn existing_v4_catalog_is_upgraded_to_v5_without_losing_native_text() {
+    let storage_root = TestStorage::new("schema-v4-upgrade");
+    let paths = &storage_root.paths;
+    let data = b"v4 catalog document";
+    let owner_id = "11111111-1111-4111-8111-111111111111";
+
+    storage::begin_import(paths, &begin_request("doc-v4", data.len())).expect("begin import");
+    storage::append_import(paths, "doc-v4", data).expect("append import");
+    storage::finish_import(paths, "doc-v4").expect("finish import");
+
+    let connection = Connection::open(&paths.database).expect("open catalog");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO document_pages (document_id, page_number, native_text, status, updated_at_ms) VALUES ('doc-v4', 1, 'texto legado', 'ready', 1)",
+            [],
+        )
+        .expect("write v4 page metadata");
+    connection
+        .execute_batch(
+            r#"
+PRAGMA foreign_keys = OFF;
+CREATE TABLE document_pages_v4 (
+    document_id TEXT NOT NULL,
+    page_number INTEGER NOT NULL CHECK(page_number >= 1 AND page_number <= 10000),
+    native_text TEXT,
+    status TEXT NOT NULL CHECK(status IN ('pending', 'processing', 'ready', 'retryable', 'blocked_quota', 'needs_review', 'failed')),
+    updated_at_ms INTEGER NOT NULL,
+    PRIMARY KEY(document_id, page_number),
+    FOREIGN KEY(document_id) REFERENCES documents(document_id) ON DELETE CASCADE
+);
+INSERT INTO document_pages_v4 (document_id, page_number, native_text, status, updated_at_ms)
+SELECT document_id, page_number, native_text, status, updated_at_ms FROM document_pages;
+DROP TABLE document_pages;
+ALTER TABLE document_pages_v4 RENAME TO document_pages;
+CREATE INDEX document_pages_text_idx ON document_pages(document_id, page_number);
+DELETE FROM schema_migrations WHERE version >= 5;
+PRAGMA user_version = 4;
+PRAGMA foreign_keys = ON;
+"#,
+        )
+        .expect("downgrade fixture to v4 metadata");
+    drop(connection);
+
+    catalog::initialize(paths).expect("upgrade v4 catalog");
+
+    let upgraded = Connection::open(&paths.database).expect("reopen catalog");
+    let version: i64 = upgraded
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .expect("read upgraded version");
+    let pages = catalog::list_document_pages(paths, "doc-v4", owner_id).expect("read pages");
+
+    assert_eq!(version, 5);
+    assert_eq!(pages.len(), 1);
+    assert_eq!(pages[0].native_text.as_deref(), Some("texto legado"));
+    assert_eq!(pages[0].ocr_raw_text, None);
+    assert_eq!(pages[0].corrected_text, None);
+    assert_eq!(pages[0].extraction_source, None);
+    assert_eq!(pages[0].ocr_word_geometry_json, "[]");
+    assert_eq!(pages[0].warnings_json, "[]");
+    assert!(!pages[0].was_manually_reviewed);
+    assert_eq!(
+        catalog::search_document_pages(paths, owner_id, "legado", 10, 0, None)
+            .expect("search upgraded page")
+            .len(),
+        1
+    );
+}
+
+#[test]
 fn reasserting_an_upload_intent_rebuilds_a_missing_payload() {
     let storage_root = TestStorage::new("payload-repair");
     let paths = &storage_root.paths;
