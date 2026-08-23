@@ -125,7 +125,14 @@ A branch já deixou de ser apenas planejamento. O núcleo abaixo existe em códi
 - o comando `reconcile_native_documents` permite uma verificação opcional por SHA-256 para diagnóstico local;
 - `list_native_documents_page` oferece paginação por cursor estável, sem limitar a biblioteca inteira a 1000 documentos; o comando legado continua disponível para compatibilidade;
 
-**Limitação atual:** o worker é executado enquanto o shell está vivo; ainda não há um scheduler nativo equivalente a WorkManager no Android nem execução garantida depois de suspensão/encerramento forçado. O fluxo de publicação também precisa de validação em hardware e de cobertura operacional de rede/autenticação.
+### Sincronização Linux fora do shell
+
+- o binário desktop aceita `--sync-once`: o runtime abre a sessão nativa em janela oculta, executa uma rodada limitada do worker e encerra com status controlado;
+- `packaging/systemd/fichario-native-sync.service` e `.timer` fornecem um timer de usuário opcional para executar a sincronização cinco minutos após o boot e a cada 15 minutos;
+- o runner é montado também na rota de login, para que uma sessão expirada não deixe um processo agendado oculto aberto indefinidamente;
+- após instalar o `.deb`, o timer pode ser habilitado no usuário com `systemctl --user enable --now fichario-native-sync.timer`; o serviço precisa da sessão gráfica, do Secret Service e da rede disponíveis;
+
+**Limitação atual:** fora do timer opcional Linux, o worker continua dependente do shell; ainda não há um scheduler nativo equivalente a WorkManager no Android nem execução garantida durante suspensão/encerramento forçado. O fluxo de publicação também precisa de validação em hardware e de cobertura operacional de rede/autenticação.
 
 ### Gestão de espaço
 
@@ -178,13 +185,15 @@ No head `8edd2bf`, os artefatos foram regenerados depois do endurecimento do cic
 
 No head `50c1720`, o build de produção do frontend passou com `vite build`, a compilação Tauri Linux release passou com `cargo tauri build --no-bundle` usando o `beforeBuildCommand` desativado apenas para reutilizar o frontend já construído, e o smoke do binário permaneceu vivo por 10 segundos em diretórios XDG temporários (`124` pelo timeout esperado). O `.deb` do mesmo head foi gerado, inspecionado com `dpkg-deb`, extraído, teve o `.desktop` validado com `desktop-file-validate` e o ELF conferido; SHA-256: `5d7e6d7afa4f157fc5c7987b3c1858d5b7aa7363c974e4b4f3e7e3cff08a838`. Isso fecha o gate local Linux do head atual, sem equivaler a instalação global, outra distribuição ou hardware adicional.
 
+No ciclo do timer Linux, o frontend passou por `svelte-check` sem erros/avisos, `vite build` e 343 arquivos Vitest (1470 testes); Rust passou por `cargo fmt --check`, `cargo test --lib` (16 aprovados, 1 ignorado por depender do keyring) e `cargo clippy --lib -- -D warnings`. O release `--sync-once` iniciou com XDG temporário e encerrou com status `0`; o `.deb` correspondente contém `/usr/bin/fichario-native`, teve o `.desktop` validado e tem SHA-256 `1803563d19ff00061094e3203f5b6bd2f2aa895691da0b9ede896a3a4083a731`. O timer também passou por `systemd-analyze verify`; a unidade de serviço foi validada por contrato sem instalação global do pacote.
+
 Não há alegação de validação em Android/Windows nem de sessão Supabase autenticada nesta branch. Após a decisão de focar Linux, não foi usado `adb` nem houve instalação/execução de APK em dispositivo.
 
 ## Trabalho importante restante
 
 Prioridade alta antes de considerar o app pronto:
 
-1. adicionar scheduler nativo para retomada após suspensão/encerramento no Android e desktop;
+1. adicionar scheduler nativo equivalente a WorkManager no Android e retomar sincronização de desktop após suspensão/encerramento sem depender da ativação manual do timer Linux;
 2. ampliar migrations versionadas para futuras mudanças de catálogo e testar upgrades de várias versões;
 3. migrar eventuais consumidores legados para `list_native_documents_page` e validar acervos grandes com fixtures de paginação;
 4. completar o armazenamento de OCR, geometria, warnings e destaques offline após reinício/sem sessão remota; o catálogo já cobre título, caderno, status, contagem, texto nativo e busca FTS5, sem inventar OCR remoto;

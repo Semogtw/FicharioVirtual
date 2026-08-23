@@ -3,6 +3,20 @@ use tauri::{ipc::Response, AppHandle};
 
 use crate::{catalog, metrics, paths, storage};
 
+#[tauri::command]
+pub fn native_sync_once_mode() -> bool {
+    crate::sync_once_requested()
+}
+
+#[tauri::command]
+pub fn finish_native_sync_once(app: AppHandle) -> Result<(), String> {
+    if !crate::sync_once_requested() {
+        return Err("O runtime nativo não está no modo de sincronização única".into());
+    }
+    app.exit(0);
+    Ok(())
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NativeStatus {

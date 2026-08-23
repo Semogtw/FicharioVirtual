@@ -16,8 +16,21 @@ mod storage_tests;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use tauri::Manager;
 
+pub(crate) fn sync_once_requested_from<I, S>(args: I) -> bool
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    args.into_iter().any(|arg| arg.as_ref() == "--sync-once")
+}
+
+pub(crate) fn sync_once_requested() -> bool {
+    sync_once_requested_from(std::env::args())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let sync_once = sync_once_requested();
     let mut builder = tauri::Builder::default();
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -44,7 +57,7 @@ pub fn run() {
     builder = builder.plugin(tauri_plugin_opener::init());
 
     builder
-        .setup(|app| {
+        .setup(move |app| {
             let paths = paths::ensure(app.handle())
                 .map_err(|error| std::io::Error::other(format!("native storage: {error}")))?;
             catalog::initialize(&paths)
@@ -54,10 +67,19 @@ pub fn run() {
             storage::reconcile_documents(&paths, false).map_err(|error| {
                 std::io::Error::other(format!("native reconciliation: {error}"))
             })?;
+
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            if sync_once {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.hide();
+                }
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::native_status,
+            commands::native_sync_once_mode,
+            commands::finish_native_sync_once,
             commands::begin_local_import,
             commands::append_local_import,
             commands::finish_local_import,
@@ -90,4 +112,22 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running Fichário Virtual");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sync_once_requested_from;
+
+    #[test]
+    fn recognizes_only_the_explicit_sync_once_flag() {
+        assert!(sync_once_requested_from([
+            "fichario-native".to_string(),
+            "--sync-once".to_string()
+        ]));
+        assert!(!sync_once_requested_from(["fichario-native".to_string()]));
+        assert!(!sync_once_requested_from([
+            "fichario-native".to_string(),
+            "--sync".to_string()
+        ]));
+    }
 }
