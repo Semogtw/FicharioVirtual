@@ -20,6 +20,35 @@ pub struct DocumentRow {
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
     pub last_accessed_at_ms: i64,
+    pub title: Option<String>,
+    pub notebook_id: Option<String>,
+    pub page_count: i64,
+    pub status: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct DocumentPageMetadataRow {
+    pub document_id: String,
+    pub page_number: i64,
+    pub native_text: Option<String>,
+    pub status: String,
+    pub updated_at_ms: i64,
+}
+
+#[derive(Clone, Debug)]
+pub struct DocumentPageMetadataInput {
+    pub page_number: i64,
+    pub native_text: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct DocumentMetadataInput {
+    pub owner_id: String,
+    pub title: String,
+    pub notebook_id: Option<String>,
+    pub page_count: i64,
+    pub status: String,
+    pub pages: Vec<DocumentPageMetadataInput>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -93,17 +122,23 @@ pub fn initialize(paths: &AppPaths) -> Result<(), String> {
     let version: i64 = connection
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .map_err(|error| format!("Não foi possível ler a versão do catálogo local: {error}"))?;
-    if version > 2 {
+    if version > 3 {
         return Err(format!(
             "Catálogo local criado por uma versão mais nova do Fichário (schema {version})"
         ));
     }
+    if version == 3 {
+        reset_abandoned_sync_jobs(paths)?;
+        return Ok(());
+    }
     if version == 2 {
+        migrate_to_v3(&mut connection)?;
         reset_abandoned_sync_jobs(paths)?;
         return Ok(());
     }
     if version == 1 {
         migrate_to_v2(&mut connection)?;
+        migrate_to_v3(&mut connection)?;
         reset_abandoned_sync_jobs(paths)?;
         return Ok(());
     }
@@ -175,7 +210,81 @@ PRAGMA user_version = 1;
         .commit()
         .map_err(|error| format!("Não foi possível concluir a migração local: {error}"))?;
     migrate_to_v2(&mut connection)?;
+    migrate_to_v3(&mut connection)?;
     reset_abandoned_sync_jobs(paths)?;
+    Ok(())
+}
+
+fn migrate_to_v3(connection: &mut Connection) -> Result<(), String> {
+    let transaction = connection.transaction().map_err(|error| {
+        format!("Não foi possível iniciar a migration de metadados locais: {error}")
+    })?;
+    for (column, definition) in [
+        ("title", "TEXT"),
+        ("notebook_id", "TEXT"),
+        ("page_count", "INTEGER NOT NULL DEFAULT 1 CHECK(page_count BETWEEN 1 AND 10000)"),
+        (
+            "status",
+            "TEXT CHECK(status IS NULL OR status IN ('uploading', 'pending', 'processing', 'ready', 'partially_ready', 'needs_review', 'failed'))",
+        ),
+    ] {
+        let exists: i64 = transaction
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('documents') WHERE name = ?1",
+                [column],
+                |row| row.get(0),
+            )
+            .map_err(|error| format!("Não foi possível inspecionar os metadados locais: {error}"))?;
+        if exists == 0 {
+            transaction
+                .execute_batch(&format!("ALTER TABLE documents ADD COLUMN {column} {definition};"))
+                .map_err(|error| {
+                    format!("Não foi possível ampliar o catálogo local com {column}: {error}")
+                })?;
+        }
+    }
+    transaction
+        .execute_batch(
+            r#"
+CREATE TABLE IF NOT EXISTS document_pages (
+    document_id TEXT NOT NULL,
+    page_number INTEGER NOT NULL CHECK(page_number >= 1 AND page_number <= 10000),
+    native_text TEXT,
+    status TEXT NOT NULL CHECK(status IN ('pending', 'processing', 'ready', 'retryable', 'blocked_quota', 'needs_review', 'failed')),
+    updated_at_ms INTEGER NOT NULL,
+    PRIMARY KEY(document_id, page_number),
+    FOREIGN KEY(document_id) REFERENCES documents(document_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS document_pages_text_idx ON document_pages(document_id, page_number);
+"#,
+        )
+        .map_err(|error| format!("Não foi possível criar o índice de páginas locais: {error}"))?;
+    let migration_exists: Option<i64> = transaction
+        .query_row(
+            "SELECT version FROM schema_migrations WHERE version = 3",
+            [],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| format!("Não foi possível ler o histórico de migrations: {error}"))?;
+    if migration_exists.is_none() {
+        transaction
+            .execute(
+                "INSERT INTO schema_migrations (version, applied_at_ms) VALUES (3, ?1)",
+                [now_ms()],
+            )
+            .map_err(|error| {
+                format!("Não foi possível registrar a migration de metadados: {error}")
+            })?;
+    }
+    transaction
+        .execute_batch("PRAGMA user_version = 3;")
+        .map_err(|error| {
+            format!("Não foi possível atualizar a versão do catálogo local: {error}")
+        })?;
+    transaction.commit().map_err(|error| {
+        format!("Não foi possível concluir a migration de metadados locais: {error}")
+    })?;
     Ok(())
 }
 
@@ -266,11 +375,15 @@ fn document_from_row(row: &Row<'_>) -> rusqlite::Result<DocumentRow> {
         created_at_ms: row.get(11)?,
         updated_at_ms: row.get(12)?,
         last_accessed_at_ms: row.get(13)?,
+        title: row.get(14)?,
+        notebook_id: row.get(15)?,
+        page_count: row.get(16)?,
+        status: row.get(17)?,
     })
 }
 
 fn select_document_sql() -> &'static str {
-    "SELECT document_id, owner_id, original_filename, mime_type, size_bytes, sha256, relative_path, local_state, remote_state, remote_document_id, drive_file_id, created_at_ms, updated_at_ms, last_accessed_at_ms FROM documents"
+    "SELECT document_id, owner_id, original_filename, mime_type, size_bytes, sha256, relative_path, local_state, remote_state, remote_document_id, drive_file_id, created_at_ms, updated_at_ms, last_accessed_at_ms, title, notebook_id, page_count, status FROM documents"
 }
 
 pub fn get_document(paths: &AppPaths, document_id: &str) -> Result<Option<DocumentRow>, String> {
@@ -623,8 +736,8 @@ pub fn commit_import(paths: &AppPaths, document: &DocumentRow) -> Result<(), Str
             r#"INSERT INTO documents (
                 document_id, owner_id, original_filename, mime_type, size_bytes, sha256,
                 relative_path, local_state, remote_state, remote_document_id, drive_file_id,
-                created_at_ms, updated_at_ms, last_accessed_at_ms
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+                created_at_ms, updated_at_ms, last_accessed_at_ms, title, notebook_id, page_count, status
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
             ON CONFLICT(document_id) DO UPDATE SET
                 owner_id = excluded.owner_id,
                 original_filename = excluded.original_filename,
@@ -653,6 +766,10 @@ pub fn commit_import(paths: &AppPaths, document: &DocumentRow) -> Result<(), Str
                 document.created_at_ms,
                 document.updated_at_ms,
                 document.last_accessed_at_ms,
+                document.title,
+                document.notebook_id,
+                document.page_count,
+                document.status,
             ],
         )
         .map_err(|error| format!("Não foi possível salvar o documento local: {error}"))?;
@@ -677,6 +794,124 @@ pub fn commit_import(paths: &AppPaths, document: &DocumentRow) -> Result<(), Str
         .commit()
         .map_err(|error| format!("Não foi possível confirmar o documento local: {error}"))?;
     Ok(())
+}
+
+fn document_page_metadata_from_row(row: &Row<'_>) -> rusqlite::Result<DocumentPageMetadataRow> {
+    Ok(DocumentPageMetadataRow {
+        document_id: row.get(0)?,
+        page_number: row.get(1)?,
+        native_text: row.get(2)?,
+        status: row.get(3)?,
+        updated_at_ms: row.get(4)?,
+    })
+}
+
+pub fn update_document_metadata(
+    paths: &AppPaths,
+    document_id: &str,
+    metadata: DocumentMetadataInput,
+) -> Result<(), String> {
+    if metadata.title.trim().is_empty() || metadata.title.len() > 240 {
+        return Err("Título local inválido".into());
+    }
+    if !(1..=10_000).contains(&metadata.page_count)
+        || metadata.pages.len() != metadata.page_count as usize
+    {
+        return Err("Quantidade de páginas local inválida".into());
+    }
+    if !matches!(
+        metadata.status.as_str(),
+        "processing" | "partially_ready" | "ready" | "needs_review" | "failed"
+    ) {
+        return Err("Status local inválido".into());
+    }
+    let mut connection = open(paths)?;
+    let transaction = connection.transaction().map_err(|error| {
+        format!("Não foi possível iniciar a atualização de metadados locais: {error}")
+    })?;
+    let now = now_ms();
+    let changed = transaction
+        .execute(
+            "UPDATE documents SET title = ?3, notebook_id = ?4, page_count = ?5, status = ?6, updated_at_ms = MAX(updated_at_ms, ?7) WHERE document_id = ?1 AND owner_id = ?2",
+            params![
+                document_id,
+                metadata.owner_id,
+                metadata.title.trim(),
+                metadata.notebook_id,
+                metadata.page_count,
+                metadata.status,
+                now
+            ],
+        )
+        .map_err(|error| format!("Não foi possível salvar os metadados do documento: {error}"))?;
+    if changed != 1 {
+        return Err("Documento local não encontrado para este proprietário".into());
+    }
+    transaction
+        .execute(
+            "DELETE FROM document_pages WHERE document_id = ?1",
+            [document_id],
+        )
+        .map_err(|error| format!("Não foi possível substituir as páginas locais: {error}"))?;
+    let mut seen_pages = std::collections::HashSet::new();
+    for page in &metadata.pages {
+        if !(1..=metadata.page_count).contains(&page.page_number)
+            || !seen_pages.insert(page.page_number)
+        {
+            return Err("Página local fora do documento".into());
+        }
+        if page
+            .native_text
+            .as_ref()
+            .is_some_and(|text| text.len() > 1_000_000)
+        {
+            return Err("Texto nativo local excede o limite".into());
+        }
+        transaction
+            .execute(
+                r#"INSERT INTO document_pages (
+                    document_id, page_number, native_text, status, updated_at_ms
+                ) VALUES (?1, ?2, ?3,
+                    CASE WHEN ?3 IS NULL AND ?4 = 'ready' THEN 'needs_review'
+                         WHEN ?3 IS NULL THEN 'processing'
+                         ELSE 'ready' END, ?5)"#,
+                params![
+                    document_id,
+                    page.page_number,
+                    page.native_text,
+                    metadata.status,
+                    now
+                ],
+            )
+            .map_err(|error| {
+                format!("Não foi possível salvar os metadados da página local: {error}")
+            })?;
+    }
+    transaction
+        .commit()
+        .map_err(|error| format!("Não foi possível confirmar os metadados locais: {error}"))?;
+    Ok(())
+}
+
+pub fn list_document_pages(
+    paths: &AppPaths,
+    document_id: &str,
+    owner_id: &str,
+) -> Result<Vec<DocumentPageMetadataRow>, String> {
+    let connection = open(paths)?;
+    let mut statement = connection
+        .prepare(
+            "SELECT p.document_id, p.page_number, p.native_text, p.status, p.updated_at_ms FROM document_pages p INNER JOIN documents d ON d.document_id = p.document_id WHERE p.document_id = ?1 AND d.owner_id = ?2 ORDER BY p.page_number ASC",
+        )
+        .map_err(|error| format!("Não foi possível preparar as páginas locais: {error}"))?;
+    let rows = statement
+        .query_map(
+            params![document_id, owner_id],
+            document_page_metadata_from_row,
+        )
+        .map_err(|error| format!("Não foi possível consultar as páginas locais: {error}"))?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("Não foi possível ler as páginas locais: {error}"))
 }
 
 fn sync_job_from_row(row: &Row<'_>) -> rusqlite::Result<SyncJob> {

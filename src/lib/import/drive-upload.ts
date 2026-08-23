@@ -5,7 +5,8 @@ import { resolveDriveFolder } from '$lib/drive/resolve-folder';
 import type { DriveFile } from '$lib/drive/types';
 import {
 	importFileIntoNativeStore,
-	markNativeDocumentRemoteSynced
+	markNativeDocumentRemoteSynced,
+	updateNativeDocumentMetadata
 } from '$lib/native/local-document-store';
 import { getSupabaseClient } from '$lib/services/supabase';
 import type { Database } from '$lib/types/database';
@@ -146,6 +147,14 @@ export async function uploadPreparedImageToDriveWithGateway(
 		});
 	}
 	if (input.signal?.aborted) throw abortError();
+	await updateNativeDocumentMetadata({
+		documentId,
+		ownerId: userId,
+		title: input.title?.trim() || defaultTitle(input.prepared.originalName),
+		notebookId: input.notebookId ?? null,
+		pageCount: 1,
+		status: 'processing'
+	}).catch(() => undefined);
 	const parentFolderId = await gateway.resolveFolder(input.notebookId ?? null);
 	if (input.signal?.aborted) throw abortError();
 

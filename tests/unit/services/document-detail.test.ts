@@ -210,22 +210,43 @@ describe('native document detail mapping', () => {
 					driveFileId: pageDriveFileId,
 					createdAtMs: Date.parse('2026-08-02T01:00:00.000Z'),
 					updatedAtMs: Date.parse('2026-08-02T02:00:00.000Z'),
-					lastAccessedAtMs: Date.parse('2026-08-02T03:00:00.000Z')
+					lastAccessedAtMs: Date.parse('2026-08-02T03:00:00.000Z'),
+					title: 'Apostila local',
+					notebookId: '44444444-4444-4444-8444-444444444444',
+					pageCount: 2,
+					status: 'processing'
 				},
-				2
+				2,
+				[
+					{
+						documentId,
+						pageNumber: 1,
+						nativeText: 'texto nativo',
+						status: 'ready',
+						updatedAtMs: Date.parse('2026-08-02T02:00:00.000Z')
+					},
+					{
+						documentId,
+						pageNumber: 2,
+						nativeText: null,
+						status: 'processing',
+						updatedAtMs: Date.parse('2026-08-02T02:00:00.000Z')
+					}
+				]
 			)
 		).toMatchObject({
-			title: 'Apostila',
+			title: 'Apostila local',
 			kind: 'pdf',
-			status: 'ready',
+			status: 'processing',
 			pageCount: 2,
+			notebookId: '44444444-4444-4444-8444-444444444444',
 			originalReference: {
 				provider: 'google_drive',
 				driveFileId: pageDriveFileId
 			},
 			pages: [
 				{ pageNumber: 1, status: 'ready' },
-				{ pageNumber: 2, status: 'ready' }
+				{ pageNumber: 2, status: 'processing' }
 			]
 		});
 	});

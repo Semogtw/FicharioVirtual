@@ -90,6 +90,8 @@ A branch já deixou de ser apenas planejamento. O núcleo abaixo existe em códi
 - o `DocumentMediaViewer` consulta o catálogo nativo antes de buscar resumos/metadados remotos; PDFs presentes usam `NativePdfDataRangeTransport` e imagens presentes usam o original local antes do fallback Drive/Supabase;
 - falhas transitórias do catálogo nativo são tratadas como cache miss, preservando o fallback remoto quando ele existir;
 - quando a consulta remota da biblioteca falha no runtime nativo, a lista local filtra pelo proprietário da sessão e pagina os documentos do catálogo; a rota de detalhe reconstrói um índice de páginas local e descobre a contagem real de PDFs por faixas;
+- a migration 3 acrescenta título, caderno, status e contagem de páginas ao catálogo e mantém um snapshot owner-scoped de texto nativo por página, substituído atomicamente a cada inspeção;
+- o detalhe local lê esse snapshot para reconstruir status/texto nativo de páginas após reinício; páginas sem texto permanecem `processing`/`needs_review`, sem serem tratadas como OCR concluído;
 - testes unitários provam que o fast path local não chama a função remota;
 - se o original não existe localmente, o fluxo web/Drive continua funcionando como fallback;
 - downloads remotos completos compatíveis aquecem o cache nativo em best effort.
@@ -110,7 +112,7 @@ A branch já deixou de ser apenas planejamento. O núcleo abaixo existe em códi
 - contador de tentativas, próximo retry e último erro;
 - importações locais pendentes criam job de upload;
 - confirmação remota conclui o job ativo correspondente.
-- `schema_migrations` registra o schema 1 e a migration 2, que adiciona `payload_json` sem perder documentos ou jobs existentes;
+- `schema_migrations` registra os schemas 1–3: a migration 2 adiciona `payload_json`, e a migration 3 adiciona metadados/páginas locais sem perder documentos ou jobs existentes;
 - o payload durável preserva documento, proprietário, título, caderno, MIME, hash, tamanho e versão de OCR;
 - o bridge TypeScript lista, reserva, conclui, cancela e reagenda jobs nativos com validação do contrato IPC;
 - o bridge limita identificadores, erros persistidos e payloads de jobs antes de entregá-los ao worker;
@@ -182,7 +184,7 @@ Prioridade alta antes de considerar o app pronto:
 1. adicionar scheduler nativo para retomada após suspensão/encerramento no Android e desktop;
 2. ampliar migrations versionadas para futuras mudanças de catálogo e testar upgrades de várias versões;
 3. migrar eventuais consumidores legados para `list_native_documents_page` e validar acervos grandes com fixtures de paginação;
-4. persistir metadados de páginas, OCR e geometria suficientes para busca e destaques offline após reinício/sem sessão remota; o fallback atual reconstrói biblioteca, shell de detalhe e renderização, mas ainda não inventa texto remoto;
+4. completar o armazenamento de OCR, geometria, warnings e índice FTS local para busca/destaques offline após reinício/sem sessão remota; o snapshot atual cobre título, caderno, status, contagem e texto nativo, sem inventar OCR remoto;
 5. validar instalação/execução do bundle Linux em uma máquina desktop real além do runner;
 6. instalar e executar APK em dispositivo Android real;
 7. concluir OAuth/deep link e o adapter de armazenamento seguro Android; o adapter Linux já está implementado e teve o ciclo operacional `keyring` validado em sessão desktop, mas o login/refresh Supabase completo ainda precisa de execução autenticada;

@@ -1,4 +1,5 @@
 import { invokeNative, isNativeRuntime } from '$lib/platform/native-bridge';
+import type { DocumentStatus } from '$lib/domain/document';
 
 const DEFAULT_CHUNK_BYTES = 256 * 1024;
 const MAX_SAFE_CHUNK_BYTES = 512 * 1024;
@@ -17,6 +18,29 @@ export type NativeDocument = Readonly<{
 	createdAtMs: number;
 	updatedAtMs: number;
 	lastAccessedAtMs: number;
+	title?: string | null;
+	notebookId?: string | null;
+	pageCount?: number;
+	status?: DocumentStatus | null;
+}>;
+
+export type NativeDocumentPageMetadata = Readonly<{
+	documentId: string;
+	pageNumber: number;
+	nativeText: string | null;
+	status:
+		'pending' | 'processing' | 'ready' | 'retryable' | 'blocked_quota' | 'needs_review' | 'failed';
+	updatedAtMs: number;
+}>;
+
+export type NativeDocumentMetadataInput = Readonly<{
+	documentId: string;
+	ownerId: string;
+	title: string;
+	notebookId?: string | null;
+	pageCount: number;
+	status: Exclude<DocumentStatus, 'uploading' | 'pending'>;
+	pages?: readonly Readonly<{ pageNumber: number; nativeText: string | null }>[];
 }>;
 
 export type NativeDocumentPageCursor = Readonly<{
@@ -83,6 +107,16 @@ function request<T extends Record<string, unknown>>(value: T) {
 }
 
 function validNativeDocument(value: NativeDocument | null): value is NativeDocument {
+	const metadataValid =
+		(value?.title === undefined || value.title === null || typeof value.title === 'string') &&
+		(value?.notebookId === undefined ||
+			value.notebookId === null ||
+			typeof value.notebookId === 'string') &&
+		(value?.pageCount === undefined ||
+			(Number.isSafeInteger(value.pageCount) &&
+				value.pageCount >= 1 &&
+				value.pageCount <= 10_000)) &&
+		(value?.status === undefined || value.status === null || typeof value.status === 'string');
 	return (
 		value !== null &&
 		typeof value.documentId === 'string' &&
@@ -92,7 +126,23 @@ function validNativeDocument(value: NativeDocument | null): value is NativeDocum
 		Number.isSafeInteger(value.sizeBytes) &&
 		value.sizeBytes > 0 &&
 		typeof value.sha256 === 'string' &&
-		value.sha256.length === 64
+		value.sha256.length === 64 &&
+		metadataValid
+	);
+}
+
+function validNativeDocumentPageMetadata(value: unknown): value is NativeDocumentPageMetadata {
+	if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+	const row = value as Partial<NativeDocumentPageMetadata>;
+	return (
+		typeof row.documentId === 'string' &&
+		Number.isSafeInteger(row.pageNumber) &&
+		(row.pageNumber as number) >= 1 &&
+		(row.pageNumber as number) <= 10_000 &&
+		(row.nativeText === null || typeof row.nativeText === 'string') &&
+		typeof row.status === 'string' &&
+		Number.isSafeInteger(row.updatedAtMs) &&
+		(row.updatedAtMs as number) >= 0
 	);
 }
 
@@ -209,6 +259,59 @@ export async function resolveNativeDocumentByDriveFileId(
 		request({ driveFileId })
 	);
 	return validNativeDocument(result) ? result : null;
+}
+
+export async function listNativeDocumentPages(
+	documentId: string,
+	ownerId: string
+): Promise<readonly NativeDocumentPageMetadata[] | null> {
+	if (!isNativeRuntime()) return null;
+	const result = await invokeNative<unknown>(
+		'list_native_document_pages',
+		request({ documentId, ownerId })
+	);
+	if (!Array.isArray(result) || !result.every(validNativeDocumentPageMetadata)) {
+		throw new TypeError('Invalid native document page metadata');
+	}
+	return Object.freeze(result as NativeDocumentPageMetadata[]);
+}
+
+export async function updateNativeDocumentMetadata(
+	input: NativeDocumentMetadataInput
+): Promise<void> {
+	if (!isNativeRuntime()) return;
+	if (input.title.trim().length === 0 || input.title.length > 240) {
+		throw new TypeError('Invalid native document title');
+	}
+	if (!Number.isSafeInteger(input.pageCount) || input.pageCount < 1 || input.pageCount > 10_000) {
+		throw new TypeError('Invalid native document page count');
+	}
+	const pages = input.pages ?? [];
+	const seen = new Set<number>();
+	for (const page of pages) {
+		if (
+			!Number.isSafeInteger(page.pageNumber) ||
+			page.pageNumber < 1 ||
+			page.pageNumber > input.pageCount ||
+			seen.has(page.pageNumber) ||
+			(page.nativeText !== null && page.nativeText.length > 1_000_000)
+		) {
+			throw new TypeError('Invalid native page metadata');
+		}
+		seen.add(page.pageNumber);
+	}
+	await invokeNative<void>(
+		'update_native_document_metadata',
+		request({
+			documentId: input.documentId,
+			ownerId: input.ownerId,
+			title: input.title.trim(),
+			notebookId: input.notebookId ?? null,
+			pageCount: input.pageCount,
+			status: input.status,
+			pages: pages.map((page) => ({ pageNumber: page.pageNumber, nativeText: page.nativeText }))
+		})
+	);
 }
 
 export async function importFileIntoNativeStore(

@@ -1,7 +1,8 @@
 import { calculateSha256 } from '$lib/import/hash';
 import {
 	importFileIntoNativeStore,
-	markNativeDocumentRemoteSynced
+	markNativeDocumentRemoteSynced,
+	updateNativeDocumentMetadata
 } from '$lib/native/local-document-store';
 import {
 	ensurePendingNativeOriginal,
@@ -298,6 +299,19 @@ export async function uploadPdfWithGateway(
 		});
 	}
 	if (options.signal?.aborted) throw abortError();
+	await updateNativeDocumentMetadata({
+		documentId,
+		ownerId: userId,
+		title: options.title?.trim() || inspection.title || titleFromFile(file),
+		notebookId: options.notebookId ?? null,
+		pageCount: inspection.pageCount,
+		status: inspection.pagesNeedingOcr.length === 0 ? 'ready' : 'processing',
+		pages: Array.from({ length: inspection.pageCount }, (_, index) => {
+			const pageNumber = index + 1;
+			const nativePage = inspection.nativePages.find((page) => page.pageNumber === pageNumber);
+			return { pageNumber, nativeText: nativePage?.text ?? null };
+		})
+	}).catch(() => undefined);
 	const storageRoot = `${userId}/${documentId}`;
 	const originalStoragePath = `${storageRoot}/original.pdf`;
 	let pages = buildPdfImportPlan(inspection, storageRoot).map((page) => ({ ...page }));

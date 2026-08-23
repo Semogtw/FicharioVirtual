@@ -67,21 +67,25 @@ describe('document mapping', () => {
 				sizeBytes: 128,
 				sha256: 'a'.repeat(64),
 				localState: 'present',
-				remoteState: 'pending',
-				remoteDocumentId: null,
+				remoteState: 'synced',
+				remoteDocumentId: '11111111-1111-4111-8111-111111111111',
 				driveFileId: null,
 				createdAtMs: Date.parse('2026-08-02T01:00:00.000Z'),
 				updatedAtMs: Date.parse('2026-08-02T02:00:00.000Z'),
-				lastAccessedAtMs: Date.parse('2026-08-02T03:00:00.000Z')
+				lastAccessedAtMs: Date.parse('2026-08-02T03:00:00.000Z'),
+				title: 'Biologia local',
+				notebookId: '33333333-3333-4333-8333-333333333333',
+				pageCount: 8,
+				status: 'ready'
 			})
 		).toEqual({
 			id: '11111111-1111-4111-8111-111111111111',
-			title: 'Aula de biologia',
+			title: 'Biologia local',
 			kind: 'pdf',
-			status: 'pending',
-			pageCount: 1,
+			status: 'ready',
+			pageCount: 8,
 			thumbnailPath: null,
-			notebookId: null,
+			notebookId: '33333333-3333-4333-8333-333333333333',
 			createdAt: '2026-08-02T01:00:00.000Z',
 			updatedAt: '2026-08-02T02:00:00.000Z'
 		});

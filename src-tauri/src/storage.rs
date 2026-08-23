@@ -221,6 +221,10 @@ pub fn finish_import(paths: &AppPaths, document_id: &str) -> Result<DocumentRow,
         created_at_ms: old.as_ref().map_or(now, |value| value.created_at_ms),
         updated_at_ms: now,
         last_accessed_at_ms: now,
+        title: old.as_ref().and_then(|value| value.title.clone()),
+        notebook_id: old.as_ref().and_then(|value| value.notebook_id.clone()),
+        page_count: old.as_ref().map_or(1, |value| value.page_count),
+        status: old.as_ref().and_then(|value| value.status.clone()),
     };
     catalog::commit_import(paths, &document)?;
 

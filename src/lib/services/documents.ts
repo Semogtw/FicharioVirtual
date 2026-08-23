@@ -143,8 +143,12 @@ function pageSize(value: number): number {
 
 function nativeTimestamp(value: number) {
 	if (!Number.isSafeInteger(value) || value < 0) return null;
-	const timestamp = new Date(value).toISOString();
-	return isIsoTimestamp(timestamp) ? timestamp : null;
+	try {
+		const timestamp = new Date(value).toISOString();
+		return isIsoTimestamp(timestamp) ? timestamp : null;
+	} catch {
+		return null;
+	}
 }
 
 function nativeTitle(filename: string) {
@@ -155,6 +159,11 @@ function nativeTitle(filename: string) {
 	return title || 'Documento local';
 }
 
+function nativeMetadataTitle(document: NativeDocument) {
+	const title = document.title?.trim();
+	return title ? title.slice(0, 240) : nativeTitle(document.originalFilename);
+}
+
 function nativeKind(mimeType: string): DocumentKind | null {
 	if (mimeType === 'application/pdf') return 'pdf';
 	if (mimeType.startsWith('image/')) return 'image';
@@ -163,7 +172,29 @@ function nativeKind(mimeType: string): DocumentKind | null {
 
 function nativeStatus(document: NativeDocument): DocumentStatus {
 	if (document.localState !== 'present') return 'failed';
-	return document.remoteState === 'pending' ? 'pending' : 'ready';
+	if (document.remoteState === 'pending') return 'pending';
+	if (
+		document.status === 'processing' ||
+		document.status === 'partially_ready' ||
+		document.status === 'ready' ||
+		document.status === 'needs_review' ||
+		document.status === 'failed'
+	) {
+		return document.status;
+	}
+	return 'ready';
+}
+
+function nativePageCount(document: NativeDocument) {
+	const pageCount = document.pageCount;
+	return document.status !== null &&
+		document.status !== undefined &&
+		typeof pageCount === 'number' &&
+		Number.isSafeInteger(pageCount) &&
+		pageCount >= 1 &&
+		pageCount <= 10_000
+		? pageCount
+		: 1;
 }
 
 export function mapNativeDocumentSummary(document: NativeDocument): DocumentSummary | null {
@@ -173,12 +204,12 @@ export function mapNativeDocumentSummary(document: NativeDocument): DocumentSumm
 	if (!kind || !createdAt || !updatedAt) return null;
 	return Object.freeze({
 		id: document.documentId,
-		title: nativeTitle(document.originalFilename),
+		title: nativeMetadataTitle(document),
 		kind,
 		status: nativeStatus(document),
-		pageCount: 1,
+		pageCount: nativePageCount(document),
 		thumbnailPath: null,
-		notebookId: null,
+		notebookId: document.notebookId ?? null,
 		createdAt,
 		updatedAt
 	});

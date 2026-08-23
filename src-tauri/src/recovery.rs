@@ -123,6 +123,10 @@ fn recover_moved_document(
             created_at_ms: now,
             updated_at_ms: now,
             last_accessed_at_ms: now,
+            title: None,
+            notebook_id: None,
+            page_count: 1,
+            status: None,
         }));
     }
     Ok(None)

@@ -31,6 +31,10 @@ pub struct NativeDocument {
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
     pub last_accessed_at_ms: i64,
+    pub title: Option<String>,
+    pub notebook_id: Option<String>,
+    pub page_count: i64,
+    pub status: Option<String>,
 }
 
 impl TryFrom<catalog::DocumentRow> for NativeDocument {
@@ -51,6 +55,10 @@ impl TryFrom<catalog::DocumentRow> for NativeDocument {
             created_at_ms: value.created_at_ms,
             updated_at_ms: value.updated_at_ms,
             last_accessed_at_ms: value.last_accessed_at_ms,
+            title: value.title,
+            notebook_id: value.notebook_id,
+            page_count: value.page_count,
+            status: value.status,
         })
     }
 }
@@ -151,6 +159,54 @@ pub struct ReconcileDocumentsRequest {
     pub full_hash: bool,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativePageMetadataInput {
+    pub page_number: i64,
+    pub native_text: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateDocumentMetadataRequest {
+    pub document_id: String,
+    pub owner_id: String,
+    pub title: String,
+    pub notebook_id: Option<String>,
+    pub page_count: i64,
+    pub status: String,
+    pub pages: Vec<NativePageMetadataInput>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeDocumentPageMetadata {
+    pub document_id: String,
+    pub page_number: i64,
+    pub native_text: Option<String>,
+    pub status: String,
+    pub updated_at_ms: i64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentOwnerRequest {
+    pub document_id: String,
+    pub owner_id: String,
+}
+
+impl From<catalog::DocumentPageMetadataRow> for NativeDocumentPageMetadata {
+    fn from(value: catalog::DocumentPageMetadataRow) -> Self {
+        Self {
+            document_id: value.document_id,
+            page_number: value.page_number,
+            native_text: value.native_text,
+            status: value.status,
+            updated_at_ms: value.updated_at_ms,
+        }
+    }
+}
+
 fn app_paths(app: &AppHandle) -> Result<paths::AppPaths, String> {
     paths::ensure(app)
 }
@@ -161,7 +217,7 @@ pub fn native_status(app: AppHandle) -> Result<NativeStatus, String> {
     let summary = metrics::read(&paths)?;
     Ok(NativeStatus {
         platform: std::env::consts::OS.to_string(),
-        schema_version: 2,
+        schema_version: 3,
         local_document_count: summary.present_document_count,
         pending_sync_count: summary.pending_sync_count,
         disk_usage_bytes: summary
@@ -250,6 +306,54 @@ pub fn list_native_documents_page(
             .collect::<Result<Vec<_>, _>>()?,
         next_cursor: page.next_cursor,
     })
+}
+
+#[tauri::command]
+pub fn update_native_document_metadata(
+    app: AppHandle,
+    request: UpdateDocumentMetadataRequest,
+) -> Result<(), String> {
+    paths::validate_document_id(&request.document_id)?;
+    if request.owner_id.is_empty() || request.owner_id.len() > 128 {
+        return Err("Proprietário local inválido".into());
+    }
+    let pages = request
+        .pages
+        .into_iter()
+        .map(|page| catalog::DocumentPageMetadataInput {
+            page_number: page.page_number,
+            native_text: page.native_text,
+        })
+        .collect::<Vec<_>>();
+    catalog::update_document_metadata(
+        &app_paths(&app)?,
+        &request.document_id,
+        catalog::DocumentMetadataInput {
+            owner_id: request.owner_id,
+            title: request.title,
+            notebook_id: request.notebook_id,
+            page_count: request.page_count,
+            status: request.status,
+            pages,
+        },
+    )
+}
+
+#[tauri::command]
+pub fn list_native_document_pages(
+    app: AppHandle,
+    request: DocumentOwnerRequest,
+) -> Result<Vec<NativeDocumentPageMetadata>, String> {
+    paths::validate_document_id(&request.document_id)?;
+    if request.owner_id.is_empty() || request.owner_id.len() > 128 {
+        return Err("Proprietário local inválido".into());
+    }
+    Ok(
+        catalog::list_document_pages(&app_paths(&app)?, &request.document_id, &request.owner_id)?
+            .into_iter()
+            .map(Into::into)
+            .collect(),
+    )
 }
 
 #[tauri::command]

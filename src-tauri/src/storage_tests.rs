@@ -73,8 +73,8 @@ fn catalog_records_explicit_schema_migrations_and_payload_column() {
         )
         .expect("inspect sync job schema");
 
-    assert_eq!(version, 2);
-    assert_eq!(migrations, vec![1, 2]);
+    assert_eq!(version, 3);
+    assert_eq!(migrations, vec![1, 2, 3]);
     assert_eq!(payload_columns, 1);
 }
 
@@ -106,10 +106,50 @@ fn existing_v1_catalog_is_upgraded_without_losing_documents_or_jobs() {
         .expect("legacy document survives");
     let jobs = catalog::list_sync_jobs(paths, 10).expect("read upgraded jobs");
 
-    assert_eq!(version, 2);
+    assert_eq!(version, 3);
     assert_eq!(document.document_id, "doc-legacy");
     assert_eq!(jobs.len(), 1);
     assert!(jobs[0].payload_json.is_some());
+}
+
+#[test]
+fn existing_v2_catalog_is_upgraded_to_v3_and_keeps_metadata_rows() {
+    let storage_root = TestStorage::new("schema-v2-upgrade");
+    let paths = &storage_root.paths;
+    let data = b"v2 catalog document";
+
+    storage::begin_import(paths, &begin_request("doc-v2", data.len())).expect("begin import");
+    storage::append_import(paths, "doc-v2", data).expect("append import");
+    storage::finish_import(paths, "doc-v2").expect("finish import");
+
+    let connection = Connection::open(&paths.database).expect("open catalog");
+    connection
+        .execute_batch("DELETE FROM schema_migrations WHERE version = 3; DROP TABLE document_pages; PRAGMA user_version = 2;")
+        .expect("downgrade fixture to v2 metadata");
+    drop(connection);
+
+    catalog::initialize(paths).expect("upgrade v2 catalog");
+
+    let upgraded = Connection::open(&paths.database).expect("reopen catalog");
+    let version: i64 = upgraded
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .expect("read upgraded version");
+    let pages_table: i64 = upgraded
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'document_pages'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("inspect page metadata table");
+    assert_eq!(version, 3);
+    assert_eq!(pages_table, 1);
+    assert_eq!(
+        catalog::get_document(paths, "doc-v2")
+            .expect("read document")
+            .unwrap()
+            .document_id,
+        "doc-v2"
+    );
 }
 
 #[test]
@@ -190,6 +230,81 @@ fn begin_request(document_id: &str, expected_size: usize) -> BeginImportRequest 
         remote_document_id: None,
         drive_file_id: None,
     }
+}
+
+#[test]
+fn native_document_metadata_round_trip_replaces_page_snapshot_and_checks_owner() {
+    let storage_root = TestStorage::new("document-metadata");
+    let paths = &storage_root.paths;
+    let data = b"document metadata";
+    let owner_id = "11111111-1111-4111-8111-111111111111";
+
+    storage::begin_import(paths, &begin_request("doc-metadata", data.len())).expect("begin import");
+    storage::append_import(paths, "doc-metadata", data).expect("append import");
+    storage::finish_import(paths, "doc-metadata").expect("finish import");
+
+    catalog::update_document_metadata(
+        paths,
+        "doc-metadata",
+        catalog::DocumentMetadataInput {
+            owner_id: owner_id.into(),
+            title: "Caderno local".into(),
+            notebook_id: Some("notebook-local".into()),
+            page_count: 2,
+            status: "processing".into(),
+            pages: vec![
+                catalog::DocumentPageMetadataInput {
+                    page_number: 1,
+                    native_text: Some("primeira página".into()),
+                },
+                catalog::DocumentPageMetadataInput {
+                    page_number: 2,
+                    native_text: None,
+                },
+            ],
+        },
+    )
+    .expect("save metadata");
+    let document = catalog::get_document(paths, "doc-metadata")
+        .expect("read metadata document")
+        .expect("metadata document exists");
+    assert_eq!(document.title.as_deref(), Some("Caderno local"));
+    assert_eq!(document.notebook_id.as_deref(), Some("notebook-local"));
+    assert_eq!(document.page_count, 2);
+    assert_eq!(document.status.as_deref(), Some("processing"));
+    let pages = catalog::list_document_pages(paths, "doc-metadata", owner_id).expect("read pages");
+    assert_eq!(pages.len(), 2);
+    assert_eq!(pages[0].native_text.as_deref(), Some("primeira página"));
+    assert_eq!(pages[1].status, "processing");
+
+    catalog::update_document_metadata(
+        paths,
+        "doc-metadata",
+        catalog::DocumentMetadataInput {
+            owner_id: owner_id.into(),
+            title: "Caderno atualizado".into(),
+            notebook_id: None,
+            page_count: 1,
+            status: "ready".into(),
+            pages: vec![catalog::DocumentPageMetadataInput {
+                page_number: 1,
+                native_text: Some("página atualizada".into()),
+            }],
+        },
+    )
+    .expect("replace metadata");
+    let replaced =
+        catalog::list_document_pages(paths, "doc-metadata", owner_id).expect("read replaced pages");
+    assert_eq!(replaced.len(), 1);
+    assert_eq!(
+        replaced[0].native_text.as_deref(),
+        Some("página atualizada")
+    );
+    assert!(
+        catalog::list_document_pages(paths, "doc-metadata", "different-owner")
+            .expect("read pages for different owner")
+            .is_empty()
+    );
 }
 
 #[test]

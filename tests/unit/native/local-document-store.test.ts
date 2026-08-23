@@ -1,12 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
 	getNativeStatus,
+	listNativeDocumentPages,
 	listNativeDocumentsPage,
 	nativeImportRanges,
 	reconcileNativeDocuments,
 	readNativeOriginal,
 	readNativeDocumentRange,
-	resolveNativeDocument
+	resolveNativeDocument,
+	updateNativeDocumentMetadata
 } from '../../../src/lib/native/local-document-store';
 import { isNativeRuntime } from '../../../src/lib/platform/native-bridge';
 
@@ -171,6 +173,52 @@ describe('native runtime bridge', () => {
 			request: {
 				limit: 2,
 				cursor: { lastAccessedAtMs: 9, documentId: 'doc-page-z' }
+			}
+		});
+	});
+
+	it('round-trips owner-scoped document metadata and page text', async () => {
+		const invoke = vi
+			.fn()
+			.mockResolvedValueOnce(undefined)
+			.mockResolvedValueOnce([
+				{
+					documentId: 'doc-metadata',
+					pageNumber: 1,
+					nativeText: 'texto nativo',
+					status: 'ready',
+					updatedAtMs: 10
+				}
+			]);
+		root.__TAURI__ = { core: { invoke } };
+
+		await updateNativeDocumentMetadata({
+			documentId: 'doc-metadata',
+			ownerId: '11111111-1111-4111-8111-111111111111',
+			title: 'Aula local',
+			notebookId: null,
+			pageCount: 1,
+			status: 'ready',
+			pages: [{ pageNumber: 1, nativeText: 'texto nativo' }]
+		});
+		await expect(
+			listNativeDocumentPages('doc-metadata', '11111111-1111-4111-8111-111111111111')
+		).resolves.toMatchObject([{ pageNumber: 1, nativeText: 'texto nativo' }]);
+		expect(invoke).toHaveBeenNthCalledWith(1, 'update_native_document_metadata', {
+			request: {
+				documentId: 'doc-metadata',
+				ownerId: '11111111-1111-4111-8111-111111111111',
+				title: 'Aula local',
+				notebookId: null,
+				pageCount: 1,
+				status: 'ready',
+				pages: [{ pageNumber: 1, nativeText: 'texto nativo' }]
+			}
+		});
+		expect(invoke).toHaveBeenNthCalledWith(2, 'list_native_document_pages', {
+			request: {
+				documentId: 'doc-metadata',
+				ownerId: '11111111-1111-4111-8111-111111111111'
 			}
 		});
 	});
