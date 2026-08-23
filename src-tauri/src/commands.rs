@@ -131,6 +131,12 @@ pub struct MarkRemoteSyncedRequest {
     pub drive_file_id: Option<String>,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReconcileDocumentsRequest {
+    pub full_hash: bool,
+}
+
 fn app_paths(app: &AppHandle) -> Result<paths::AppPaths, String> {
     paths::ensure(app)
 }
@@ -242,6 +248,14 @@ pub fn evict_local_document(app: AppHandle, request: DocumentRequest) -> Result<
 #[tauri::command]
 pub fn native_disk_usage(app: AppHandle) -> Result<u64, String> {
     metrics::disk_usage_bytes(&app_paths(&app)?)
+}
+
+#[tauri::command]
+pub fn reconcile_native_documents(
+    app: AppHandle,
+    request: ReconcileDocumentsRequest,
+) -> Result<storage::ReconciliationSummary, String> {
+    storage::reconcile_documents(&app_paths(&app)?, request.full_hash)
 }
 
 #[tauri::command]

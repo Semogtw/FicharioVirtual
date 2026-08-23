@@ -12,6 +12,15 @@ use crate::{
 
 pub const MAX_IPC_CHUNK_BYTES: usize = 512 * 1024;
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReconciliationSummary {
+    pub inspected_documents: usize,
+    pub missing_documents: usize,
+    pub corrupt_documents: usize,
+    pub unchanged_documents: usize,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BeginImportRequest {
@@ -275,6 +284,47 @@ pub fn local_document_by_drive_file_id(
         return Ok(None);
     };
     validate_present_document(paths, document)
+}
+
+pub fn reconcile_documents(
+    paths: &AppPaths,
+    full_hash: bool,
+) -> Result<ReconciliationSummary, String> {
+    let documents = catalog::list_all_documents(paths)?;
+    let mut summary = ReconciliationSummary::default();
+
+    for document in documents {
+        if document.local_state != "present" {
+            continue;
+        }
+        summary.inspected_documents += 1;
+        let path = paths::resolve_relative(&paths.root, &document.relative_path)?;
+        let metadata = match fs::metadata(&path) {
+            Ok(value) => value,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                catalog::set_local_state(paths, &document.document_id, "missing")?;
+                summary.missing_documents += 1;
+                continue;
+            }
+            Err(error) => {
+                return Err(format!(
+                    "Não foi possível reconciliar o documento local: {error}"
+                ));
+            }
+        };
+
+        let corrupt = !metadata.is_file()
+            || metadata.len() != u64::try_from(document.size_bytes).unwrap_or(u64::MAX)
+            || (full_hash && hash_file(&path)? != document.sha256);
+        if corrupt {
+            catalog::set_local_state(paths, &document.document_id, "corrupt")?;
+            summary.corrupt_documents += 1;
+        } else {
+            summary.unchanged_documents += 1;
+        }
+    }
+
+    Ok(summary)
 }
 
 pub fn read_range(

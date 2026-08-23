@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
 	getNativeStatus,
 	nativeImportRanges,
+	reconcileNativeDocuments,
 	readNativeDocumentRange,
 	resolveNativeDocument
 } from '../../../src/lib/native/local-document-store';
@@ -51,6 +52,26 @@ describe('native runtime bridge', () => {
 		expect(bytes).toEqual(expected);
 		expect(invoke).toHaveBeenCalledWith('read_local_document_range', {
 			request: { documentId: 'doc-1', start: 4, endExclusive: 8 }
+		});
+	});
+
+	it('reconciles the complete native catalog with an optional full hash', async () => {
+		const invoke = vi.fn().mockResolvedValue({
+			inspectedDocuments: 3,
+			missingDocuments: 1,
+			corruptDocuments: 1,
+			unchangedDocuments: 1
+		});
+		root.__TAURI__ = { core: { invoke } };
+
+		await expect(reconcileNativeDocuments(true)).resolves.toEqual({
+			inspectedDocuments: 3,
+			missingDocuments: 1,
+			corruptDocuments: 1,
+			unchangedDocuments: 1
+		});
+		expect(invoke).toHaveBeenCalledWith('reconcile_native_documents', {
+			request: { fullHash: true }
 		});
 	});
 });

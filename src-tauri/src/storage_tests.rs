@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     catalog::{self, ImportSession},
-    paths::AppPaths,
+    paths::{self, AppPaths},
     recovery,
     storage::{self, BeginImportRequest},
 };
@@ -314,4 +314,54 @@ fn startup_recovery_reconstructs_file_moved_before_sqlite_commit() {
             .len(),
         1
     );
+}
+
+#[test]
+fn catalog_reconciliation_marks_missing_documents_without_promoting_files() {
+    let storage_root = TestStorage::new("reconcile-missing");
+    let paths = &storage_root.paths;
+    let data = b"document to reconcile";
+
+    storage::begin_import(paths, &begin_request("doc-reconcile-missing", data.len()))
+        .expect("begin import");
+    storage::append_import(paths, "doc-reconcile-missing", data).expect("append import");
+    let document = storage::finish_import(paths, "doc-reconcile-missing").expect("finish import");
+    let document_path = paths::resolve_relative(&paths.root, &document.relative_path)
+        .expect("resolve document path");
+    fs::remove_file(document_path).expect("remove document for reconciliation");
+
+    let summary = storage::reconcile_documents(paths, false).expect("reconcile catalog");
+    let reconciled = catalog::get_document(paths, "doc-reconcile-missing")
+        .expect("read reconciled document")
+        .expect("reconciled document exists");
+
+    assert_eq!(summary.inspected_documents, 1);
+    assert_eq!(summary.missing_documents, 1);
+    assert_eq!(summary.corrupt_documents, 0);
+    assert_eq!(reconciled.local_state, "missing");
+}
+
+#[test]
+fn catalog_reconciliation_detects_same_size_corruption_when_hash_requested() {
+    let storage_root = TestStorage::new("reconcile-corrupt");
+    let paths = &storage_root.paths;
+    let data = b"original bytes";
+
+    storage::begin_import(paths, &begin_request("doc-reconcile-corrupt", data.len()))
+        .expect("begin import");
+    storage::append_import(paths, "doc-reconcile-corrupt", data).expect("append import");
+    let document = storage::finish_import(paths, "doc-reconcile-corrupt").expect("finish import");
+    let document_path = paths::resolve_relative(&paths.root, &document.relative_path)
+        .expect("resolve document path");
+    fs::write(document_path, b"mutated bytes!").expect("mutate document without changing size");
+
+    let summary = storage::reconcile_documents(paths, true).expect("reconcile catalog");
+    let reconciled = catalog::get_document(paths, "doc-reconcile-corrupt")
+        .expect("read reconciled document")
+        .expect("reconciled document exists");
+
+    assert_eq!(summary.inspected_documents, 1);
+    assert_eq!(summary.missing_documents, 0);
+    assert_eq!(summary.corrupt_documents, 1);
+    assert_eq!(reconciled.local_state, "corrupt");
 }

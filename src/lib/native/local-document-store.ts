@@ -29,6 +29,13 @@ export type NativeStatus = Readonly<{
 	maxIpcChunkBytes: number;
 }>;
 
+export type NativeReconciliationSummary = Readonly<{
+	inspectedDocuments: number;
+	missingDocuments: number;
+	corruptDocuments: number;
+	unchangedDocuments: number;
+}>;
+
 export type NativeImportOptions = Readonly<{
 	documentId: string;
 	ownerId: string;
@@ -82,6 +89,16 @@ function validNativeDocument(value: NativeDocument | null): value is NativeDocum
 export async function getNativeStatus(): Promise<NativeStatus | null> {
 	if (!isNativeRuntime()) return null;
 	return await invokeNative<NativeStatus>('native_status');
+}
+
+export async function reconcileNativeDocuments(
+	fullHash = false
+): Promise<NativeReconciliationSummary | null> {
+	if (!isNativeRuntime()) return null;
+	return await invokeNative<NativeReconciliationSummary>(
+		'reconcile_native_documents',
+		request({ fullHash })
+	);
 }
 
 export async function resolveNativeDocument(documentId: string): Promise<NativeDocument | null> {

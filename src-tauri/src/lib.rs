@@ -23,6 +23,9 @@ pub fn run() {
                 .map_err(|error| std::io::Error::other(format!("native catalog: {error}")))?;
             recovery::recover_abandoned_imports(&paths)
                 .map_err(|error| std::io::Error::other(format!("native recovery: {error}")))?;
+            storage::reconcile_documents(&paths, false).map_err(|error| {
+                std::io::Error::other(format!("native reconciliation: {error}"))
+            })?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -38,6 +41,7 @@ pub fn run() {
             commands::verify_local_document,
             commands::evict_local_document,
             commands::native_disk_usage,
+            commands::reconcile_native_documents,
             commands::list_native_sync_jobs,
             commands::claim_native_sync_jobs,
             commands::complete_native_sync_job,

@@ -112,6 +112,8 @@ A branch já deixou de ser apenas planejamento. O núcleo abaixo existe em códi
 - `runNativeSyncWorker` é iniciado no shell nativo ao abrir, voltar ao foco, ficar visível e a cada 60 segundos;
 - o worker reconstrói o original local e reutiliza os fluxos existentes de publicação de PDF e imagem, confirma `remote_state`/`drive_file_id` e usa backoff determinístico em falhas transitórias;
 - payload inválido ou operação desconhecida é cancelado com erro persistido, evitando retry infinito;
+- a inicialização reconcilia todos os documentos marcados como presentes por tamanho/tipo de arquivo, marcando ausentes e corrompidos sem promover arquivos não catalogados;
+- o comando `reconcile_native_documents` permite uma verificação opcional por SHA-256 para diagnóstico local;
 
 **Limitação atual:** o worker é executado enquanto o shell está vivo; ainda não há um scheduler nativo equivalente a WorkManager no Android nem execução garantida depois de suspensão/encerramento forçado. O fluxo de publicação também precisa de validação em hardware e de cobertura operacional de rede/autenticação.
 
@@ -132,7 +134,7 @@ Existe workflow dedicado `.github/workflows/validate-native-app.yml` com:
 - `pnpm verify` completo;
 - `cargo fmt --check`;
 - `cargo check --locked` em Linux e Windows;
-- smoke build Android aarch64 com geração de APK de debug;
+- smoke build Android aarch64 com geração de APK de debug, disponível somente em execução manual autorizada;
 - instalação do `.deb`, validação do `.desktop` e extração do AppImage em runner Linux;
 - preservação temporária do `Cargo.lock` gerado e do APK como artifacts.
 
@@ -152,7 +154,7 @@ Prioridade alta antes de considerar o app pronto:
 
 1. adicionar scheduler nativo para retomada após suspensão/encerramento no Android e desktop;
 2. ampliar migrations versionadas para futuras mudanças de catálogo e testar upgrades de várias versões;
-3. eliminar limites de consulta que possam prejudicar bibliotecas muito grandes;
+3. substituir listagens de biblioteca por paginação/cursor para não depender de limites artificiais em acervos grandes;
 4. validar instalação/execução do bundle Linux em uma máquina desktop real além do runner;
 5. instalar e executar APK em dispositivo Android real;
 6. tratar OAuth/deep link e armazenamento seguro de credenciais especificamente no shell nativo;

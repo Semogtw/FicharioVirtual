@@ -305,6 +305,21 @@ pub fn list_documents(paths: &AppPaths, limit: usize) -> Result<Vec<DocumentRow>
         .map_err(|error| format!("Não foi possível ler a biblioteca local: {error}"))
 }
 
+pub fn list_all_documents(paths: &AppPaths) -> Result<Vec<DocumentRow>, String> {
+    let connection = open(paths)?;
+    let mut statement = connection
+        .prepare(&format!(
+            "{} ORDER BY last_accessed_at_ms DESC, document_id ASC",
+            select_document_sql()
+        ))
+        .map_err(|error| format!("Não foi possível listar a biblioteca local: {error}"))?;
+    let rows = statement
+        .query_map([], document_from_row)
+        .map_err(|error| format!("Não foi possível listar a biblioteca local: {error}"))?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("Não foi possível ler a biblioteca local: {error}"))
+}
+
 pub fn touch_document(paths: &AppPaths, document_id: &str) -> Result<(), String> {
     let connection = open(paths)?;
     let now = now_ms();
