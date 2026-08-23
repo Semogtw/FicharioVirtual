@@ -8,6 +8,7 @@ import {
 	readNativeOriginal,
 	readNativeDocumentRange,
 	resolveNativeDocument,
+	searchNativeDocumentPages,
 	updateNativeDocumentMetadata
 } from '../../../src/lib/native/local-document-store';
 import { isNativeRuntime } from '../../../src/lib/platform/native-bridge';
@@ -221,6 +222,64 @@ describe('native runtime bridge', () => {
 				ownerId: '11111111-1111-4111-8111-111111111111'
 			}
 		});
+	});
+
+	it('queries the native FTS index with bounded owner-scoped pagination', async () => {
+		const invoke = vi.fn().mockResolvedValue([
+			{
+				documentId: 'doc-search',
+				documentTitle: 'Aula local',
+				notebookId: 'notebook-1',
+				pageNumber: 2,
+				nativeText: 'Texto indexado',
+				rank: 0.25
+			}
+		]);
+		root.__TAURI__ = { core: { invoke } };
+
+		await expect(
+			searchNativeDocumentPages({
+				ownerId: 'owner-1',
+				query: '  texto  ',
+				notebookId: 'notebook-1',
+				limit: 20,
+				offset: 40
+			})
+		).resolves.toMatchObject([{ documentId: 'doc-search', pageNumber: 2 }]);
+		expect(invoke).toHaveBeenCalledWith('search_native_document_pages', {
+			request: {
+				ownerId: 'owner-1',
+				query: 'texto',
+				notebookId: 'notebook-1',
+				limit: 20,
+				offset: 40
+			}
+		});
+	});
+
+	it('rejects native search results and pagination outside the bridge contract', async () => {
+		const invoke = vi.fn().mockResolvedValue([
+			{
+				documentId: 'doc-search',
+				documentTitle: 'Aula local',
+				notebookId: null,
+				pageNumber: 1,
+				nativeText: 'Texto indexado',
+				rank: -1
+			}
+		]);
+		root.__TAURI__ = { core: { invoke } };
+
+		await expect(
+			searchNativeDocumentPages({ ownerId: 'owner-1', query: 'texto', limit: 101 })
+		).rejects.toThrow('Invalid native search limit');
+		await expect(
+			searchNativeDocumentPages({ ownerId: 'owner-1', query: 'texto', offset: -1 })
+		).rejects.toThrow('Invalid native search offset');
+		await expect(searchNativeDocumentPages({ ownerId: 'owner-1', query: 'texto' })).rejects.toThrow(
+			'Invalid native search result'
+		);
+		expect(invoke).toHaveBeenCalledTimes(1);
 	});
 });
 

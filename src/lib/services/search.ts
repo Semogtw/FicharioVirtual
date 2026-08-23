@@ -1,10 +1,5 @@
 import { z } from 'zod';
-import {
-	listNativeDocumentPages,
-	listNativeDocumentsPage,
-	type NativeDocument,
-	type NativeDocumentPageCursor
-} from '$lib/native/local-document-store';
+import { searchNativeDocumentPages, type NativeSearchPage } from '$lib/native/local-document-store';
 import { isNativeRuntime } from '$lib/platform/native-bridge';
 import { sessionState } from '$lib/stores/session.svelte';
 import { getSupabaseClient } from './supabase';
@@ -113,28 +108,6 @@ function nativeExcerpt(text: string, query: string) {
 	return `${start > 0 ? '…' : ''}${excerpt}${end < text.length ? '…' : ''}`;
 }
 
-function nativeDocumentTitle(document: NativeDocument) {
-	const title = document.title?.trim();
-	if (title) return title.slice(0, 240);
-	return document.originalFilename.replace(/\.[^.]+$/u, '').trim() || 'Documento local';
-}
-
-async function listAllNativeDocuments(ownerId: string): Promise<readonly NativeDocument[]> {
-	const documents: NativeDocument[] = [];
-	const seenCursors = new Set<string>();
-	let cursor: NativeDocumentPageCursor | null = null;
-	while (true) {
-		const page = await listNativeDocumentsPage({ limit: 1_000, cursor });
-		if (!page) return Object.freeze([]);
-		documents.push(...page.documents.filter((document) => document.ownerId === ownerId));
-		if (!page.nextCursor) return Object.freeze(documents);
-		const key = `${page.nextCursor.lastAccessedAtMs}:${page.nextCursor.documentId}`;
-		if (seenCursors.has(key)) throw new SearchServiceError();
-		seenCursors.add(key);
-		cursor = page.nextCursor;
-	}
-}
-
 async function searchNativePages(
 	query: string,
 	options: SearchOptions,
@@ -144,38 +117,26 @@ async function searchNativePages(
 	if (!isNativeRuntime()) return null;
 	const ownerId = sessionState.user?.id;
 	if (!ownerId) return null;
-	const terms = query.toLocaleLowerCase().split(/\s+/u).filter(Boolean);
-	const documents = await listAllNativeDocuments(ownerId);
-	const matches: SearchResult[] = [];
-	for (const document of documents) {
-		if (options.notebookId && document.notebookId !== options.notebookId) continue;
-		const pages = await listNativeDocumentPages(document.documentId, ownerId);
-		for (const page of pages ?? []) {
-			if (page.documentId !== document.documentId) continue;
-			const text = page.nativeText?.trim();
-			if (!text) continue;
-			const lowerText = text.toLocaleLowerCase();
-			if (!terms.every((term) => lowerText.includes(term))) continue;
-			const firstMatch = Math.max(0, ...terms.map((term) => lowerText.indexOf(term)));
-			matches.push({
-				pageId: `${document.documentId}:native:${page.pageNumber}`,
-				documentId: document.documentId,
-				documentTitle: nativeDocumentTitle(document),
-				notebookId: document.notebookId ?? null,
-				notebookName: null,
-				pageNumber: page.pageNumber,
-				excerpt: nativeExcerpt(text, query),
-				rank: 1 / (1 + firstMatch)
-			});
-		}
-	}
-	matches.sort(
-		(left, right) =>
-			right.rank - left.rank ||
-			left.documentId.localeCompare(right.documentId) ||
-			left.pageNumber - right.pageNumber
+	const pages = await searchNativeDocumentPages({
+		ownerId,
+		query,
+		notebookId: options.notebookId ?? null,
+		limit,
+		offset
+	});
+	if (!pages) return null;
+	return Object.freeze(
+		pages.map((page: NativeSearchPage) => ({
+			pageId: `${page.documentId}:native:${page.pageNumber}`,
+			documentId: page.documentId,
+			documentTitle: page.documentTitle || 'Documento local',
+			notebookId: page.notebookId,
+			notebookName: null,
+			pageNumber: page.pageNumber,
+			excerpt: nativeExcerpt(page.nativeText, query),
+			rank: page.rank
+		}))
 	);
-	return Object.freeze(matches.slice(offset, offset + limit));
 }
 
 export async function searchPages(

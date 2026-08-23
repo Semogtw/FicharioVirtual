@@ -150,41 +150,19 @@ describe('searchPages', () => {
 		sessionState.user = { id: ownerId } as never;
 		Object.defineProperty(globalThis.navigator, 'onLine', { value: false, configurable: true });
 		const invoke = vi.fn((command: string) => {
-			if (command === 'list_native_documents_page') {
-				return Promise.resolve({
-					documents: [
-						{
-							documentId,
-							ownerId,
-							originalFilename: 'Aula.pdf',
-							mimeType: 'application/pdf',
-							sizeBytes: 12,
-							sha256: 'a'.repeat(64),
-							localState: 'present',
-							remoteState: 'synced',
-							remoteDocumentId: documentId,
-							driveFileId: null,
-							createdAtMs: 1,
-							updatedAtMs: 1,
-							lastAccessedAtMs: 1,
-							title: 'Biologia',
-							notebookId: null,
-							pageCount: 1,
-							status: 'ready'
-						}
-					],
-					nextCursor: null
-				});
+			if (command === 'search_native_document_pages') {
+				return Promise.resolve([
+					{
+						documentId,
+						documentTitle: 'Biologia',
+						notebookId: null,
+						pageNumber: 1,
+						nativeText: 'A fotossíntese ocorre no cloroplasto.',
+						rank: 1
+					}
+				]);
 			}
-			return Promise.resolve([
-				{
-					documentId,
-					pageNumber: 1,
-					nativeText: 'A fotossíntese ocorre no cloroplasto.',
-					status: 'ready',
-					updatedAtMs: 1
-				}
-			]);
+			return Promise.resolve(undefined);
 		});
 		root.__TAURI__ = { core: { invoke } };
 
@@ -196,11 +174,14 @@ describe('searchPages', () => {
 				excerpt: 'A fotossíntese ocorre no cloroplasto.'
 			}
 		]);
-		expect(invoke).toHaveBeenNthCalledWith(1, 'list_native_documents_page', {
-			request: { limit: 1_000, cursor: null }
-		});
-		expect(invoke).toHaveBeenNthCalledWith(2, 'list_native_document_pages', {
-			request: { documentId, ownerId }
+		expect(invoke).toHaveBeenNthCalledWith(1, 'search_native_document_pages', {
+			request: {
+				ownerId,
+				query: 'fotossíntese',
+				notebookId: null,
+				limit: 10,
+				offset: 0
+			}
 		});
 	});
 });

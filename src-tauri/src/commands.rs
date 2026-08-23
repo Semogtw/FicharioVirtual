@@ -195,6 +195,40 @@ pub struct DocumentOwnerRequest {
     pub owner_id: String,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchNativePagesRequest {
+    pub owner_id: String,
+    pub query: String,
+    pub notebook_id: Option<String>,
+    pub limit: Option<usize>,
+    pub offset: Option<usize>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeSearchPage {
+    pub document_id: String,
+    pub document_title: String,
+    pub notebook_id: Option<String>,
+    pub page_number: i64,
+    pub native_text: String,
+    pub rank: f64,
+}
+
+impl From<catalog::DocumentSearchPageRow> for NativeSearchPage {
+    fn from(value: catalog::DocumentSearchPageRow) -> Self {
+        Self {
+            document_id: value.document_id,
+            document_title: value.document_title,
+            notebook_id: value.notebook_id,
+            page_number: value.page_number,
+            native_text: value.native_text,
+            rank: value.rank,
+        }
+    }
+}
+
 impl From<catalog::DocumentPageMetadataRow> for NativeDocumentPageMetadata {
     fn from(value: catalog::DocumentPageMetadataRow) -> Self {
         Self {
@@ -217,7 +251,7 @@ pub fn native_status(app: AppHandle) -> Result<NativeStatus, String> {
     let summary = metrics::read(&paths)?;
     Ok(NativeStatus {
         platform: std::env::consts::OS.to_string(),
-        schema_version: 3,
+        schema_version: 4,
         local_document_count: summary.present_document_count,
         pending_sync_count: summary.pending_sync_count,
         disk_usage_bytes: summary
@@ -354,6 +388,30 @@ pub fn list_native_document_pages(
             .map(Into::into)
             .collect(),
     )
+}
+
+#[tauri::command]
+pub fn search_native_document_pages(
+    app: AppHandle,
+    request: SearchNativePagesRequest,
+) -> Result<Vec<NativeSearchPage>, String> {
+    if request.owner_id.is_empty() || request.owner_id.len() > 128 {
+        return Err("Proprietário local inválido".into());
+    }
+    if request.query.trim().is_empty() || request.query.len() > 200 {
+        return Err("Consulta local inválida".into());
+    }
+    Ok(catalog::search_document_pages(
+        &app_paths(&app)?,
+        &request.owner_id,
+        &request.query,
+        request.limit.unwrap_or(30),
+        request.offset.unwrap_or(0),
+        request.notebook_id.as_deref(),
+    )?
+    .into_iter()
+    .map(Into::into)
+    .collect())
 }
 
 #[tauri::command]

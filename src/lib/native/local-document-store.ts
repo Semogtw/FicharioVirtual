@@ -43,6 +43,15 @@ export type NativeDocumentMetadataInput = Readonly<{
 	pages?: readonly Readonly<{ pageNumber: number; nativeText: string | null }>[];
 }>;
 
+export type NativeSearchPage = Readonly<{
+	documentId: string;
+	documentTitle: string;
+	notebookId: string | null;
+	pageNumber: number;
+	nativeText: string;
+	rank: number;
+}>;
+
 export type NativeDocumentPageCursor = Readonly<{
 	lastAccessedAtMs: number;
 	documentId: string;
@@ -152,6 +161,29 @@ function validNativeDocumentPageMetadata(value: unknown): value is NativeDocumen
 			row.status === 'failed') &&
 		Number.isSafeInteger(row.updatedAtMs) &&
 		(row.updatedAtMs as number) >= 0
+	);
+}
+
+function validNativeSearchPage(value: unknown): value is NativeSearchPage {
+	if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+	const row = value as Partial<NativeSearchPage>;
+	return (
+		typeof row.documentId === 'string' &&
+		row.documentId.length > 0 &&
+		row.documentId.length <= 128 &&
+		typeof row.documentTitle === 'string' &&
+		row.documentTitle.length <= 240 &&
+		(row.notebookId === null ||
+			(typeof row.notebookId === 'string' && row.notebookId.length <= 128)) &&
+		Number.isSafeInteger(row.pageNumber) &&
+		(row.pageNumber as number) >= 1 &&
+		(row.pageNumber as number) <= 10_000 &&
+		typeof row.nativeText === 'string' &&
+		row.nativeText.length > 0 &&
+		row.nativeText.length <= 1_000_000 &&
+		typeof row.rank === 'number' &&
+		Number.isFinite(row.rank) &&
+		row.rank >= 0
 	);
 }
 
@@ -327,6 +359,44 @@ export async function updateNativeDocumentMetadata(
 			pages: pages.map((page) => ({ pageNumber: page.pageNumber, nativeText: page.nativeText }))
 		})
 	);
+}
+
+export async function searchNativeDocumentPages(options: {
+	ownerId: string;
+	query: string;
+	notebookId?: string | null;
+	limit?: number;
+	offset?: number;
+}): Promise<readonly NativeSearchPage[] | null> {
+	if (!isNativeRuntime()) return null;
+	if (options.ownerId.trim().length === 0 || options.ownerId.length > 128) {
+		throw new TypeError('Invalid native document owner');
+	}
+	if (options.query.trim().length === 0 || options.query.length > 200) {
+		throw new TypeError('Invalid native search query');
+	}
+	const limit = options.limit ?? 30;
+	if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+		throw new TypeError('Invalid native search limit');
+	}
+	const offset = options.offset ?? 0;
+	if (!Number.isSafeInteger(offset) || offset < 0 || offset > 10_000) {
+		throw new TypeError('Invalid native search offset');
+	}
+	const result = await invokeNative<unknown>(
+		'search_native_document_pages',
+		request({
+			ownerId: options.ownerId,
+			query: options.query.trim(),
+			notebookId: options.notebookId ?? null,
+			limit,
+			offset
+		})
+	);
+	if (!Array.isArray(result) || !result.every(validNativeSearchPage)) {
+		throw new TypeError('Invalid native search result');
+	}
+	return Object.freeze(result as NativeSearchPage[]);
 }
 
 export async function importFileIntoNativeStore(

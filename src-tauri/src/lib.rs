@@ -68,6 +68,7 @@ pub fn run() {
             commands::list_native_documents_page,
             commands::update_native_document_metadata,
             commands::list_native_document_pages,
+            commands::search_native_document_pages,
             commands::read_local_document_range,
             commands::verify_local_document,
             commands::evict_local_document,

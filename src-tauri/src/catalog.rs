@@ -42,6 +42,16 @@ pub struct DocumentPageMetadataInput {
 }
 
 #[derive(Clone, Debug)]
+pub struct DocumentSearchPageRow {
+    pub document_id: String,
+    pub document_title: String,
+    pub notebook_id: Option<String>,
+    pub page_number: i64,
+    pub native_text: String,
+    pub rank: f64,
+}
+
+#[derive(Clone, Debug)]
 pub struct DocumentMetadataInput {
     pub owner_id: String,
     pub title: String,
@@ -122,23 +132,30 @@ pub fn initialize(paths: &AppPaths) -> Result<(), String> {
     let version: i64 = connection
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .map_err(|error| format!("Não foi possível ler a versão do catálogo local: {error}"))?;
-    if version > 3 {
+    if version > 4 {
         return Err(format!(
             "Catálogo local criado por uma versão mais nova do Fichário (schema {version})"
         ));
     }
+    if version == 4 {
+        reset_abandoned_sync_jobs(paths)?;
+        return Ok(());
+    }
     if version == 3 {
+        migrate_to_v4(&mut connection)?;
         reset_abandoned_sync_jobs(paths)?;
         return Ok(());
     }
     if version == 2 {
         migrate_to_v3(&mut connection)?;
+        migrate_to_v4(&mut connection)?;
         reset_abandoned_sync_jobs(paths)?;
         return Ok(());
     }
     if version == 1 {
         migrate_to_v2(&mut connection)?;
         migrate_to_v3(&mut connection)?;
+        migrate_to_v4(&mut connection)?;
         reset_abandoned_sync_jobs(paths)?;
         return Ok(());
     }
@@ -211,6 +228,7 @@ PRAGMA user_version = 1;
         .map_err(|error| format!("Não foi possível concluir a migração local: {error}"))?;
     migrate_to_v2(&mut connection)?;
     migrate_to_v3(&mut connection)?;
+    migrate_to_v4(&mut connection)?;
     reset_abandoned_sync_jobs(paths)?;
     Ok(())
 }
@@ -284,6 +302,54 @@ CREATE INDEX IF NOT EXISTS document_pages_text_idx ON document_pages(document_id
         })?;
     transaction.commit().map_err(|error| {
         format!("Não foi possível concluir a migration de metadados locais: {error}")
+    })?;
+    Ok(())
+}
+
+fn migrate_to_v4(connection: &mut Connection) -> Result<(), String> {
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("Não foi possível iniciar a migration de busca local: {error}"))?;
+    transaction
+        .execute_batch(
+            r#"
+CREATE VIRTUAL TABLE IF NOT EXISTS document_pages_fts USING fts5(
+    document_id UNINDEXED,
+    page_number UNINDEXED,
+    native_text,
+    tokenize = 'unicode61 remove_diacritics 2'
+);
+DELETE FROM document_pages_fts;
+INSERT INTO document_pages_fts (document_id, page_number, native_text)
+SELECT document_id, page_number, native_text
+FROM document_pages
+WHERE native_text IS NOT NULL AND length(native_text) > 0;
+"#,
+        )
+        .map_err(|error| format!("Não foi possível criar o índice de busca local: {error}"))?;
+    let migration_exists: Option<i64> = transaction
+        .query_row(
+            "SELECT version FROM schema_migrations WHERE version = 4",
+            [],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| format!("Não foi possível ler o histórico de migrations: {error}"))?;
+    if migration_exists.is_none() {
+        transaction
+            .execute(
+                "INSERT INTO schema_migrations (version, applied_at_ms) VALUES (4, ?1)",
+                [now_ms()],
+            )
+            .map_err(|error| format!("Não foi possível registrar a migration de busca: {error}"))?;
+    }
+    transaction
+        .execute_batch("PRAGMA user_version = 4;")
+        .map_err(|error| {
+            format!("Não foi possível atualizar a versão do catálogo local: {error}")
+        })?;
+    transaction.commit().map_err(|error| {
+        format!("Não foi possível concluir a migration de busca local: {error}")
     })?;
     Ok(())
 }
@@ -888,6 +954,18 @@ pub fn update_document_metadata(
             })?;
     }
     transaction
+        .execute(
+            "DELETE FROM document_pages_fts WHERE document_id = ?1",
+            [document_id],
+        )
+        .map_err(|error| format!("Não foi possível atualizar a busca local: {error}"))?;
+    transaction
+        .execute(
+            "INSERT INTO document_pages_fts (document_id, page_number, native_text) SELECT document_id, page_number, native_text FROM document_pages WHERE document_id = ?1 AND native_text IS NOT NULL AND length(native_text) > 0",
+            [document_id],
+        )
+        .map_err(|error| format!("Não foi possível indexar o texto local: {error}"))?;
+    transaction
         .commit()
         .map_err(|error| format!("Não foi possível confirmar os metadados locais: {error}"))?;
     Ok(())
@@ -912,6 +990,67 @@ pub fn list_document_pages(
         .map_err(|error| format!("Não foi possível consultar as páginas locais: {error}"))?;
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(|error| format!("Não foi possível ler as páginas locais: {error}"))
+}
+
+fn safe_fts_query(query: &str) -> Result<String, String> {
+    let terms = query
+        .split_whitespace()
+        .filter_map(|term| {
+            let normalized: String = term
+                .chars()
+                .filter(|value| value.is_alphanumeric())
+                .collect();
+            (!normalized.is_empty()).then(|| format!("\"{normalized}\"*"))
+        })
+        .collect::<Vec<_>>();
+    if terms.is_empty() {
+        return Err("Consulta local vazia".into());
+    }
+    Ok(terms.join(" AND "))
+}
+
+pub fn search_document_pages(
+    paths: &AppPaths,
+    owner_id: &str,
+    query: &str,
+    limit: usize,
+    offset: usize,
+    notebook_id: Option<&str>,
+) -> Result<Vec<DocumentSearchPageRow>, String> {
+    if query.trim().is_empty() || query.len() > 200 {
+        return Err("Consulta local inválida".into());
+    }
+    let fts_query = safe_fts_query(query)?;
+    let connection = open(paths)?;
+    let mut statement = connection
+        .prepare(
+            "SELECT f.document_id, d.title, d.notebook_id, f.page_number, f.native_text, bm25(document_pages_fts) FROM document_pages_fts AS f INNER JOIN documents AS d ON d.document_id = f.document_id WHERE document_pages_fts MATCH ?1 AND d.owner_id = ?2 AND (?3 IS NULL OR d.notebook_id = ?3) ORDER BY bm25(document_pages_fts) ASC, f.document_id ASC, f.page_number ASC LIMIT ?4 OFFSET ?5",
+        )
+        .map_err(|error| format!("Não foi possível preparar a busca local: {error}"))?;
+    let rows = statement
+        .query_map(
+            params![
+                fts_query,
+                owner_id,
+                notebook_id,
+                limit.clamp(1, 100) as i64,
+                offset.min(10_000) as i64
+            ],
+            |row| {
+                let score: f64 = row.get(5)?;
+                Ok(DocumentSearchPageRow {
+                    document_id: row.get(0)?,
+                    document_title: row.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                    notebook_id: row.get(2)?,
+                    page_number: row.get(3)?,
+                    native_text: row.get(4)?,
+                    rank: -score,
+                })
+            },
+        )
+        .map_err(|error| format!("Não foi possível consultar a busca local: {error}"))?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("Não foi possível ler os resultados locais: {error}"))
 }
 
 fn sync_job_from_row(row: &Row<'_>) -> rusqlite::Result<SyncJob> {

@@ -73,8 +73,8 @@ fn catalog_records_explicit_schema_migrations_and_payload_column() {
         )
         .expect("inspect sync job schema");
 
-    assert_eq!(version, 3);
-    assert_eq!(migrations, vec![1, 2, 3]);
+    assert_eq!(version, 4);
+    assert_eq!(migrations, vec![1, 2, 3, 4]);
     assert_eq!(payload_columns, 1);
 }
 
@@ -106,7 +106,7 @@ fn existing_v1_catalog_is_upgraded_without_losing_documents_or_jobs() {
         .expect("legacy document survives");
     let jobs = catalog::list_sync_jobs(paths, 10).expect("read upgraded jobs");
 
-    assert_eq!(version, 3);
+    assert_eq!(version, 4);
     assert_eq!(document.document_id, "doc-legacy");
     assert_eq!(jobs.len(), 1);
     assert!(jobs[0].payload_json.is_some());
@@ -124,7 +124,7 @@ fn existing_v2_catalog_is_upgraded_to_v3_and_keeps_metadata_rows() {
 
     let connection = Connection::open(&paths.database).expect("open catalog");
     connection
-        .execute_batch("DELETE FROM schema_migrations WHERE version = 3; DROP TABLE document_pages; PRAGMA user_version = 2;")
+        .execute_batch("DELETE FROM schema_migrations WHERE version >= 3; DROP TABLE document_pages; PRAGMA user_version = 2;")
         .expect("downgrade fixture to v2 metadata");
     drop(connection);
 
@@ -141,7 +141,7 @@ fn existing_v2_catalog_is_upgraded_to_v3_and_keeps_metadata_rows() {
             |row| row.get(0),
         )
         .expect("inspect page metadata table");
-    assert_eq!(version, 3);
+    assert_eq!(version, 4);
     assert_eq!(pages_table, 1);
     assert_eq!(
         catalog::get_document(paths, "doc-v2")
@@ -276,6 +276,10 @@ fn native_document_metadata_round_trip_replaces_page_snapshot_and_checks_owner()
     assert_eq!(pages.len(), 2);
     assert_eq!(pages[0].native_text.as_deref(), Some("primeira página"));
     assert_eq!(pages[1].status, "processing");
+    let search = catalog::search_document_pages(paths, owner_id, "primeira", 10, 0, None)
+        .expect("search local page text");
+    assert_eq!(search.len(), 1);
+    assert_eq!(search[0].page_number, 1);
 
     catalog::update_document_metadata(
         paths,
@@ -299,6 +303,11 @@ fn native_document_metadata_round_trip_replaces_page_snapshot_and_checks_owner()
     assert_eq!(
         replaced[0].native_text.as_deref(),
         Some("página atualizada")
+    );
+    assert!(
+        catalog::search_document_pages(paths, owner_id, "primeira", 10, 0, None)
+            .expect("search replaced page text")
+            .is_empty()
     );
     assert!(
         catalog::list_document_pages(paths, "doc-metadata", "different-owner")
