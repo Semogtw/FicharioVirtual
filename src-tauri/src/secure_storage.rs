@@ -141,4 +141,42 @@ mod tests {
         assert!(validate_value(&"x".repeat(MAX_VALUE_BYTES)).is_ok());
         assert!(validate_value(&"x".repeat(MAX_VALUE_BYTES + 1)).is_err());
     }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "requires a desktop Secret Service/libsecret session"]
+    fn linux_keyring_round_trip_when_desktop_keyring_is_available() {
+        struct Cleanup<'a>(&'a str);
+
+        impl Drop for Cleanup<'_> {
+            fn drop(&mut self) {
+                let _ = super::platform::remove(self.0);
+            }
+        }
+
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after Unix epoch")
+            .as_nanos();
+        let key = format!("sb-fichario-linux-smoke-{}-{timestamp}", std::process::id());
+        let value = "fichario-rust-linux-smoke-value";
+        let _cleanup = Cleanup(&key);
+
+        assert_eq!(
+            super::platform::get(&key).expect("precondition lookup"),
+            None
+        );
+        super::platform::set(&key, value).expect("Secret Service set");
+        assert_eq!(
+            super::platform::get(&key).expect("Secret Service get"),
+            Some(value.into())
+        );
+        super::platform::remove(&key).expect("Secret Service remove");
+        assert_eq!(
+            super::platform::get(&key).expect("postcondition lookup"),
+            None
+        );
+    }
 }
