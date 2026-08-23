@@ -325,6 +325,40 @@ export async function readNativeDocumentBlob(document: NativeDocument): Promise<
 	return new Blob(parts, { type: document.mimeType });
 }
 
+export async function readNativeOriginal(
+	documentId: string,
+	expectedMime: string,
+	maximumBytes: number
+): Promise<Blob | null> {
+	if (!isNativeRuntime()) return null;
+	if (expectedMime.length === 0 || !Number.isSafeInteger(maximumBytes) || maximumBytes < 1) {
+		throw new TypeError('Invalid native original constraints');
+	}
+	let document: NativeDocument | null;
+	try {
+		document = await resolveNativeDocument(documentId);
+	} catch {
+		return null;
+	}
+	const mimeMatches = expectedMime.endsWith('/*')
+		? document?.mimeType.startsWith(expectedMime.slice(0, -1))
+		: document?.mimeType === expectedMime;
+	if (
+		!document ||
+		document.localState !== 'present' ||
+		!mimeMatches ||
+		document.sizeBytes > maximumBytes
+	) {
+		return null;
+	}
+	try {
+		const blob = await readNativeDocumentBlob(document);
+		return blob.size === document.sizeBytes ? blob : null;
+	} catch {
+		return null;
+	}
+}
+
 export async function verifyNativeDocument(documentId: string, fullHash = false) {
 	if (!isNativeRuntime()) return false;
 	return await invokeNative<boolean>('verify_local_document', request({ documentId, fullHash }));

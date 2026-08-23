@@ -87,6 +87,8 @@ A branch já deixou de ser apenas planejamento. O núcleo abaixo existe em códi
 - arquivo completo local evita `drive-media`;
 - leitura por faixa local evita `drive-media`;
 - PDF.js recebe faixas do arquivo nativo por `PDFDataRangeTransport`, sem exigir carregar PDFs grandes inteiros na memória;
+- o `DocumentMediaViewer` consulta o catálogo nativo antes de buscar resumos/metadados remotos; PDFs presentes usam `NativePdfDataRangeTransport` e imagens presentes usam o original local antes do fallback Drive/Supabase;
+- falhas transitórias do catálogo nativo são tratadas como cache miss, preservando o fallback remoto quando ele existir;
 - testes unitários provam que o fast path local não chama a função remota;
 - se o original não existe localmente, o fluxo web/Drive continua funcionando como fallback;
 - downloads remotos completos compatíveis aquecem o cache nativo em best effort.
@@ -179,13 +181,14 @@ Prioridade alta antes de considerar o app pronto:
 1. adicionar scheduler nativo para retomada após suspensão/encerramento no Android e desktop;
 2. ampliar migrations versionadas para futuras mudanças de catálogo e testar upgrades de várias versões;
 3. migrar eventuais consumidores legados para `list_native_documents_page` e validar acervos grandes com fixtures de paginação;
-4. validar instalação/execução do bundle Linux em uma máquina desktop real além do runner;
-5. instalar e executar APK em dispositivo Android real;
-6. concluir OAuth/deep link e o adapter de armazenamento seguro Android; o adapter Linux já está implementado e teve o ciclo operacional `keyring` validado em sessão desktop, mas o login/refresh Supabase completo ainda precisa de execução autenticada;
-7. signing de Android e Windows, política de update e checksums;
-8. validar falta de espaço, crash durante cópia, perda de rede e expiração de autenticação;
-9. medir abertura local em hardware real e registrar p50/p95;
-10. validar atualizações/rollback com artefatos assinados.
+4. persistir metadados locais de documento/página suficientes para biblioteca, busca e destaques offline após reinício/sem sessão remota;
+5. validar instalação/execução do bundle Linux em uma máquina desktop real além do runner;
+6. instalar e executar APK em dispositivo Android real;
+7. concluir OAuth/deep link e o adapter de armazenamento seguro Android; o adapter Linux já está implementado e teve o ciclo operacional `keyring` validado em sessão desktop, mas o login/refresh Supabase completo ainda precisa de execução autenticada;
+8. signing de Android e Windows, política de update e checksums;
+9. validar falta de espaço, crash durante cópia, perda de rede e expiração de autenticação;
+10. medir abertura local em hardware real e registrar p50/p95;
+11. validar atualizações/rollback com artefatos assinados.
 
 ## Invariantes que não podem regredir
 

@@ -6,6 +6,10 @@
 	import type { PageDetail } from '$lib/domain/page';
 	import type { WordGeometry } from '$lib/ocr/word-geometry';
 	import { openDrivePdfRangeDocument } from '$lib/pdf/drive-range-transport';
+	import {
+		openNativePdfRangeDocument,
+		type NativePdfRangeDocument
+	} from '$lib/pdf/native-range-transport';
 	import { renderPdfDocumentPage, renderPdfPage } from '$lib/pdf/renderer';
 	import {
 		extractPdfDocumentWordGeometry,
@@ -17,6 +21,7 @@
 		writeLocalMediaPreview,
 		type MediaPreviewCacheKey
 	} from '$lib/pwa/media-preview-cache';
+	import { readNativeOriginal, resolveNativeDocument } from '$lib/native/local-document-store';
 	import {
 		loadDocumentPage,
 		type DocumentDetail,
@@ -24,6 +29,7 @@
 	} from '$lib/services/document-detail';
 	import { getSupabaseClient } from '$lib/services/supabase';
 	import { sessionState } from '$lib/stores/session.svelte';
+	import { isNativeRuntime } from '$lib/platform/native-bridge';
 
 	interface DocumentMediaViewerProps {
 		detail: DocumentDetail;
@@ -60,6 +66,10 @@
 	let processing = false;
 	let generation = 0;
 	let supabasePdfFile: File | null = null;
+	let nativePdfDocument: NativePdfRangeDocument | null = null;
+	let nativePdfChecked = false;
+	let nativeImageBlob: Blob | null = null;
+	let nativeImageChecked = false;
 	let drivePdfFile: File | null = null;
 	let drivePdfSize: number | null | undefined = undefined;
 	const ownedObjectUrls = new Map<string, string>();
@@ -84,6 +94,12 @@
 	function resetMediaCaches() {
 		releaseObjectUrls();
 		supabasePdfFile = null;
+		const previousNativePdfDocument = nativePdfDocument;
+		nativePdfDocument = null;
+		if (previousNativePdfDocument) void previousNativePdfDocument.destroy();
+		nativePdfChecked = false;
+		nativeImageBlob = null;
+		nativeImageChecked = false;
 		drivePdfFile = null;
 		drivePdfSize = undefined;
 	}
@@ -91,7 +107,9 @@
 	function resetRenderedPages() {
 		resetMediaCaches();
 		const directImageUrl =
-			detail.kind === 'image' && detail.originalReference.provider === 'supabase'
+			!isNativeRuntime() &&
+			detail.kind === 'image' &&
+			detail.originalReference.provider === 'supabase'
 				? detail.originalReference.url
 				: null;
 		renderedPages = pages.map((page) => ({
@@ -274,6 +292,51 @@
 		return drivePdfSize;
 	}
 
+	async function ensureNativePdfRangeDocument(
+		expectedGeneration: number,
+		expectedRevision: string
+	) {
+		if (nativePdfChecked) return nativePdfDocument;
+		nativePdfChecked = true;
+		try {
+			const local = await resolveNativeDocument(detail.id);
+			if (refreshIsStale(expectedGeneration, expectedRevision)) return null;
+			if (!local || local.localState !== 'present' || local.mimeType !== 'application/pdf') {
+				return null;
+			}
+			const opened = await openNativePdfRangeDocument({
+				documentId: local.documentId,
+				totalBytes: local.sizeBytes
+			});
+			if (refreshIsStale(expectedGeneration, expectedRevision)) {
+				await opened.destroy();
+				return null;
+			}
+			nativePdfDocument = opened;
+			return nativePdfDocument;
+		} catch {
+			return null;
+		}
+	}
+
+	function localPageDetail(page: DocumentPageSummary): PageDetail {
+		return Object.freeze({
+			id: page.id,
+			pageNumber: page.pageNumber,
+			correctedText: null,
+			nativeText: null,
+			ocrRawText: null,
+			text: '',
+			extractionSource: null,
+			sourceDriveFileId: page.sourceDriveFileId,
+			wordGeometry: EMPTY_GEOMETRY,
+			warnings: Object.freeze([]),
+			status: page.status,
+			wasManuallyReviewed: false,
+			updatedAt: page.updatedAt
+		});
+	}
+
 	async function ensureSupabasePdfFile() {
 		if (supabasePdfFile) return supabasePdfFile;
 		if (detail.originalReference.provider !== 'supabase') throw new Error('PDF indisponível');
@@ -383,6 +446,21 @@
 			if (refreshIsStale(expectedGeneration, expectedRevision)) return;
 			if (cached) {
 				publishImagePage(page, cached, expectedGeneration, expectedRevision);
+				return;
+			}
+			if (page.pageNumber === 1 && !nativeImageChecked) {
+				nativeImageChecked = true;
+				const localImageBlob = await readNativeOriginal(
+					detail.id,
+					'image/*',
+					2 * 1024 * 1024 * 1024
+				);
+				if (refreshIsStale(expectedGeneration, expectedRevision)) return;
+				nativeImageBlob = localImageBlob;
+			}
+			if (page.pageNumber === 1 && nativeImageBlob) {
+				publishImagePage(page, nativeImageBlob, expectedGeneration, expectedRevision);
+				void cacheImagePreview(page, nativeImageBlob);
 				return;
 			}
 			const pageDriveFileId =
@@ -527,6 +605,25 @@
 	) {
 		if (detail.kind === 'image') {
 			await processImageBatch(pageNumbers, expectedGeneration, expectedRevision);
+			return;
+		}
+		const nativeDocument = await ensureNativePdfRangeDocument(expectedGeneration, expectedRevision);
+		if (nativeDocument) {
+			const targets = pageNumbers
+				.map((pageNumber) => pages.find((page) => page.pageNumber === pageNumber) ?? null)
+				.filter((page): page is DocumentPageSummary => page !== null)
+				.map((page) =>
+					initialPageDetail?.pageNumber === page.pageNumber
+						? initialPageDetail
+						: localPageDetail(page)
+				);
+			targets.forEach((page) => updateRendered(page.pageNumber, { loading: true, error: null }));
+			await renderPdfDocumentTargets(
+				nativeDocument.document,
+				targets,
+				expectedGeneration,
+				expectedRevision
+			);
 			return;
 		}
 

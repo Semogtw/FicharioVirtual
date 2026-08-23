@@ -4,6 +4,7 @@ import {
 	listNativeDocumentsPage,
 	nativeImportRanges,
 	reconcileNativeDocuments,
+	readNativeOriginal,
 	readNativeDocumentRange,
 	resolveNativeDocument
 } from '../../../src/lib/native/local-document-store';
@@ -53,6 +54,50 @@ describe('native runtime bridge', () => {
 		expect(bytes).toEqual(expected);
 		expect(invoke).toHaveBeenCalledWith('read_local_document_range', {
 			request: { documentId: 'doc-1', start: 4, endExclusive: 8 }
+		});
+	});
+
+	it('reads a present native original for the offline viewer before any remote request', async () => {
+		const invoke = vi
+			.fn()
+			.mockResolvedValueOnce({
+				documentId: 'doc-1',
+				ownerId: '11111111-1111-4111-8111-111111111111',
+				originalFilename: 'documento.png',
+				mimeType: 'image/png',
+				sizeBytes: 4,
+				sha256: 'a'.repeat(64),
+				localState: 'present',
+				remoteState: 'synced',
+				remoteDocumentId: 'doc-1',
+				driveFileId: null,
+				createdAtMs: 1,
+				updatedAtMs: 1,
+				lastAccessedAtMs: 1
+			})
+			.mockResolvedValueOnce(Uint8Array.from([1, 2, 3, 4]).buffer);
+		root.__TAURI__ = { core: { invoke } };
+
+		const original = await readNativeOriginal('doc-1', 'image/*', 16);
+
+		expect(original).not.toBeNull();
+		expect(original?.type).toBe('image/png');
+		expect([...new Uint8Array(await original!.arrayBuffer())]).toEqual([1, 2, 3, 4]);
+		expect(invoke).toHaveBeenNthCalledWith(1, 'get_local_document', {
+			request: { documentId: 'doc-1' }
+		});
+		expect(invoke).toHaveBeenNthCalledWith(2, 'read_local_document_range', {
+			request: { documentId: 'doc-1', start: 0, endExclusive: 4 }
+		});
+	});
+
+	it('treats native catalog failures as a cache miss so remote fallback can continue', async () => {
+		const invoke = vi.fn().mockRejectedValue(new Error('catalog unavailable'));
+		root.__TAURI__ = { core: { invoke } };
+
+		await expect(readNativeOriginal('doc-1', 'image/*', 16)).resolves.toBeNull();
+		expect(invoke).toHaveBeenCalledWith('get_local_document', {
+			request: { documentId: 'doc-1' }
 		});
 	});
 

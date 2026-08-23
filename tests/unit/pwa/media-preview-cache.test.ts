@@ -26,6 +26,32 @@ describe('local media preview cache', () => {
 		expect(viewer).toContain('cachePdfPreview(page, blob)');
 	});
 
+	it('opens a native PDF before requesting remote page metadata', () => {
+		const processLookup = viewer.indexOf('async function processBatch(');
+		const nativeLookup = viewer.indexOf(
+			'const nativeDocument = await ensureNativePdfRangeDocument(',
+			processLookup
+		);
+		const cacheLookup = viewer.indexOf(
+			'const uncachedPageNumbers = await publishCachedPdfSummaries(',
+			processLookup
+		);
+
+		expect(nativeLookup).toBeGreaterThan(-1);
+		expect(nativeLookup).toBeLessThan(cacheLookup);
+		expect(viewer).toContain('localPageDetail(page)');
+		expect(viewer).toContain('openNativePdfRangeDocument');
+	});
+
+	it('does not prefill a remote image URL in the native viewer', () => {
+		const resetLookup = viewer.indexOf('function resetRenderedPages()');
+		const directUrlLookup = viewer.indexOf('const directImageUrl =', resetLookup);
+		const nativeRuntimeLookup = viewer.indexOf('isNativeRuntime()', directUrlLookup);
+
+		expect(resetLookup).toBeGreaterThan(-1);
+		expect(nativeRuntimeLookup).toBeGreaterThan(directUrlLookup);
+	});
+
 	it('stores a compact representation instead of copying downloaded image originals', () => {
 		expect(viewer).toContain('createLocalImagePreview(blob)');
 		expect(viewer).not.toContain('writeLocalMediaPreview(key, blob);\n\t\tconst pageDriveFileId');
