@@ -136,11 +136,20 @@ function validNativeDocumentPageMetadata(value: unknown): value is NativeDocumen
 	const row = value as Partial<NativeDocumentPageMetadata>;
 	return (
 		typeof row.documentId === 'string' &&
+		row.documentId.length > 0 &&
+		row.documentId.length <= 128 &&
 		Number.isSafeInteger(row.pageNumber) &&
 		(row.pageNumber as number) >= 1 &&
 		(row.pageNumber as number) <= 10_000 &&
-		(row.nativeText === null || typeof row.nativeText === 'string') &&
-		typeof row.status === 'string' &&
+		(row.nativeText === null ||
+			(typeof row.nativeText === 'string' && row.nativeText.length <= 1_000_000)) &&
+		(row.status === 'pending' ||
+			row.status === 'processing' ||
+			row.status === 'ready' ||
+			row.status === 'retryable' ||
+			row.status === 'blocked_quota' ||
+			row.status === 'needs_review' ||
+			row.status === 'failed') &&
 		Number.isSafeInteger(row.updatedAtMs) &&
 		(row.updatedAtMs as number) >= 0
 	);
@@ -266,6 +275,9 @@ export async function listNativeDocumentPages(
 	ownerId: string
 ): Promise<readonly NativeDocumentPageMetadata[] | null> {
 	if (!isNativeRuntime()) return null;
+	if (ownerId.trim().length === 0 || ownerId.length > 128) {
+		throw new TypeError('Invalid native document owner');
+	}
 	const result = await invokeNative<unknown>(
 		'list_native_document_pages',
 		request({ documentId, ownerId })
@@ -280,6 +292,9 @@ export async function updateNativeDocumentMetadata(
 	input: NativeDocumentMetadataInput
 ): Promise<void> {
 	if (!isNativeRuntime()) return;
+	if (input.ownerId.trim().length === 0 || input.ownerId.length > 128) {
+		throw new TypeError('Invalid native document owner');
+	}
 	if (input.title.trim().length === 0 || input.title.length > 240) {
 		throw new TypeError('Invalid native document title');
 	}

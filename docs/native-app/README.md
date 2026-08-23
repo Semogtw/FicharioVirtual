@@ -92,6 +92,7 @@ A branch já deixou de ser apenas planejamento. O núcleo abaixo existe em códi
 - quando a consulta remota da biblioteca falha no runtime nativo, a lista local filtra pelo proprietário da sessão e pagina os documentos do catálogo; a rota de detalhe reconstrói um índice de páginas local e descobre a contagem real de PDFs por faixas;
 - a migration 3 acrescenta título, caderno, status e contagem de páginas ao catálogo e mantém um snapshot owner-scoped de texto nativo por página, substituído atomicamente a cada inspeção;
 - o detalhe local lê esse snapshot para reconstruir status/texto nativo de páginas após reinício; páginas sem texto permanecem `processing`/`needs_review`, sem serem tratadas como OCR concluído;
+- a busca textual usa esse texto nativo local como fallback offline, com filtro de caderno, paginação e excerpt limitado; OCR/semântica/FTS continuam dependentes do próximo slice;
 - testes unitários provam que o fast path local não chama a função remota;
 - se o original não existe localmente, o fluxo web/Drive continua funcionando como fallback;
 - downloads remotos completos compatíveis aquecem o cache nativo em best effort.
