@@ -408,6 +408,13 @@ Preferência:
 2. Tauri Stronghold ou integração equivalente para material que precise de vault local;
 3. somente identificadores não sensíveis no SQLite.
 
+Estado desta branch:
+
+- Linux usa o adapter Rust `keyring` com Secret Service/libsecret, serialização das chamadas e limites de chave/valor;
+- Windows usa o mesmo contrato com Credential Manager quando esse target for validado;
+- o adapter TypeScript falha fechado fora do runtime nativo e nunca grava tokens nativos em `localStorage`;
+- Android ainda precisa do secure store específico da plataforma e não deve ser considerado autenticado até esse adapter existir.
+
 ### Arquivos locais
 
 - não aceitar traversal em caminhos;
@@ -422,8 +429,8 @@ Manter Supabase como identidade principal.
 
 O fluxo nativo deve suportar:
 
-- sessão persistida de forma segura;
-- refresh normal;
+- sessão persistida de forma segura (implementada no Linux; Windows preparado; Android pendente);
+- refresh normal através do adapter seguro (pendente de validar o fluxo completo);
 - OAuth via navegador do sistema quando necessário;
 - callback por deep link/custom protocol;
 - logout apagando credenciais locais e estado sensível sem apagar originais locais sem confirmação explícita.

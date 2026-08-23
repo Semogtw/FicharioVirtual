@@ -2,6 +2,8 @@ import { env } from '$env/dynamic/public';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { parsePublicEnv } from '$lib/env/public';
 import type { Database } from '$lib/types/database';
+import { nativeAuthStorage } from '$lib/native/secure-storage';
+import { isNativeRuntime } from '$lib/platform/native-bridge';
 
 let browserClient: SupabaseClient<Database> | null = null;
 
@@ -9,15 +11,17 @@ export function createBrowserSupabaseClient(
 	source: Record<string, string | undefined> = env
 ): SupabaseClient<Database> {
 	const configuration = parsePublicEnv(source);
+	const native = isNativeRuntime();
 
 	return createClient<Database>(
 		configuration.PUBLIC_SUPABASE_URL,
 		configuration.PUBLIC_SUPABASE_PUBLISHABLE_KEY,
 		{
 			auth: {
+				storage: native ? nativeAuthStorage : undefined,
 				persistSession: true,
 				autoRefreshToken: true,
-				detectSessionInUrl: true
+				detectSessionInUrl: !native
 			},
 			global: {
 				headers: {

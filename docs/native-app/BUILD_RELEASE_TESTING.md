@@ -494,6 +494,7 @@ Antes de marcar stable:
 - [ ] zero Drive requests no fast path local confirmado
 - [ ] sync interrompido/retomado testado
 - [ ] auth expirada testada
+- [ ] secure store Linux operacional validado com Secret Service/libsecret sem fallback para armazenamento web
 - [ ] assinatura dos artefatos validada quando habilitada
 - [x] checksums publicados/registrados no artifact Linux do CI e registrados na documentação da branch
 - [ ] release notes atualizadas

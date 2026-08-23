@@ -6,6 +6,7 @@ mod external;
 mod metrics;
 mod paths;
 mod recovery;
+mod secure_storage;
 mod storage;
 mod sync_intent;
 
@@ -50,6 +51,9 @@ pub fn run() {
             commands::cancel_native_sync_job,
             commands::mark_native_remote_synced,
             cache_commands::trim_native_cache,
+            secure_storage::native_secure_storage_get,
+            secure_storage::native_secure_storage_set,
+            secure_storage::native_secure_storage_remove,
             sync_intent::ensure_native_upload_intent,
             sync_intent::cancel_native_upload_intent,
             external::open_native_oauth_url,

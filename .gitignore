@@ -5,6 +5,8 @@ supabase/.temp/
 .svelte-kit/
 build/
 coverage/
+src-tauri/target/
+src-tauri/gen/
 playwright-report/
 test-results/
 .env

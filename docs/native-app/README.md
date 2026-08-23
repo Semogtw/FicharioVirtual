@@ -130,6 +130,13 @@ A branch já deixou de ser apenas planejamento. O núcleo abaixo existe em códi
 - a mesma tela oferece reconciliação manual do catálogo: a verificação rápida confere presença/tamanho/tipo e a opção explícita de SHA-256 valida o conteúdo completo; o resumo distingue arquivos ausentes, corrompidos e inalterados.
 - a tela também lista pendências da fila nativa, último erro e tentativas, com ação manual para executar o worker novamente depois que a conexão for recuperada.
 
+### Autenticação nativa
+
+- no runtime Linux, a sessão Supabase usa o armazenamento seguro do sistema via Secret Service/libsecret, sem fallback para `localStorage`;
+- o adapter Tauri também está preparado para Credential Manager no Windows, embora esse target permaneça secundário nesta fase;
+- chaves e valores são validados nos boundaries Rust e TypeScript, e o runtime web continua usando o armazenamento web existente;
+- Android ainda precisa do adapter de armazenamento seguro da plataforma; por isso a sessão nativa Android permanece explicitamente bloqueada até essa implementação e sua validação autorizada.
+
 ## Validação
 
 Existe workflow dedicado `.github/workflows/validate-native-app.yml` com:
@@ -165,7 +172,7 @@ Prioridade alta antes de considerar o app pronto:
 3. migrar eventuais consumidores legados para `list_native_documents_page` e validar acervos grandes com fixtures de paginação;
 4. validar instalação/execução do bundle Linux em uma máquina desktop real além do runner;
 5. instalar e executar APK em dispositivo Android real;
-6. tratar OAuth/deep link e armazenamento seguro de credenciais especificamente no shell nativo;
+6. concluir OAuth/deep link e o adapter de armazenamento seguro Android; o adapter Linux já está implementado, mas ainda precisa de validação operacional em uma sessão desktop com Secret Service;
 7. signing de Android e Windows, política de update e checksums;
 8. validar falta de espaço, crash durante cópia, perda de rede e expiração de autenticação;
 9. medir abertura local em hardware real e registrar p50/p95;
