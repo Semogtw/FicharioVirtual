@@ -96,6 +96,7 @@ jobs:
           desktop-file-validate "$desktop_file"
           package_name="$(dpkg-deb -f "$deb_path" Package)"
           test -n "$package_name"
+          deb_path="$(realpath "$deb_path")"
           sudo apt-get install -y "$deb_path"
           dpkg-query --show "$package_name"
           "$appimage_path" --appimage-extract >/dev/null
