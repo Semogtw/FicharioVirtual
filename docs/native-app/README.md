@@ -112,6 +112,7 @@ A branch já deixou de ser apenas planejamento. O núcleo abaixo existe em códi
 - `runNativeSyncWorker` é iniciado no shell nativo ao abrir, voltar ao foco, ficar visível e a cada 60 segundos;
 - o worker reconstrói o original local e reutiliza os fluxos existentes de publicação de PDF e imagem, confirma `remote_state`/`drive_file_id` e usa backoff determinístico em falhas transitórias;
 - payload inválido ou operação desconhecida é cancelado com erro persistido, evitando retry infinito;
+- duplicatas remotas conhecidas são reconciliadas no catálogo e concluem o job, evitando repetir upload indefinidamente após uma interrupção;
 - a inicialização reconcilia todos os documentos marcados como presentes por tamanho/tipo de arquivo, marcando ausentes e corrompidos sem promover arquivos não catalogados;
 - o comando `reconcile_native_documents` permite uma verificação opcional por SHA-256 para diagnóstico local;
 - `list_native_documents_page` oferece paginação por cursor estável, sem limitar a biblioteca inteira a 1000 documentos; o comando legado continua disponível para compatibilidade;

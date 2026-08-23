@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { NativeDocument } from '../../../src/lib/native/local-document-store';
 import type { NativeSyncJob } from '../../../src/lib/native/sync-queue';
 import {
+	NativeSyncDuplicateError,
 	runNativeSyncWorker,
 	type NativeSyncWorkerDependencies
 } from '../../../src/lib/native/sync-worker';
@@ -138,5 +139,18 @@ describe('native sync worker', () => {
 
 		expect(result).toEqual({ claimed: 1, completed: 0, retried: 0, cancelled: 1 });
 		expect(fixture.calls).toEqual(['resolve', 'cancel']);
+	});
+
+	it('reconciles a duplicate remote document instead of retrying the upload', async () => {
+		const fixture = dependencies({
+			async publish() {
+				throw new NativeSyncDuplicateError('remote-existing-document');
+			}
+		});
+
+		const result = await runNativeSyncWorker({ dependencies: fixture.value });
+
+		expect(result).toEqual({ claimed: 1, completed: 1, retried: 0, cancelled: 0 });
+		expect(fixture.calls).toEqual(['claim', 'resolve', 'read', 'mark', 'complete']);
 	});
 });

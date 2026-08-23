@@ -66,6 +66,16 @@ export class NativeSyncPermanentError extends Error {
 	}
 }
 
+export class NativeSyncDuplicateError extends Error {
+	readonly remoteDocumentId: string;
+
+	constructor(remoteDocumentId: string) {
+		super('O documento já existe remotamente; o catálogo local será reconciliado.');
+		this.name = 'NativeSyncDuplicateError';
+		this.remoteDocumentId = remoteDocumentId;
+	}
+}
+
 function invalid(message: string): never {
 	throw new NativeSyncPermanentError(message);
 }
@@ -194,7 +204,24 @@ async function runWorker(
 			completed += 1;
 		} catch (error) {
 			const message = errorMessage(error);
-			if (error instanceof NativeSyncPermanentError) {
+			if (error instanceof NativeSyncDuplicateError) {
+				try {
+					await dependencies.markRemoteSynced({
+						documentId: job.documentId,
+						remoteDocumentId: error.remoteDocumentId,
+						driveFileId: null
+					});
+					await dependencies.completeJob(job.id);
+					completed += 1;
+				} catch (reconciliationError) {
+					await dependencies.failJob({
+						id: job.id,
+						error: errorMessage(reconciliationError),
+						retryAfterMs: retryDelay(job.attempts)
+					});
+					retried += 1;
+				}
+			} else if (error instanceof NativeSyncPermanentError) {
 				await dependencies.cancelJob({ id: job.id, error: message });
 				cancelled += 1;
 			} else {
@@ -231,40 +258,53 @@ const defaultDependencies: NativeSyncWorkerDependencies = {
 };
 
 async function publishNativeDocument(file: File, payload: NativeUploadPayload) {
-	if (payload.mimeType === 'application/pdf') {
-		const { uploadPdfToDrive } = await import('$lib/pdf/drive-upload');
-		const result = await uploadPdfToDrive(file, {
-			nativeDocumentId: payload.documentId,
-			title: payload.title,
-			notebookId: payload.notebookId,
-			promptVersion: payload.promptVersion
-		});
-		return {
-			remoteDocumentId: result.documentId,
-			driveFileId: result.driveFileId ?? null
-		};
+	try {
+		if (payload.mimeType === 'application/pdf') {
+			const { uploadPdfToDrive } = await import('$lib/pdf/drive-upload');
+			const result = await uploadPdfToDrive(file, {
+				nativeDocumentId: payload.documentId,
+				title: payload.title,
+				notebookId: payload.notebookId,
+				promptVersion: payload.promptVersion
+			});
+			return {
+				remoteDocumentId: result.documentId,
+				driveFileId: result.driveFileId ?? null
+			};
+		}
+		if (/^image\/(jpeg|png|webp)$/i.test(payload.mimeType)) {
+			const [{ prepareImage }, { uploadPreparedImage }] = await Promise.all([
+				import('$lib/import/image-client'),
+				import('$lib/import/upload')
+			]);
+			const prepared = await prepareImage(file, 'standard');
+			const result = await uploadPreparedImage({
+				prepared,
+				title: payload.title,
+				notebookId: payload.notebookId,
+				promptVersion: payload.promptVersion,
+				nativeDocumentId: payload.documentId
+			});
+			return {
+				remoteDocumentId: result.documentId,
+				driveFileId: result.storagePath.startsWith('drive:')
+					? result.storagePath.slice('drive:'.length)
+					: null
+			};
+		}
+		invalid(`Tipo de arquivo não suportado: ${payload.mimeType}`);
+	} catch (error) {
+		if (
+			error instanceof Error &&
+			(error.name === 'DuplicatePdfError' || error.name === 'DuplicateImageError')
+		) {
+			const remoteDocumentId = (error as Error & { documentId?: unknown }).documentId;
+			if (typeof remoteDocumentId === 'string' && remoteDocumentId.length > 0) {
+				throw new NativeSyncDuplicateError(remoteDocumentId);
+			}
+		}
+		throw error;
 	}
-	if (/^image\/(jpeg|png|webp)$/i.test(payload.mimeType)) {
-		const [{ prepareImage }, { uploadPreparedImage }] = await Promise.all([
-			import('$lib/import/image-client'),
-			import('$lib/import/upload')
-		]);
-		const prepared = await prepareImage(file, 'standard');
-		const result = await uploadPreparedImage({
-			prepared,
-			title: payload.title,
-			notebookId: payload.notebookId,
-			promptVersion: payload.promptVersion,
-			nativeDocumentId: payload.documentId
-		});
-		return {
-			remoteDocumentId: result.documentId,
-			driveFileId: result.storagePath.startsWith('drive:')
-				? result.storagePath.slice('drive:'.length)
-				: null
-		};
-	}
-	invalid(`Tipo de arquivo não suportado: ${payload.mimeType}`);
 }
 
 let activeRun: Promise<NativeSyncWorkerResult | null> | null = null;
