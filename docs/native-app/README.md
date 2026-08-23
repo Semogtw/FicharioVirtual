@@ -132,7 +132,7 @@ Existe workflow dedicado `.github/workflows/validate-native-app.yml` com:
 
 Já houve ciclo com frontend completo verde e compilação Rust/Linux do núcleo verde. O gate multiplataforma continua sendo tratado como fonte de verdade: uma plataforma só passa para **validada em CI** quando o workflow do head correspondente termina verde.
 
-No head `bf7e5f1`, a validação nativa passou para frontend, Rust Ubuntu/Windows e Android aarch64; o bundle Linux também foi publicado como artifact pelo workflow. O bundle Windows permaneceu em execução separada e não é usado como evidência para Android/Linux.
+No head `bf7e5f1`, a validação nativa passou para frontend, Rust Ubuntu/Windows e Android aarch64; os bundles Linux e Windows também foram publicados como artifacts pelos workflows. A evidência de Windows permanece separada e não faz parte do caminho crítico Android/Linux.
 
 Ainda não há alegação de validação em hardware Android/Windows/Linux real nesta branch.
 
