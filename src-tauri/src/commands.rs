@@ -97,6 +97,20 @@ pub struct ListRequest {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ListDocumentsPageRequest {
+    pub limit: Option<usize>,
+    pub cursor: Option<catalog::DocumentPageCursor>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeDocumentPage {
+    pub documents: Vec<NativeDocument>,
+    pub next_cursor: Option<catalog::DocumentPageCursor>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ClaimSyncRequest {
     pub limit: Option<usize>,
     pub lease_ms: Option<i64>,
@@ -216,6 +230,26 @@ pub fn list_local_documents(
     .into_iter()
     .map(TryInto::try_into)
     .collect()
+}
+
+#[tauri::command]
+pub fn list_native_documents_page(
+    app: AppHandle,
+    request: ListDocumentsPageRequest,
+) -> Result<NativeDocumentPage, String> {
+    let page = catalog::list_documents_page(
+        &app_paths(&app)?,
+        request.limit.unwrap_or(200),
+        request.cursor.as_ref(),
+    )?;
+    Ok(NativeDocumentPage {
+        documents: page
+            .documents
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<_>, _>>()?,
+        next_cursor: page.next_cursor,
+    })
 }
 
 #[tauri::command]

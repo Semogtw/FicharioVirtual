@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
 	getNativeStatus,
+	listNativeDocumentsPage,
 	nativeImportRanges,
 	reconcileNativeDocuments,
 	readNativeDocumentRange,
@@ -72,6 +73,46 @@ describe('native runtime bridge', () => {
 		});
 		expect(invoke).toHaveBeenCalledWith('reconcile_native_documents', {
 			request: { fullHash: true }
+		});
+	});
+
+	it('reads a cursor page without imposing a library-wide limit', async () => {
+		const invoke = vi.fn().mockResolvedValue({
+			documents: [
+				{
+					documentId: 'doc-page-a',
+					ownerId: '11111111-1111-4111-8111-111111111111',
+					originalFilename: 'page.pdf',
+					mimeType: 'application/pdf',
+					sizeBytes: 4,
+					sha256: 'a'.repeat(64),
+					localState: 'present',
+					remoteState: 'pending',
+					remoteDocumentId: null,
+					driveFileId: null,
+					createdAtMs: 1,
+					updatedAtMs: 1,
+					lastAccessedAtMs: 1
+				}
+			],
+			nextCursor: { lastAccessedAtMs: 1, documentId: 'doc-page-a' }
+		});
+		root.__TAURI__ = { core: { invoke } };
+
+		await expect(
+			listNativeDocumentsPage({
+				limit: 2,
+				cursor: { lastAccessedAtMs: 9, documentId: 'doc-page-z' }
+			})
+		).resolves.toMatchObject({
+			documents: [{ documentId: 'doc-page-a' }],
+			nextCursor: { lastAccessedAtMs: 1, documentId: 'doc-page-a' }
+		});
+		expect(invoke).toHaveBeenCalledWith('list_native_documents_page', {
+			request: {
+				limit: 2,
+				cursor: { lastAccessedAtMs: 9, documentId: 'doc-page-z' }
+			}
 		});
 	});
 });

@@ -1,5 +1,5 @@
 use rusqlite::{params, Connection, OptionalExtension, Row, Transaction};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::paths::AppPaths;
@@ -20,6 +20,19 @@ pub struct DocumentRow {
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
     pub last_accessed_at_ms: i64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentPageCursor {
+    pub last_accessed_at_ms: i64,
+    pub document_id: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct DocumentPage {
+    pub documents: Vec<DocumentRow>,
+    pub next_cursor: Option<DocumentPageCursor>,
 }
 
 #[derive(Clone, Debug)]
@@ -318,6 +331,51 @@ pub fn list_all_documents(paths: &AppPaths) -> Result<Vec<DocumentRow>, String> 
         .map_err(|error| format!("Não foi possível listar a biblioteca local: {error}"))?;
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(|error| format!("Não foi possível ler a biblioteca local: {error}"))
+}
+
+pub fn list_documents_page(
+    paths: &AppPaths,
+    limit: usize,
+    cursor: Option<&DocumentPageCursor>,
+) -> Result<DocumentPage, String> {
+    let connection = open(paths)?;
+    let page_limit = limit.clamp(1, 1_000);
+    let mut statement = connection
+        .prepare(&format!(
+            "{} WHERE (?1 IS NULL OR last_accessed_at_ms < ?1 OR (last_accessed_at_ms = ?1 AND document_id > ?2)) ORDER BY last_accessed_at_ms DESC, document_id ASC LIMIT ?3",
+            select_document_sql()
+        ))
+        .map_err(|error| format!("Não foi possível preparar a página da biblioteca local: {error}"))?;
+    let rows = statement
+        .query_map(
+            params![
+                cursor.map(|value| value.last_accessed_at_ms),
+                cursor.map(|value| value.document_id.as_str()),
+                (page_limit + 1) as i64
+            ],
+            document_from_row,
+        )
+        .map_err(|error| {
+            format!("Não foi possível consultar a página da biblioteca local: {error}")
+        })?;
+    let mut documents = rows
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("Não foi possível ler a página da biblioteca local: {error}"))?;
+    let has_more = documents.len() > page_limit;
+    if has_more {
+        documents.truncate(page_limit);
+    }
+    let next_cursor = has_more
+        .then(|| documents.last())
+        .flatten()
+        .map(|document| DocumentPageCursor {
+            last_accessed_at_ms: document.last_accessed_at_ms,
+            document_id: document.document_id.clone(),
+        });
+    Ok(DocumentPage {
+        documents,
+        next_cursor,
+    })
 }
 
 pub fn touch_document(paths: &AppPaths, document_id: &str) -> Result<(), String> {

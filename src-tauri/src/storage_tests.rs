@@ -365,3 +365,40 @@ fn catalog_reconciliation_detects_same_size_corruption_when_hash_requested() {
     assert_eq!(summary.corrupt_documents, 1);
     assert_eq!(reconciled.local_state, "corrupt");
 }
+
+#[test]
+fn catalog_document_pages_resume_with_a_cursor_without_dropping_documents() {
+    let storage_root = TestStorage::new("document-pages");
+    let paths = &storage_root.paths;
+
+    for (document_id, data) in [
+        ("doc-page-a", b"page a".as_slice()),
+        ("doc-page-b", b"page b".as_slice()),
+        ("doc-page-c", b"page c".as_slice()),
+    ] {
+        storage::begin_import(paths, &begin_request(document_id, data.len()))
+            .expect("begin import");
+        storage::append_import(paths, document_id, data).expect("append import");
+        storage::finish_import(paths, document_id).expect("finish import");
+    }
+
+    let first = catalog::list_documents_page(paths, 2, None).expect("read first page");
+    let first_ids: Vec<_> = first
+        .documents
+        .iter()
+        .map(|document| document.document_id.as_str())
+        .collect();
+    let cursor = first.next_cursor.expect("first page has a cursor");
+    let second = catalog::list_documents_page(paths, 2, Some(&cursor)).expect("read second page");
+    let second_ids: Vec<_> = second
+        .documents
+        .iter()
+        .map(|document| document.document_id.as_str())
+        .collect();
+
+    assert_eq!(first.documents.len(), 2);
+    assert_eq!(second.documents.len(), 1);
+    assert!(second.next_cursor.is_none());
+    assert!(first_ids.iter().all(|id| !second_ids.contains(id)));
+    assert_eq!(first_ids.len() + second_ids.len(), 3);
+}

@@ -37,6 +37,7 @@ pub fn run() {
             commands::get_local_document,
             commands::get_local_document_by_drive_file_id,
             commands::list_local_documents,
+            commands::list_native_documents_page,
             commands::read_local_document_range,
             commands::verify_local_document,
             commands::evict_local_document,

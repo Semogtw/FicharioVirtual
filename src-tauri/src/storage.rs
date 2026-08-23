@@ -391,7 +391,7 @@ pub fn evict_document(paths: &AppPaths, document_id: &str) -> Result<(), String>
 }
 
 pub fn disk_usage(paths: &AppPaths) -> Result<u64, String> {
-    let documents = catalog::list_documents(paths, 1000)?;
+    let documents = catalog::list_all_documents(paths)?;
     let document_bytes = documents
         .iter()
         .filter(|document| document.local_state == "present")

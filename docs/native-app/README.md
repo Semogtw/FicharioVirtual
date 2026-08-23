@@ -114,6 +114,7 @@ A branch já deixou de ser apenas planejamento. O núcleo abaixo existe em códi
 - payload inválido ou operação desconhecida é cancelado com erro persistido, evitando retry infinito;
 - a inicialização reconcilia todos os documentos marcados como presentes por tamanho/tipo de arquivo, marcando ausentes e corrompidos sem promover arquivos não catalogados;
 - o comando `reconcile_native_documents` permite uma verificação opcional por SHA-256 para diagnóstico local;
+- `list_native_documents_page` oferece paginação por cursor estável, sem limitar a biblioteca inteira a 1000 documentos; o comando legado continua disponível para compatibilidade;
 
 **Limitação atual:** o worker é executado enquanto o shell está vivo; ainda não há um scheduler nativo equivalente a WorkManager no Android nem execução garantida depois de suspensão/encerramento forçado. O fluxo de publicação também precisa de validação em hardware e de cobertura operacional de rede/autenticação.
 
@@ -154,7 +155,7 @@ Prioridade alta antes de considerar o app pronto:
 
 1. adicionar scheduler nativo para retomada após suspensão/encerramento no Android e desktop;
 2. ampliar migrations versionadas para futuras mudanças de catálogo e testar upgrades de várias versões;
-3. substituir listagens de biblioteca por paginação/cursor para não depender de limites artificiais em acervos grandes;
+3. migrar eventuais consumidores legados para `list_native_documents_page` e validar acervos grandes com fixtures de paginação;
 4. validar instalação/execução do bundle Linux em uma máquina desktop real além do runner;
 5. instalar e executar APK em dispositivo Android real;
 6. tratar OAuth/deep link e armazenamento seguro de credenciais especificamente no shell nativo;

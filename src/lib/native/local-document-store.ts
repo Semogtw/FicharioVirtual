@@ -19,6 +19,16 @@ export type NativeDocument = Readonly<{
 	lastAccessedAtMs: number;
 }>;
 
+export type NativeDocumentPageCursor = Readonly<{
+	lastAccessedAtMs: number;
+	documentId: string;
+}>;
+
+export type NativeDocumentPage = Readonly<{
+	documents: readonly NativeDocument[];
+	nextCursor: NativeDocumentPageCursor | null;
+}>;
+
 export type NativeStatus = Readonly<{
 	platform: string;
 	schemaVersion: number;
@@ -86,6 +96,37 @@ function validNativeDocument(value: NativeDocument | null): value is NativeDocum
 	);
 }
 
+function validNativeDocumentPageCursor(value: unknown): value is NativeDocumentPageCursor {
+	return (
+		value !== null &&
+		typeof value === 'object' &&
+		!Array.isArray(value) &&
+		Number.isSafeInteger((value as NativeDocumentPageCursor).lastAccessedAtMs) &&
+		(value as NativeDocumentPageCursor).lastAccessedAtMs >= 0 &&
+		typeof (value as NativeDocumentPageCursor).documentId === 'string' &&
+		(value as NativeDocumentPageCursor).documentId.length > 0 &&
+		(value as NativeDocumentPageCursor).documentId.length <= 128
+	);
+}
+
+function parseNativeDocumentPage(value: unknown): NativeDocumentPage {
+	if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+		throw new TypeError('Invalid native document page');
+	}
+	const row = value as { documents?: unknown; nextCursor?: unknown };
+	if (
+		!Array.isArray(row.documents) ||
+		!row.documents.every((document) => validNativeDocument(document as NativeDocument | null)) ||
+		(row.nextCursor !== null && !validNativeDocumentPageCursor(row.nextCursor))
+	) {
+		throw new TypeError('Invalid native document page');
+	}
+	return Object.freeze({
+		documents: Object.freeze(row.documents as NativeDocument[]),
+		nextCursor: row.nextCursor as NativeDocumentPageCursor | null
+	});
+}
+
 export async function getNativeStatus(): Promise<NativeStatus | null> {
 	if (!isNativeRuntime()) return null;
 	return await invokeNative<NativeStatus>('native_status');
@@ -99,6 +140,29 @@ export async function reconcileNativeDocuments(
 		'reconcile_native_documents',
 		request({ fullHash })
 	);
+}
+
+export async function listNativeDocumentsPage(
+	options: {
+		limit?: number;
+		cursor?: NativeDocumentPageCursor | null;
+	} = {}
+): Promise<NativeDocumentPage | null> {
+	if (!isNativeRuntime()) return null;
+	const limit = options.limit ?? 200;
+	if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1_000) {
+		throw new TypeError('Invalid native document page limit');
+	}
+	if (options.cursor !== undefined && options.cursor !== null) {
+		if (!validNativeDocumentPageCursor(options.cursor)) {
+			throw new TypeError('Invalid native document page cursor');
+		}
+	}
+	const result = await invokeNative<unknown>(
+		'list_native_documents_page',
+		request({ limit, cursor: options.cursor ?? null })
+	);
+	return parseNativeDocumentPage(result);
 }
 
 export async function resolveNativeDocument(documentId: string): Promise<NativeDocument | null> {
