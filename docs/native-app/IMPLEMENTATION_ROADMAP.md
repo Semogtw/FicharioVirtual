@@ -191,7 +191,7 @@ Remover dependências frágeis de redirect dentro do webview.
 
 - browser externo para OAuth quando aplicável;
 - deep link de callback;
-- sessão Supabase persistida em secure store (Linux implementado; Windows preparado; Android pendente);
+- sessão Supabase persistida em secure store (Linux implementado e ciclo operacional `keyring` validado; Windows preparado; Android pendente);
 - refresh token seguro no fluxo nativo Linux/Windows;
 - logout confiável;
 - reautenticação do Drive sem apagar biblioteca local;

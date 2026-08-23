@@ -176,7 +176,7 @@ Prioridade alta antes de considerar o app pronto:
 3. migrar eventuais consumidores legados para `list_native_documents_page` e validar acervos grandes com fixtures de paginação;
 4. validar instalação/execução do bundle Linux em uma máquina desktop real além do runner;
 5. instalar e executar APK em dispositivo Android real;
-6. concluir OAuth/deep link e o adapter de armazenamento seguro Android; o adapter Linux já está implementado, mas ainda precisa de validação operacional em uma sessão desktop com Secret Service;
+6. concluir OAuth/deep link e o adapter de armazenamento seguro Android; o adapter Linux já está implementado e teve o ciclo operacional `keyring` validado em sessão desktop, mas o login/refresh Supabase completo ainda precisa de execução autenticada;
 7. signing de Android e Windows, política de update e checksums;
 8. validar falta de espaço, crash durante cópia, perda de rede e expiração de autenticação;
 9. medir abertura local em hardware real e registrar p50/p95;
