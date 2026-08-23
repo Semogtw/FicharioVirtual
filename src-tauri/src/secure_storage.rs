@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use tauri::AppHandle;
 
 const MAX_KEY_BYTES: usize = 256;
 const MAX_VALUE_BYTES: usize = 64 * 1024;
@@ -107,21 +108,80 @@ mod platform {
     }
 }
 
+#[cfg(target_os = "android")]
+mod android_platform {
+    use super::{validate_key, validate_value};
+    use tauri::Manager;
+    use tauri_plugin_keyring_store::KeyringExt;
+
+    const ERROR: &str = "Não foi possível acessar o armazenamento seguro do Android";
+
+    pub fn get(app: &tauri::AppHandle, key: &str) -> Result<Option<String>, String> {
+        validate_key(key)?;
+        app.keyring()
+            .store
+            .get_password(key)
+            .map_err(|_| ERROR.to_string())
+    }
+
+    pub fn set(app: &tauri::AppHandle, key: &str, value: &str) -> Result<(), String> {
+        validate_key(key)?;
+        validate_value(value)?;
+        app.keyring()
+            .store
+            .set_password(key, value)
+            .map_err(|_| ERROR.to_string())
+    }
+
+    pub fn remove(app: &tauri::AppHandle, key: &str) -> Result<(), String> {
+        validate_key(key)?;
+        app.keyring()
+            .store
+            .delete(key)
+            .map_err(|_| ERROR.to_string())
+    }
+}
+
 #[tauri::command]
 pub fn native_secure_storage_get(
+    app: AppHandle,
     request: SecureStorageKeyRequest,
 ) -> Result<Option<String>, String> {
-    platform::get(&request.key)
+    #[cfg(target_os = "android")]
+    return android_platform::get(&app, &request.key);
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = app;
+        platform::get(&request.key)
+    }
 }
 
 #[tauri::command]
-pub fn native_secure_storage_set(request: SecureStorageSetRequest) -> Result<(), String> {
-    platform::set(&request.key, &request.value)
+pub fn native_secure_storage_set(
+    app: AppHandle,
+    request: SecureStorageSetRequest,
+) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    return android_platform::set(&app, &request.key, &request.value);
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = app;
+        platform::set(&request.key, &request.value)
+    }
 }
 
 #[tauri::command]
-pub fn native_secure_storage_remove(request: SecureStorageKeyRequest) -> Result<(), String> {
-    platform::remove(&request.key)
+pub fn native_secure_storage_remove(
+    app: AppHandle,
+    request: SecureStorageKeyRequest,
+) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    return android_platform::remove(&app, &request.key);
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = app;
+        platform::remove(&request.key)
+    }
 }
 
 #[cfg(test)]

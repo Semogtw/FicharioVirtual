@@ -56,6 +56,15 @@ pub fn run() {
 
     builder = builder.plugin(tauri_plugin_opener::init());
 
+    #[cfg(target_os = "android")]
+    {
+        builder = builder.plugin(
+            tauri_plugin_keyring_store::Builder::new()
+                .service("br.com.semog.fichario")
+                .build(),
+        );
+    }
+
     builder
         .setup(move |app| {
             let paths = paths::ensure(app.handle())
