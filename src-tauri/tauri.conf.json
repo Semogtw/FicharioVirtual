@@ -47,6 +47,11 @@
 			}
 		}
 	},
+	"plugins": {
+		"deep-link": {
+			"mobile": [{ "host": "fichario-virtual.pages.dev", "pathPrefix": ["/settings"] }]
+		}
+	},
 	"bundle": {
 		"active": true,
 		"category": "Productivity",

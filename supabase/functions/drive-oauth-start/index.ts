@@ -1,5 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { corsHeaders, parseAppOrigin } from '../_shared/cors.ts';
+import { corsHeaders, nativeOAuthReturnOrigin, parseAppOrigin } from '../_shared/cors.ts';
 import { buildGoogleAuthorizationUrl } from '../_shared/google-oauth.ts';
 import {
 	createOAuthPkceChallenge,
@@ -27,14 +27,22 @@ function empty(status: number, appOrigin: string | null) {
 }
 
 Deno.serve(async (request) => {
-	const appOrigin = parseAppOrigin(
+	const canonicalAppOrigin = parseAppOrigin(Deno.env.get('APP_ORIGIN'));
+	const requestedAppOrigin = parseAppOrigin(
 		Deno.env.get('APP_ORIGIN_ALLOWLIST') ?? Deno.env.get('APP_ORIGIN'),
 		request.headers.get('Origin')
 	);
-	const respond = (status: number, body: Record<string, unknown>) => json(status, body, appOrigin);
+	const oauthReturnOrigin =
+		canonicalAppOrigin === null || requestedAppOrigin === null
+			? null
+			: nativeOAuthReturnOrigin(canonicalAppOrigin, requestedAppOrigin);
+	const respond = (status: number, body: Record<string, unknown>) =>
+		json(status, body, requestedAppOrigin);
 
-	if (!appOrigin) return respond(503, { code: 'drive_oauth_not_configured' });
-	if (request.method === 'OPTIONS') return empty(204, appOrigin);
+	if (!requestedAppOrigin || !oauthReturnOrigin) {
+		return respond(503, { code: 'drive_oauth_not_configured' });
+	}
+	if (request.method === 'OPTIONS') return empty(204, requestedAppOrigin);
 	if (request.method !== 'POST') return respond(405, { code: 'method_not_allowed' });
 
 	const authorization = request.headers.get('Authorization');
@@ -69,7 +77,7 @@ Deno.serve(async (request) => {
 		.maybeSingle();
 	if (allowedError || !allowed) return respond(403, { code: 'drive_oauth_forbidden' });
 
-	const state = generateOAuthStateForOrigin(appOrigin);
+	const state = generateOAuthStateForOrigin(oauthReturnOrigin);
 	const nonce = generateOAuthOpaqueValue();
 	const codeVerifier = generateOAuthOpaqueValue();
 	const [stateHash, codeChallenge] = await Promise.all([

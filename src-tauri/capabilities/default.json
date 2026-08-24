@@ -3,5 +3,5 @@
 	"identifier": "default",
 	"description": "Permissões mínimas da janela principal. Operações de arquivos passam apenas por comandos próprios validados.",
 	"windows": ["main"],
-	"permissions": ["core:default"]
+	"permissions": ["core:default", "deep-link:default"]
 }

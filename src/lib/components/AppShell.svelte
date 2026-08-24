@@ -9,6 +9,7 @@
 	import ImportQueueTray from './ImportQueueTray.svelte';
 	import MobileNavigation from './MobileNavigation.svelte';
 	import NavigationIcon from './NavigationIcon.svelte';
+	import { installNativeOAuthDeepLinkListener } from '$lib/native/native-oauth-deep-link-listener';
 	import TopSearch from './TopSearch.svelte';
 	import { runNativeSyncWorker } from '$lib/native/sync-worker';
 
@@ -24,6 +25,13 @@
 	let documentRoute = $derived(page.url.pathname.startsWith('/documents/'));
 
 	onMount(() => {
+		let removeDeepLinkListener: (() => void) | null = null;
+		void installNativeOAuthDeepLinkListener()
+			.then((unlisten) => {
+				removeDeepLinkListener = unlisten;
+			})
+			.catch(() => undefined);
+
 		const kick = () => {
 			void runNativeSyncWorker().catch(() => undefined);
 		};
@@ -36,6 +44,7 @@
 		document.addEventListener('visibilitychange', onVisibilityChange);
 		const interval = window.setInterval(kick, 60_000);
 		return () => {
+			removeDeepLinkListener?.();
 			window.removeEventListener('focus', kick);
 			window.removeEventListener('online', kick);
 			document.removeEventListener('visibilitychange', onVisibilityChange);

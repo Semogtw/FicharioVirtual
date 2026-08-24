@@ -153,7 +153,11 @@ A branch já deixou de ser apenas planejamento. O núcleo abaixo existe em códi
 - o adapter Tauri também está preparado para Credential Manager no Windows, embora esse target permaneça secundário nesta fase;
 - no runtime Android, o mesmo contrato IPC usa `tauri-plugin-keyring-store` com Android Keystore + SharedPreferences, sob o namespace fixo `br.com.semog.fichario`, sem persistência em `localStorage`;
 - chaves e valores são validados nos boundaries Rust e TypeScript, e o runtime web continua usando o armazenamento web existente;
+- o retorno do OAuth nativo usa o `tauri-plugin-deep-link`: callbacks para `https://fichario-virtual.pages.dev/settings/?drive=...` são filtrados por origem, caminho e resultado antes de navegar para a tela de Drive;
+- o início do OAuth, quando chamado pelo runtime Tauri, grava no `state` a origem HTTPS canônica em vez de `http://tauri.localhost`/`tauri://localhost`, permitindo que o Android encaminhe o callback pelo App Link;
 - a implementação Android foi compilada em build mobile e instalada em hardware real neste ciclo; o ciclo autenticado Supabase e o exercício real do secure store ainda permanecem pendentes.
+
+O plugin e o tratamento do callback estão versionados, mas a associação Android ainda depende de operação externa: o domínio canônico precisa servir `/.well-known/assetlinks.json` com o pacote `br.com.semog.fichario` e as fingerprints das chaves de distribuição. O APK de debug usado neste ciclo não fecha essa associação nem prova o login OAuth.
 
 ## Validação
 
@@ -199,6 +203,8 @@ No ciclo seguinte, o adapter Android de armazenamento seguro foi integrado com `
 
 No head `8fe3d0b`, o projeto Android foi inicializado com o SDK/NDK local, o frontend foi empacotado, e `cargo tauri android build --apk` terminou verde para os quatro ABIs. O APK universal unsigned tem 68.822.684 bytes e SHA-256 `c86091a9b5ce390c5e175bc80816f4b276f5bcc500b5f6aa1abccb42cee62a51`. Para smoke físico, ele foi assinado somente com a debug keystore local, verificado pelas assinaturas v2/v3, instalado via `adb` no Samsung SM-A715F (Android 13) e aberto com `MainActivity` em primeiro plano; a tela de login carregou sem crash. Esse teste prova empacotamento, instalação e inicialização, mas não prova publicação, assinatura de release, login Supabase, OAuth/deep link ou o ciclo `set/get/remove` do secure store em produção.
 
+No checkpoint seguinte, o retorno OAuth nativo passou a registrar o plugin oficial de deep link, validar URLs recebidas e encaminhar a sessão ao caminho HTTPS canônico. O build Android posterior terminou verde para os quatro ABIs; o APK universal unsigned tem 69.676.604 bytes e SHA-256 `934f2b4bce322188b3d17e89ecc4eddc855a2403334cfdb5e9121ab7d86761cc`. Ele foi assinado somente com debug keystore, instalado no SM-A715F e recebeu um App Link explícito via `adb` sem crash; a validação automatizada cobre origem, caminho, query única e resultados permitidos. A associação física do domínio, OAuth autenticado e assinatura de distribuição continuam pendentes até a configuração das chaves reais.
+
 ## Trabalho importante restante
 
 Prioridade alta antes de considerar o app pronto:
@@ -209,7 +215,7 @@ Prioridade alta antes de considerar o app pronto:
 4. integrar a apresentação de destaques/edição offline ao snapshot de análise já persistido; o catálogo agora cobre título, caderno, status, contagem, texto nativo, OCR bruto/corrigido, fonte, geometria, warnings, revisão manual e busca FTS5, sem inventar OCR remoto;
 5. validar instalação/execução do bundle Linux em uma máquina desktop real além do runner;
 6. repetir o smoke com artefato Android assinado para distribuição e completar os cenários do checklist físico;
-7. validar OAuth/deep link, o ciclo operacional do adapter de armazenamento seguro Android e o login/refresh Supabase completo; o adapter Linux já está implementado e teve o ciclo operacional `keyring` validado em sessão desktop;
+7. publicar/verificar `assetlinks.json`, exercitar OAuth/deep link em hardware com artefato de distribuição, validar o ciclo operacional do adapter de armazenamento seguro Android e o login/refresh Supabase completo; o adapter Linux já está implementado e teve o ciclo operacional `keyring` validado em sessão desktop;
 8. signing de Android e Windows, política de update e checksums;
 9. validar falta de espaço, crash durante cópia, perda de rede e expiração de autenticação;
 10. medir abertura local em hardware real e registrar p50/p95;

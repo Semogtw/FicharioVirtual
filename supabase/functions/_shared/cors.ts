@@ -93,6 +93,10 @@ export function isNativeAppOrigin(value: string | null | undefined): boolean {
 	return normalized !== null && NATIVE_APP_ORIGINS.has(normalized);
 }
 
+export function nativeOAuthReturnOrigin(canonicalOrigin: string, requestedOrigin: string): string {
+	return isNativeAppOrigin(requestedOrigin) ? canonicalOrigin : requestedOrigin;
+}
+
 export function parseAppOrigin(
 	value: string | undefined,
 	requestOrigin?: string | null

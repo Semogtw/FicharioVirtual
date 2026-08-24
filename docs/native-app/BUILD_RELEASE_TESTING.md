@@ -324,6 +324,8 @@ Emulador/CI não substitui testes reais.
 
 O head `8fe3d0b` já teve um smoke básico em um Samsung SM-A715F com Android 13: APK universal assinado com debug keystore apenas para teste, instalação via `adb`, `MainActivity` em primeiro plano e tela de login carregada sem crash. Isso não fecha o checklist abaixo nem substitui assinatura de release.
 
+O código atual registra o plugin de deep link e filtra o callback OAuth para `https://fichario-virtual.pages.dev/settings/?drive=...`. O APK universal unsigned deste ciclo tem SHA-256 `934f2b4bce322188b3d17e89ecc4eddc855a2403334cfdb5e9121ab7d86761cc`; a cópia debug foi instalada e recebeu um App Link explícito via `adb` sem crash, mas isso não valida a associação de domínio. Antes do aceite físico, o domínio precisa servir `/.well-known/assetlinks.json` com a fingerprint da chave de distribuição; o APK de debug não deve ser usado para validar essa associação.
+
 Testar:
 
 - seletor de arquivos;

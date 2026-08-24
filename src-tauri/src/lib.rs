@@ -54,7 +54,9 @@ pub fn run() {
             );
     }
 
-    builder = builder.plugin(tauri_plugin_opener::init());
+    builder = builder
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_deep_link::init());
 
     #[cfg(target_os = "android")]
     {
