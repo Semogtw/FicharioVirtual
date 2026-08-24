@@ -12,6 +12,12 @@ describe('Supabase local configuration', () => {
 		expect(config).toMatch(/\[local_smtp\][\s\S]*?enabled\s*=\s*true/);
 	});
 
+	it('enables the public email signup flow', () => {
+		const config = read('supabase/config.toml');
+		expect(config).toMatch(/\[auth\][\s\S]*?enable_signup\s*=\s*true/);
+		expect(config).toMatch(/\[auth\.email\][\s\S]*?enable_signup\s*=\s*true/);
+	});
+
 	it('requires JWT for authenticated application Edge Functions', () => {
 		const config = read('supabase/config.toml');
 		for (const functionName of [
