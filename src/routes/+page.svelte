@@ -1,11 +1,13 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { onDestroy, onMount } from 'svelte';
 	import { fly } from 'svelte/transition';
 	import AnimatedNumber from '$lib/components/AnimatedNumber.svelte';
 	import DocumentCard from '$lib/components/DocumentCard.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import LoadingCollection from '$lib/components/LoadingCollection.svelte';
+	import PublicLanding from '$lib/components/PublicLanding.svelte';
 	import type { DocumentSummary } from '$lib/domain/document';
 	import { listDocuments } from '$lib/services/documents';
 	import { RequestVersion } from '$lib/services/request-version';
@@ -72,6 +74,7 @@
 	}
 
 	onMount(() => {
+		if (page.data.session === null) return;
 		void loadDashboard();
 	});
 
@@ -81,87 +84,96 @@
 </script>
 
 <svelte:head>
-	<title>Início — Fichário Virtual</title>
+	<title
+		>{page.data.session === null
+			? 'Fichário Virtual — seu arquivo, pesquisável'
+			: 'Início — Fichário Virtual'}</title
+	>
 </svelte:head>
 
-<div class="page" aria-labelledby="page-title">
-	<header class="page-header">
-		<div>
-			<p class="eyebrow">Seu arquivo pessoal</p>
-			<h1 id="page-title">Encontre a página certa.</h1>
-			<p class="summary">
-				Imagens, PDFs e anotações organizados como um fichário — pesquisáveis sem perder o original.
-			</p>
-		</div>
-		<a class="primary-action" href="/import/">Importar documento</a>
-	</header>
-
-	<section class="overview" aria-label="Resumo da biblioteca" aria-busy={loading || refreshing}>
-		<a class="overview-card actionable" href="/library/" aria-label="Abrir biblioteca">
-			<span>Documentos</span>
-			<strong><AnimatedNumber value={usage?.totals.documents ?? null} /></strong>
-			<small>Arquivos privados preservados no fichário</small>
-			<b aria-hidden="true">Abrir biblioteca →</b>
-		</a>
-		<article class="overview-card">
-			<span>Páginas no fichário</span>
-			<strong><AnimatedNumber value={usage?.totals.pages ?? null} /></strong>
-			<small>Originais preservados e conteúdo preparado para pesquisa</small>
-		</article>
-		<a class="overview-card actionable" href="/notebooks/" aria-label="Abrir cadernos">
-			<span>Cadernos</span>
-			<strong><AnimatedNumber value={usage?.totals.notebooks ?? null} /></strong>
-			<small>Conjuntos de documentos organizados do seu jeito</small>
-			<b aria-hidden="true">Abrir cadernos →</b>
-		</a>
-	</section>
-
-	{#if warning}
-		<div class="warning" role="status" transition:fly={{ y: -6, duration: 220 }}>
-			<p>{warning}</p>
-			<button type="button" disabled={loading || refreshing} onclick={() => void loadDashboard()}>
-				{refreshing ? 'Atualizando…' : 'Tentar atualizar novamente'}
-			</button>
-		</div>
-	{/if}
-
-	<section class="recent" aria-labelledby="recent-title">
-		<div class="section-heading">
+{#if page.data.session === null}
+	<PublicLanding />
+{:else}
+	<div class="page" aria-labelledby="page-title">
+		<header class="page-header">
 			<div>
-				<p class="eyebrow">Biblioteca</p>
-				<h2 id="recent-title">Documentos recentes</h2>
+				<p class="eyebrow">Seu arquivo pessoal</p>
+				<h1 id="page-title">Encontre a página certa.</h1>
+				<p class="summary">
+					Imagens, PDFs e anotações organizados como um fichário — pesquisáveis sem perder o
+					original.
+				</p>
 			</div>
-			<a href="/library/">Ver biblioteca</a>
-		</div>
+			<a class="primary-action" href="/import/">Importar documento</a>
+		</header>
 
-		{#if loading}
-			<LoadingCollection count={6} label="Atualizando o resumo do fichário…" />
-		{:else if error}
-			<div class="error" role="alert" transition:fly={{ y: -6, duration: 220 }}>
-				<p>{error}</p>
-				<button type="button" onclick={() => void loadDashboard()}>Tentar novamente</button>
-			</div>
-		{:else if !documentsAvailable}
-			<div class="error" role="alert" transition:fly={{ y: -6, duration: 220 }}>
-				<p>Os documentos recentes não puderam ser carregados.</p>
-				<button type="button" onclick={() => void loadDashboard()}>Tentar novamente</button>
-			</div>
-		{:else if recentDocuments.length === 0}
-			<EmptyState
-				title="Seu fichário ainda está vazio"
-				description="Importe uma imagem ou PDF. O arquivo original será preservado enquanto o texto é preparado para pesquisa."
-				actionLabel="Importar o primeiro documento"
-				onAction={startImport}
-			/>
-		{:else}
-			<div class="recent-grid" aria-label="Documentos adicionados recentemente">
-				{#each recentDocuments as document (document.id)}
-					<DocumentCard {document} />
-				{/each}
+		<section class="overview" aria-label="Resumo da biblioteca" aria-busy={loading || refreshing}>
+			<a class="overview-card actionable" href="/library/" aria-label="Abrir biblioteca">
+				<span>Documentos</span>
+				<strong><AnimatedNumber value={usage?.totals.documents ?? null} /></strong>
+				<small>Arquivos privados preservados no fichário</small>
+				<b aria-hidden="true">Abrir biblioteca →</b>
+			</a>
+			<article class="overview-card">
+				<span>Páginas no fichário</span>
+				<strong><AnimatedNumber value={usage?.totals.pages ?? null} /></strong>
+				<small>Originais preservados e conteúdo preparado para pesquisa</small>
+			</article>
+			<a class="overview-card actionable" href="/notebooks/" aria-label="Abrir cadernos">
+				<span>Cadernos</span>
+				<strong><AnimatedNumber value={usage?.totals.notebooks ?? null} /></strong>
+				<small>Conjuntos de documentos organizados do seu jeito</small>
+				<b aria-hidden="true">Abrir cadernos →</b>
+			</a>
+		</section>
+
+		{#if warning}
+			<div class="warning" role="status" transition:fly={{ y: -6, duration: 220 }}>
+				<p>{warning}</p>
+				<button type="button" disabled={loading || refreshing} onclick={() => void loadDashboard()}>
+					{refreshing ? 'Atualizando…' : 'Tentar atualizar novamente'}
+				</button>
 			</div>
 		{/if}
-	</section>
-</div>
+
+		<section class="recent" aria-labelledby="recent-title">
+			<div class="section-heading">
+				<div>
+					<p class="eyebrow">Biblioteca</p>
+					<h2 id="recent-title">Documentos recentes</h2>
+				</div>
+				<a href="/library/">Ver biblioteca</a>
+			</div>
+
+			{#if loading}
+				<LoadingCollection count={6} label="Atualizando o resumo do fichário…" />
+			{:else if error}
+				<div class="error" role="alert" transition:fly={{ y: -6, duration: 220 }}>
+					<p>{error}</p>
+					<button type="button" onclick={() => void loadDashboard()}>Tentar novamente</button>
+				</div>
+			{:else if !documentsAvailable}
+				<div class="error" role="alert" transition:fly={{ y: -6, duration: 220 }}>
+					<p>Os documentos recentes não puderam ser carregados.</p>
+					<button type="button" onclick={() => void loadDashboard()}>Tentar novamente</button>
+				</div>
+			{:else if recentDocuments.length === 0}
+				<EmptyState
+					title="Seu fichário ainda está vazio"
+					description="Importe uma imagem ou PDF. O arquivo original será preservado enquanto o texto é preparado para pesquisa."
+					actionLabel="Importar o primeiro documento"
+					onAction={startImport}
+				/>
+			{:else}
+				<div class="recent-grid" aria-label="Documentos adicionados recentemente">
+					{#each recentDocuments as document (document.id)}
+						<DocumentCard {document} />
+					{/each}
+				</div>
+			{/if}
+		</section>
+	</div>
+{/if}
 
 <style>
 	.page {

@@ -12,13 +12,13 @@ describe('layout authentication redirects', () => {
 			/if \(persistedSession !== null\) \{[\s\S]*session: persistedSession,[\s\S]*authState: 'session_preserved' as const,[\s\S]*providerProfile: null/
 		);
 		expect(source).toMatch(
-			/if \(!isLoginRoute\) \{[\s\S]*redirect\(307, '\/login\/\?reason=unavailable'\);[\s\S]*\}[\s\S]*return \{ session: null, authState: 'unavailable' as const, providerProfile: null \};/
+			/if \(!isPublicRoute\) \{[\s\S]*redirect\(307, '\/login\/\?reason=unavailable'\);[\s\S]*\}[\s\S]*return \{ session: null, authState: 'unavailable' as const, providerProfile: null \};/
 		);
 	});
 
 	it('still redirects truly anonymous users and keeps successful redirect control flow outside the try block', () => {
 		expect(source).toMatch(
-			/if \(session === null && !isLoginRoute\) \{[\s\S]*redirect\(307, '\/login\/'\);/
+			/if \(session === null && !isPublicRoute\) \{[\s\S]*redirect\(307, '\/login\/'\);/
 		);
 		expect(source).toMatch(
 			/if \(session !== null && isLoginRoute\) \{[\s\S]*redirect\(307, '\/'\);/

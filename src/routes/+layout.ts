@@ -14,6 +14,12 @@ export const trailingSlash = 'always';
 
 export const load: LayoutLoad = async ({ url }) => {
 	const isLoginRoute = url.pathname.startsWith('/login');
+	const publicRoutePrefixes = ['/', '/login', '/privacy', '/terms'];
+	const isPublicRoute = publicRoutePrefixes.some((prefix) =>
+		prefix === '/'
+			? url.pathname === '/'
+			: url.pathname === prefix || url.pathname.startsWith(`${prefix}/`)
+	);
 
 	if (!browser) {
 		return { session: null, authState: 'unverified' as const, providerProfile: null };
@@ -40,13 +46,13 @@ export const load: LayoutLoad = async ({ url }) => {
 				providerProfile: null
 			};
 		}
-		if (!isLoginRoute) {
+		if (!isPublicRoute) {
 			redirect(307, '/login/?reason=unavailable');
 		}
 		return { session: null, authState: 'unavailable' as const, providerProfile: null };
 	}
 
-	if (session === null && !isLoginRoute) {
+	if (session === null && !isPublicRoute) {
 		redirect(307, '/login/');
 	}
 	if (session !== null && isLoginRoute) {
