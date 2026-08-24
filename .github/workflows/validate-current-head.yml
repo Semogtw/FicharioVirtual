@@ -228,7 +228,7 @@ jobs:
           SUPABASE_OUTCOME: ${{ steps.supabase.outcome }}
           DATABASE_OUTCOME: ${{ steps.database.outcome }}
         run: |
-          printf '%s\n' \
+          bash tools/checks/aggregate-verification-outcomes.sh \
             "frontend=$FRONTEND_OUTCOME" \
             "source=$SOURCE_OUTCOME" \
             "chromium=$CHROMIUM_OUTCOME" \
@@ -237,23 +237,6 @@ jobs:
             "edge=$EDGE_OUTCOME" \
             "supabase=$SUPABASE_OUTCOME" \
             "database=$DATABASE_OUTCOME"
-
-          for outcome in \
-            "$FRONTEND_OUTCOME" \
-            "$SOURCE_OUTCOME" \
-            "$CHROMIUM_OUTCOME" \
-            "$BROWSER_OUTCOME" \
-            "$DENO_OUTCOME" \
-            "$EDGE_OUTCOME" \
-            "$SUPABASE_OUTCOME" \
-            "$DATABASE_OUTCOME"; do
-            if [ "$outcome" != 'success' ]; then
-              echo "Incomplete verification outcome: $outcome" >&2
-              exit 1
-            fi
-          done
-
-          echo 'All required verification gates succeeded.'
 
       - name: Publish final receipt
         if: always()
@@ -265,6 +248,7 @@ jobs:
           CHROMIUM_OUTCOME: ${{ steps.chromium.outcome }}
           BROWSER_OUTCOME: ${{ steps.browser.outcome }}
           EDGE_OUTCOME: ${{ steps.edge.outcome }}
+          SUPABASE_OUTCOME: ${{ steps.supabase.outcome }}
           DATABASE_OUTCOME: ${{ steps.database.outcome }}
         run: |
           if [ -z "${RECEIPT_ISSUE:-}" ]; then
@@ -282,6 +266,7 @@ jobs:
           Chromium: $CHROMIUM_OUTCOME
           Browser: $BROWSER_OUTCOME
           Edge: $EDGE_OUTCOME
+          Supabase: $SUPABASE_OUTCOME
           Database: $DATABASE_OUTCOME
           EOF
           gh issue edit "$RECEIPT_ISSUE" --body-file /tmp/receipt.md

@@ -12,10 +12,10 @@ describe('current head validation workflow', () => {
 		expect(workflow).not.toContain('cancel-in-progress: false');
 	});
 
-	it('still validates application and infrastructure changes pushed to main', () => {
+	it('still validates application and infrastructure changes pushed to supported branches', () => {
 		const workflow = readFileSync(workflowPath, 'utf8');
 
-		expect(workflow).toContain('branches: [main]');
+		expect(workflow).toContain('branches: [main, feat/public-portfolio]');
 		expect(workflow).toContain('- .github/workflows/**');
 		expect(workflow).toContain('- src/**');
 		expect(workflow).toContain('- supabase/**');
@@ -42,10 +42,8 @@ describe('current head validation workflow', () => {
 		] as const) {
 			expect(rejectBlock).toContain(`${name}: \${{ steps.${step}.outcome }}`);
 		}
-		expect(rejectBlock).toContain(`if [ "$outcome" != 'success' ]; then`);
-		expect(rejectBlock).toContain('echo "Incomplete verification outcome: $outcome" >&2');
-		expect(rejectBlock).toContain('exit 1');
-		expect(rejectBlock).toContain("echo 'All required verification gates succeeded.'");
+		expect(rejectBlock).toContain('bash tools/checks/aggregate-verification-outcomes.sh');
+		expect(rejectBlock).not.toContain('for outcome in');
 		expect(rejectBlock).not.toContain('exit "$failed"');
 		expect(rejectBlock).not.toContain("steps.frontend.outcome != 'success'");
 	});
