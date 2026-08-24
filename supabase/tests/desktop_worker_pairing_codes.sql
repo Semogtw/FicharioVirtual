@@ -6,8 +6,8 @@ select plan(8);
 insert into auth.users (id, email)
 values ('75555555-5555-4555-8555-555555555555', 'pair-code@example.test');
 
-insert into public.app_users (user_id, is_active)
-values ('75555555-5555-4555-8555-555555555555', true);
+insert into public.app_users (user_id, is_active, provider_profile)
+values ('75555555-5555-4555-8555-555555555555', true, 'owner');
 
 select ok(
   has_function_privilege(

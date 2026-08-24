@@ -7,10 +7,10 @@ insert into auth.users (id, email)
 values
   ('11111111-1111-4111-8111-111111111111', 'worker-auth@example.test'),
   ('22222222-2222-4222-8222-222222222222', 'worker-other@example.test');
-insert into public.app_users (user_id, is_active)
+insert into public.app_users (user_id, is_active, provider_profile)
 values
-  ('11111111-1111-4111-8111-111111111111', true),
-  ('22222222-2222-4222-8222-222222222222', true);
+  ('11111111-1111-4111-8111-111111111111', true, 'owner'),
+  ('22222222-2222-4222-8222-222222222222', true, 'owner');
 
 select lives_ok(
   $$

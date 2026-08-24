@@ -6,8 +6,8 @@ select plan(7);
 insert into auth.users (id, email)
 values ('91111111-1111-4111-8111-111111111111', 'claim-reaper@example.test');
 
-insert into public.app_users (user_id, is_active)
-values ('91111111-1111-4111-8111-111111111111', true);
+insert into public.app_users (user_id, is_active, provider_profile)
+values ('91111111-1111-4111-8111-111111111111', true, 'owner');
 
 insert into public.documents (
   id,

@@ -5,15 +5,14 @@ const source = readFileSync('src/routes/+layout.ts', 'utf8');
 
 describe('layout authentication redirects', () => {
 	it('keeps a persisted session when allowlist verification is temporarily unavailable', () => {
-		expect(source).toContain(
-			"import { loadAuthorizedSession, loadPersistedSession } from '$lib/services/auth';"
-		);
+		expect(source).toContain('loadAuthorizedSession');
+		expect(source).toContain('loadPersistedSession');
 		expect(source).toContain('persistedSession = await loadPersistedSession();');
 		expect(source).toMatch(
-			/if \(persistedSession !== null\) \{[\s\S]*return \{ session: persistedSession, authState: 'session_preserved' as const \};/
+			/if \(persistedSession !== null\) \{[\s\S]*session: persistedSession,[\s\S]*authState: 'session_preserved' as const,[\s\S]*providerProfile: null/
 		);
 		expect(source).toMatch(
-			/if \(!isLoginRoute\) \{[\s\S]*redirect\(307, '\/login\/\?reason=unavailable'\);[\s\S]*\}[\s\S]*return \{ session: null, authState: 'unavailable' as const \};/
+			/if \(!isLoginRoute\) \{[\s\S]*redirect\(307, '\/login\/\?reason=unavailable'\);[\s\S]*\}[\s\S]*return \{ session: null, authState: 'unavailable' as const, providerProfile: null \};/
 		);
 	});
 

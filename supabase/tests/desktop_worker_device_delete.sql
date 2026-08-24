@@ -8,10 +8,10 @@ values
   ('81111111-1111-4111-8111-111111111111', 'delete-owner@example.test'),
   ('82222222-2222-4222-8222-222222222222', 'delete-other@example.test');
 
-insert into public.app_users (user_id, is_active)
+insert into public.app_users (user_id, is_active, provider_profile)
 values
-  ('81111111-1111-4111-8111-111111111111', true),
-  ('82222222-2222-4222-8222-222222222222', true);
+  ('81111111-1111-4111-8111-111111111111', true, 'owner'),
+  ('82222222-2222-4222-8222-222222222222', true, 'owner');
 
 insert into public.ocr_worker_devices (
   id,

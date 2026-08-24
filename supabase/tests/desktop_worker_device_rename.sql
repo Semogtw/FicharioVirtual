@@ -8,10 +8,10 @@ values
   ('71111111-1111-4111-8111-111111111111', 'rename-owner@example.test'),
   ('72222222-2222-4222-8222-222222222222', 'rename-other@example.test');
 
-insert into public.app_users (user_id, is_active)
+insert into public.app_users (user_id, is_active, provider_profile)
 values
-  ('71111111-1111-4111-8111-111111111111', true),
-  ('72222222-2222-4222-8222-222222222222', true);
+  ('71111111-1111-4111-8111-111111111111', true, 'owner'),
+  ('72222222-2222-4222-8222-222222222222', true, 'owner');
 
 insert into public.ocr_worker_devices (
   id,

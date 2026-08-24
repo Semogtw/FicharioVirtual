@@ -59,6 +59,7 @@ async function mockSupabase(context: BrowserContext, counters: RequestCounters) 
 
 		if (path === '/rest/v1/app_users') return json(route, { is_active: true });
 		if (path === '/rest/v1/rpc/ensure_current_app_user') return json(route, 'owner');
+		if (path === '/rest/v1/rpc/current_provider_profile') return json(route, 'owner');
 		if (path === '/rest/v1/drive_connections') {
 			return json(route, {
 				status: 'connected',

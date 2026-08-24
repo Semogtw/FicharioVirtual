@@ -8,10 +8,10 @@ values
   ('a1111111-1111-4111-8111-111111111111', 'queue-owner@example.test'),
   ('a2222222-2222-4222-8222-222222222222', 'queue-other@example.test');
 
-insert into public.app_users (user_id, is_active)
+insert into public.app_users (user_id, is_active, provider_profile)
 values
-  ('a1111111-1111-4111-8111-111111111111', true),
-  ('a2222222-2222-4222-8222-222222222222', true);
+  ('a1111111-1111-4111-8111-111111111111', true, 'owner'),
+  ('a2222222-2222-4222-8222-222222222222', true, 'owner');
 
 insert into public.documents (
   id,

@@ -5,8 +5,8 @@ select plan(16);
 
 insert into auth.users (id, email)
 values ('11111111-1111-4111-8111-111111111111', 'desktop-completion@example.test');
-insert into public.app_users (user_id, is_active)
-values ('11111111-1111-4111-8111-111111111111', true);
+insert into public.app_users (user_id, is_active, provider_profile)
+values ('11111111-1111-4111-8111-111111111111', true, 'owner');
 
 select public.register_ocr_worker_device(
   '11111111-1111-4111-8111-111111111111',

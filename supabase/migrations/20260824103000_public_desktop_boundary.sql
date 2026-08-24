@@ -186,3 +186,18 @@ begin
   );
 end;
 $$;
+
+revoke execute on function public.create_ocr_worker_pairing_code()
+  from public, anon;
+grant execute on function public.create_ocr_worker_pairing_code()
+  to authenticated, service_role;
+
+revoke execute on function public.register_ocr_worker_device(uuid, text, text, jsonb)
+  from public, anon, authenticated;
+grant execute on function public.register_ocr_worker_device(uuid, text, text, jsonb)
+  to service_role;
+
+revoke execute on function public.authenticate_ocr_worker_device(text)
+  from public, anon, authenticated;
+grant execute on function public.authenticate_ocr_worker_device(text)
+  to service_role;
