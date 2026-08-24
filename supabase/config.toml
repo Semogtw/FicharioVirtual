@@ -29,15 +29,18 @@ file_size_limit = "20MiB"
 enabled = true
 site_url = "http://127.0.0.1:5173"
 additional_redirect_urls = ["http://127.0.0.1:5173/**"]
-enable_signup = false
+enable_signup = true
 minimum_password_length = 10
 
 [auth.email]
-enable_signup = false
+enable_signup = true
 double_confirm_changes = true
 enable_confirmations = true
 
 [functions.process-ocr]
+verify_jwt = true
+
+[functions.process-public-ocr]
 verify_jwt = true
 
 [functions.ocr-queue-kick]

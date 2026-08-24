@@ -1,4 +1,5 @@
 import type { GeminiOcrBatchOutcome, GeminiOcrBatchPage } from './gemini-ocr-client.ts';
+import type { OcrProviderOutcome, OcrProviderPage } from './ocr-provider.ts';
 
 export type OcrContentClass =
 	| 'unknown'
@@ -82,6 +83,66 @@ export function buildGeminiTelemetryRpcArgs(input: {
 						toolUsePromptTokensDetails: usage.toolUsePromptTokensDetails
 					}
 				: {})
+		},
+		recorded_at: input.recordedAt
+	};
+}
+
+export function buildAzureTelemetryRpcArgs(input: {
+	eventId: string;
+	documentId: string;
+	batchId: string | null;
+	model: string;
+	promptVersion: number;
+	documentKind: 'image' | 'pdf';
+	pages: readonly OcrProviderPage[];
+	outcome: OcrProviderOutcome | null;
+	status: 'success' | 'error';
+	safeErrorCode: string | null;
+	latencyMs: number;
+	recordedAt: string;
+}) {
+	const results = new Map(input.outcome?.pages.map((page) => [page.pageId, page]) ?? []);
+	const latencyMs = Number.isFinite(input.latencyMs)
+		? Math.max(0, Math.min(3_600_000, Math.round(input.latencyMs)))
+		: 0;
+	return {
+		target_event_id: input.eventId,
+		target_document_id: input.documentId,
+		target_batch_id: input.batchId,
+		target_provider: 'azure_vision',
+		target_model: input.model,
+		target_provider_model_version: input.outcome?.providerModelVersion ?? null,
+		target_prompt_version: input.promptVersion,
+		target_document_kind: input.documentKind,
+		terminal_status: input.status,
+		target_safe_error_code: input.safeErrorCode,
+		target_page_metrics: input.pages.map((page) => {
+			const result = results.get(page.pageId);
+			return {
+				pageId: page.pageId,
+				pageNumber: page.pageNumber,
+				sourceBytes: page.bytes.byteLength,
+				outputCharacters: result?.text.length ?? 0,
+				warningCount: result?.warnings.length ?? 0,
+				needsReview: result?.needsReview ?? false,
+				contentClass: result?.contentClass ?? 'unknown',
+				routeReason: 'public_azure',
+				shadowSample: false
+			};
+		}),
+		target_latency_ms: latencyMs,
+		target_prompt_token_count: null,
+		target_cached_content_token_count: null,
+		target_candidates_token_count: null,
+		target_tool_use_prompt_token_count: null,
+		target_thoughts_token_count: null,
+		target_total_token_count: null,
+		target_service_tier: null,
+		target_provider_response_id: input.outcome?.providerResponseId ?? null,
+		target_usage_details: {
+			contentClassificationVersion: OCR_CONTENT_CLASSIFICATION_VERSION,
+			providerRequestCount: input.outcome?.usage?.requestCount ?? null
 		},
 		recorded_at: input.recordedAt
 	};

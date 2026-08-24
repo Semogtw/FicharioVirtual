@@ -17,6 +17,8 @@ import {
 } from '../_shared/gemini-ocr-routing.ts';
 import { requestGeminiOcrBatch, type GeminiOcrBatchPage } from '../_shared/gemini-ocr-client.ts';
 import { buildGeminiTelemetryRpcArgs } from '../_shared/ocr-provider-telemetry.ts';
+import { resolveCurrentProviderPolicy } from '../_shared/provider-profile-resolver.ts';
+import { runPublicOcr } from '../_shared/public-ocr-runner.ts';
 import {
 	enqueueVisualEmbeddingAfterOcr,
 	visualTemporaryMediaIsNeeded
@@ -160,6 +162,29 @@ Deno.serve(async (request) => {
 
 	const supabaseUrl = Deno.env.get('SUPABASE_URL');
 	const publishableKey = Deno.env.get('SUPABASE_ANON_KEY');
+	if (!supabaseUrl || !publishableKey) return respond(503, { code: 'ocr_not_configured' });
+
+	const supabase = createClient(supabaseUrl, publishableKey, {
+		global: { headers: { Authorization: authorization } },
+		auth: { persistSession: false, autoRefreshToken: false }
+	});
+	const {
+		data: { user },
+		error: userError
+	} = await supabase.auth.getUser();
+	if (userError || !user) return respond(401, { code: 'authentication_required' });
+
+	const providerPolicy = await resolveCurrentProviderPolicy(supabase);
+	if (!providerPolicy) return respond(503, { code: 'provider_profile_unavailable' });
+	if (providerPolicy.profile === 'public') {
+		return runPublicOcr({
+			supabase,
+			request,
+			parsedRequest,
+			respond
+		});
+	}
+
 	const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 	const apiKey = Deno.env.get('GEMINI_API_KEY');
 	const model = Deno.env.get('OCR_MODEL_PRIMARY') ?? DEFAULT_GEMINI_OCR_PRIMARY_MODEL;
@@ -204,16 +229,6 @@ Deno.serve(async (request) => {
 	if (parsedRequest.pageIds.length > maxBatchPages) {
 		return respond(413, { code: 'ocr_batch_too_many_pages', splitRequired: true });
 	}
-
-	const supabase = createClient(supabaseUrl, publishableKey, {
-		global: { headers: { Authorization: authorization } },
-		auth: { persistSession: false, autoRefreshToken: false }
-	});
-	const {
-		data: { user },
-		error: userError
-	} = await supabase.auth.getUser();
-	if (userError || !user) return respond(401, { code: 'authentication_required' });
 
 	const admin = createClient(supabaseUrl, serviceRoleKey, {
 		auth: { persistSession: false, autoRefreshToken: false }
