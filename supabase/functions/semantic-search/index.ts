@@ -16,6 +16,7 @@ import {
 } from '../_shared/semantic-ranking.ts';
 import { recordSemanticRetrievalEvent } from '../_shared/semantic-retrieval-telemetry.ts';
 import { hasVisualSearchIntent } from '../_shared/visual-search-policy.ts';
+import { resolveCurrentProviderPolicy } from '../_shared/provider-profile-resolver.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_REQUEST_BODY_BYTES = 8 * 1024;
@@ -537,6 +538,7 @@ Deno.serve(async (request) => {
 		error: userError
 	} = await supabase.auth.getUser();
 	if (userError || !user) return respond(401, { code: 'authentication_required' });
+	const providerPolicy = await resolveCurrentProviderPolicy(supabase);
 
 	const startedAt = performance.now();
 	const abort = new AbortController();
@@ -546,15 +548,20 @@ Deno.serve(async (request) => {
 	);
 
 	try {
-		const apiKey = Deno.env.get('GEMINI_API_KEY');
+		const geminiAllowed = providerPolicy?.geminiAllowed === true;
+		const apiKey = geminiAllowed ? Deno.env.get('GEMINI_API_KEY') : undefined;
 		const semanticAllowed =
 			parsed.query.length >= MIN_SEMANTIC_QUERY_CHARS &&
+			geminiAllowed &&
 			Boolean(apiKey) &&
 			parsed.offset + parsed.limit <= MAX_HYBRID_WINDOW;
 
 		if (!semanticAllowed) {
-			let reason = 'semantic_not_configured';
+			let reason = providerPolicy ? 'provider_profile_not_gemini' : 'provider_policy_unavailable';
 			if (parsed.query.length < MIN_SEMANTIC_QUERY_CHARS) reason = 'query_too_short';
+			else if (!geminiAllowed)
+				reason = providerPolicy ? 'provider_profile_not_gemini' : 'provider_policy_unavailable';
+			else if (!apiKey) reason = 'semantic_not_configured';
 			else if (parsed.offset + parsed.limit > MAX_HYBRID_WINDOW) {
 				reason = 'semantic_window_exhausted';
 			}

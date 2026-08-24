@@ -85,4 +85,14 @@ describe('adaptive visual semantic implementation contract', () => {
 		expect(indexer).toContain('error.status === 429');
 		expect(indexer).toContain("status: 'blocked_quota'");
 	});
+
+	it('keeps public profiles out of the Gemini visual queue and worker claim', () => {
+		const boundary = readFileSync(
+			'supabase/migrations/20260824113000_public_gemini_embedding_boundary.sql',
+			'utf8'
+		);
+		expect(boundary).toContain('prevent_non_owner_visual_embedding_job');
+		expect(boundary).toContain("provider_profile = 'owner'");
+		expect(boundary).toContain('claim_page_visual_embedding_jobs');
+	});
 });

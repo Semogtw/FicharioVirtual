@@ -43,6 +43,15 @@ describe('global semantic search edge contract', () => {
 		expect(edge).toContain('getSemanticQueryEmbedding({');
 	});
 
+	it('fails closed to lexical search for profiles without Gemini entitlement', () => {
+		expect(edge).toContain('resolveCurrentProviderPolicy(supabase)');
+		expect(edge).toContain('providerPolicy?.geminiAllowed === true');
+		expect(edge).toContain("'provider_profile_not_gemini'");
+		expect(edge).toContain(
+			"const apiKey = geminiAllowed ? Deno.env.get('GEMINI_API_KEY') : undefined"
+		);
+	});
+
 	it('keeps textual fallback for short queries, quota and provider failures', () => {
 		expect(edge).toContain("reason = 'query_too_short'");
 		expect(edge).toContain("'semantic_quota_or_rate_limit'");

@@ -16,6 +16,10 @@ const dispatchMigration = readFileSync(
 const worker = readFileSync('supabase/functions/semantic-index-worker/index.ts', 'utf8');
 const indexer = readFileSync('supabase/functions/_shared/background-semantic-indexer.ts', 'utf8');
 const config = readFileSync('supabase/config.toml', 'utf8');
+const dispatchSource = readFileSync(
+	'supabase/migrations/20260824113000_public_gemini_embedding_boundary.sql',
+	'utf8'
+);
 
 describe('automatic semantic indexing', () => {
 	it('keeps the background dispatcher service-role only', () => {
@@ -57,5 +61,11 @@ describe('automatic semantic indexing', () => {
 		expect(dispatchMigration).toContain(
 			'revoke execute on function public.replace_page_semantic_chunks(uuid, text, text, jsonb)'
 		);
+	});
+
+	it('keeps public profiles out of the Gemini document-indexing dispatcher', () => {
+		expect(dispatchSource).toContain("provider_profile = 'owner'");
+		expect(dispatchSource).toContain('background_semantic_as_user');
+		expect(dispatchSource).toContain('list_background_semantic_users');
 	});
 });

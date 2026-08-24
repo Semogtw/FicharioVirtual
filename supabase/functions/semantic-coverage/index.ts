@@ -10,6 +10,7 @@ import { semanticIndexStats } from '../_shared/semantic-index-stats.ts';
 import { getSemanticQueryEmbeddings } from '../_shared/semantic-query-cache.ts';
 import { compareHybridRanked } from '../_shared/semantic-ranking.ts';
 import { recordSemanticRetrievalEvent } from '../_shared/semantic-retrieval-telemetry.ts';
+import { resolveCurrentProviderPolicy } from '../_shared/provider-profile-resolver.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_TOPICS = 40;
@@ -317,11 +318,31 @@ Deno.serve(async (request) => {
 		error: userError
 	} = await supabase.auth.getUser();
 	if (userError || !user) return respond(401, { code: 'authentication_required' });
+	const providerPolicy = await resolveCurrentProviderPolicy(supabase);
 	const abort = new AbortController();
 	const timeoutMs = envInteger('SEMANTIC_COVERAGE_TIMEOUT_MS', 55_000, 5_000, 120_000) ?? 55_000;
 	const timeout = setTimeout(() => abort.abort(), timeoutMs);
 	const startedAt = performance.now();
 	try {
+		if (providerPolicy?.geminiAllowed !== true) {
+			const topics = await lexicalTopics(supabase, parsed);
+			const reason = providerPolicy ? 'provider_profile_not_gemini' : 'provider_policy_unavailable';
+			await recordSemanticRetrievalEvent(supabase, {
+				surface: 'topic_coverage',
+				mode: 'fallback',
+				model: null,
+				resultCount: topics.reduce((sum, topic) => sum + topic.candidates.length, 0),
+				durationMs: performance.now() - startedAt,
+				fallbackReason: reason
+			});
+			return respond(200, {
+				mode: 'lexical',
+				reason,
+				embeddingModel: null,
+				index: null,
+				topics
+			});
+		}
 		const apiKey = Deno.env.get('GEMINI_API_KEY');
 		if (!apiKey) {
 			const topics = await lexicalTopics(supabase, parsed);

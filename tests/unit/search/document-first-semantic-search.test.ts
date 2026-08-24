@@ -77,4 +77,10 @@ describe('document-first semantic search UX', () => {
 		expect(coverageEdge).not.toContain('requestGeminiCoverageVerification');
 		expect(coverageEdge).not.toContain('COVERAGE_VERIFY_MODEL');
 	});
+
+	it('keeps public topic coverage lexical-only without a Gemini query embedding', () => {
+		expect(coverageEdge).toContain('resolveCurrentProviderPolicy(supabase)');
+		expect(coverageEdge).toContain('providerPolicy?.geminiAllowed !== true');
+		expect(coverageEdge).toContain("'provider_profile_not_gemini'");
+	});
 });
