@@ -93,6 +93,7 @@ A branch já deixou de ser apenas planejamento. O núcleo abaixo existe em códi
 - a migration 3 acrescenta título, caderno, status e contagem de páginas ao catálogo e mantém um snapshot owner-scoped de metadados por página, substituído atomicamente a cada inspeção;
 - a migration 5 acrescenta texto OCR bruto/corrigido, fonte de extração, geometria por palavra, warnings e revisão manual, com validação de limites e JSON; migrations v1–v4 continuam atualizáveis sem perder documentos, páginas ou jobs;
 - o detalhe local lê esse snapshot para reconstruir status, texto e análise de páginas após reinício; páginas sem texto permanecem `processing`/`needs_review`, sem serem tratadas como OCR concluído;
+- a abertura de uma página local usa uma consulta nativa owner-scoped da página solicitada, sem reler o snapshot completo de análise a cada navegação; a lista completa continua reservada ao índice leve do documento;
 - a busca textual usa o índice FTS5 local sobre o texto efetivo (corrigido, nativo ou OCR bruto) como fallback offline, com filtro de caderno, paginação e excerpt limitado; semântica continua dependente do próximo slice;
 - páginas abertas pela fonte remota são hidratadas no catálogo nativo em best effort, preservando o remoto como fonte imediata e mantendo o fallback quando o cache falhar;
 - testes unitários provam que o fast path local não chama a função remota;
@@ -204,7 +205,7 @@ Prioridade alta antes de considerar o app pronto:
 
 1. adicionar scheduler nativo equivalente a WorkManager no Android e retomar sincronização de desktop após suspensão/encerramento sem depender da ativação manual do timer Linux;
 2. manter migrations versionadas para futuras mudanças de catálogo; o caminho v1→v5 já está coberto por fixtures de upgrade;
-3. ampliar a validação de acervos muito grandes; os consumidores atuais já usam `list_native_documents_page` e o cursor está coberto por fixture de paginação;
+3. ampliar a validação de acervos muito grandes; os consumidores atuais já usam `list_native_documents_page`, o cursor está coberto por fixture de paginação e a abertura de página usa consulta individual owner-scoped, mas ainda falta benchmark em catálogo volumoso;
 4. integrar a apresentação de destaques/edição offline ao snapshot de análise já persistido; o catálogo agora cobre título, caderno, status, contagem, texto nativo, OCR bruto/corrigido, fonte, geometria, warnings, revisão manual e busca FTS5, sem inventar OCR remoto;
 5. validar instalação/execução do bundle Linux em uma máquina desktop real além do runner;
 6. instalar e executar APK em dispositivo Android real;

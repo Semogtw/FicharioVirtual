@@ -1301,6 +1301,23 @@ pub fn list_document_pages(
         .map_err(|error| format!("Não foi possível ler as páginas locais: {error}"))
 }
 
+pub fn get_document_page(
+    paths: &AppPaths,
+    document_id: &str,
+    owner_id: &str,
+    page_number: i64,
+) -> Result<Option<DocumentPageMetadataRow>, String> {
+    let connection = open(paths)?;
+    connection
+        .query_row(
+            "SELECT p.document_id, p.page_number, p.native_text, p.ocr_raw_text, p.corrected_text, p.extraction_source, p.ocr_word_geometry_json, p.warnings_json, p.was_manually_reviewed, p.status, p.updated_at_ms FROM document_pages p INNER JOIN documents d ON d.document_id = p.document_id WHERE p.document_id = ?1 AND d.owner_id = ?2 AND p.page_number = ?3",
+            params![document_id, owner_id, page_number],
+            document_page_metadata_from_row,
+        )
+        .optional()
+        .map_err(|error| format!("Não foi possível consultar a página local: {error}"))
+}
+
 fn safe_fts_query(query: &str) -> Result<String, String> {
     let terms = query
         .split_whitespace()

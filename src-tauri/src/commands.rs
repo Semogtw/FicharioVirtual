@@ -255,6 +255,14 @@ pub struct DocumentOwnerRequest {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct GetNativeDocumentPageRequest {
+    pub document_id: String,
+    pub owner_id: String,
+    pub page_number: i64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SearchNativePagesRequest {
     pub owner_id: String,
     pub query: String,
@@ -492,6 +500,27 @@ pub fn list_native_document_pages(
             .map(Into::into)
             .collect(),
     )
+}
+
+#[tauri::command]
+pub fn get_native_document_page(
+    app: AppHandle,
+    request: GetNativeDocumentPageRequest,
+) -> Result<Option<NativeDocumentPageMetadata>, String> {
+    paths::validate_document_id(&request.document_id)?;
+    if request.owner_id.is_empty() || request.owner_id.len() > 128 {
+        return Err("Proprietário local inválido".into());
+    }
+    if !(1..=10_000).contains(&request.page_number) {
+        return Err("Número de página local inválido".into());
+    }
+    Ok(catalog::get_document_page(
+        &app_paths(&app)?,
+        &request.document_id,
+        &request.owner_id,
+        request.page_number,
+    )?
+    .map(Into::into))
 }
 
 #[tauri::command]

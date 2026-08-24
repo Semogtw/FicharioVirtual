@@ -416,6 +416,31 @@ export async function listNativeDocumentPages(
 	return Object.freeze(pages as NativeDocumentPageMetadata[]);
 }
 
+export async function getNativeDocumentPage(
+	documentId: string,
+	ownerId: string,
+	pageNumber: number
+): Promise<NativeDocumentPageMetadata | null> {
+	if (!isNativeRuntime()) return null;
+	if (documentId.trim().length === 0 || documentId.length > 128) {
+		throw new TypeError('Invalid native document identifier');
+	}
+	if (ownerId.trim().length === 0 || ownerId.length > 128) {
+		throw new TypeError('Invalid native document owner');
+	}
+	if (!Number.isSafeInteger(pageNumber) || pageNumber < 1 || pageNumber > 10_000) {
+		throw new TypeError('Invalid native document page number');
+	}
+	const result = await invokeNative<unknown>(
+		'get_native_document_page',
+		request({ documentId, ownerId, pageNumber })
+	);
+	if (result === null) return null;
+	const page = parseNativeDocumentPageMetadata(result);
+	if (!page) throw new TypeError('Invalid native document page metadata');
+	return page;
+}
+
 export async function updateNativeDocumentMetadata(
 	input: NativeDocumentMetadataInput
 ): Promise<void> {

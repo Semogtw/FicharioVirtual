@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
 	getNativeStatus,
+	getNativeDocumentPage,
 	listNativeDocumentPages,
 	listNativeDocumentsPage,
 	nativeImportRanges,
@@ -248,6 +249,34 @@ describe('native runtime bridge', () => {
 			request: {
 				documentId: 'doc-metadata',
 				ownerId: '11111111-1111-4111-8111-111111111111'
+			}
+		});
+	});
+
+	it('loads one owner-scoped page without enumerating the document page list', async () => {
+		const invoke = vi.fn().mockResolvedValue({
+			documentId: 'doc-metadata',
+			pageNumber: 37,
+			nativeText: 'página local',
+			ocrRawText: null,
+			correctedText: null,
+			extractionSource: 'native_pdf',
+			wordGeometry: [],
+			warnings: [],
+			wasManuallyReviewed: false,
+			status: 'ready',
+			updatedAtMs: 10
+		});
+		root.__TAURI__ = { core: { invoke } };
+
+		await expect(
+			getNativeDocumentPage('doc-metadata', '11111111-1111-4111-8111-111111111111', 37)
+		).resolves.toMatchObject({ pageNumber: 37, nativeText: 'página local' });
+		expect(invoke).toHaveBeenCalledWith('get_native_document_page', {
+			request: {
+				documentId: 'doc-metadata',
+				ownerId: '11111111-1111-4111-8111-111111111111',
+				pageNumber: 37
 			}
 		});
 	});

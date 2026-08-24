@@ -100,6 +100,7 @@ pub fn run() {
             commands::update_native_document_metadata,
             commands::update_native_document_page_metadata,
             commands::list_native_document_pages,
+            commands::get_native_document_page,
             commands::search_native_document_pages,
             commands::read_local_document_range,
             commands::verify_local_document,

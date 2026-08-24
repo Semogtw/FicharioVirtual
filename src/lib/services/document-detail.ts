@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { mapPageRecord, type PageDetail, type PageRecord } from '$lib/domain/page';
 import {
+	getNativeDocumentPage,
 	listNativeDocumentPages,
 	resolveNativeDocument,
 	updateNativeDocumentPageMetadata,
@@ -513,9 +514,8 @@ async function loadNativeDocumentPage(
 	try {
 		const document = await resolveNativeDocument(documentId);
 		if (!document || document.ownerId !== ownerId) return null;
-		const pages = (await listNativeDocumentPages(documentId, ownerId)) ?? [];
-		const page = pages.find((candidate) => candidate.pageNumber === pageNumber);
-		return mapNativePageDetail(document, pageNumber, page);
+		const page = await getNativeDocumentPage(documentId, ownerId, pageNumber);
+		return mapNativePageDetail(document, pageNumber, page ?? undefined);
 	} catch {
 		return null;
 	}

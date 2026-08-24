@@ -618,3 +618,67 @@ fn catalog_document_pages_resume_with_a_cursor_without_dropping_documents() {
     assert!(first_ids.iter().all(|id| !second_ids.contains(id)));
     assert_eq!(first_ids.len() + second_ids.len(), 3);
 }
+
+#[test]
+fn catalog_reads_one_page_with_owner_scope_without_listing_the_snapshot() {
+    let storage_root = TestStorage::new("single-document-page");
+    let paths = &storage_root.paths;
+    let owner_id = "11111111-1111-4111-8111-111111111111";
+    let data = b"document page metadata";
+
+    storage::begin_import(paths, &begin_request("doc-single-page", data.len()))
+        .expect("begin import");
+    storage::append_import(paths, "doc-single-page", data).expect("append import");
+    storage::finish_import(paths, "doc-single-page").expect("finish import");
+    catalog::update_document_metadata(
+        paths,
+        "doc-single-page",
+        catalog::DocumentMetadataInput {
+            owner_id: owner_id.into(),
+            title: "Documento local".into(),
+            notebook_id: None,
+            page_count: 2,
+            status: "ready".into(),
+            pages: vec![
+                catalog::DocumentPageMetadataInput {
+                    page_number: 1,
+                    native_text: Some("primeira página".into()),
+                    ocr_raw_text: None,
+                    corrected_text: None,
+                    extraction_source: Some("native_pdf".into()),
+                    ocr_word_geometry_json: "[]".into(),
+                    warnings_json: "[]".into(),
+                    was_manually_reviewed: false,
+                },
+                catalog::DocumentPageMetadataInput {
+                    page_number: 2,
+                    native_text: Some("segunda página".into()),
+                    ocr_raw_text: None,
+                    corrected_text: None,
+                    extraction_source: Some("native_pdf".into()),
+                    ocr_word_geometry_json: "[]".into(),
+                    warnings_json: "[]".into(),
+                    was_manually_reviewed: false,
+                },
+            ],
+        },
+    )
+    .expect("write page snapshot");
+
+    let page = catalog::get_document_page(paths, "doc-single-page", owner_id, 2)
+        .expect("read one page")
+        .expect("page exists");
+
+    assert_eq!(page.page_number, 2);
+    assert_eq!(page.native_text.as_deref(), Some("segunda página"));
+    assert!(
+        catalog::get_document_page(paths, "doc-single-page", "other-owner", 2)
+            .expect("check other owner")
+            .is_none()
+    );
+    assert!(
+        catalog::get_document_page(paths, "doc-single-page", owner_id, 3)
+            .expect("check missing page")
+            .is_none()
+    );
+}
