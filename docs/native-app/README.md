@@ -153,7 +153,7 @@ A branch já deixou de ser apenas planejamento. O núcleo abaixo existe em códi
 - o adapter Tauri também está preparado para Credential Manager no Windows, embora esse target permaneça secundário nesta fase;
 - no runtime Android, o mesmo contrato IPC usa `tauri-plugin-keyring-store` com Android Keystore + SharedPreferences, sob o namespace fixo `br.com.semog.fichario`, sem persistência em `localStorage`;
 - chaves e valores são validados nos boundaries Rust e TypeScript, e o runtime web continua usando o armazenamento web existente;
-- a implementação Android está presente, mas a sessão nativa Android permanece não validada até o smoke de compilação mobile autorizado e a execução em hardware real.
+- a implementação Android foi compilada em build mobile e instalada em hardware real neste ciclo; o ciclo autenticado Supabase e o exercício real do secure store ainda permanecem pendentes.
 
 ## Validação
 
@@ -195,9 +195,9 @@ No ciclo de metadata v5, o Rust passou por `cargo test --lib` com 16 testes apro
 
 No head `a8d3505`, esses gates foram repetidos no Linux: 343 arquivos Vitest (1471 testes), `svelte-check` sem erros/avisos, `cargo fmt --check`, `cargo test --lib` (16 aprovados, 1 ignorado), `cargo clippy --lib -- -D warnings`, `vite build` com finalização CSP/PWA, Tauri release `--sync-once` com status `0` e `.deb` inspecionado. O pacote contém o ELF x86-64 e um `.desktop` válido; o SHA-256 do `.deb` local é `acbeb7a018a3d7ad05046f0d5f11d807347a5656629720efde16068b2af22e9d`.
 
-No ciclo seguinte, o adapter Android de armazenamento seguro foi integrado com `tauri-plugin-keyring-store` e o fixture de upgrade v4→v5 foi adicionado. No Linux, Rust passou por `cargo check`, 17 testes aprovados e 1 ignorado, clippy sem warnings, e o binário release atualizado voltou a passar pelo `--sync-once`. O adapter Android não foi compilado/executado neste ciclo por causa da regra de testar somente Linux.
+No ciclo seguinte, o adapter Android de armazenamento seguro foi integrado com `tauri-plugin-keyring-store` e o fixture de upgrade v4→v5 foi adicionado. No Linux, Rust passou por `cargo check`, 17 testes aprovados e 1 ignorado, clippy sem warnings, e o binário release atualizado voltou a passar pelo `--sync-once`.
 
-Não há alegação de validação em Android/Windows nem de sessão Supabase autenticada nesta branch. Após a decisão de focar Linux, não foi usado `adb` nem houve instalação/execução de APK em dispositivo; o adapter Android está implementado, porém aguardando esse gate autorizado.
+No head `8fe3d0b`, o projeto Android foi inicializado com o SDK/NDK local, o frontend foi empacotado, e `cargo tauri android build --apk` terminou verde para os quatro ABIs. O APK universal unsigned tem 68.822.684 bytes e SHA-256 `c86091a9b5ce390c5e175bc80816f4b276f5bcc500b5f6aa1abccb42cee62a51`. Para smoke físico, ele foi assinado somente com a debug keystore local, verificado pelas assinaturas v2/v3, instalado via `adb` no Samsung SM-A715F (Android 13) e aberto com `MainActivity` em primeiro plano; a tela de login carregou sem crash. Esse teste prova empacotamento, instalação e inicialização, mas não prova publicação, assinatura de release, login Supabase, OAuth/deep link ou o ciclo `set/get/remove` do secure store em produção.
 
 ## Trabalho importante restante
 
@@ -208,8 +208,8 @@ Prioridade alta antes de considerar o app pronto:
 3. ampliar a validação de acervos muito grandes; os consumidores atuais já usam `list_native_documents_page`, o cursor está coberto por fixture de paginação e a abertura de página usa consulta individual owner-scoped, mas ainda falta benchmark em catálogo volumoso;
 4. integrar a apresentação de destaques/edição offline ao snapshot de análise já persistido; o catálogo agora cobre título, caderno, status, contagem, texto nativo, OCR bruto/corrigido, fonte, geometria, warnings, revisão manual e busca FTS5, sem inventar OCR remoto;
 5. validar instalação/execução do bundle Linux em uma máquina desktop real além do runner;
-6. instalar e executar APK em dispositivo Android real;
-7. validar OAuth/deep link e o adapter de armazenamento seguro Android em build mobile; o adapter Linux já está implementado e teve o ciclo operacional `keyring` validado em sessão desktop, mas o login/refresh Supabase completo ainda precisa de execução autenticada;
+6. repetir o smoke com artefato Android assinado para distribuição e completar os cenários do checklist físico;
+7. validar OAuth/deep link, o ciclo operacional do adapter de armazenamento seguro Android e o login/refresh Supabase completo; o adapter Linux já está implementado e teve o ciclo operacional `keyring` validado em sessão desktop;
 8. signing de Android e Windows, política de update e checksums;
 9. validar falta de espaço, crash durante cópia, perda de rede e expiração de autenticação;
 10. medir abertura local em hardware real e registrar p50/p95;

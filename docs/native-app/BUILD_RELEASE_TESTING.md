@@ -322,6 +322,8 @@ Emulador/CI não substitui testes reais.
 
 ### Android físico
 
+O head `8fe3d0b` já teve um smoke básico em um Samsung SM-A715F com Android 13: APK universal assinado com debug keystore apenas para teste, instalação via `adb`, `MainActivity` em primeiro plano e tela de login carregada sem crash. Isso não fecha o checklist abaixo nem substitui assinatura de release.
+
 Testar:
 
 - seletor de arquivos;
