@@ -5,7 +5,7 @@ test('login screen exposes both sign-in and public signup modes', async ({ page 
 
 	await expect(page.getByRole('heading', { name: 'Acesse seu fichário' })).toBeVisible();
 	await expect(page.getByLabel('E-mail')).toBeVisible();
-	await expect(page.getByLabel('Senha')).toBeVisible();
+	await expect(page.getByRole('textbox', { name: 'Senha', exact: true })).toBeVisible();
 
 	const modeSwitch = page.getByLabel('Escolha entre entrar e criar conta');
 	const signInMode = modeSwitch.getByRole('button', { name: 'Entrar', exact: true });

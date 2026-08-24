@@ -8,10 +8,10 @@ values
   ('b1111111-1111-4111-8111-111111111111', 'candidate-owner@example.test'),
   ('b2222222-2222-4222-8222-222222222222', 'candidate-other@example.test');
 
-insert into public.app_users (user_id, is_active)
+insert into public.app_users (user_id, is_active, provider_profile)
 values
-  ('b1111111-1111-4111-8111-111111111111', true),
-  ('b2222222-2222-4222-8222-222222222222', true);
+  ('b1111111-1111-4111-8111-111111111111', true, 'owner'),
+  ('b2222222-2222-4222-8222-222222222222', true, 'owner');
 
 insert into public.documents (
   id,

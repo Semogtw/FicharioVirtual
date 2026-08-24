@@ -34,9 +34,9 @@ values
   ('11111111-1111-4111-8111-111111111111', 'batch-owner@example.test'),
   ('22222222-2222-4222-8222-222222222222', 'batch-other@example.test');
 
-insert into public.app_users (user_id, is_active) values
-  ('11111111-1111-4111-8111-111111111111', true),
-  ('22222222-2222-4222-8222-222222222222', true);
+insert into public.app_users (user_id, is_active, provider_profile) values
+  ('11111111-1111-4111-8111-111111111111', true, 'owner'),
+  ('22222222-2222-4222-8222-222222222222', true, 'owner');
 
 insert into public.documents (
   id, user_id, title, kind, original_filename, storage_path, page_count, status

@@ -90,7 +90,8 @@ describe('background OCR queue contract', () => {
 		expect(config).toContain('[functions.ocr-queue-kick]\nverify_jwt = true');
 		expect(config).toContain('[functions.ocr-queue-worker]\nverify_jwt = false');
 		expect(kick).toContain('userClient.auth.getUser()');
-		expect(kick).toContain(".eq('is_active', true)");
+		expect(kick).toContain('resolveCurrentProviderPolicy(userClient)');
+		expect(kick).toContain('if (!providerPolicy.geminiAllowed)');
 		expect(kick).toContain("Deno.env.get('OCR_BACKGROUND_WORKER_KEY')");
 		expect(kick).toContain("'X-Fichario-Worker-Key': workerKey");
 		expect(kick).toContain("'X-Fichario-Worker-Mode': 'sync'");
