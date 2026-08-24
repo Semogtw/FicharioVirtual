@@ -301,3 +301,23 @@ begin
   order by c.claimed_at, c.id;
 end;
 $$;
+
+revoke execute on function public.list_background_semantic_users(text, integer)
+  from public, anon, authenticated;
+grant execute on function public.list_background_semantic_users(text, integer)
+  to service_role;
+
+revoke execute on function public.background_semantic_as_user(uuid, text, jsonb)
+  from public, anon, authenticated;
+grant execute on function public.background_semantic_as_user(uuid, text, jsonb)
+  to service_role;
+
+revoke execute on function public.dispatch_semantic_index_on_text_change()
+  from public, anon, authenticated;
+grant execute on function public.dispatch_semantic_index_on_text_change()
+  to service_role;
+
+revoke execute on function public.claim_page_visual_embedding_jobs(text, integer)
+  from public, anon, authenticated;
+grant execute on function public.claim_page_visual_embedding_jobs(text, integer)
+  to service_role;
