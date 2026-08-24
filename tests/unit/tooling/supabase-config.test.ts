@@ -16,6 +16,7 @@ describe('Supabase local configuration', () => {
 		const config = read('supabase/config.toml');
 		for (const functionName of [
 			'process-ocr',
+			'process-public-ocr',
 			'delete-document',
 			'drive-oauth-start',
 			'drive-access-token',

@@ -12,7 +12,7 @@ export type AuthServiceErrorCode =
 
 type ServiceError = { message: string; status?: number };
 type SignOutScope = 'global' | 'local' | 'others';
-type ProviderProfile = 'owner' | 'public';
+export type ProviderProfile = 'owner' | 'public';
 
 type AllowlistQuery = {
 	select(columns: string): AllowlistQuery;
@@ -41,7 +41,7 @@ export type AuthClientLike = {
 		signOut(options?: { scope?: SignOutScope }): Promise<{ error: ServiceError | null }>;
 	};
 	rpc(
-		functionName: 'ensure_current_app_user'
+		functionName: 'ensure_current_app_user' | 'current_provider_profile'
 	): Promise<{ data: unknown; error: ServiceError | null }>;
 	from(table: 'app_users'): AllowlistQuery;
 };
@@ -209,6 +209,18 @@ export async function loadAuthorizedSession(
 	const session = await loadPersistedSession(client);
 	if (session === null) return null;
 	return authorizeSession(session, client);
+}
+
+export async function loadCurrentProviderProfile(
+	client: AuthClientLike = defaultClient()
+): Promise<ProviderProfile | null> {
+	try {
+		const { data, error } = await client.rpc('current_provider_profile');
+		if (error) throw new AuthServiceError('auth_unavailable');
+		return parseEnrollmentProfile(data);
+	} catch (error) {
+		unavailable(error);
+	}
 }
 
 export async function signIn(

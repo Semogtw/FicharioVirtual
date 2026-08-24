@@ -3,14 +3,11 @@ begin;
 create extension if not exists pgtap with schema extensions;
 select plan(10);
 
-select ok(
-  has_function(
-    'public',
-    'claim_public_azure_ocr_job',
-    array['uuid', 'text', 'timestamp with time zone'],
-    'the public Azure claim RPC exists with a dedicated signature'
-  ),
-  'public OCR has a separate claim boundary'
+select has_function(
+  'public',
+  'claim_public_azure_ocr_job',
+  array['uuid', 'text', 'timestamp with time zone'],
+  'the public Azure claim RPC exists with a dedicated signature'
 );
 select ok(
   has_function_privilege(
