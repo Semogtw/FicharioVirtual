@@ -54,7 +54,7 @@ Fichário Digital
     └── public
         ├── OCR público de maior franquia, inicialmente Azure
         ├── fallback gratuito opcional
-        ├── embeddings públicos configurados
+        ├── busca textual disponível; embeddings públicos ainda não ativados
         └── worker desktop pessoal proibido
 ```
 
@@ -91,6 +91,7 @@ Perfil padrão para novos cadastros:
 
 - usa o provider público de OCR;
 - não usa a chave Gemini pessoal como fallback;
+- não consome a chave Gemini pessoal para embeddings textuais ou visuais;
 - não pode reivindicar jobs do worker desktop pessoal;
 - continua com todas as funcionalidades do produto;
 - pode ter limites operacionais de proteção, sem transformar o produto numa demo.
@@ -252,7 +253,16 @@ Antes de ativar Azure em produção, revalidar preços, limites F0 e serviço re
 
 ## 9. Embeddings e busca semântica
 
-Busca semântica continua disponível para usuários públicos.
+Busca textual continua disponível para usuários públicos. A busca semântica
+pública só deve ser ativada quando houver um provider não-Gemini com modelo e
+dimensão versionados.
+
+Estado implementado nesta branch:
+
+- `owner` continua usando embeddings textuais e visuais Gemini;
+- `public` recebe fallback lexical antes de qualquer embedding de consulta;
+- os workers e as filas de embeddings filtram perfis `owner` no banco;
+- o OCR público não enfileira enriquecimento visual Gemini.
 
 A mesma ideia de perfil deve ser aplicada a qualquer API externa de embeddings se a cota pessoal precisar ser protegida.
 
