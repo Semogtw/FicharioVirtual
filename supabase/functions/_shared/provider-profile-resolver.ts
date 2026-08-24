@@ -5,7 +5,7 @@ type RpcError = Readonly<{ message?: string }>;
 export type ProviderProfileRpcClient = Readonly<{
 	rpc: (
 		functionName: 'current_provider_profile'
-	) => Promise<{ data: unknown; error: RpcError | null }>;
+	) => PromiseLike<{ data: unknown; error: RpcError | null }>;
 }>;
 
 /**

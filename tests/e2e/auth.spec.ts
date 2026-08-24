@@ -17,10 +17,16 @@ test('login screen exposes both sign-in and public signup modes', async ({ page 
 	await expect(page.getByLabel('Mostrar senha')).toBeVisible();
 	await page.getByLabel('Mostrar senha').click();
 	await expect(page.getByLabel('Ocultar senha')).toBeVisible();
-	await expect(page.getByLabel('Senha')).toHaveAttribute('type', 'text');
+	await expect(page.getByRole('textbox', { name: 'Senha', exact: true })).toHaveAttribute(
+		'type',
+		'text'
+	);
 
 	await signUpMode.click();
 	await expect(signUpMode).toHaveAttribute('aria-pressed', 'true');
-	await expect(page.getByLabel('Senha')).toHaveAttribute('autocomplete', 'new-password');
+	await expect(page.getByRole('textbox', { name: 'Senha', exact: true })).toHaveAttribute(
+		'autocomplete',
+		'new-password'
+	);
 	await expect(page.getByText('A conta pública usa o mesmo Fichário')).toBeVisible();
 });

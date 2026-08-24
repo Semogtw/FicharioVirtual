@@ -24,8 +24,8 @@ where id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'::uuid;
 insert into auth.users (id, email)
 values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'ocr-gate@example.test');
 
-insert into public.app_users (user_id, is_active)
-values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', true);
+insert into public.app_users (user_id, is_active, provider_profile)
+values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', true, 'owner');
 
 insert into public.documents (
   id,
