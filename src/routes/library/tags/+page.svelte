@@ -596,12 +596,6 @@
 		color: var(--muted);
 	}
 
-	.loading {
-		padding: 2rem;
-		color: var(--muted);
-		text-align: center;
-	}
-
 	.error,
 	.message {
 		margin: 0;

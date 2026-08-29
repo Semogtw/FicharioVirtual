@@ -1,6 +1,17 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { mapPageRecord, type PageDetail, type PageRecord } from '$lib/domain/page';
+import {
+	getNativeDocumentPage,
+	listNativeDocumentPages,
+	resolveNativeDocument,
+	updateNativeDocumentPageMetadata,
+	type NativeDocument,
+	type NativeDocumentPageMetadata
+} from '$lib/native/local-document-store';
+import { openNativePdfRangeDocument } from '$lib/pdf/native-range-transport';
+import { isNativeRuntime } from '$lib/platform/native-bridge';
+import { sessionState } from '$lib/stores/session.svelte';
 import type {
 	Database,
 	DocumentKind,
@@ -294,6 +305,264 @@ function mapPageSummary(record: z.infer<typeof pageSummaryRecordSchema>): Docume
 	});
 }
 
+function nativeTimestamp(value: number) {
+	if (!Number.isSafeInteger(value) || value < 0) return null;
+	try {
+		const result = new Date(value).toISOString();
+		return isIsoTimestamp(result) ? result : null;
+	} catch {
+		return null;
+	}
+}
+
+function nativeTitle(filename: string) {
+	return (
+		filename
+			.replace(/\.[^.]+$/u, '')
+			.trim()
+			.slice(0, 240) || 'Documento local'
+	);
+}
+
+function nativeMetadataTitle(document: NativeDocument) {
+	const title = document.title?.trim();
+	return title ? title.slice(0, 240) : nativeTitle(document.originalFilename);
+}
+
+function nativePageCount(document: NativeDocument, fallback: number) {
+	const pageCount = document.pageCount;
+	if (
+		document.status !== null &&
+		document.status !== undefined &&
+		typeof pageCount === 'number' &&
+		Number.isSafeInteger(pageCount) &&
+		pageCount >= 1 &&
+		pageCount <= 10_000
+	) {
+		return pageCount;
+	}
+	return Number.isSafeInteger(fallback) && fallback >= 1 && fallback <= 10_000 ? fallback : 1;
+}
+
+function nativeDocumentStatus(document: NativeDocument): DocumentStatus {
+	if (document.localState !== 'present') return 'failed';
+	if (document.remoteState === 'pending') return 'pending';
+	if (
+		document.status === 'processing' ||
+		document.status === 'partially_ready' ||
+		document.status === 'ready' ||
+		document.status === 'needs_review' ||
+		document.status === 'failed'
+	) {
+		return document.status;
+	}
+	return 'ready';
+}
+
+function nativePageUpdatedAt(
+	document: NativeDocument,
+	page: NativeDocumentPageMetadata | undefined
+) {
+	return (
+		nativeTimestamp(page?.updatedAtMs ?? document.updatedAtMs) ??
+		nativeTimestamp(document.createdAtMs) ??
+		new Date(0).toISOString()
+	);
+}
+
+function mapNativePageDetail(
+	document: NativeDocument,
+	pageNumber: number,
+	page: NativeDocumentPageMetadata | undefined
+): PageDetail {
+	const fallbackStatus: ProcessingStatus =
+		nativeDocumentStatus(document) === 'pending'
+			? 'pending'
+			: document.localState === 'present'
+				? 'ready'
+				: 'failed';
+	return mapPageRecord({
+		id: `${document.documentId}:native:${pageNumber}`,
+		page_number: pageNumber,
+		native_text: page?.nativeText ?? null,
+		ocr_raw_text: page?.ocrRawText ?? null,
+		corrected_text: page?.correctedText ?? null,
+		extraction_source: page?.extractionSource ?? (page?.nativeText ? 'native_pdf' : null),
+		source_drive_file_id: null,
+		ocr_word_geometry:
+			page?.wordGeometry?.map((word) => [
+				word.text,
+				word.left,
+				word.top,
+				word.right,
+				word.bottom
+			]) ?? [],
+		warnings: page?.warnings ? [...page.warnings] : [],
+		status: page?.status ?? fallbackStatus,
+		was_manually_reviewed: page?.wasManuallyReviewed ?? false,
+		updated_at: nativePageUpdatedAt(document, page)
+	});
+}
+
+function nativeKind(mimeType: string): DocumentKind | null {
+	if (mimeType === 'application/pdf') return 'pdf';
+	if (mimeType.startsWith('image/')) return 'image';
+	return null;
+}
+
+export function mapNativeDocumentDetail(
+	document: NativeDocument,
+	pageCount = 1,
+	pageMetadata: readonly NativeDocumentPageMetadata[] = []
+): DocumentDetail | null {
+	const kind = nativeKind(document.mimeType);
+	const createdAt = nativeTimestamp(document.createdAtMs);
+	const updatedAt = nativeTimestamp(document.updatedAtMs);
+	const normalizedPageCount = nativePageCount(document, pageCount);
+	if (!kind || !createdAt || !updatedAt) return null;
+	const driveFileId = document.driveFileId;
+	const originalReference =
+		driveFileId && driveFileIdSchema.safeParse(driveFileId).success
+			? Object.freeze({
+					provider: 'google_drive' as const,
+					url: driveReferenceUrl(driveFileId),
+					driveFileId
+				})
+			: Object.freeze({ provider: 'missing' as const, url: null, driveFileId: null });
+	const pageByNumber = new Map(pageMetadata.map((page) => [page.pageNumber, page] as const));
+	const documentStatus = nativeDocumentStatus(document);
+	const defaultPageStatus: ProcessingStatus =
+		documentStatus === 'pending'
+			? 'pending'
+			: documentStatus === 'ready'
+				? 'ready'
+				: documentStatus === 'failed'
+					? 'failed'
+					: 'processing';
+	return Object.freeze({
+		id: document.documentId,
+		title: nativeMetadataTitle(document),
+		kind,
+		status: documentStatus,
+		pageCount: normalizedPageCount,
+		notebookId: document.notebookId ?? null,
+		originalFilename: document.originalFilename,
+		originalUrl: originalReference.url,
+		originalReference,
+		physicalState: document.localState === 'present' ? 'available' : 'missing',
+		pages: Object.freeze(
+			Array.from({ length: normalizedPageCount }, (_, index) => {
+				const page = pageByNumber.get(index + 1);
+				return Object.freeze({
+					id: `${document.documentId}:native:${index + 1}`,
+					pageNumber: index + 1,
+					sourceDriveFileId: null,
+					status: page?.status ?? defaultPageStatus,
+					updatedAt: nativePageUpdatedAt(document, page)
+				});
+			})
+		),
+		createdAt,
+		updatedAt
+	});
+}
+
+async function loadNativeDocumentDetail(documentId: string): Promise<DocumentDetail | null> {
+	if (!isNativeRuntime()) return null;
+	const ownerId = sessionState.user?.id;
+	if (!ownerId) return null;
+	try {
+		const local = await resolveNativeDocument(documentId);
+		if (!local || local.ownerId !== ownerId) return null;
+		let pageCount = local.pageCount ?? 1;
+		let pageMetadata: readonly NativeDocumentPageMetadata[] = [];
+		try {
+			pageMetadata = (await listNativeDocumentPages(local.documentId, ownerId)) ?? [];
+		} catch {
+			pageMetadata = [];
+		}
+		if (local.localState === 'present' && local.mimeType === 'application/pdf') {
+			try {
+				const opened = await openNativePdfRangeDocument({
+					documentId: local.documentId,
+					totalBytes: local.sizeBytes
+				});
+				try {
+					if (Number.isSafeInteger(opened.document.numPages) && opened.document.numPages > 0) {
+						pageCount = Math.min(opened.document.numPages, 10_000);
+					}
+				} finally {
+					await opened.destroy();
+				}
+			} catch {
+				// Keep a one-page shell; the viewer will surface a precise render error if needed.
+			}
+		}
+		return mapNativeDocumentDetail(local, pageCount, pageMetadata);
+	} catch {
+		return null;
+	}
+}
+
+async function loadNativeDocumentPage(
+	documentId: string,
+	pageNumber: number
+): Promise<PageDetail | null> {
+	if (!isNativeRuntime()) return null;
+	const ownerId = sessionState.user?.id;
+	if (!ownerId) return null;
+	try {
+		const document = await resolveNativeDocument(documentId);
+		if (!document || document.ownerId !== ownerId) return null;
+		const page = await getNativeDocumentPage(documentId, ownerId, pageNumber);
+		return mapNativePageDetail(document, pageNumber, page ?? undefined);
+	} catch {
+		return null;
+	}
+}
+
+async function cacheRemotePageMetadata(
+	documentId: string,
+	page: PageRecord,
+	mappedPage: PageDetail
+) {
+	if (!isNativeRuntime()) return;
+	const ownerId = sessionState.user?.id;
+	if (!ownerId) return;
+	try {
+		const local = await resolveNativeDocument(documentId);
+		if (!local || local.ownerId !== ownerId) return;
+		await updateNativeDocumentPageMetadata({
+			documentId,
+			ownerId,
+			status: mappedPage.status,
+			page: {
+				pageNumber: mappedPage.pageNumber,
+				nativeText: mappedPage.nativeText,
+				ocrRawText: mappedPage.ocrRawText,
+				correctedText: mappedPage.correctedText,
+				extractionSource: mappedPage.extractionSource,
+				wordGeometry: mappedPage.wordGeometry,
+				warnings: mappedPage.warnings,
+				wasManuallyReviewed: mappedPage.wasManuallyReviewed
+			}
+		});
+	} catch {
+		// Remote detail remains authoritative if the local metadata cache is unavailable.
+	}
+}
+
+async function loadNativeDocumentPreview(
+	documentId: string,
+	pageNumber: number
+): Promise<DocumentPreview | null> {
+	const detail = await loadNativeDocumentDetail(documentId);
+	if (!detail) return null;
+	const page = await loadNativeDocumentPage(documentId, pageNumber);
+	if (!page) return null;
+	return Object.freeze({ detail, page });
+}
+
 export async function loadDocumentDetailWithGateway(
 	documentId: string,
 	gateway: DocumentDetailGateway
@@ -364,6 +633,8 @@ export async function loadDocumentPreviewWithGateway(
 		if (rawPage === null) throw new DocumentDetailError('not_found');
 		const page = pageRecordSchema.parse(rawPage);
 		if (page.page_number !== validatedPageNumber) throw new DocumentDetailError('unavailable');
+		const mappedPage = mapPageRecord(page);
+		void cacheRemotePageMetadata(validatedDocumentId, page, mappedPage);
 		const detail = Object.freeze({
 			id: document.id,
 			title: document.title,
@@ -387,7 +658,7 @@ export async function loadDocumentPreviewWithGateway(
 			createdAt: document.created_at,
 			updatedAt: document.updated_at
 		});
-		return Object.freeze({ detail, page: mapPageRecord(page) });
+		return Object.freeze({ detail, page: mappedPage });
 	} catch (error) {
 		preserveNotFound(error);
 	}
@@ -405,7 +676,9 @@ export async function loadDocumentPageWithGateway(
 		if (rawPage === null) throw new DocumentDetailError('not_found');
 		const page = pageRecordSchema.parse(rawPage);
 		if (page.page_number !== validatedPageNumber) throw new DocumentDetailError('unavailable');
-		return mapPageRecord(page);
+		const mappedPage = mapPageRecord(page);
+		void cacheRemotePageMetadata(validatedDocumentId, page, mappedPage);
+		return mappedPage;
 	} catch (error) {
 		preserveNotFound(error);
 	}
@@ -489,15 +762,34 @@ export async function loadDocumentDetail(
 	const resolvedClient = client ?? getSupabaseClient();
 	const gateway = new SupabaseDocumentGateway(resolvedClient);
 	if (client) return loadDocumentDetailWithGateway(validatedDocumentId, gateway);
+	const preferNative =
+		isNativeRuntime() && typeof navigator !== 'undefined' && navigator.onLine === false;
+	if (preferNative) {
+		const nativeDetail = await loadNativeDocumentDetail(validatedDocumentId);
+		if (nativeDetail) return nativeDetail;
+	}
 
 	const userId = await currentCacheUserId(resolvedClient);
-	if (!userId) return loadDocumentDetailWithGateway(validatedDocumentId, gateway);
+	if (!userId) {
+		try {
+			return await loadDocumentDetailWithGateway(validatedDocumentId, gateway);
+		} catch (error) {
+			const nativeDetail = await loadNativeDocumentDetail(validatedDocumentId);
+			if (nativeDetail) return nativeDetail;
+			throw error;
+		}
+	}
 	const key = detailCacheKey(userId, validatedDocumentId);
 	const cached = getCached(detailCache, key);
 	if (cached) return cached;
 	const existing = detailInflight.get(key);
 	if (existing) return existing;
 	const request = loadDocumentDetailWithGateway(validatedDocumentId, gateway)
+		.catch(async (error) => {
+			const nativeDetail = await loadNativeDocumentDetail(validatedDocumentId);
+			if (nativeDetail) return nativeDetail;
+			throw error;
+		})
 		.then((detail) => {
 			putCached(detailCache, key, detail, DETAIL_CACHE_TTL_MS, DETAIL_CACHE_MAX_ENTRIES);
 			return detail;
@@ -520,10 +812,29 @@ export async function loadDocumentPreview(
 	if (client) {
 		return loadDocumentPreviewWithGateway(validatedDocumentId, validatedPageNumber, gateway);
 	}
+	const preferNative =
+		isNativeRuntime() && typeof navigator !== 'undefined' && navigator.onLine === false;
+	if (preferNative) {
+		const nativePreview = await loadNativeDocumentPreview(validatedDocumentId, validatedPageNumber);
+		if (nativePreview) return nativePreview;
+	}
 
 	const userId = await currentCacheUserId(resolvedClient);
 	if (!userId) {
-		return loadDocumentPreviewWithGateway(validatedDocumentId, validatedPageNumber, gateway);
+		try {
+			return await loadDocumentPreviewWithGateway(
+				validatedDocumentId,
+				validatedPageNumber,
+				gateway
+			);
+		} catch (error) {
+			const nativePreview = await loadNativeDocumentPreview(
+				validatedDocumentId,
+				validatedPageNumber
+			);
+			if (nativePreview) return nativePreview;
+			throw error;
+		}
 	}
 	const key = `${userId}:${validatedDocumentId}:${validatedPageNumber}`;
 	const cached = getCached(previewCache, key);
@@ -531,6 +842,14 @@ export async function loadDocumentPreview(
 	const existing = previewInflight.get(key);
 	if (existing) return existing;
 	const request = loadDocumentPreviewWithGateway(validatedDocumentId, validatedPageNumber, gateway)
+		.catch(async (error) => {
+			const nativePreview = await loadNativeDocumentPreview(
+				validatedDocumentId,
+				validatedPageNumber
+			);
+			if (nativePreview) return nativePreview;
+			throw error;
+		})
 		.then((preview) => {
 			putCached(previewCache, key, preview, DETAIL_CACHE_TTL_MS, DETAIL_CACHE_MAX_ENTRIES);
 			return preview;
@@ -551,16 +870,34 @@ export async function loadDocumentPage(
 	const resolvedClient = client ?? getSupabaseClient();
 	const gateway = new SupabaseDocumentGateway(resolvedClient);
 	if (client) return loadDocumentPageWithGateway(validatedDocumentId, validatedPageNumber, gateway);
+	const preferNative =
+		isNativeRuntime() && typeof navigator !== 'undefined' && navigator.onLine === false;
+	if (preferNative) {
+		const nativePage = await loadNativeDocumentPage(validatedDocumentId, validatedPageNumber);
+		if (nativePage) return nativePage;
+	}
 
 	const userId = await currentCacheUserId(resolvedClient);
-	if (!userId)
-		return loadDocumentPageWithGateway(validatedDocumentId, validatedPageNumber, gateway);
+	if (!userId) {
+		try {
+			return await loadDocumentPageWithGateway(validatedDocumentId, validatedPageNumber, gateway);
+		} catch (error) {
+			const nativePage = await loadNativeDocumentPage(validatedDocumentId, validatedPageNumber);
+			if (nativePage) return nativePage;
+			throw error;
+		}
+	}
 	const key = pageCacheKey(userId, validatedDocumentId, validatedPageNumber);
 	const cached = getCached(pageCache, key);
 	if (cached) return cached;
 	const existing = pageInflight.get(key);
 	if (existing) return existing;
 	const request = loadDocumentPageWithGateway(validatedDocumentId, validatedPageNumber, gateway)
+		.catch(async (error) => {
+			const nativePage = await loadNativeDocumentPage(validatedDocumentId, validatedPageNumber);
+			if (nativePage) return nativePage;
+			throw error;
+		})
 		.then((page) => {
 			putCached(pageCache, key, page, PAGE_CACHE_TTL_MS, PAGE_CACHE_MAX_ENTRIES);
 			return page;

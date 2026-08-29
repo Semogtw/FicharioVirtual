@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import { searchNativeDocumentPages, type NativeSearchPage } from '$lib/native/local-document-store';
+import { isNativeRuntime } from '$lib/platform/native-bridge';
+import { sessionState } from '$lib/stores/session.svelte';
 import { getSupabaseClient } from './supabase';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -88,6 +91,54 @@ function mapRow(row: SearchRow): SearchResult {
 	});
 }
 
+function nativeExcerpt(text: string, query: string) {
+	const lowerText = text.toLocaleLowerCase();
+	const lowerQuery = query.toLocaleLowerCase();
+	const index = Math.max(
+		lowerText.indexOf(lowerQuery),
+		...query
+			.split(/\s+/u)
+			.filter(Boolean)
+			.map((term) => lowerText.indexOf(term.toLocaleLowerCase()))
+	);
+	const matchIndex = index < 0 ? 0 : index;
+	const start = Math.max(0, matchIndex - 160);
+	const end = Math.min(text.length, start + 2_000);
+	const excerpt = text.slice(start, end).trim();
+	return `${start > 0 ? '…' : ''}${excerpt}${end < text.length ? '…' : ''}`;
+}
+
+async function searchNativePages(
+	query: string,
+	options: SearchOptions,
+	limit: number,
+	offset: number
+): Promise<readonly SearchResult[] | null> {
+	if (!isNativeRuntime()) return null;
+	const ownerId = sessionState.user?.id;
+	if (!ownerId) return null;
+	const pages = await searchNativeDocumentPages({
+		ownerId,
+		query,
+		notebookId: options.notebookId ?? null,
+		limit,
+		offset
+	});
+	if (!pages) return null;
+	return Object.freeze(
+		pages.map((page: NativeSearchPage) => ({
+			pageId: `${page.documentId}:native:${page.pageNumber}`,
+			documentId: page.documentId,
+			documentTitle: page.documentTitle || 'Documento local',
+			notebookId: page.notebookId,
+			notebookName: null,
+			pageNumber: page.pageNumber,
+			excerpt: nativeExcerpt(page.nativeText, query),
+			rank: page.rank
+		}))
+	);
+}
+
 export async function searchPages(
 	query: string,
 	options: SearchOptions = {},
@@ -106,6 +157,17 @@ export async function searchPages(
 		throw new TypeError('Invalid search notebook');
 	}
 	if (options.signal?.aborted) throw new DOMException('Search cancelled', 'AbortError');
+	if (
+		!client &&
+		isNativeRuntime() &&
+		typeof navigator !== 'undefined' &&
+		navigator.onLine === false
+	) {
+		const nativeResults = await searchNativePages(normalized, options, limit, offset).catch(
+			() => null
+		);
+		if (nativeResults) return nativeResults;
+	}
 
 	try {
 		const gateway = client ?? defaultClient();
@@ -121,6 +183,12 @@ export async function searchPages(
 		return Object.freeze(searchRowsSchema.parse(data).map(mapRow));
 	} catch (error) {
 		if (error instanceof DOMException && error.name === 'AbortError') throw error;
+		if (!client) {
+			const nativeResults = await searchNativePages(normalized, options, limit, offset).catch(
+				() => null
+			);
+			if (nativeResults) return nativeResults;
+		}
 		throw new SearchServiceError();
 	}
 }

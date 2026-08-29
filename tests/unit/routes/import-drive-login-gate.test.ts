@@ -26,12 +26,12 @@ describe('Drive login gate for imports', () => {
 		expect(dialog).toContain('dialog.close()');
 	});
 
-	it('checks Drive before both image and PDF upload entrypoints', () => {
+	it('passes each import AbortSignal through the Drive gate before remote upload', () => {
 		expect(imageUpload).toMatch(
-			/export async function uploadPreparedImage[\s\S]*await requireDriveForUpload\(\);[\s\S]*uploadPreparedImageToDrive/
+			/export async function uploadPreparedImage[\s\S]*await requireDriveForUpload\(input\.signal\);[\s\S]*uploadPreparedImageToDrive/
 		);
 		expect(pdfUpload).toMatch(
-			/export async function uploadPdf[\s\S]*await requireDriveForUpload\(\);[\s\S]*uploadPdfToDrive/
+			/export async function uploadPdf[\s\S]*await requireDriveForUpload\(options\.signal\);[\s\S]*uploadPdfToDrive/
 		);
 	});
 
@@ -40,5 +40,12 @@ describe('Drive login gate for imports', () => {
 		expect(gate).toContain("result === 'authorized'");
 		expect(gate).toContain('resolveWaiters();');
 		expect(gate).toContain("new DOMException('', 'AbortError')");
+	});
+
+	it('detaches an individually cancelled import without cancelling other Drive waiters', () => {
+		expect(gate).toContain("signal.addEventListener('abort', waiter.onAbort, { once: true })");
+		expect(gate).toContain("signal.removeEventListener('abort', waiter.onAbort)");
+		expect(gate).toContain("settleWaiter(waiter, 'reject')");
+		expect(gate).toContain('if (waiters.size > 0) return;');
 	});
 });

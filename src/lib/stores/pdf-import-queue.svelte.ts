@@ -5,6 +5,7 @@ import {
 	type ImportBroadcastUpdate
 } from '$lib/import/import-broadcast';
 import { RecentImportCompletions } from '$lib/import/recent-import-completions';
+import { NativeOriginalPendingError } from '$lib/native/pending-import';
 import {
 	deleteStoredPdfImport,
 	listStoredPdfImports,
@@ -60,6 +61,7 @@ export type PdfQueueItem = {
 export const pdfImportQueue = $state<{ items: PdfQueueItem[] }>({ items: [] });
 
 const IMPORT_LOCK_RETRY_MS = 1_000;
+const SYNC_RETRY_MS = 30_000;
 const controllers = new Map<string, AbortController>();
 const queuedFiles = new WeakSet<File>();
 const persistenceChains = new Map<string, Promise<void>>();
@@ -67,6 +69,7 @@ const itemStores = new Map<string, PdfResumeStore>();
 const restoringUsers = new Set<string>();
 const completedElsewhere = new WeakSet<PdfQueueItem>();
 const completedBeforeRestore = new RecentImportCompletions();
+const syncRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
 let running = false;
 let lockRetryTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -168,6 +171,7 @@ function remoteStatus(item: PdfQueueItem) {
 	if (item.status === 'queued') return 'draft' as const;
 	if (item.status === 'inspecting') return 'preparing' as const;
 	if (['uploading', 'rendering', 'publishing'].includes(item.status)) return 'uploading' as const;
+	if (item.status === 'waiting') return 'paused' as const;
 	if (item.status === 'failed') return 'failed' as const;
 	if (item.status === 'cancelled' || item.status === 'duplicate') return 'cancelled' as const;
 	return 'processing' as const;
@@ -214,7 +218,12 @@ async function synchronizeItem(item: PdfQueueItem) {
 			preparedItems: item.inspected ? 1 : 0,
 			uploadedItems: item.uploaded ? 1 : 0,
 			completedItems: item.published ? 1 : 0,
-			lastErrorCode: item.status === 'failed' ? 'pdf_import_failed' : null,
+			lastErrorCode:
+				item.status === 'failed'
+					? 'pdf_import_failed'
+					: item.status === 'waiting' && !item.published
+						? 'sync_pending'
+						: null,
 			finishedAt: status === 'completed' || status === 'cancelled' ? new Date().toISOString() : null
 		});
 	} catch {
@@ -247,6 +256,34 @@ async function withImportLock(item: PdfQueueItem, operation: () => Promise<void>
 	return runBrowserExclusive(`fichario-import-${item.resumeKey}`, operation);
 }
 
+function clearSyncRetry(itemId: string) {
+	const timer = syncRetryTimers.get(itemId);
+	if (timer === undefined) return;
+	clearTimeout(timer);
+	syncRetryTimers.delete(itemId);
+}
+
+function scheduleSyncRetry(item: PdfQueueItem) {
+	if (
+		syncRetryTimers.has(item.id) ||
+		!pdfImportQueue.items.includes(item) ||
+		item.status !== 'waiting' ||
+		item.result !== null
+	) {
+		return;
+	}
+	const timer = setTimeout(() => {
+		syncRetryTimers.delete(item.id);
+		if (!pdfImportQueue.items.includes(item) || item.status !== 'waiting' || item.result !== null)
+			return;
+		item.status = 'queued';
+		item.error = null;
+		void persistItem(item);
+		void pump();
+	}, SYNC_RETRY_MS);
+	syncRetryTimers.set(item.id, timer);
+}
+
 async function processItem(item: PdfQueueItem) {
 	const controller = new AbortController();
 	controllers.set(item.id, controller);
@@ -259,6 +296,7 @@ async function processItem(item: PdfQueueItem) {
 		item.result = await uploadPdf(item.file, {
 			notebookId: item.notebookId,
 			signal: controller.signal,
+			nativeResumeKey: item.resumeKey,
 			onProgress(progress) {
 				item.progress = progress;
 				item.status = phaseStatus(progress);
@@ -287,6 +325,12 @@ async function processItem(item: PdfQueueItem) {
 			item.status = 'duplicate';
 			item.duplicateDocumentId = error.documentId;
 			item.error = error.message;
+		} else if (error instanceof NativeOriginalPendingError) {
+			item.status = 'waiting';
+			item.error = error.message;
+			const explicitlyCancelled =
+				error.cause instanceof DOMException && error.cause.name === 'AbortError';
+			if (!explicitlyCancelled) scheduleSyncRetry(item);
 		} else {
 			item.status = 'failed';
 			item.error = message(error);
@@ -314,6 +358,7 @@ function discardCompletedElsewhere(itemId: string) {
 	const [item] = pdfImportQueue.items.splice(index, 1);
 	if (!item) return;
 	completedElsewhere.add(item);
+	clearSyncRetry(item.id);
 	controllers.get(item.id)?.abort();
 	queuedFiles.delete(item.file);
 	if (!pdfImportQueue.items.some((candidate) => candidate.status === 'queued')) clearPumpRetry();
@@ -387,6 +432,7 @@ export function addPdfs(files: readonly File[], options: { notebookId?: string |
 }
 
 export function cancelPdfImport(itemId: string) {
+	clearSyncRetry(itemId);
 	controllers.get(itemId)?.abort();
 	const item = pdfImportQueue.items.find((candidate) => candidate.id === itemId);
 	if (item?.status === 'queued') {
@@ -397,6 +443,7 @@ export function cancelPdfImport(itemId: string) {
 }
 
 export async function retryPdfImport(itemId: string) {
+	clearSyncRetry(itemId);
 	const item = pdfImportQueue.items.find((candidate) => candidate.id === itemId);
 	if (!item || !['failed', 'cancelled', 'waiting'].includes(item.status)) return;
 	item.error = null;
@@ -433,6 +480,7 @@ export async function retryPdfImport(itemId: string) {
 }
 
 export function removePdfImport(itemId: string) {
+	clearSyncRetry(itemId);
 	cancelPdfImport(itemId);
 	const index = pdfImportQueue.items.findIndex((item) => item.id === itemId);
 	if (index < 0) return;

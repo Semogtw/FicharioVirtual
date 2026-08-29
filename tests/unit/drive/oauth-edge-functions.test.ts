@@ -21,7 +21,8 @@ describe('Drive OAuth Edge Function boundaries', () => {
 		const source = readFileSync(startPath, 'utf8');
 
 		expect(source).toContain('generateOAuthOpaqueValue');
-		expect(source).toContain('generateOAuthStateForOrigin(appOrigin)');
+		expect(source).toContain('generateOAuthStateForOrigin(oauthReturnOrigin)');
+		expect(source).toContain('json(status, body, requestedAppOrigin)');
 		expect(source).toContain("request.headers.get('Origin')");
 		expect(source).toContain("Deno.env.get('APP_ORIGIN_ALLOWLIST')");
 		expect(source).toContain('hashOAuthState');

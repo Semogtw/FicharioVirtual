@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto, onNavigate } from '$app/navigation';
 	import { page } from '$app/state';
+	import { onMount } from 'svelte';
 	import type { Snippet } from 'svelte';
 	import DataProcessingNotice from './DataProcessingNotice.svelte';
 	import DriveUploadGate from './DriveUploadGate.svelte';
@@ -8,7 +9,9 @@
 	import ImportQueueTray from './ImportQueueTray.svelte';
 	import MobileNavigation from './MobileNavigation.svelte';
 	import NavigationIcon from './NavigationIcon.svelte';
+	import { installNativeOAuthDeepLinkListener } from '$lib/native/native-oauth-deep-link-listener';
 	import TopSearch from './TopSearch.svelte';
+	import { runNativeSyncWorker } from '$lib/native/sync-worker';
 
 	interface AppShellProps {
 		children: Snippet;
@@ -20,6 +23,34 @@
 		searchRoute ? (page.url.searchParams.get('q')?.slice(0, 200) ?? '') : ''
 	);
 	let documentRoute = $derived(page.url.pathname.startsWith('/documents/'));
+
+	onMount(() => {
+		let removeDeepLinkListener: (() => void) | null = null;
+		void installNativeOAuthDeepLinkListener()
+			.then((unlisten) => {
+				removeDeepLinkListener = unlisten;
+			})
+			.catch(() => undefined);
+
+		const kick = () => {
+			void runNativeSyncWorker().catch(() => undefined);
+		};
+		const onVisibilityChange = () => {
+			if (document.visibilityState === 'visible') kick();
+		};
+		kick();
+		window.addEventListener('focus', kick);
+		window.addEventListener('online', kick);
+		document.addEventListener('visibilitychange', onVisibilityChange);
+		const interval = window.setInterval(kick, 60_000);
+		return () => {
+			removeDeepLinkListener?.();
+			window.removeEventListener('focus', kick);
+			window.removeEventListener('online', kick);
+			document.removeEventListener('visibilitychange', onVisibilityChange);
+			window.clearInterval(interval);
+		};
+	});
 
 	const navigation = [
 		{ href: '/', label: 'Início', icon: 'home' },

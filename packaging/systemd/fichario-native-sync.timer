@@ -1,0 +1,11 @@
+[Unit]
+Description=Fichário Virtual periodic local sync
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=15min
+Persistent=true
+Unit=fichario-native-sync.service
+
+[Install]
+WantedBy=timers.target

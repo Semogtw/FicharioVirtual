@@ -1,0 +1,133 @@
+name: Build native desktop artifacts
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/build-native-artifacts.yml
+      - src-tauri/**
+      - src/**
+      - static/**
+      - package.json
+      - pnpm-lock.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-artifacts-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  desktop-bundle:
+    name: Bundle ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: Linux
+          - os: windows-latest
+            label: Windows
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      CI: 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22.16.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Linux native dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            desktop-file-utils
+
+      - name: Ensure Rust toolchain
+        shell: bash
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustc --version
+          cargo --version
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version 2.11.4 --locked
+
+      - name: Build native bundle
+        run: cargo tauri build
+
+      - name: Install and inspect Linux bundles
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          deb_path="$(find src-tauri/target/release/bundle/deb -type f -name '*.deb' -print -quit)"
+          appimage_path="$(find src-tauri/target/release/bundle/appimage -type f -name '*.AppImage' -print -quit)"
+          test -n "$deb_path"
+          test -n "$appimage_path"
+          deb_extract_dir="$(mktemp -d)"
+          dpkg-deb -x "$deb_path" "$deb_extract_dir"
+          desktop_file="$(find "$deb_extract_dir/usr/share/applications" -type f -name '*.desktop' -print -quit)"
+          test -n "$desktop_file"
+          desktop-file-validate "$desktop_file"
+          package_name="$(dpkg-deb -f "$deb_path" Package)"
+          test -n "$package_name"
+          deb_path="$(realpath "$deb_path")"
+          sudo apt-get install -y "$deb_path"
+          dpkg-query --show "$package_name"
+          "$appimage_path" --appimage-extract >/dev/null
+          test -x squashfs-root/AppRun
+          rm -rf squashfs-root "$deb_extract_dir"
+
+      - name: Generate and verify Linux checksums
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle_root="src-tauri/target/release/bundle"
+          mapfile -d '' bundle_files < <(
+            find "$bundle_root" -type f \( -name '*.deb' -o -name '*.AppImage' \) -print0 | sort -z
+          )
+          test "${#bundle_files[@]}" -gt 0
+          relative_files=()
+          for file in "${bundle_files[@]}"; do
+            relative_files+=("${file#"$bundle_root/"}")
+          done
+          (
+            cd "$bundle_root"
+            sha256sum "${relative_files[@]}" > SHA256SUMS
+            sha256sum --check SHA256SUMS
+          )
+          test -s "$bundle_root/SHA256SUMS"
+
+      - name: Upload bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: fichario-${{ runner.os }}-${{ github.sha }}
+          path: src-tauri/target/release/bundle/**
+          if-no-files-found: error
+          retention-days: 5

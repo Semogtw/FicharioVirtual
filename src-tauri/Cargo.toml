@@ -1,0 +1,36 @@
+[package]
+name = "fichario-native"
+version = "0.1.0"
+description = "Native shell for Fichário Virtual"
+authors = ["Arthur Almeida"]
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "fichario_native_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2.11", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-deep-link = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.40", features = ["bundled"] }
+sha2 = "0.10"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3.6.3", default-features = false, features = ["linux-native-sync-persistent", "crypto-rust"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3.6.3", default-features = false, features = ["windows-native"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+tauri-plugin-keyring-store = { version = "0.2.0", default-features = false }
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-single-instance = { version = "2.4.3", features = ["deep-link"] }
+tauri-plugin-window-state = "2.4.1"

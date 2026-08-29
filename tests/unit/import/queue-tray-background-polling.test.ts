@@ -10,8 +10,9 @@ const queueTray = readFileSync(
 describe('import queue background OCR reconciliation', () => {
 	it('reacts when an already-mounted queue later enters the waiting state', () => {
 		expect(queueTray).toContain('$effect(() => {');
+		expect(queueTray).toContain('const hasWaitingOcr = entries.some(');
 		expect(queueTray).toContain(
-			"const hasWaiting = entries.some((entry) => entry.item.status === 'waiting');"
+			"(entry) => entry.item.status === 'waiting' && entry.item.result !== null"
 		);
 		expect(queueTray).toContain('if (pollTimer === null && !refreshing)');
 		expect(queueTray).toContain('void refreshBackgroundOcr().finally(scheduleBackgroundPoll);');

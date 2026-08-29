@@ -1,4 +1,13 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+const native = vi.hoisted(() => ({
+	importFileIntoNativeStore: vi.fn().mockResolvedValue(null),
+	markNativeDocumentRemoteSynced: vi.fn().mockResolvedValue(undefined),
+	updateNativeDocumentMetadata: vi.fn().mockResolvedValue(undefined)
+}));
+
+vi.mock('$lib/native/local-document-store', () => native);
+
 import {
 	uploadPreparedImageToDriveWithGateway,
 	type DriveImageImportGateway,
@@ -12,6 +21,10 @@ const pageId = '33333333-3333-4333-8333-333333333333';
 const jobId = '44444444-4444-4444-8444-444444444444';
 const folderId = '0AParentFolderId_123456789';
 const driveFileId = '1AbCdEfGhIjKlMnOpQrStUvWxYz_123456';
+
+afterEach(() => {
+	vi.clearAllMocks();
+});
 
 function prepared(): PreparedImage {
 	return {
@@ -147,6 +160,15 @@ describe('Drive-first image upload', () => {
 			`${userId}/${documentId}/ocr.webp`,
 			`${userId}/${documentId}/thumbnail.jpg`
 		]);
+		expect(native.updateNativeDocumentMetadata).toHaveBeenCalledWith({
+			documentId,
+			ownerId: userId,
+			title: 'scan',
+			notebookId: null,
+			pageCount: 1,
+			status: 'processing',
+			pages: [{ pageNumber: 1, nativeText: null }]
+		});
 		expect(value.publication).toMatchObject({
 			documentId,
 			pageId,

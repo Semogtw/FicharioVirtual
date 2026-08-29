@@ -65,6 +65,9 @@
 	};
 
 	function label(entry: QueueEntry) {
+		if (entry.item.status === 'waiting' && entry.item.result === null) {
+			return 'Salvo no dispositivo · aguardando sincronização';
+		}
 		return labels[entry.item.status] ?? entry.item.status;
 	}
 
@@ -193,7 +196,8 @@
 		if (!mounted) return;
 		if (pollTimer !== null) clearTimeout(pollTimer);
 		pollTimer = null;
-		if (!entries.some((entry) => entry.item.status === 'waiting')) return;
+		if (!entries.some((entry) => entry.item.status === 'waiting' && entry.item.result !== null))
+			return;
 		const interval =
 			document.visibilityState === 'visible'
 				? REFRESH_INTERVAL_VISIBLE_MS
@@ -205,9 +209,11 @@
 	}
 
 	$effect(() => {
-		const hasWaiting = entries.some((entry) => entry.item.status === 'waiting');
+		const hasWaitingOcr = entries.some(
+			(entry) => entry.item.status === 'waiting' && entry.item.result !== null
+		);
 		if (!mounted) return;
-		if (!hasWaiting) {
+		if (!hasWaitingOcr) {
 			if (pollTimer !== null) clearTimeout(pollTimer);
 			pollTimer = null;
 			return;

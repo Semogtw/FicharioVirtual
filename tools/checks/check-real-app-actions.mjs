@@ -314,6 +314,7 @@ try {
 		'/search/',
 		'/drive/',
 		'/settings/',
+		'/settings/storage/',
 		'/coverage/'
 	]) {
 		await mobile.goto(new URL(route, target).href, {

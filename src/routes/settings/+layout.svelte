@@ -1,32 +1,36 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { isNativeRuntime } from '$lib/platform/native-bridge';
 	import type { Snippet } from 'svelte';
 
 	let { children }: { children: Snippet } = $props();
+	const native = isNativeRuntime();
 </script>
 
 <nav class="settings-tabs" aria-label="Seções das configurações">
-	<a href="/settings/" aria-current={page.url.pathname === '/settings/' ? 'page' : undefined}>
-		Geral
-	</a>
+	<a href="/settings/" aria-current={page.url.pathname === '/settings/' ? 'page' : undefined}
+		>Geral</a
+	>
+	{#if native}
+		<a
+			href="/settings/storage/"
+			aria-current={page.url.pathname.startsWith('/settings/storage') ? 'page' : undefined}
+			>Armazenamento</a
+		>
+	{/if}
 	<a
 		href="/settings/computers/"
-		aria-current={page.url.pathname === '/settings/computers/' ? 'page' : undefined}
+		aria-current={page.url.pathname === '/settings/computers/' ? 'page' : undefined}>Computadores</a
 	>
-		Computadores
-	</a>
 	<a
 		href="/settings/computers/queue/"
 		aria-current={page.url.pathname.startsWith('/settings/computers/queue') ? 'page' : undefined}
+		>Fila de leitura</a
 	>
-		Fila de leitura
-	</a>
 	<a
 		href="/settings/usage/"
-		aria-current={page.url.pathname.startsWith('/settings/usage') ? 'page' : undefined}
+		aria-current={page.url.pathname.startsWith('/settings/usage') ? 'page' : undefined}>Uso</a
 	>
-		Uso
-	</a>
 </nav>
 
 {@render children()}
@@ -42,7 +46,6 @@
 		border-radius: var(--radius-md);
 		background: var(--surface);
 	}
-
 	a {
 		min-height: 2.45rem;
 		display: inline-flex;
@@ -53,18 +56,15 @@
 		font-size: 0.84rem;
 		font-weight: 740;
 	}
-
 	a[aria-current='page'] {
 		background: var(--archive);
 		color: white;
 	}
-
 	@media (max-width: 520px) {
 		.settings-tabs {
 			width: 100%;
 			overflow-x: auto;
 		}
-
 		a {
 			flex: 1 0 auto;
 			justify-content: center;

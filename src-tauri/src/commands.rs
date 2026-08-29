@@ -1,0 +1,642 @@
+use serde::{Deserialize, Serialize};
+use tauri::{ipc::Response, AppHandle};
+
+use crate::{catalog, metrics, paths, storage};
+
+#[tauri::command]
+pub fn native_sync_once_mode() -> bool {
+    crate::sync_once_requested()
+}
+
+#[tauri::command]
+pub fn finish_native_sync_once(app: AppHandle) -> Result<(), String> {
+    if !crate::sync_once_requested() {
+        return Err("O runtime nativo não está no modo de sincronização única".into());
+    }
+    app.exit(0);
+    Ok(())
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeStatus {
+    pub platform: String,
+    pub schema_version: u32,
+    pub local_document_count: usize,
+    pub pending_sync_count: usize,
+    pub disk_usage_bytes: u64,
+    pub max_document_bytes: u64,
+    pub max_ipc_chunk_bytes: usize,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeDocument {
+    pub document_id: String,
+    pub owner_id: String,
+    pub original_filename: String,
+    pub mime_type: String,
+    pub size_bytes: u64,
+    pub sha256: String,
+    pub local_state: String,
+    pub remote_state: String,
+    pub remote_document_id: Option<String>,
+    pub drive_file_id: Option<String>,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
+    pub last_accessed_at_ms: i64,
+    pub title: Option<String>,
+    pub notebook_id: Option<String>,
+    pub page_count: i64,
+    pub status: Option<String>,
+}
+
+impl TryFrom<catalog::DocumentRow> for NativeDocument {
+    type Error = String;
+
+    fn try_from(value: catalog::DocumentRow) -> Result<Self, Self::Error> {
+        Ok(Self {
+            document_id: value.document_id,
+            owner_id: value.owner_id,
+            original_filename: value.original_filename,
+            mime_type: value.mime_type,
+            size_bytes: u64::try_from(value.size_bytes).map_err(|_| "Tamanho local inválido")?,
+            sha256: value.sha256,
+            local_state: value.local_state,
+            remote_state: value.remote_state,
+            remote_document_id: value.remote_document_id,
+            drive_file_id: value.drive_file_id,
+            created_at_ms: value.created_at_ms,
+            updated_at_ms: value.updated_at_ms,
+            last_accessed_at_ms: value.last_accessed_at_ms,
+            title: value.title,
+            notebook_id: value.notebook_id,
+            page_count: value.page_count,
+            status: value.status,
+        })
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentRequest {
+    pub document_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DriveFileRequest {
+    pub drive_file_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppendImportRequest {
+    pub document_id: String,
+    pub chunk: Vec<u8>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadRangeRequest {
+    pub document_id: String,
+    pub start: u64,
+    pub end_exclusive: u64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VerifyDocumentRequest {
+    pub document_id: String,
+    pub full_hash: bool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListRequest {
+    pub limit: Option<usize>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListDocumentsPageRequest {
+    pub limit: Option<usize>,
+    pub cursor: Option<catalog::DocumentPageCursor>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeDocumentPage {
+    pub documents: Vec<NativeDocument>,
+    pub next_cursor: Option<catalog::DocumentPageCursor>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaimSyncRequest {
+    pub limit: Option<usize>,
+    pub lease_ms: Option<i64>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncJobRequest {
+    pub id: i64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FailSyncJobRequest {
+    pub id: i64,
+    pub error: String,
+    pub retry_after_ms: i64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CancelSyncJobRequest {
+    pub id: i64,
+    pub error: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MarkRemoteSyncedRequest {
+    pub document_id: String,
+    pub remote_document_id: Option<String>,
+    pub drive_file_id: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReconcileDocumentsRequest {
+    pub full_hash: bool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativePageMetadataInput {
+    pub page_number: i64,
+    pub native_text: Option<String>,
+    #[serde(default)]
+    pub ocr_raw_text: Option<String>,
+    #[serde(default)]
+    pub corrected_text: Option<String>,
+    #[serde(default)]
+    pub extraction_source: Option<String>,
+    #[serde(default)]
+    pub word_geometry: Vec<NativeWordGeometry>,
+    #[serde(default)]
+    pub warnings: Vec<NativePageWarning>,
+    #[serde(default)]
+    pub was_manually_reviewed: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeWordGeometry {
+    pub text: String,
+    pub left: i64,
+    pub top: i64,
+    pub right: i64,
+    pub bottom: i64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativePageWarning {
+    pub code: String,
+    pub message: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateDocumentMetadataRequest {
+    pub document_id: String,
+    pub owner_id: String,
+    pub title: String,
+    pub notebook_id: Option<String>,
+    pub page_count: i64,
+    pub status: String,
+    pub pages: Vec<NativePageMetadataInput>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateNativeDocumentPageMetadataRequest {
+    pub document_id: String,
+    pub owner_id: String,
+    pub status: String,
+    pub page: NativePageMetadataInput,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeDocumentPageMetadata {
+    pub document_id: String,
+    pub page_number: i64,
+    pub native_text: Option<String>,
+    pub ocr_raw_text: Option<String>,
+    pub corrected_text: Option<String>,
+    pub extraction_source: Option<String>,
+    pub word_geometry: Vec<NativeWordGeometry>,
+    pub warnings: Vec<NativePageWarning>,
+    pub was_manually_reviewed: bool,
+    pub status: String,
+    pub updated_at_ms: i64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentOwnerRequest {
+    pub document_id: String,
+    pub owner_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetNativeDocumentPageRequest {
+    pub document_id: String,
+    pub owner_id: String,
+    pub page_number: i64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchNativePagesRequest {
+    pub owner_id: String,
+    pub query: String,
+    pub notebook_id: Option<String>,
+    pub limit: Option<usize>,
+    pub offset: Option<usize>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeSearchPage {
+    pub document_id: String,
+    pub document_title: String,
+    pub notebook_id: Option<String>,
+    pub page_number: i64,
+    pub native_text: String,
+    pub rank: f64,
+}
+
+impl From<catalog::DocumentSearchPageRow> for NativeSearchPage {
+    fn from(value: catalog::DocumentSearchPageRow) -> Self {
+        Self {
+            document_id: value.document_id,
+            document_title: value.document_title,
+            notebook_id: value.notebook_id,
+            page_number: value.page_number,
+            native_text: value.native_text,
+            rank: value.rank,
+        }
+    }
+}
+
+impl From<catalog::DocumentPageMetadataRow> for NativeDocumentPageMetadata {
+    fn from(value: catalog::DocumentPageMetadataRow) -> Self {
+        Self {
+            document_id: value.document_id,
+            page_number: value.page_number,
+            native_text: value.native_text,
+            ocr_raw_text: value.ocr_raw_text,
+            corrected_text: value.corrected_text,
+            extraction_source: value.extraction_source,
+            word_geometry: serde_json::from_str(&value.ocr_word_geometry_json).unwrap_or_default(),
+            warnings: serde_json::from_str(&value.warnings_json).unwrap_or_default(),
+            was_manually_reviewed: value.was_manually_reviewed,
+            status: value.status,
+            updated_at_ms: value.updated_at_ms,
+        }
+    }
+}
+
+fn app_paths(app: &AppHandle) -> Result<paths::AppPaths, String> {
+    paths::ensure(app)
+}
+
+#[tauri::command]
+pub fn native_status(app: AppHandle) -> Result<NativeStatus, String> {
+    let paths = app_paths(&app)?;
+    let summary = metrics::read(&paths)?;
+    Ok(NativeStatus {
+        platform: std::env::consts::OS.to_string(),
+        schema_version: 5,
+        local_document_count: summary.present_document_count,
+        pending_sync_count: summary.pending_sync_count,
+        disk_usage_bytes: summary
+            .present_document_bytes
+            .saturating_add(summary.staging_bytes),
+        max_document_bytes: paths::MAX_NATIVE_DOCUMENT_BYTES,
+        max_ipc_chunk_bytes: storage::MAX_IPC_CHUNK_BYTES,
+    })
+}
+
+#[tauri::command]
+pub fn begin_local_import(
+    app: AppHandle,
+    request: storage::BeginImportRequest,
+) -> Result<(), String> {
+    storage::begin_import(&app_paths(&app)?, &request)
+}
+
+#[tauri::command]
+pub fn append_local_import(app: AppHandle, request: AppendImportRequest) -> Result<u64, String> {
+    storage::append_import(&app_paths(&app)?, &request.document_id, &request.chunk)
+}
+
+#[tauri::command]
+pub fn finish_local_import(
+    app: AppHandle,
+    request: DocumentRequest,
+) -> Result<NativeDocument, String> {
+    storage::finish_import(&app_paths(&app)?, &request.document_id)?.try_into()
+}
+
+#[tauri::command]
+pub fn abort_local_import(app: AppHandle, request: DocumentRequest) -> Result<(), String> {
+    storage::abort_import(&app_paths(&app)?, &request.document_id)
+}
+
+#[tauri::command]
+pub fn get_local_document(
+    app: AppHandle,
+    request: DocumentRequest,
+) -> Result<Option<NativeDocument>, String> {
+    storage::local_document(&app_paths(&app)?, &request.document_id)?
+        .map(TryInto::try_into)
+        .transpose()
+}
+
+#[tauri::command]
+pub fn get_local_document_by_drive_file_id(
+    app: AppHandle,
+    request: DriveFileRequest,
+) -> Result<Option<NativeDocument>, String> {
+    storage::local_document_by_drive_file_id(&app_paths(&app)?, &request.drive_file_id)?
+        .map(TryInto::try_into)
+        .transpose()
+}
+
+#[tauri::command]
+pub fn list_local_documents(
+    app: AppHandle,
+    request: ListRequest,
+) -> Result<Vec<NativeDocument>, String> {
+    catalog::list_documents(
+        &app_paths(&app)?,
+        request.limit.unwrap_or(200).clamp(1, 1000),
+    )?
+    .into_iter()
+    .map(TryInto::try_into)
+    .collect()
+}
+
+#[tauri::command]
+pub fn list_native_documents_page(
+    app: AppHandle,
+    request: ListDocumentsPageRequest,
+) -> Result<NativeDocumentPage, String> {
+    let page = catalog::list_documents_page(
+        &app_paths(&app)?,
+        request.limit.unwrap_or(200),
+        request.cursor.as_ref(),
+    )?;
+    Ok(NativeDocumentPage {
+        documents: page
+            .documents
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<_>, _>>()?,
+        next_cursor: page.next_cursor,
+    })
+}
+
+#[tauri::command]
+pub fn update_native_document_metadata(
+    app: AppHandle,
+    request: UpdateDocumentMetadataRequest,
+) -> Result<(), String> {
+    paths::validate_document_id(&request.document_id)?;
+    if request.owner_id.is_empty() || request.owner_id.len() > 128 {
+        return Err("Proprietário local inválido".into());
+    }
+    let pages = request
+        .pages
+        .into_iter()
+        .map(|page| {
+            Ok(catalog::DocumentPageMetadataInput {
+                page_number: page.page_number,
+                native_text: page.native_text,
+                ocr_raw_text: page.ocr_raw_text,
+                corrected_text: page.corrected_text,
+                extraction_source: page.extraction_source,
+                ocr_word_geometry_json: serde_json::to_string(&page.word_geometry)
+                    .map_err(|_| "Geometria local inválida".to_string())?,
+                warnings_json: serde_json::to_string(&page.warnings)
+                    .map_err(|_| "Avisos locais inválidos".to_string())?,
+                was_manually_reviewed: page.was_manually_reviewed,
+            })
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    catalog::update_document_metadata(
+        &app_paths(&app)?,
+        &request.document_id,
+        catalog::DocumentMetadataInput {
+            owner_id: request.owner_id,
+            title: request.title,
+            notebook_id: request.notebook_id,
+            page_count: request.page_count,
+            status: request.status,
+            pages,
+        },
+    )
+}
+
+#[tauri::command]
+pub fn update_native_document_page_metadata(
+    app: AppHandle,
+    request: UpdateNativeDocumentPageMetadataRequest,
+) -> Result<(), String> {
+    paths::validate_document_id(&request.document_id)?;
+    if request.owner_id.is_empty() || request.owner_id.len() > 128 {
+        return Err("Proprietário local inválido".into());
+    }
+    let page = request.page;
+    catalog::update_document_page_metadata(
+        &app_paths(&app)?,
+        &request.document_id,
+        &request.owner_id,
+        &request.status,
+        catalog::DocumentPageMetadataInput {
+            page_number: page.page_number,
+            native_text: page.native_text,
+            ocr_raw_text: page.ocr_raw_text,
+            corrected_text: page.corrected_text,
+            extraction_source: page.extraction_source,
+            ocr_word_geometry_json: serde_json::to_string(&page.word_geometry)
+                .map_err(|_| "Geometria local inválida".to_string())?,
+            warnings_json: serde_json::to_string(&page.warnings)
+                .map_err(|_| "Avisos locais inválidos".to_string())?,
+            was_manually_reviewed: page.was_manually_reviewed,
+        },
+    )
+}
+
+#[tauri::command]
+pub fn list_native_document_pages(
+    app: AppHandle,
+    request: DocumentOwnerRequest,
+) -> Result<Vec<NativeDocumentPageMetadata>, String> {
+    paths::validate_document_id(&request.document_id)?;
+    if request.owner_id.is_empty() || request.owner_id.len() > 128 {
+        return Err("Proprietário local inválido".into());
+    }
+    Ok(
+        catalog::list_document_pages(&app_paths(&app)?, &request.document_id, &request.owner_id)?
+            .into_iter()
+            .map(Into::into)
+            .collect(),
+    )
+}
+
+#[tauri::command]
+pub fn get_native_document_page(
+    app: AppHandle,
+    request: GetNativeDocumentPageRequest,
+) -> Result<Option<NativeDocumentPageMetadata>, String> {
+    paths::validate_document_id(&request.document_id)?;
+    if request.owner_id.is_empty() || request.owner_id.len() > 128 {
+        return Err("Proprietário local inválido".into());
+    }
+    if !(1..=10_000).contains(&request.page_number) {
+        return Err("Número de página local inválido".into());
+    }
+    Ok(catalog::get_document_page(
+        &app_paths(&app)?,
+        &request.document_id,
+        &request.owner_id,
+        request.page_number,
+    )?
+    .map(Into::into))
+}
+
+#[tauri::command]
+pub fn search_native_document_pages(
+    app: AppHandle,
+    request: SearchNativePagesRequest,
+) -> Result<Vec<NativeSearchPage>, String> {
+    if request.owner_id.is_empty() || request.owner_id.len() > 128 {
+        return Err("Proprietário local inválido".into());
+    }
+    if request.query.trim().is_empty() || request.query.len() > 200 {
+        return Err("Consulta local inválida".into());
+    }
+    Ok(catalog::search_document_pages(
+        &app_paths(&app)?,
+        &request.owner_id,
+        &request.query,
+        request.limit.unwrap_or(30),
+        request.offset.unwrap_or(0),
+        request.notebook_id.as_deref(),
+    )?
+    .into_iter()
+    .map(Into::into)
+    .collect())
+}
+
+#[tauri::command]
+pub fn read_local_document_range(
+    app: AppHandle,
+    request: ReadRangeRequest,
+) -> Result<Response, String> {
+    let bytes = storage::read_range(
+        &app_paths(&app)?,
+        &request.document_id,
+        request.start,
+        request.end_exclusive,
+    )?;
+    Ok(Response::new(bytes))
+}
+
+#[tauri::command]
+pub fn verify_local_document(
+    app: AppHandle,
+    request: VerifyDocumentRequest,
+) -> Result<bool, String> {
+    storage::verify_document(&app_paths(&app)?, &request.document_id, request.full_hash)
+}
+
+#[tauri::command]
+pub fn evict_local_document(app: AppHandle, request: DocumentRequest) -> Result<(), String> {
+    storage::evict_document(&app_paths(&app)?, &request.document_id)
+}
+
+#[tauri::command]
+pub fn native_disk_usage(app: AppHandle) -> Result<u64, String> {
+    metrics::disk_usage_bytes(&app_paths(&app)?)
+}
+
+#[tauri::command]
+pub fn reconcile_native_documents(
+    app: AppHandle,
+    request: ReconcileDocumentsRequest,
+) -> Result<storage::ReconciliationSummary, String> {
+    storage::reconcile_documents(&app_paths(&app)?, request.full_hash)
+}
+
+#[tauri::command]
+pub fn list_native_sync_jobs(
+    app: AppHandle,
+    request: ListRequest,
+) -> Result<Vec<catalog::SyncJob>, String> {
+    catalog::list_sync_jobs(&app_paths(&app)?, request.limit.unwrap_or(50).clamp(1, 100))
+}
+
+#[tauri::command]
+pub fn claim_native_sync_jobs(
+    app: AppHandle,
+    request: ClaimSyncRequest,
+) -> Result<Vec<catalog::SyncJob>, String> {
+    catalog::claim_sync_jobs(
+        &app_paths(&app)?,
+        request.limit.unwrap_or(2),
+        request.lease_ms.unwrap_or(60_000),
+    )
+}
+
+#[tauri::command]
+pub fn complete_native_sync_job(app: AppHandle, request: SyncJobRequest) -> Result<(), String> {
+    catalog::complete_sync_job(&app_paths(&app)?, request.id)
+}
+
+#[tauri::command]
+pub fn fail_native_sync_job(app: AppHandle, request: FailSyncJobRequest) -> Result<(), String> {
+    catalog::fail_sync_job(
+        &app_paths(&app)?,
+        request.id,
+        &request.error,
+        request.retry_after_ms,
+    )
+}
+
+#[tauri::command]
+pub fn cancel_native_sync_job(app: AppHandle, request: CancelSyncJobRequest) -> Result<(), String> {
+    catalog::cancel_sync_job(&app_paths(&app)?, request.id, &request.error)
+}
+
+#[tauri::command]
+pub fn mark_native_remote_synced(
+    app: AppHandle,
+    request: MarkRemoteSyncedRequest,
+) -> Result<(), String> {
+    paths::validate_document_id(&request.document_id)?;
+    catalog::mark_remote_synced(
+        &app_paths(&app)?,
+        &request.document_id,
+        request.remote_document_id.as_deref(),
+        request.drive_file_id.as_deref(),
+    )
+}

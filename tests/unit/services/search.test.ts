@@ -1,15 +1,30 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
 	searchPages,
 	SearchServiceError,
 	type SearchClientLike
 } from '../../../src/lib/services/search';
+import { sessionState } from '../../../src/lib/stores/session.svelte';
 
 type SearchResponse = { data: unknown; error: unknown };
 type SearchRequest = ReturnType<SearchClientLike['rpc']>;
 
 const pageId = '11111111-1111-4111-8111-111111111111';
 const documentId = '22222222-2222-4222-8222-222222222222';
+const ownerId = '33333333-3333-4333-8333-333333333333';
+
+type MutableGlobal = typeof globalThis & {
+	__TAURI__?: { core: { invoke: ReturnType<typeof vi.fn> } };
+};
+
+const root = globalThis as MutableGlobal;
+
+afterEach(() => {
+	delete root.__TAURI__;
+	sessionState.user = null;
+	Object.defineProperty(globalThis.navigator, 'onLine', { value: true, configurable: true });
+	vi.restoreAllMocks();
+});
 
 function row(overrides: Record<string, unknown> = {}) {
 	return {
@@ -129,5 +144,44 @@ describe('searchPages', () => {
 
 		const aborted = new DOMException('cancelled by caller', 'AbortError');
 		await expect(searchPages('texto', {}, client([], aborted).value)).rejects.toBe(aborted);
+	});
+
+	it('searches native page text while Linux is offline', async () => {
+		sessionState.user = { id: ownerId } as never;
+		Object.defineProperty(globalThis.navigator, 'onLine', { value: false, configurable: true });
+		const invoke = vi.fn((command: string) => {
+			if (command === 'search_native_document_pages') {
+				return Promise.resolve([
+					{
+						documentId,
+						documentTitle: 'Biologia',
+						notebookId: null,
+						pageNumber: 1,
+						nativeText: 'A fotossíntese ocorre no cloroplasto.',
+						rank: 1
+					}
+				]);
+			}
+			return Promise.resolve(undefined);
+		});
+		root.__TAURI__ = { core: { invoke } };
+
+		await expect(searchPages('fotossíntese', { limit: 10 })).resolves.toMatchObject([
+			{
+				documentId,
+				documentTitle: 'Biologia',
+				pageNumber: 1,
+				excerpt: 'A fotossíntese ocorre no cloroplasto.'
+			}
+		]);
+		expect(invoke).toHaveBeenNthCalledWith(1, 'search_native_document_pages', {
+			request: {
+				ownerId,
+				query: 'fotossíntese',
+				notebookId: null,
+				limit: 10,
+				offset: 0
+			}
+		});
 	});
 });
